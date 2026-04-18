@@ -1,25 +1,21 @@
-# Project Coding Rules (Library Management System - Quản Lý Thư Viện)
+# Project Coding Rules: Hồ Sơ Lô Điện Tử (eBMR)
 
-## 1. Project Structure
-- **React Components**: `resources/js/Components`
-- **React Pages (Inertia)**: `resources/js/Pages`
-- **Classic Views**: `resources/views/pages`
-- **Controllers**: `app/Http/Controllers/Pages`
-- **Models**: `app/Models`
-- **Assets**: `public/js`, `public/css`
+## 1. Project Vision & Core Philosophy
+- **Name**: eBMR - Electronic Batch Manufacturing Record.
+- **Objective**: provide a flexible system to design and generate various documents, forms, and profiles.
+- **Dynamic Nature**: Forms are NOT hard-coded. Users design forms through a "Form Builder" interface.
+- **Data Strategy**: Use a **Dynamic JSON** structure for both form definitions (schema) and user-submitted data. This allows for total flexibility without migrating the database for every new form type.
 
-## 2. Naming Conventions
-- **React Components**: PascalCase (e.g., `BookCatalog.jsx`)
-- **React Hooks**: camelCase starting with `use` (e.g., `useBorrowing.js`)
-- **API Functions**: camelCase (e.g., `getBookList`, `processLoan`)
-- **Database Fields**: snake_case (e.g., `author_id`, `published_year`)
-- **Blade Files**: camelCase or snake_case (standard: `bookDetail.blade.php`)
-- **Variable names (PHP/JS)**: camelCase
+## 2. Technical Stack
+- **Backend**: Laravel 12+ (Eloquent, JSON field support).
+- **Frontend**: React 19+ (Vite, Inertia/React-Router).
+- **UI Components**: PrimeReact (Tables, Inputs), React Bootstrap (Layout), SweetAlert2 (Dialogs).
+- **Styling**: Vanilla CSS + Tailwind (for utilities). Focus on modern aesthetics.
 
-## 3. API & Data Pattern
-- **Library**: Use `axios` for all asynchronous requests.
-- **Inertia**: Use `router.post()` or `router.get()` for navigation-driven actions in React.
-- **Classic**: Use `$.ajax` or `axios` in jQuery scripts.
+## 3. Database & Data Pattern (JSON First)
+- **JSON Storage**: Detailed form structures and submission data must be stored in `json` or `jsonb` columns.
+- **Querying**: Use Laravel's JSON path arrows `->` or `->>` for querying specific keys within the dynamic data.
+- **Migration Policy**: Only migrate core metabolic fields (ID, code, status, timestamps, user_id). Avoid adding content-specific columns; use the JSON payload instead.
 - **Standard Return Format**:
   ```json
   {
@@ -29,39 +25,34 @@
   }
   ```
 
-## 4. UI Frameworks & UX Standard (Professional & Beautiful)
-- **Design Philosophy**: Modern, Clean, and Intellectual. Use rich typography and generous white space.
+## 4. Form Designer Components
+- **Modularity**: Every form element (Input, Radio, Checkbox, Text Editor, File Upload) must be a standalone React component.
+- **Persistence**: Components must support a unified `value` and `onChange` prop to sync with the central JSON state.
+- **Rich Text**: Use a high-quality editor (e.g., Quill or CKEditor integrated into PrimeReact) for descriptions.
+- **Validation Schema**: Form designs should include metadata for validation (required, regex, min/max).
+
+## 5. UI/UX Standards (Premium & Professional)
+- **Design Philosophy**: Modern, High-Precision, and Professional. 
 - **Color Palette**: 
-    - *Primary*: Deep Navy (`#003A4F`) for authority and depth.
-    - *Secondary*: Gold/Antique Gold (`#CDC717`) for highlights.
-    - *Background*: Soft neutrals (`#F8F9FA` or slight parchment tints).
-- **React Components**: Use **React Bootstrap** for layouts and **PrimeReact** for lists/tables.
-- **Modern Effects**: 
-    - Use **Glassmorphism** for modals and floating navbars.
-    - Implement **Smooth Transitions** (0.3s) for all hover states.
-    - Use **Soft Rounded Corners** (border-radius: 12px) for cards and inputs.
-- **Icons**: Lucide Icons or FontAwesome 6 (Duotone preferred).
-- **Notifications**: Always use **SweetAlert2 (Swal)** with custom "Dark" or "Glass" themes.
-- **Typography Standards**: 
-    - *Base Font*: Always use **Arimo** (Sans-serif) for the entire project.
-    - *Headings (e.g., "THÀNH VIÊN")*: Use **Arimo** with high weight (bold) and `letter-spacing: 1px`.
-    - *Text Transform*: Headings for modules should be **UPPERCASE**.
-- **Form Standards**:
-    - Use **Floating Labels** for all input forms to maintain a clean UI.
-    - Border-radius must be exactly `12px` for all input fields and containers.
-    - Soft shadows (`box-shadow: 0 4px 6px rgba(0,0,0,0.05)`) should be applied to all form cards.
+    - *Primary*: Deep Navy (`#003A4F`) - Symbolizes stability and authority.
+    - *Secondary*: Gold/Antique Gold (`#CDC717`) - For highlights and call-to-actions.
+    - *Background*: Neutral light grey (`#F8F9FA`) or glassmorphic layers.
+- **Aesthetics**:
+    - **Glassmorphism**: Use for sidebars, cards, and modal backdrops.
+    - **Rounded Corners**: Strict `border-radius: 12px` for all elements (cards, inputs, buttons).
+    - **Shadows**: Soft, multi-layered shadows (`0 8px 30px rgba(0,0,0,0.04)`).
+    - **Transitions**: Global `0.3s ease-in-out` for all interactive states.
+- **Typography**: 
+    - **Arimo** (Sans-serif) is the official project font.
+    - Captions and module headers should be **UPPERCASE** with `1px` letter spacing.
 
-## 5. Coding Logic
-- **Separation of Concerns**: Keep UI components clean; move complex business logic to Custom Hooks (React) or Helper classes (PHP).
-- **Date Handling**: Use **Carbon** in PHP and **dayjs** or `Date` objects in JS. Format for DB: `YYYY-MM-DD HH:mm:ss`.
-- **Validation**: Always validate data on the Backend using Laravel Request Validation.
+## 6. Coding Logic & Performance
+- **Separation of Concerns**: Keep business logic out of the view layer. Use Hooks for complex state and Services for API logic.
+- **Audit Trails**: Since eBMR is critical, every change to a dynamic record must be logged (who, when, what changed).
+- **Version Control**: Form templates should be versioned. Submitting data to an old template version must still work.
+- **Performance**: Use memoization (`useMemo`, `useCallback`) for the form builder to prevent lag with large schemas.
 
-## 6. Error Handling
-- **Async/API**: Always wrap API calls in `try/catch` blocks.
-- **Backend**: Use `try/catch` for database transactions and return meaningful error messages.
-- **Feedback**: Show toast messages for success/error if no redirect is involved.
-
-## 7. Performance & Integrity
-- **Database**: Use Eloquent relationships where possible. Avoid N+1 query problems.
-- **Data Integrity**: Implement strict permission checks at the top of Views and inside Controllers (`user_has_permission`).
-- **Locks**: Disable editing/saving for historical data (past dates) to maintain records integrity.
+## 7. Error & Data Integrity
+- **Safety**: Always wrap JSON parsing/encoding in try/catch to handle malformed data.
+- **Permissions**: Implement strict check-access logic. Certain forms may be "Locked" after signing/completion.
+- **Feedback**: Every button click should have visual feedback (loading spinners, success toasts).

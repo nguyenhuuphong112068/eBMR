@@ -1,0 +1,86 @@
+{
+  "project_name": "Hồ Sơ Lô Điện Tử (eBMR)",
+  "concept": "Dynamic JSON Schema & Data Mapping",
+  "example": {
+    "form_schema": {
+      "form_id": "ebmr-001",
+      "version": "1.0",
+      "title": "Kiểm tra thông số vận hành máy (Machine Parameter Log)",
+      "sections": [
+        {
+          "section_id": "section-1",
+          "section_title": "Thông tin chung",
+          "fields": [
+            {
+              "id": "batch_no",
+              "type": "text",
+              "label": "Số Lô (Batch No)",
+              "placeholder": "Ví dụ: LOT-2024-001",
+              "validation": {
+                "required": true,
+                "regex": "^LOT-[0-9]{4}-[0-9]{3}$"
+              }
+            },
+            {
+              "id": "man_date",
+              "type": "date",
+              "label": "Ngày sản xuất",
+              "defaultValue": "today",
+              "validation": {
+                "required": true
+              }
+            }
+          ]
+        },
+        {
+          "section_id": "section-2",
+          "section_title": "Thông số máy",
+          "fields": [
+            {
+              "id": "temperature",
+              "type": "number",
+              "label": "Nhiệt độ (°C)",
+              "min": 15,
+              "max": 45,
+              "unit": "°C",
+              "validation": {
+                "required": true
+              }
+            },
+            {
+              "id": "machine_status",
+              "type": "radio",
+              "label": "Tình trạng máy",
+              "options": [
+                { "label": "Bình thường", "value": "normal" },
+                { "label": "Cảnh báo", "value": "warning" },
+                { "label": "Dừng máy", "value": "stop" }
+              ]
+            },
+            {
+              "id": "observation_notes",
+              "type": "rich-text",
+              "label": "Ghi chú quán sát",
+              "placeholder": "Nhập các ghi chú quan trọng tại đây..."
+            }
+          ]
+        }
+      ]
+    },
+    "submission_data": {
+      "metadata": {
+        "form_id": "ebmr-001",
+        "version": "1.0",
+        "submitted_by": 102,
+        "submitted_at": "2024-04-18T18:05:00Z"
+      },
+      "values": {
+        "batch_no": "LOT-2024-001",
+        "man_date": "2024-04-18",
+        "temperature": 23.5,
+        "machine_status": "normal",
+        "observation_notes": "<p>Máy vận hành ổn định, không có tiếng động lạ. Nhiệt độ phòng đạt chuẩn.</p>"
+      }
+    }
+  }
+}

@@ -8,6 +8,7 @@ require_once(__DIR__ . '/AuditTrialRoute.php');
 
 require_once(__DIR__ . '/NotificationRoute.php');
 require_once(__DIR__ . '/ChatRoute.php');
+require_once(__DIR__ . '/ebmrRoute.php');
 
 // require_once(__DIR__ . '/categoryRoute.php');
 // require_once(__DIR__ . '/ImportRoute.php');

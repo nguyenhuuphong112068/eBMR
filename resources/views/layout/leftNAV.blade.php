@@ -62,7 +62,7 @@
     <a href="{{ route('pages.general.home') }}" class="brand-link text-center">
         <img src="{{ asset('img/iconstella.svg') }}" alt="Logo" style="width: 50px; height: auto;">
         <span class="brand-text fw-bold d-block mt-2 library-title"
-            style="color: var(--primary-navy); font-size: 1.2rem;">LMS-SYSTEM</span>
+            style="color: var(--primary-navy); font-size: 1.2rem;">eBMR-SYSTEM</span>
     </a>
 
     <!-- Sidebar Menu -->
@@ -70,6 +70,22 @@
         <nav class="mt-2">
             <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu"
                 data-accordion="false">
+
+                <li class="nav-header">HỒ SƠ ĐIỆN TỬ</li>
+                <li class="nav-item">
+                    <a href="{{ route('pages.ebmr.draft') }}"
+                        class="nav-link {{ str_contains(url()->current(), 'ebmr/draft') ? 'active' : '' }}">
+                        <i class="fas fa-edit"></i>
+                        <p>Soạn hồ sơ</p>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="{{ route('pages.ebmr.designer') }}"
+                        class="nav-link {{ str_contains(url()->current(), 'ebmr/designer') ? 'active' : '' }}">
+                        <i class="fas fa-drafting-compass"></i>
+                        <p>Thiết kế biểu mẫu</p>
+                    </a>
+                </li>
 
                 {{-- <li class="nav-header">TỔNG QUAN</li>
                 <li class="nav-item">
@@ -133,45 +149,6 @@
                     </ul>
                 </li>
 
-                <!-- Droplist Menu Vị Trí Lưu Trữ -->
-                <li
-                    class="nav-item has-treeview {{ str_contains(url()->current(), 'storageLocation') ? 'menu-open' : '' }}">
-                    <a href="#"
-                        class="nav-link {{ str_contains(url()->current(), 'storageLocation') ? 'active' : '' }}">
-                        <i class="fas fa-map-marker-alt"></i>
-                        <p>
-                            Vị Trí Lưu Trữ
-                            <i class="right fas fa-angle-left"></i>
-                        </p>
-                    </a>
-                    <ul class="nav nav-treeview">
-                        <li class="nav-item"><a href="{{ route('pages.storageLocation.warehouse.list') }}"
-                                class="nav-link"><i class="far fa-circle nav-icon text-primary"></i>
-                                <p>Kho</p>
-                            </a></li>
-                        <li class="nav-item"><a href="{{ route('pages.storageLocation.room.list') }}" class="nav-link"><i
-                                    class="far fa-circle nav-icon text-info"></i>
-                                <p>Phòng</p>
-                            </a></li>
-                        <li class="nav-item"><a href="{{ route('pages.storageLocation.shelf.list') }}" class="nav-link"><i
-                                    class="far fa-circle nav-icon text-warning"></i>
-                                <p>Kệ (Shelf)</p>
-                            </a></li>
-                        <li class="nav-item"><a href="{{ route('pages.storageLocation.location.list') }}" class="nav-link"><i
-                                    class="far fa-circle nav-icon text-danger"></i>
-                                <p>Vị trí (Location)</p>
-                            </a></li>
-                    </ul>
-                </li>
-
-                <!-- Quản lý Tài liệu -->
-                <li class="nav-item">
-                    <a href="{{ route('pages.documentStorage.document.list') }}"
-                        class="nav-link {{ str_contains(url()->current(), 'documentStorage') ? 'active' : '' }}">
-                        <i class="fas fa-file-contract"></i>
-                        <p>Quản lý Tài liệu</p>
-                    </a>
-                </li>
 
                 <!-- User Policy -->
                 @if (user_has_permission(session('user')['userId'], 'layout_User', 'boolean'))
