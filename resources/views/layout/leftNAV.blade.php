@@ -72,19 +72,23 @@
                 data-accordion="false">
 
                 <li class="nav-header">HỒ SƠ ĐIỆN TỬ</li>
-                <li class="nav-item">
-                    <a href="{{ route('pages.ebmr.draft') }}"
-                        class="nav-link {{ str_contains(url()->current(), 'ebmr/draft') ? 'active' : '' }}">
-                        <i class="fas fa-edit"></i>
-                        <p>Soạn hồ sơ</p>
+                <li class="nav-item has-treeview {{ str_contains(url()->current(), 'ebmr/templates') ? 'menu-open' : '' }}">
+                    <a href="#" class="nav-link {{ str_contains(url()->current(), 'ebmr/templates') ? 'active' : '' }}">
+                        <i class="fas fa-folder-open"></i>
+                        <p>
+                            Soạn Hồ Sơ Lô
+                            <i class="right fas fa-angle-left"></i>
+                        </p>
                     </a>
-                </li>
-                <li class="nav-item">
-                    <a href="{{ route('pages.ebmr.designer') }}"
-                        class="nav-link {{ str_contains(url()->current(), 'ebmr/designer') ? 'active' : '' }}">
-                        <i class="fas fa-drafting-compass"></i>
-                        <p>Thiết kế biểu mẫu</p>
-                    </a>
+                    <ul class="nav nav-treeview pl-3">
+                        <li class="nav-item">
+                            <a href="{{ route('pages.ebmr.templates') }}"
+                                class="nav-link {{ str_contains(url()->current(), 'ebmr/templates') ? 'active' : '' }}">
+                                <i class="fas fa-file-medical"></i>
+                                <p>Hồ Sơ Sản Xuất BMR</p>
+                            </a>
+                        </li>
+                    </ul>
                 </li>
 
                 {{-- <li class="nav-header">TỔNG QUAN</li>

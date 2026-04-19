@@ -16,7 +16,7 @@ return new class extends Migration
             $table->string('code', 50)->unique();
             $table->string('name', 255);
             $table->foreignId('location_id')->constrained('locations')->onDelete('cascade');
-            $table->foreignId('department_id')->constrained('deparments')->onDelete('cascade');
+            $table->unsignedBigInteger('department_id')->nullable();
             $table->unsignedBigInteger('status_id')->nullable();
             $table->date('expired_date')->nullable();
             $table->string('created_by')->nullable();

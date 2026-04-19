@@ -909,9 +909,7 @@
             </div>
         </div>
 
-        @yield('model')
 
-        @yield('script')
 
 
 
@@ -922,6 +920,9 @@
 
     <!-- jQuery -->
     @include('layout.js')
+
+    @yield('model')
+    @yield('script')
     <!-- page script -->
     <!-- page script -->
     <script>

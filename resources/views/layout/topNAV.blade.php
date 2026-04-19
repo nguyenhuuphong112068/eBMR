@@ -26,10 +26,12 @@
             </div>
         </li>
 
+        @if(session('user'))
         <li class="nav-item d-none d-md-flex flex-column align-items-end me-4" style="line-height: 1.2;">
-            <span class="fw-bold" style="color: var(--primary-navy); font-size: 0.95rem;">{{ session('user')['fullName'] }}</span>
-            <span class="text-muted" style="font-size: 0.75rem; text-transform: uppercase;">{{ session('user')['userGroup'] }}</span>
+            <span class="fw-bold" style="color: var(--primary-navy); font-size: 0.95rem;">{{ session('user')['fullName'] ?? 'User' }}</span>
+            <span class="text-muted" style="font-size: 0.75rem; text-transform: uppercase;">{{ session('user')['userGroup'] ?? '' }}</span>
         </li>
+        @endif
 
         <li class="nav-item">
             <a href="{{ route('logout') }}" class="nav-link" style="font-size: 1.2rem; color: #dc3545; transition: var(--transition-fast);">

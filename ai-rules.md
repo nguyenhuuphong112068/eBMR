@@ -56,3 +56,23 @@
 - **Safety**: Always wrap JSON parsing/encoding in try/catch to handle malformed data.
 - **Permissions**: Implement strict check-access logic. Certain forms may be "Locked" after signing/completion.
 - **Feedback**: Every button click should have visual feedback (loading spinners, success toasts).
+
+## 8. Designer Architecture (Blade-based)
+- **Monolith Avoidance**: Large designer files (>1000 lines) must be split into a modular directory structure under `resources/views/pages/ebmr/designer/`.
+- **Directory Structure**:
+    - `partials/`: Contains reusable HTML fragments (toolbar, sidebar, canvas, modals).
+    - `scripts/`: Contains functional logic split by domain (state, render, table-logic, events).
+- **Style Management**: 
+    - Styles should be placed in `partials/styles.blade.php` and included via `@include`.
+- **JS Integration**: 
+    - Since Blade partials are included server-side, maintain a specific inclusion order to ensure global state variables (in `scripts/state.blade.php`) are initialized before other functional scripts.
+- **Naming Convention**: 
+    - Use snake_case for partial filenames (e.g., `table_ops.blade.php`).
+- **State Management**: 
+    - Centralize the `items` array and `saveState()` logic in a core state partial to maintain a single source of truth across modules.
+
+## 9. Testing & Development Credentials
+- **Admin Access**: 
+    - *Username*: `Admin`
+    - *Password*: `Abc@1234`
+
