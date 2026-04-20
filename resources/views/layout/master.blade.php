@@ -995,6 +995,8 @@
 
             function loadNotifications() {
                 $.get("{{ route('notifications.list') }}", function(data) {
+                    if (!Array.isArray(data)) return;
+                    
                     let unreadCount = data.filter(n => n.is_read == 0).length;
                     if (unreadCount > 0) {
                         $('#notif-badge-navbar').text(unreadCount).show();

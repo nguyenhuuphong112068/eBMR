@@ -1,8 +1,18 @@
 <script>
+    window.isReadOnly = @json($isReadOnly ?? false);
+    window.isExecutionMode = @json($isExecutionMode ?? false);
+    window.executionValues = @json($executionValues ?? (object)[]);
+
     let items = @json($template->schema->fields ?? []);
+    let fieldsConfigInit = @json($template->schema->fieldsConfig ?? (object)[]);
+    
+    // Ensure fieldsConfig is strictly an Object so JSON.stringify doesn't drop assigned properties
+    let fieldsConfig = (!fieldsConfigInit || Array.isArray(fieldsConfigInit)) ? {} : fieldsConfigInit;
+    
     let currentTemplateId = {{ $template->id ?? 'null' }};
     let historyEnabled = {{ $template->log_history ?? 0 }} == 1;
     let selectedId = null;
+    let selectedFieldId = null;
 
     if (items.length === 0) {
         // Generate Default BMR Header if document is new

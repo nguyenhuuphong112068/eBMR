@@ -1,0 +1,506 @@
+<link href="{{ asset('css/bootstrap.min.css') }}" rel="stylesheet">
+<style> 
+    .highlight-row {
+        background-color: #fff3cd !important; /* vàng nhạt */
+    }
+</style>
+<div class="content-wrapper">
+    <div class="card">
+        <div class="card-header mt-4">
+            {{-- <h3 class="card-title">Ghi Chú Nếu Có</h3> --}}
+        </div>
+            @php
+                $auth_update = user_has_permission(session('user')['userId'], 'category_product_update','disabled');
+                $auth_deActive = user_has_permission(session('user')['userId'], 'category_product_deActive','disabled');
+                $create_i_Hypothesis_category = user_has_permission(session('user')['userId'], 'create_intermediate_Hypothesis_category', 'boolean');
+            @endphp
+
+        <!-- /.card-Body -->
+        <div class="card-body">
+            @if (user_has_permission(session('user')['userId'], 'category_product_create', 'boolean'))
+                <button class="btn btn-success btn-create mb-2" 
+                    data-toggle="modal" 
+                    data-target="#intermediate_category"
+                    data-modal_type="#create_modal"
+                    style="width: 255px">
+                    <i class="fas fa-plus"></i> Thêm Danh Mục
+                </button>
+            @endif
+
+            @if ($create_i_Hypothesis_category)
+                <button class="btn btn-success btn-create-hypothesis mb-2" 
+                    data-toggle="modal" 
+                    data-target="#intermediate_category"
+                    data-modal_type="#create_hypothesis_modal"
+                    style="width: 255px">
+                    <i class="fas fa-plus"></i> Thêm Danh Mục Giả Định
+                </button>
+            @endif
+
+            <table id="data_table_product_category" class="table table-bordered table-striped">
+
+                <thead style = "position: sticky; top: 60px; background-color: white; z-index: 1020">
+
+                    <tr>
+                        <th>STT</th>
+                        <th>Mã sản Phẩm</th>
+                        <th>Tên Sản Phẩm</th>
+                        <th>Cỡ Lô</th>
+                        <th>Thị Trường</th>
+                        <th>Qui Cách</th>
+                        <th>Đóng gói</th>
+                        <th>Phân Xưởng</th>
+                        <th>Người Tạo/ Ngày Tạo</th>
+                        @if (!$auth_update )
+                            <th>Cập Nhật</th>
+                        @endif
+                        @if ($create_i_Hypothesis_category )
+                            <th>Cập Nhật DMGĐ</th>
+                        @endif
+                        <th>Vô Hiệu</th>
+                        <th>Công Thức</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach ($datas as $data)
+                        <tr class = "{{ $data->IsHypothesis? 'highlight-row':'' }}">
+                            <td>{{ $loop->iteration }} 
+                                @if(session('user')['userGroup'] == "Admin") <div> {{ $data->id}} </div> @endif
+                            </td>
+                            @if ($data->active)
+                                <td class="text-success">
+                                    <div>{{ $data->finished_product_code }} </div>
+                                    <div>{{ $data->intermediate_code }} </div>
+                                </td>
+                                <td>
+                                    <div>{{ $data->finished_product_name }} </div>
+                                    <div>{{ $data->intermediate_product_name }} </div>
+                                </td>
+                            @else
+                                <td class="text-danger">
+                                    <div>{{ $data->finished_product_code }} </div>
+                                    <div>{{ $data->intermediate_code }} </div>
+                                </td>
+                                <td>
+                                    <div>{{ $data->finished_product_name }} </div>
+                                    <div>{{ $data->intermediate_product_name }} </div>
+                                </td>
+                            @endif
+                            
+                            <td>
+                                <div> {{ $data->batch_size . ' ' . $data->unit_batch_size . '#' }} </div>
+                                <div> {{ $data->batch_qty . ' ' . $data->unit_batch_qty }} </div>
+                            </td>
+                            <td> {{ $data->market }}</td>
+                            <td> {{ $data->specification }}</td>
+
+                            <td class="text-center align-middle">
+                                <div class="d-flex flex-column align-items-center">
+                                    @if ($data->primary_parkaging)
+                                        <i class="fas fa-check-circle text-primary fs-4"></i>
+                                    @endif
+                                </div>
+                            </td>
+
+
+                            <td>{{ $data->deparment_code }}</td>
+                            <td>
+                                <div> {{ $data->prepared_by }} </div>
+                                <div>{{ $data->created_at?\Carbon\Carbon::parse($data->created_at)->format('d/m/Y') : '' }}</div>
+                            </td>
+
+                            @if (!$auth_update )
+                            <td class="text-center align-middle">
+                                <button type="button" class="btn btn-warning btn-edit" data-id="{{ $data->id }}"
+                                    data-finished_product_code="{{ $data->finished_product_code }}"
+                                    data-intermediate_code="{{ $data->intermediate_code }}"
+                                    data-product_name_id="{{ $data->product_name_id }}"
+                                    data-market_id="{{ $data->market_id }}"
+                                    data-specification_id="{{ $data->specification_id }}"
+                                    data-batch_size="{{ $data->batch_size }}" data-batch_qty="{{ $data->batch_qty }}"
+                                    data-unit_batch_qty="{{ $data->unit_batch_qty }}"
+                                    data-primary_parkaging="{{ $data->primary_parkaging }}" data-toggle="modal"
+                                    data-target="#update_modal"
+                                    {{ $auth_update }}>
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                            </td>
+                            @endif
+
+                            @if ($create_i_Hypothesis_category )
+                            <td class="text-center align-middle">
+                                <button type="button" class="btn btn-warning btn-edit-hypothesis" 
+                                    data-id="{{ $data->id }}"
+                                    data-finished_product_code="{{ $data->finished_product_code }}"
+                                    data-intermediate_code="{{ $data->intermediate_code }}"
+                                    data-product_name_id="{{ $data->product_name_id }}"
+                                    data-market_id="{{ $data->market_id }}"
+                                    data-specification_id="{{ $data->specification_id }}"
+                                    data-batch_size="{{ $data->batch_size }}" data-batch_qty="{{ $data->batch_qty }}"
+                                    data-unit_batch_qty="{{ $data->unit_batch_qty }}"
+                                    data-primary_parkaging="{{ $data->primary_parkaging }}" 
+                                    data-toggle="modal"
+                                    data-target="#update_hypothesis_modal"
+                                    {{ $data->IsHypothesis == 0 ? $auth_update :''}}
+                                    >
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                            </td>
+                            @endif
+
+
+                            <td class="text-center align-middle">
+                                <form class="form-deActive" action="{{ route('pages.category.product.deActive') }}"
+                                    method="post">
+                                    @csrf
+                                    <input type="hidden" name="id" value = "{{ $data->id }}">
+                                    <input type="hidden" name="active" value="{{ $data->active }}">
+                                    <input type="hidden" name="IsHypothesis" value="{{ $data->IsHypothesis }}">
+
+                                    @if ($data->active)
+                                        <button type="submit" class="btn btn-danger"  data-type="{{ $data->active }}"
+                                            data-name="{{ $data->finished_product_code . ' - ' . $data->intermediate_code . ' - ' . $data->finished_product_name }}"
+                                            {{ $data->IsHypothesis == 0 ? $auth_update :''}}
+                                            >
+                                            <i class="fas fa-lock"></i>
+                                        </button>
+                                    @else
+                                        <button type="submit" class="btn btn-success" {{ $auth_deActive }} data-type="{{ $data->active }}" 
+                                            data-name="{{ $data->finished_product_code . ' - ' . $data->intermediate_code . ' - ' . $data->finished_product_name }}"
+                                            >
+                                            <i class="fas fa-unlock"></i>
+                                        </button>
+                                    @endif
+                                </form>
+                            </td>
+
+                            <td class="text-center align-middle">
+
+                                <button type="button"
+                                    class="btn btn-recipe btn-primary mx-1"
+                                    data-finished_product_code="{{ $data->finished_product_code }}"
+                                    data-product_name="{{ $data->finished_product_name}} - {{$data->batch_qty}} {{$data->unit_batch_qty }}"
+                                    data-id =  "{{ $data->id }}"
+                                    data-is_hypothesis="{{ $data->IsHypothesis }}"
+                                  
+                                    data-toggle="modal"
+                                    data-target="#intermediateRecipeModal"
+                                    >
+                                    <i class="fas fa-list-alt"></i>
+                                </button>
+
+                                @if ($data->IsHypothesis)
+                                    <button type="button"
+                                        class="btn btn-create-bom btn-success mt-1 "
+                                        data-id="{{ $data->id }}"
+                                        data-product_name="{{ $data->finished_product_name}} - {{$data->batch_qty}} {{$data->unit_batch_qty }}"
+                                        data-id =  "{{ $data->id }}"
+                                      
+
+                                        data-toggle="modal"
+                                        data-target="#createBOMModal"
+                                        >
+                                        <i class="fas fa-plus"></i>
+                                    </button>
+                                @endif
+
+
+
+                            </td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+        <!-- /.card-body -->
+    </div>
+    <!-- /.content -->
+</div>
+
+<script src="{{ asset('js/vendor/jquery-1.12.4.min.js') }}"></script>
+<script src="{{ asset('js/popper.min.js') }}"></script>
+<script src="{{ asset('js/bootstrap.min.js') }}"></script>
+<script src="{{ asset('js/sweetalert2.all.min.js') }}"></script>
+
+@if (session('success'))
+    <script>
+        Swal.fire({
+            title: 'Thành công!',
+            text: '{{ session('success') }}',
+            icon: 'success',
+            timer: 2000, // tự đóng sau 2 giây
+            showConfirmButton: false
+        });
+    </script>
+@endif
+
+<script>
+    $(document).ready(function() {
+        document.body.style.overflowY = "auto";
+        $('.btn-edit').click(function() {
+            const button = $(this);
+            const modal = $('#update_modal');
+
+            // Gán dữ liệu vào input
+            modal.find('input[name="id"]').val(button.data('id'));
+            modal.find('input[name="finished_product_code"]').val(button.data('finished_product_code'));
+            modal.find('input[name="intermediate_code"]').val(button.data('intermediate_code'));
+            modal.find('select[name="product_name_id"]').val(button.data('product_name_id'));
+            modal.find('select[name="market_id"]').val(button.data('market_id'));
+            modal.find('select[name="specification_id"]').val(button.data('specification_id'));
+            modal.find('input[name="batch_size"]').val(button.data('batch_size'));
+            modal.find('input[name="batch_qty"]').val(button.data('batch_qty'));
+            modal.find('input[name="unit_batch_qty"]').val(button.data('unit_batch_qty'));
+            modal.find('input[name="primary_parkaging"]').prop('checked', button.data(
+                'primary_parkaging'));
+        });
+
+        $('.btn-edit-hypothesis').click(function() {
+            const button = $(this);
+            const modal = $('#update_hypothesis_modal');
+
+            // Gán dữ liệu vào input
+            modal.find('input[name="id"]').val(button.data('id'));
+            modal.find('input[name="finished_product_code"]').val(button.data('finished_product_code'));
+            modal.find('input[name="intermediate_code"]').val(button.data('intermediate_code'));
+            modal.find('select[name="product_name_id"]').val(button.data('product_name_id'));
+            modal.find('select[name="market_id"]').val(button.data('market_id'));
+            modal.find('select[name="specification_id"]').val(button.data('specification_id'));
+            modal.find('input[name="batch_size"]').val(button.data('batch_size'));
+            modal.find('input[name="batch_qty"]').val(button.data('batch_qty'));
+            modal.find('input[name="unit_batch_qty"]').val(button.data('unit_batch_qty'));
+            
+        });
+
+        $('.form-deActive').on('submit', function(e) {
+            e.preventDefault(); // chặn submit mặc định
+            const form = this;
+            const productName = $(form).find('button[type="submit"]').data('name');
+            const active = $(form).find('button[type="submit"]').data('type');
+
+            let title = 'Bạn chắc chắn muốn vô hiệu hóa danh mục?'
+            if (!active) {
+                title = 'Bạn chắc chắn muốn phục hồi danh mục?'
+            }
+
+            Swal.fire({
+                title: title,
+                text: `Sản phẩm: ${productName}`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#28a745',
+                cancelButtonColor: '#d33',
+                confirmButtonText: 'Đồng ý',
+                cancelButtonText: 'Hủy'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    form.submit(); // chỉ submit sau khi xác nhận
+                }
+            });
+        });
+
+        $('#data_table_product_category').DataTable({
+            paging: true,
+            lengthChange: true,
+            searching: true,
+            ordering: true,
+            info: true,
+            autoWidth: false,
+            pageLength: 10,
+            lengthMenu: [
+                [10, 25, 50, 100, -1],
+                [10, 25, 50, 100, "Tất cả"]
+            ],
+            language: {
+                search: "Tìm kiếm:",
+                lengthMenu: "Hiển thị _MENU_ dòng",
+                info: "Hiển thị _START_ đến _END_ của _TOTAL_ dòng",
+                paginate: {
+                    previous: "Trước",
+                    next: "Sau"
+                }
+            },
+            infoCallback: function(settings, start, end, max, total, pre) {
+                // Đếm số bản ghi active = 1 và active = 0
+                let activeCount = 0;
+                let inactiveCount = 0;
+
+                // lấy toàn bộ data trong DataTable
+                settings.aoData.forEach(function(row) {
+                    // row._aData là dữ liệu thô của từng <tr>
+                    // bạn có thể dựa vào class text-success / text-danger hoặc thêm 1 cột hidden active
+                    const td = $(row.anCells[1]); // cột thứ 2 là intermediate_code
+                    if (td.hasClass('text-success')) {
+                        activeCount++;
+                    } else if (td.hasClass('text-danger')) {
+                        inactiveCount++;
+                    }
+                });
+
+                return pre + ` (Đang hiệu lực: ${activeCount}, Vô hiệu: ${inactiveCount})`;
+            }
+        });
+
+        $('.btn-create-bom').click(function() {
+            const button = $(this);
+            const modal = $('#createBOMModal');
+            const product_caterogy_id = $(this).data('id')
+            // Gán dữ liệu vào input
+            modal.find('#product_caterogy_id').val(button.data('id'));
+            modal.find('#recipe_i_title').val(button.data('product_name'));
+            
+            const history_modal = modal.find('#data_table_create_recipe_body')
+            
+            
+            // const create_recip_modal = $('#data_table_create_recipe_body')
+            // // Xóa dữ liệu cũ
+            history_modal.empty();
+
+            // Gọi Ajax lấy dữ liệu history
+            $.ajax({
+                    url: "{{ route('pages.category.intermediate.recipe') }}",
+                    type: 'post',
+                    data: {
+                        IsHypothesis: 1,
+                        product_caterogy_id: product_caterogy_id,
+                        _token: "{{ csrf_token() }}"
+                    },
+                    success: function(res) {
+                        
+                        if (res.length === 0) {
+                            history_modal.append(
+                                `<tr><td colspan="6" class="text-center">Không có công thức</td></tr>`
+                            );
+                        } else {
+
+                        res.forEach((item, index) => {
+                            let code = item.MatID ?? '';
+                            let name = item.MaterialName ?? '';
+                            let qty = item.MatQty ?? '';
+                            let uom = item.uom ?? '';
+
+                            history_modal.append(`
+                                <tr>
+                                    <td>${index + 1}</td>
+
+                                    <td>
+                                        <input type="text" 
+                                            class="form-control code" 
+                                            value="${code}">
+                                    </td>
+
+                                    <td>
+                                        <input type="text" 
+                                            class="form-control name" 
+                                            value="${name}">
+                                    </td>
+
+                                    <td>
+                                        <input type="number" 
+                                            step="0.001"
+                                            class="form-control qty" 
+                                            value="${qty}">
+                                    </td>
+
+                                    <td>
+                                        <input type="text" 
+                                            class="form-control uom" 
+                                            value="${uom}">
+                                    </td>
+
+                                    <td>
+                                        <button type="button" 
+                                                class="btn btn-danger btn-sm btn_remove">
+                                            <i class="fa fa-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            `);
+
+                        });
+                                                
+                        }
+                    },
+                    error: function() {
+                        history_modal.append(
+                            `<tr><td colspan="6" class="text-center text-danger">Lỗi tải dữ liệu</td></tr>`
+                        );
+                    }
+            });
+
+            
+        });
+
+    });
+
+    $(document).on('click', '.btn-recipe', function(){
+
+            const history_modal = $('#data_table_recipe_body')
+            const intermediate_code = $(this).data('finished_product_code');
+            const product_name = $(this).data('product_name');
+            const IsHypothesis = $(this).data('is_hypothesis');
+            const product_caterogy_id = $(this).data('id')
+            
+            $('#recipe_intermediate_code').text(`${intermediate_code} - ${product_name}`);
+
+                // Xóa dữ liệu cũ
+                history_modal.empty();
+
+                // Gọi Ajax lấy dữ liệu history
+            $.ajax({
+                    url: "{{ route('pages.category.intermediate.recipe') }}",
+                    type: 'post',
+                    data: {
+                        IsHypothesis: IsHypothesis,
+                        product_caterogy_id: product_caterogy_id,
+                        intermediate_code: intermediate_code,
+                        _token: "{{ csrf_token() }}"
+                    },
+                    success: function(res) {
+                        if (res.length === 0) {
+                            history_modal.append(
+                                `<tr><td colspan="6" class="text-center">Không có công thức</td></tr>`
+                            );
+                        } else {
+                            res.forEach((item, index) => {
+                                // map màu level
+                       
+                                history_modal.append(`
+                              <tr>
+                                    <td>${index + 1}</td>
+                                    <td>${item.MatID ?? ''}</td>
+                                    <td>${item.MaterialName ?? ''}</td>
+                                    <td style="text-align:center">
+                                        ${
+                                            item.MatQty != null
+                                            ? Number(item.MatQty).toLocaleString(undefined, {
+                                                minimumFractionDigits: 0,
+                                                maximumFractionDigits: 3
+                                            })
+                                            : ''
+                                        }
+                                    </td>
+
+                                    <td style="text-align:center">
+                                        ${item.uom ?? ''}
+                                    </td>
+
+                                    <td>${Math.round(item.Revno1 ?? 0)}</td>
+                              </tr>
+                          `);
+                            });
+                        }
+                    },
+                    error: function() {
+                        history_modal.append(
+                            `<tr><td colspan="6" class="text-center text-danger">Lỗi tải dữ liệu</td></tr>`
+                        );
+                    }
+            });
+
+        });
+
+
+
+
+</script>

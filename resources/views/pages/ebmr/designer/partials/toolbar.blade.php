@@ -30,12 +30,15 @@
                 </div>
             </div>
 
-            <button class="btn btn-toolbar-action" onclick="addItem('static-text')"><i
+            <button class="btn btn-toolbar-action" onmousedown="event.preventDefault();" onclick="addItem('static-text')"><i
                     class="fas fa-paragraph me-1"></i>
                 Mô tả</button>
 
-            <button class="btn btn-toolbar-action" onclick="addItem('signature')"><i class="fas fa-signature me-1"></i>
+            <button class="btn btn-toolbar-action" onmousedown="event.preventDefault();" onclick="handleSignatureClick()"><i class="fas fa-signature me-1"></i>
                 Chữ ký</button>
+
+            <button class="btn btn-toolbar-action text-primary fw-bold" onmousedown="event.preventDefault();" onclick="insertDynamicField()"><i class="fas fa-keyboard me-1"></i>
+                Biến số</button>
         </div>
 
         <div class="ms-auto">

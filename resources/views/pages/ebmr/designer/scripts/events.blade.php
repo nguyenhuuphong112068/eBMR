@@ -2,6 +2,8 @@
     function initTableAdvancedFeatures() {
         // 1. Selection Logic
         document.addEventListener('mousedown', (e) => {
+            if (window.isExecutionMode) return; // Chặn chọn khối ở chế độ ghi chép
+
             const cell = e.target.closest('td, th');
             if (cell && cell.closest('.mini-table')) {
                 isSelecting = true;
@@ -17,7 +19,7 @@
         });
 
         document.addEventListener('mouseover', (e) => {
-            if (!isSelecting) return;
+            if (window.isExecutionMode || !isSelecting) return;
             const cell = e.target.closest('td, th');
             if (cell && cell.closest('.mini-table') === startCell.closest('.mini-table')) {
                 highlightRange(startCell, cell);
@@ -30,6 +32,7 @@
 
         // 2. Paste Logic (Smart Paste)
         document.addEventListener('paste', (e) => {
+            if (window.isExecutionMode) return; // Không cho phép paste cấu trúc/khối mới
             const cell = e.target.closest('td, th');
             if (cell) {
                 saveState();
@@ -41,6 +44,14 @@
 
         // 3. Shortcuts & Navigation
         document.addEventListener('keydown', (e) => {
+            if (window.isExecutionMode) {
+                // Chỉ cho phép các phím di chuyển cơ bản, không cho phép phím tắt hệ thống (Ctrl+S, Ctrl+Z...)
+                if (e.ctrlKey) {
+                    if (['s', 'z', 'y'].includes(e.key.toLowerCase())) e.preventDefault();
+                }
+                return;
+            }
+
             if (e.key === 'Tab' && e.target.closest('[contenteditable="true"]')) {
                 e.preventDefault();
                 document.execCommand('insertHTML', false, '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;');

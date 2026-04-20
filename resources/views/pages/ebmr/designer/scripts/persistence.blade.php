@@ -3,6 +3,7 @@
         const name = document.getElementById('templateName').value || 'Hồ sơ không tên';
         const schema = {
             type: 'document-flow',
+            fieldsConfig: fieldsConfig,
             fields: items.map(i => ({
                 id: i.id,
                 type: i.type,

@@ -610,4 +610,98 @@
     }
     .ruler-margin-left { left: 0; border-right: 1px solid #aaa; }
     .ruler-margin-right { right: 0; border-left: 1px solid #aaa; }
+
+    /* Layout Transitions */
+    .transition-all {
+        transition: all 0.3s ease-in-out;
+    }
+
+    .cursor-pointer {
+        cursor: pointer;
+    }
+
+    #outline-minimized:hover, #sidebar-minimized:hover {
+        background-color: #f1f3f4 !important;
+    }
+    /* Comments Gutter Styling */
+    .comment-gutter {
+        /* No longer absolute, part of flex flow */
+        width: 320px;
+        pointer-events: none;
+    }
+
+    .comment-item {
+        position: absolute;
+        width: 100%;
+        background: white;
+        border: 1px solid #e0e0e0;
+        border-radius: 12px;
+        padding: 14px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        font-size: 0.88rem;
+        transition: all 0.25s ease;
+        pointer-events: auto;
+        border-left: 5px solid #1a73e8;
+    }
+
+    .comment-item:hover, .comment-item.active {
+        box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        border-color: #1a73e8;
+        transform: scale(1.02);
+        z-index: 2000;
+    }
+
+    .comment-connector-line {
+        position: absolute;
+        height: 1px;
+        border-top: 1.5px dashed #4285f4;
+        width: 40px;
+        left: -40px;
+        opacity: 0.3;
+        pointer-events: none;
+        z-index: -1;
+    }
+
+    .comment-avatar {
+        width: 32px;
+        height: 32px;
+        background: #1a73e8;
+        color: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        font-size: 0.8rem;
+        flex-shrink: 0;
+    }
+
+    .comment-user {
+        font-weight: 600;
+        color: #202124;
+        font-size: 0.9rem;
+    }
+
+    .comment-date {
+        font-size: 0.75rem;
+        color: #70757a;
+    }
+
+    .comment-content {
+        margin-top: 8px;
+        color: #3c4043;
+        line-height: 1.5;
+    }
+
+    .ebmr-comment-highlight {
+        background-color: rgba(255, 244, 163, 0.4);
+        border-bottom: 2px solid #f29900;
+        cursor: pointer;
+        padding: 2px 0;
+    }
+
+    .ebmr-comment-highlight.active, .ebmr-comment-highlight:hover {
+        background-color: rgba(255, 235, 59, 1);
+        box-shadow: 0 0 0 2px rgba(255, 235, 59, 0.3);
+    }
 </style>

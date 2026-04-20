@@ -14,9 +14,16 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     
     <div class="content-wrapper" id="mainContent" style="background-color: #f1f3f4; min-height: 100vh;">
+        @if(!$isReadOnly)
         @include('pages.ebmr.designer.partials.toolbar')
+        @endif
         @include('pages.ebmr.designer.partials.canvas')
     </div>
+
+    <script>
+        window.isReadOnly = {{ $isReadOnly ? 'true' : 'false' }};
+        window.templateComments = @json($comments);
+    </script>
 
     @include('pages.ebmr.designer.partials.modals')
     @include('pages.ebmr.designer.partials.styles')
@@ -28,5 +35,6 @@
     @include('pages.ebmr.designer.scripts.table_advanced')
     @include('pages.ebmr.designer.scripts.ui_handlers')
     @include('pages.ebmr.designer.scripts.persistence')
+    @include('pages.ebmr.designer.scripts.comments')
     @include('pages.ebmr.designer.scripts.events')
 @endsection

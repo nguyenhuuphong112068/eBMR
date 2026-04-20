@@ -11,8 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('documents', function (Blueprint $table) {
-            $table->dropColumn('document_types_id');
+        Schema::table('ebmr_records', function (Blueprint $table) {
+            $table->string('batch_number')->nullable()->after('template_id');
         });
     }
 
@@ -21,8 +21,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('documents', function (Blueprint $table) {
-            $table->tinyInteger('document_types_id')->nullable();
+        Schema::table('ebmr_records', function (Blueprint $table) {
+            $table->dropColumn('batch_number');
         });
     }
 };

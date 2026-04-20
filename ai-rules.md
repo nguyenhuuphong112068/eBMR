@@ -76,3 +76,17 @@
     - *Username*: `Admin`
     - *Password*: `Abc@1234`
 
+## 10. Operation Modes (3 Chế Độ Hoạt Động)
+Hệ thống eBMR có 3 chế độ hoạt động cơ bản với quyền hạn và thao tác phân biệt rõ ràng:
+1. **Chế độ "Soạn hồ sơ" (Drafting Mode)**: 
+   - Dành cho người dùng cấp 1 (Thiết kế / QA). 
+   - Cho phép toàn quyền thay đổi nội dung, cấu trúc biểu mẫu (thêm/sửa/xoá bảng, chữ).
+   - Dữ liệu cấu trúc lưu vào bảng `ebmr_template_blocks` thuộc `ebmr_templates`.
+2. **Chế độ "Kiểm tra phê duyệt" (Approval Mode)**: 
+   - Không cho phép thay đổi bất kỳ nội dung hay cấu trúc biểu mẫu nào.
+   - Chỉ được phép thao tác tính năng **Bình luận (Comment)** để làm rõ, yêu cầu sửa đổi hoặc phản hồi, có chức năng highlight vị trí được chọn.
+3. **Chế độ "Ghi chép" (Execution Mode)**: 
+   - Dành cho người dùng cấp 2 (Sản xuất / Vận hành).
+   - Không cho phép thay đổi cấu trúc biểu mẫu.
+   - Chỉ được phép ghi nội dung (nhập dữ liệu văn bản) vào các **ô dữ liệu (cells)** trong bảng chưa bị khoá và click **Ký tên**.
+   - Dữ liệu thu thập ở bước này KHÔNG BỊ LƯU đè vào bảng `template_block` chứa cấu trúc mẫu. Thay vào đó, nó được tách biệt và lưu rải rác từng ô dữ liệu vào bảng `ebmr_run_data` mapping với `record_id` trong `ebmr_records`.

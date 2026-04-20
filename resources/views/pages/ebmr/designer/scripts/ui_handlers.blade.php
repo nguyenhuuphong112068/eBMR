@@ -2,6 +2,8 @@
     function selectItem(id, doRender = true) {
         selectedId = id;
         if (doRender) renderBlocks();
+        if (window.isReadOnly) return; // Don't try to update property panel in ReadOnly mode
+
         const item = items.find(i => i.id === id);
         const panel = document.getElementById('property-panel');
         const body = document.getElementById('prop-body');
@@ -180,7 +182,9 @@
         saveState();
         items = items.filter(i => i.id !== id);
         selectedId = null;
-        document.getElementById('property-panel').classList.add('d-none');
+        if (!isSidebarMinimized) {
+            document.getElementById('property-panel').classList.add('d-none');
+        }
         renderBlocks();
     }
 
@@ -543,5 +547,354 @@
         marginL.style.width = leftPx + 'px';
         markerRight.style.right = rightPx + 'px';
         marginR.style.width = rightPx + 'px';
+    }
+
+    let isOutlineMinimized = false;
+    let isSidebarMinimized = true;
+
+    window.toggleOutline = function(minimize) {
+        isOutlineMinimized = minimize;
+        const col = document.getElementById('outline-col');
+        const content = col.querySelector('.outline-sidebar');
+        const minimized = document.getElementById('outline-minimized');
+
+        if (minimize) {
+            col.className = 'col-lg-1 transition-all p-0';
+            content.classList.add('d-none');
+            minimized.classList.remove('d-none');
+            updateCanvasWidth();
+        } else {
+            col.className = 'col-lg-2 transition-all';
+            content.classList.remove('d-none');
+            minimized.classList.add('d-none');
+            updateCanvasWidth();
+        }
+    };
+
+    window.toggleSidebar = function(minimize) {
+        isSidebarMinimized = minimize;
+        const col = document.getElementById('sidebar-col');
+        const minimized = document.getElementById('sidebar-minimized');
+        const panel = document.getElementById('property-panel');
+        const full = document.getElementById('sidebar-full');
+
+        if (minimize) {
+            col.className = 'col-lg-1 transition-all p-0';
+            if (full) full.classList.add('d-none');
+            minimized.classList.remove('d-none');
+            if (panel) {
+                // When minimized, panel wrapper just becomes a hidden container for the full content
+                panel.classList.remove('card', 'shadow-sm');
+                panel.classList.add('bg-transparent', 'shadow-none', 'border-0');
+                panel.style.boxShadow = 'none';
+            }
+            updateCanvasWidth();
+        } else {
+            col.className = 'col-lg-3 transition-all';
+            if (full) full.classList.remove('d-none');
+            minimized.classList.add('d-none');
+            if (panel) {
+                panel.classList.add('card', 'shadow-sm');
+                panel.classList.remove('bg-transparent', 'shadow-none', 'border-0');
+                if (selectedId) panel.classList.remove('d-none');
+                else panel.classList.add('d-none');
+            }
+            updateCanvasWidth();
+        }
+    };
+
+    function updateCanvasWidth() {
+        const canvas = document.getElementById('canvas-col');
+        
+        if (isOutlineMinimized && isSidebarMinimized) {
+            canvas.className = 'col-lg-10 transition-all';
+        } else if (isOutlineMinimized) {
+            canvas.className = 'col-lg-8 transition-all';
+        } else if (isSidebarMinimized) {
+            canvas.className = 'col-lg-9 transition-all';
+        } else {
+            canvas.className = 'col-lg-7 transition-all';
+        }
+    }
+
+    // Smart Signature Handler
+    function handleSignatureClick() {
+        let targetRange = null;
+        
+        // Try saved text selection first (if we have one)
+        if (savedTextSelection) {
+            targetRange = savedTextSelection;
+        } else {
+            // Try native selection
+            const sel = window.getSelection();
+            if (sel && sel.rangeCount > 0) {
+                targetRange = sel.getRangeAt(0);
+            }
+        }
+        
+        if (targetRange) {
+            let node = targetRange.startContainer;
+            if (node.nodeType === 3) node = node.parentNode;
+            
+            if (node && node.closest && node.closest('[contenteditable="true"]')) {
+                // If cursor is inside a table cell or a text block, insert an inline signature tag instead of a block
+                insertDynamicField('signature');
+                return;
+            }
+        }
+        
+        // Default behavior: create a new Signature Block at the root level
+        if (typeof addItem === 'function') {
+            addItem('signature');
+        }
+    }
+
+    // Dynamic Fields Data Handling
+    function insertDynamicField(defaultType = 'text') {
+        const fieldId = 'field_' + Math.floor(Math.random() * 1000000);
+        let defaultLabel = '[Nhập dữ liệu]';
+        if (defaultType === 'signature') defaultLabel = '[Ký tên]';
+        
+        let dynamicName = 'var_' + fieldId; // Fallback
+        
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0) {
+            let node = sel.getRangeAt(0).startContainer;
+            if (node.nodeType === 3) node = node.parentNode;
+            
+            const td = node.closest('td, th');
+            const block = node.closest('.block-item');
+            
+            if (block) {
+                const blockId = block.getAttribute('data-id');
+                if (td) {
+                    const r = td.getAttribute('data-row');
+                    const c = td.getAttribute('data-col');
+                    dynamicName = `${blockId}_r${r}_c${c}`;
+                } else {
+                    dynamicName = `${blockId}_text`;
+                }
+            }
+        }
+        
+        // Register in state if not exists
+        if (!fieldsConfig[fieldId]) {
+            fieldsConfig[fieldId] = {
+                id: fieldId,
+                name: dynamicName,
+                label: defaultType === 'signature' ? 'Người duyệt' : 'Nhập dữ liệu',
+                type: defaultType,
+                validation: {
+                    required: false,
+                    min: null,
+                    max: null,
+                    decimal_places: null
+                },
+                options: []
+            };
+        }
+
+        // Restore selection if lost
+        if (savedTextSelection) {
+            const currentSel = window.getSelection();
+            currentSel.removeAllRanges();
+            currentSel.addRange(savedTextSelection);
+        }
+        
+        const currentSel = window.getSelection();
+        if (currentSel.rangeCount > 0) {
+            const range = currentSel.getRangeAt(0);
+            
+            // Create the badge node directly to completely bypass browser execCommand sanitization
+            const span = document.createElement('span');
+            span.contentEditable = "false";
+            span.className = "ebmr-field-badge badge bg-primary text-white mx-1 cursor-pointer shadow-sm";
+            span.setAttribute('data-field-id', fieldId);
+            span.setAttribute('onclick', `selectField(event, '${fieldId}')`);
+            span.innerHTML = `<i class="fas fa-edit me-1"></i> ${defaultLabel}`;
+            
+            const zeroWidthSpace = document.createTextNode('\u200B');
+            
+            range.deleteContents();
+            range.insertNode(zeroWidthSpace);
+            range.insertNode(span);
+            
+            // Move cursor to zero width space
+            range.setStartAfter(zeroWidthSpace);
+            range.collapse(true);
+            currentSel.removeAllRanges();
+            currentSel.addRange(range);
+            
+            // Trigger input event to update model
+            const ce = span.closest('[contenteditable="true"]');
+            if (ce) {
+                ce.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        } else {
+             const html = `<span contenteditable="false" class="ebmr-field-badge badge bg-primary text-white mx-1 cursor-pointer shadow-sm" data-field-id="${fieldId}" onclick="selectField(event, '${fieldId}')"><i class="fas fa-edit me-1"></i> ${defaultLabel}</span>\u200B`;
+             document.execCommand('insertHTML', false, html);
+        }
+        
+        saveStateDebounced();
+        selectField(null, fieldId);
+    }
+
+    function selectField(event, fieldId) {
+        if (event) event.stopPropagation(); // Prevents triggering block selection
+        
+        selectedFieldId = fieldId;
+        selectedId = null; // Clear block selection
+        
+        // Remove active class from blocks
+        document.querySelectorAll('.block-item').forEach(el => el.classList.remove('active'));
+        
+        const field = fieldsConfig[fieldId];
+        if (!field) return;
+
+        // Ensure validation object exists to prevent crashes
+        if (!field.validation) {
+            field.validation = { required: false, min: null, max: null, decimal_places: null };
+        }
+
+        const panel = document.getElementById('property-panel');
+        const body = document.getElementById('prop-body');
+        
+        if (panel) {
+            panel.classList.remove('d-none');
+            // If sidebar is hidden, open it
+            if (isSidebarMinimized) {
+                toggleSidebar(false);
+            }
+        }
+
+        let typeHtml = `
+            <div class="mb-3">
+                <label class="small fw-bold mb-2">Biến số Hệ thống</label>
+                <div class="alert alert-warning py-2 mb-2 small">
+                    <i class="fas fa-info-circle me-1"></i> Đây là trường dữ liệu động để thu thập thông tin trong quá trình sản xuất.
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="small fw-bold text-muted text-uppercase mb-2">Tên thẻ (Nhãn hiển thị)</label>
+                <input type="text" class="form-control form-control-sm" value="${field.label || ''}" oninput="syncFieldConfig('${fieldId}', 'label', this.value)">
+                <div class="form-text small" style="font-size: 0.7rem;">Hiển thị ngắn gọn cho người dùng. VD: Khối lượng (g).</div>
+            </div>
+            
+            @if(session('user') && session('user')['userGroup'] === 'Admin')
+            <div class="mb-3">
+                <label class="small fw-bold text-muted text-uppercase mb-2 text-danger"><i class="fas fa-tools me-1"></i>Tên biến (Machine-readable)</label>
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-light border-end-0">@</span>
+                    <input type="text" class="form-control border-start-0" value="${field.name || ''}" oninput="syncFieldConfig('${fieldId}', 'name', this.value)">
+                </div>
+                <div class="form-text small text-muted" style="font-size: 0.7rem;">Chỉ dành cho Admin. Hệ thống tự động tạo mã này theo cấu hình vị trí.</div>
+            </div>
+            @endif
+
+            <hr class="my-3">
+
+            <div class="mb-3">
+                <label class="small fw-bold text-muted text-uppercase mb-2">Kiểu dữ liệu</label>
+                <select class="form-select form-select-sm" onchange="syncFieldConfig('${fieldId}', 'type', this.value)">
+                    <option value="text" ${field.type === 'text' ? 'selected' : ''}>✒️ Văn bản (Text)</option>
+                    <option value="number" ${field.type === 'number' ? 'selected' : ''}>🔢 Số (Number)</option>
+                    <option value="date" ${field.type === 'date' ? 'selected' : ''}>📅 Ngày tháng (Date)</option>
+                    <option value="select" ${field.type === 'select' ? 'selected' : ''}>🔘 Khóa chọn (Dropdown)</option>
+                    <option value="signature" ${field.type === 'signature' ? 'selected' : ''}>✍️ Chữ ký (Signature)</option>
+                    <option value="checkbox" ${field.type === 'checkbox' ? 'selected' : ''}>☑️ Hộp kiểm tra (Checkbox)</option>
+                </select>
+            </div>
+            
+            <div class="mb-3">
+                <div class="form-check form-switch ps-4 pt-1">
+                    <input class="form-check-input ms-n4" type="checkbox" id="fieldRequired" ${field.validation.required ? 'checked' : ''} onchange="syncFieldConfig('${fieldId}', 'validation.required', this.checked)">
+                    <label class="form-check-label small fw-bold" for="fieldRequired">Bắt buộc điền</label>
+                </div>
+            </div>
+        `;
+
+        if (field.type === 'number') {
+            typeHtml += `
+                <div class="card bg-light border-0 shadow-none mb-3">
+                    <div class="card-body p-3">
+                        <label class="small fw-bold mb-2"><i class="fas fa-balance-scale me-1"></i> Giới hạn giá trị</label>
+                        <div class="row g-2 mb-2">
+                            <div class="col-6">
+                                <label class="small text-muted" style="font-size: 0.75em;">Tối thiểu (Min)</label>
+                                <input type="number" class="form-control form-control-sm" placeholder="VD: 71.0" value="${field.validation.min !== null ? field.validation.min : ''}" oninput="syncFieldConfig('${fieldId}', 'validation.min', this.value)">
+                            </div>
+                            <div class="col-6">
+                                <label class="small text-muted" style="font-size: 0.75em;">Tối đa (Max)</label>
+                                <input type="number" class="form-control form-control-sm" placeholder="VD: 81.0" value="${field.validation.max !== null ? field.validation.max : ''}" oninput="syncFieldConfig('${fieldId}', 'validation.max', this.value)">
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <label class="small text-muted" style="font-size: 0.75em;">Chữ số thập phân</label>
+                            <input type="number" class="form-control form-control-sm" min="0" max="6" placeholder="Bỏ trống nếu là số nguyên" value="${field.validation.decimal_places !== null ? field.validation.decimal_places : ''}" oninput="syncFieldConfig('${fieldId}', 'validation.decimal_places', this.value)">
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else if (field.type === 'select') {
+            typeHtml += `
+                <div class="mb-3">
+                    <label class="small fw-bold text-muted text-uppercase mb-2">Danh sách lựa chọn</label>
+                    <textarea class="form-control form-control-sm" rows="3" placeholder="Ví dụ: Đạt, Tốt, Không đạt" oninput="syncFieldConfig('${fieldId}', 'options', this.value)">${(field.options || []).join(', ')}</textarea>
+                    <div class="form-text small" style="font-size: 0.7rem;">Mỗi lựa chọn cách nhau bởi dấu phẩy (,).</div>
+                </div>
+            `;
+        }
+        
+        typeHtml += `
+            <div class="mt-4 text-center">
+                <button class="btn btn-sm btn-outline-danger w-100" onclick="deleteDynamicField('${fieldId}')"><i class="fas fa-trash-alt me-1"></i> Xóa biến số</button>
+            </div>
+        `;
+
+        body.innerHTML = typeHtml;
+    }
+
+    function syncFieldConfig(fieldId, path, value) {
+        if (!fieldsConfig[fieldId]) return;
+        
+        let target = fieldsConfig[fieldId];
+        const keys = path.split('.');
+        const lastKey = keys.pop();
+        
+        // Traverse path to deeply update
+        for (let key of keys) {
+            if (!target[key]) target[key] = {};
+            target = target[key];
+        }
+
+        // Type coercion
+        if (value === '') value = null;
+        else if (path.includes('min') || path.includes('max') || path.includes('decimal_places')) {
+            value = value !== null ? Number(value) : null;
+        } else if (path === 'options') {
+            value = value ? value.split(',').map(s => s.trim()).filter(s => s) : [];
+        }
+
+        target[lastKey] = value;
+        
+        // If label changes, update the DOM badge immediately
+        if (path === 'label') {
+            const el = document.querySelector(`.ebmr-field-badge[data-field-id="${fieldId}"]`);
+            if (el) el.innerHTML = `<i class="fas fa-edit me-1"></i> ${value || '[Trống]'}`;
+        } else if (path === 'type') {
+            selectField(null, fieldId); // Re-render panel
+        }
+        
+        saveStateDebounced();
+    }
+    
+    function deleteDynamicField(fieldId) {
+        const el = document.querySelector(`.ebmr-field-badge[data-field-id="${fieldId}"]`);
+        if (el) {
+            el.remove();
+            delete fieldsConfig[fieldId];
+            saveStateDebounced();
+            document.getElementById('property-panel').classList.add('d-none');
+        }
     }
 </script>
