@@ -106,6 +106,7 @@ class EbmrExecutionController extends Controller
             if (!empty($validated['status'])) {
                 DB::table('ebmr_records')
                     ->where('id', $validated['record_id'])
+                    
                     ->update(['status' => $validated['status'], 'updated_at' => $now]);
             }
 

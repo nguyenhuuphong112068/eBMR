@@ -9,7 +9,6 @@ class EbmrDesignerController extends Controller
 {
     public function designer($id = null)
     {
-        session(['title' => 'Thiết kế biểu mẫu BMR']);
         $template = null;
         $isReadOnly = false;
         $comments = [];
@@ -17,6 +16,45 @@ class EbmrDesignerController extends Controller
         if ($id) {
             $template = DB::table('ebmr_templates')->where('id', $id)->first();
             if ($template) {
+                // Update session title based on type
+                $type = $template->type ?? 'BMR';
+                $title = 'Thiết kế hồ sơ BMR';
+                if ($type === 'GF') $title = 'Thiết kế biểu mẫu dùng chung';
+                if ($type === 'BPR') $title = 'Thiết kế hồ sơ đóng gói';
+                if ($type === 'MF') $title = 'Thiết kế biểu mẫu gốc';
+                session(['title' => $title]);
+
+                // Get category extra info for header display
+                if ($type === 'GF') {
+                    $cat = DB::table('gf_category')->where('id', $template->caterogy_id)->first();
+                    $template->category_code = $cat->code ?? '';
+                    $template->category_name = $cat->name ?? '';
+                    $template->relatived_sop_no = $cat->relatived_sop_no ?? '';
+                } elseif ($type === 'MF') {
+                    $cat = DB::table('mf_category')->where('id', $template->caterogy_id)->first();
+                    $template->category_code = $cat->code ?? '';
+                    $template->category_name = $cat->name ?? '';
+                    $template->stage_name = $cat->stage_name ?? '';
+                } elseif ($type === 'BPR') {
+                    $cat = DB::table('finished_product_category')
+                        ->leftJoin('product_name', 'finished_product_category.product_name_id', '=', 'product_name.id')
+                        ->where('finished_product_category.id', $template->caterogy_id)
+                        ->select('finished_product_category.*', 'product_name.name as product_name')
+                        ->first();
+                    $template->category_code = $cat->finished_product_code ?? '';
+                    $template->category_name = $cat->product_name ?? '';
+                } else {
+                    $cat = DB::table('intermediate_category')
+                        ->leftJoin('product_name', 'intermediate_category.product_name_id', '=', 'product_name.id')
+                        ->leftJoin('dosage', 'intermediate_category.dosage_id', '=', 'dosage.id')
+                        ->where('intermediate_category.id', $template->caterogy_id)
+                        ->select('intermediate_category.*', 'product_name.name as product_name', 'dosage.name as dosage_name')
+                        ->first();
+                    $template->category_code = $cat->intermediate_code ?? '';
+                    $template->category_name = $cat->product_name ?? '';
+                    $template->dosage_name = $cat->dosage_name ?? '';
+                    $template->batch_size = ($cat->batch_size ?? '') . ' ' . ($cat->unit_batch_size ?? '');
+                }
                 // Determine read-only state
                 $currentUserId = session('user')['userId'] ?? null;
                 if ($template->owner_id != $currentUserId || $template->status !== 'draft') {
@@ -53,71 +91,82 @@ class EbmrDesignerController extends Controller
 
     public function save(Request $request)
     {
-        $validated = $request->validate([
-            'id' => 'nullable|integer',
-            'name' => 'required|string|max:255',
-            'schema' => 'required|array',
-            'log_history' => 'nullable|boolean'
-        ]);
+        try {
+            $validated = $request->validate([
+                'id' => 'nullable|integer',
+                'name' => 'required|string|max:255',
+                'schema' => 'required|array',
+                'log_history' => 'nullable|boolean'
+            ]);
 
-        $schemaData = $validated['schema'];
-        $fields = $schemaData['fields'] ?? [];
-        $fieldsConfig = $schemaData['fieldsConfig'] ?? null;
+            $schemaData = $validated['schema'];
+            $fields = $schemaData['fields'] ?? [];
+            $fieldsConfig = $schemaData['fieldsConfig'] ?? null;
 
-        $data = [
-            'name' => $validated['name'],
-            'updated_at' => now()
-        ];
-
-        if (isset($validated['log_history'])) {
-            $data['log_history'] = $validated['log_history'];
-        }
-
-        if (!empty($validated['id'])) {
-            $oldTemplateId = $validated['id'];
-            $oldTemplate = clone(DB::table('ebmr_templates')->where('id', $oldTemplateId)->first());
-
-            // Reconstruct old schema for logging
-            $oldBlocks = DB::table('ebmr_template_blocks')->where('template_id', $oldTemplateId)->get();
-            $oldFields = [];
-            foreach ($oldBlocks as $ob) {
-                $oldFields[] = json_decode($ob->properties, true);
-            }
-            $oldTemplate->schema = json_encode(['fields' => $oldFields]);
-
-            if ($oldTemplate->log_history) {
-                $this->logRevision($oldTemplate, $schemaData);
-            }
-
-            DB::table('ebmr_templates')->where('id', $oldTemplateId)->update($data);
-            $id = $oldTemplateId;
-            DB::table('ebmr_template_blocks')->where('template_id', $id)->delete();
-        } else {
-            $data['created_at'] = now();
-            $id = DB::table('ebmr_templates')->insertGetId($data);
-        }
-
-        // Insert new blocks
-        $blocksToInsert = [];
-        $order = 0;
-        foreach ($fields as $field) {
-            $blocksToInsert[] = [
-                'template_id' => $id,
-                'type' => $field['type'] ?? 'unknown',
-                'label' => $field['id'] ?? null,
-                'order' => $order++,
-                'content' => $field['content'] ?? null,
-                'properties' => json_encode($field),
-                'fields_config' => json_encode($fieldsConfig),
-                'created_at' => now(),
+            $data = [
+                'name' => $validated['name'],
                 'updated_at' => now()
             ];
-        }
-        if (!empty($blocksToInsert)) {
-            DB::table('ebmr_template_blocks')->insert($blocksToInsert);
-        }
 
-        return response()->json(['success' => true, 'message' => 'Lưu biểu mẫu thành công', 'id' => $id]);
+            if (isset($validated['log_history'])) {
+                $data['log_history'] = $validated['log_history'];
+            }
+
+            if (!empty($validated['id'])) {
+                $oldTemplateId = $validated['id'];
+                $oldTemplateRecord = DB::table('ebmr_templates')->where('id', $oldTemplateId)->first();
+                
+                if ($oldTemplateRecord) {
+                    $oldTemplate = clone($oldTemplateRecord);
+
+                    // Reconstruct old schema for logging
+                    $oldBlocks = DB::table('ebmr_template_blocks')->where('template_id', $oldTemplateId)->get();
+                    $oldFields = [];
+                    foreach ($oldBlocks as $ob) {
+                        $oldFields[] = json_decode($ob->properties, true);
+                    }
+                    $oldTemplate->schema = json_encode(['fields' => $oldFields]);
+
+                    if (!empty($oldTemplate->log_history)) {
+                        $this->logRevision($oldTemplate, $schemaData);
+                    }
+
+                    DB::table('ebmr_templates')->where('id', $oldTemplateId)->update($data);
+                    $id = $oldTemplateId;
+                    DB::table('ebmr_template_blocks')->where('template_id', $id)->delete();
+                } else {
+                    return response()->json(['success' => false, 'message' => 'Không tìm thấy hồ sơ gốc'], 404);
+                }
+            } else {
+                $data['created_at'] = now();
+                $id = DB::table('ebmr_templates')->insertGetId($data);
+            }
+
+            // Insert new blocks
+            $blocksToInsert = [];
+            $order = 0;
+            foreach ($fields as $field) {
+                $blocksToInsert[] = [
+                    'template_id' => $id,
+                    'type' => $field['type'] ?? 'unknown',
+                    'label' => $field['id'] ?? null,
+                    'order' => $order++,
+                    'content' => $field['content'] ?? null,
+                    'properties' => json_encode($field),
+                    'fields_config' => json_encode($fieldsConfig),
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ];
+            }
+            if (!empty($blocksToInsert)) {
+                DB::table('ebmr_template_blocks')->insert($blocksToInsert);
+            }
+
+            return response()->json(['success' => true, 'message' => 'Lưu biểu mẫu thành công', 'id' => $id]);
+        } catch (\Exception $e) {
+            \Log::error('EbmrDesignerController@save error: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Lỗi hệ thống: ' . $e->getMessage()], 500);
+        }
     }
 
     private function logRevision($oldTemplate, $newSchema)

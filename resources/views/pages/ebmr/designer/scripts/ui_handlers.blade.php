@@ -2,7 +2,7 @@
     function selectItem(id, doRender = true) {
         selectedId = id;
         if (doRender) renderBlocks();
-        if (window.isReadOnly) return; // Don't try to update property panel in ReadOnly mode
+        if (window.isReadOnly) return; 
 
         const item = items.find(i => i.id === id);
         const panel = document.getElementById('property-panel');
@@ -535,12 +535,12 @@
         if (!markerLeft) return;
         
         const item = items.find(i => i.id === selectedId);
-        let leftPx = 48; // default page padding
-        let rightPx = 48;
+        let leftPx = 40; // matching padding 40px
+        let rightPx = 40;
 
         if (item) {
-            if (item.marginLeft) leftPx = 48 + parseFloat(item.marginLeft);
-            if (item.marginRight) rightPx = 48 + parseFloat(item.marginRight);
+            if (item.marginLeft) leftPx = 40 + parseFloat(item.marginLeft);
+            if (item.marginRight) rightPx = 40 + parseFloat(item.marginRight);
         }
 
         markerLeft.style.left = leftPx + 'px';
@@ -579,24 +579,23 @@
         const full = document.getElementById('sidebar-full');
 
         if (minimize) {
-            col.className = 'col-lg-1 transition-all p-0';
+            if (col) col.className = 'col-lg-1 transition-all p-0';
             if (full) full.classList.add('d-none');
-            minimized.classList.remove('d-none');
+            if (minimized) minimized.classList.remove('d-none');
             if (panel) {
-                // When minimized, panel wrapper just becomes a hidden container for the full content
                 panel.classList.remove('card', 'shadow-sm');
                 panel.classList.add('bg-transparent', 'shadow-none', 'border-0');
                 panel.style.boxShadow = 'none';
             }
             updateCanvasWidth();
         } else {
-            col.className = 'col-lg-3 transition-all';
+            if (col) col.className = 'col-lg-3 transition-all';
             if (full) full.classList.remove('d-none');
-            minimized.classList.add('d-none');
+            if (minimized) minimized.classList.add('d-none');
             if (panel) {
                 panel.classList.add('card', 'shadow-sm');
                 panel.classList.remove('bg-transparent', 'shadow-none', 'border-0');
-                if (selectedId) panel.classList.remove('d-none');
+                if (selectedId || selectedFieldId) panel.classList.remove('d-none');
                 else panel.classList.add('d-none');
             }
             updateCanvasWidth();

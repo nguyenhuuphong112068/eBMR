@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <title>Quản Lý Thư Viện</title>
+    <title>eBMR | Electronic Batch Manufacturing Record</title>
     <!-- Tell the browser to be responsive to screen width -->
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="icon" type="image/png" href="{{ asset('img/iconstella.svg') }}">
@@ -244,7 +244,7 @@
         .user-initials {
             width: 40px;
             height: 40px;
-            background: var(--primary-navy);
+            background: var(--primary);
             /* Màu Navy chủ đạo */
             color: white;
             border-radius: 50%;
@@ -297,8 +297,8 @@
             width: 38px;
             height: 38px;
             background: transparent;
-            border: 2px solid var(--accent-gold);
-            color: var(--accent-gold);
+            border: 2px solid var(--accent);
+            color: var(--accent);
             border-radius: 50%;
             display: flex;
             justify-content: center;
@@ -311,8 +311,8 @@
 
         .chat-trigger:hover {
             transform: scale(1.1);
-            border-color: #e5df18;
-            color: #e5df18;
+            border-color: var(--primary);
+            color: var(--primary);
         }
 
         .chat-trigger .unread-badge-total {
@@ -410,7 +410,7 @@
 
         .chat-window-header {
             padding: 8px 12px;
-            background: #28a745;
+            background: var(--primary);
             /* Xanh lá */
             color: white;
             border-radius: 7px 7px 0 0;
@@ -796,7 +796,7 @@
 <body class="hold-transition sidebar-mini layout-navbar-fixed layout-fixed">
 
     <!-- General wrapper -->
-    <div class="wrapper">
+    <div class="wrapper ebmr-content-wrapper">
 
         @include('layout.topNAV')
         @include('layout.leftNAV')

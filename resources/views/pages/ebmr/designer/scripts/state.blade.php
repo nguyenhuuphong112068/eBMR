@@ -5,6 +5,7 @@
 
     let items = @json($template->schema->fields ?? []);
     let fieldsConfigInit = @json($template->schema->fieldsConfig ?? (object)[]);
+    let pageOrientation = @json($template->schema->pageOrientation ?? 'portrait');
     
     // Ensure fieldsConfig is strictly an Object so JSON.stringify doesn't drop assigned properties
     let fieldsConfig = (!fieldsConfigInit || Array.isArray(fieldsConfigInit)) ? {} : fieldsConfigInit;
@@ -15,29 +16,101 @@
     let selectedFieldId = null;
 
     if (items.length === 0) {
-        // Generate Default BMR Header if document is new
-        items.push(generateDefaultBmrHeader());
+        const type = "{{ $template->type ?? 'BMR' }}";
+        if (type === 'GF') {
+            items.push(generateDefaultGfHeader());
+        } else {
+            items.push(generateDefaultBmrHeader());
+        }
     }
 
-    if (items.length > 0) {
+    if (items.length > 0 || pageOrientation !== 'portrait') {
         // Wait for DOM
         document.addEventListener('DOMContentLoaded', () => {
             const nameField = document.getElementById('templateName');
             if (nameField) nameField.value = "{{ $template->name ?? '' }}";
             const hint = document.getElementById('drop-hint');
-            if (hint) hint.classList.add('d-none');
+            if (hint) {
+                if (items.length > 0) hint.classList.add('d-none');
+            }
+            if (pageOrientation === 'landscape') {
+                setOrientation('landscape');
+            }
             renderBlocks();
         });
+    }
+
+    function setOrientation(orr) {
+        pageOrientation = orr;
+        const page = document.getElementById('document-page');
+        if (!page) return;
+        
+        if (orr === 'landscape') {
+            page.classList.add('page-landscape');
+            document.body.classList.add('printing-landscape');
+        } else {
+            page.classList.remove('page-landscape');
+            document.body.classList.remove('printing-landscape');
+        }
+    }
+
+    function generateDefaultGfHeader() {
+        const id = 'blk_header_' + Date.now();
+        const t = {
+            sop: "{{ $template->relatived_sop_no ?? '' }}",
+            format: "{{ $template->category_code ?? '' }}",
+            version: "{{ $template->version ?? '1' }}",
+            name: "{{ $template->category_name ?? $template->name ?? '' }}",
+        };
+
+        // Table with 2 columns, no border, just text layout as per image 2
+        let columns = [
+            { label: 'C1', type: 'text', width: '60%' },
+            { label: 'C2', type: 'text', width: '40%' }
+        ];
+
+        let data = [
+            // Row 1: SOP and Format No
+            [
+                { content: `<div style="text-align: left; font-size: 1.1rem;"><em>Reference SOP / Số SOP đối chiếu: ${t.sop}</em></div>`, rs: 1, cs: 1 },
+                { content: `<div style="text-align: right; font-size: 1.1rem;">| <em>Format no. / Số biểu mẫu: ${t.format}-${t.version}</em></div>`, rs: 1, cs: 1 }
+            ],
+            // Row 2: Main Title (UPPERCASE)
+            [
+                { content: `<div style="text-align: center; font-size: 1.4rem; font-weight: bold; margin-top: 15px; text-transform: uppercase;">${t.name}</div>`, rs: 1, cs: 2 },
+                { content: '', hidden: true }
+            ],
+            // Row 3: Sub Title (Vietnamese or just a line)
+            [
+                { content: `<div style="text-align: center; font-size: 1.4rem; font-weight: bold;">PHIẾU KIỂM TRA ...</div>`, rs: 1, cs: 2 },
+                { content: '', hidden: true }
+            ]
+        ];
+
+        return {
+            id: id,
+            type: 'table',
+            label: 'GF Header',
+            rows: 3,
+            cols: 2,
+            columns: columns,
+            data: data,
+            rowHeights: new Array(3).fill('auto'),
+            borderMode: 'none', // Header GF is usually borderless
+            hideHeader: true,
+            locked: true,
+            isGfHeader: true
+        };
     }
 
     function generateDefaultBmrHeader() {
         const id = 'blk_header_' + Date.now();
         const t = {
             id: "{{ $template->id ?? '' }}",
-            code: "{{ $template->document_code ?? '' }}",
-            edition: "{{ $template->edition ?? '' }}",
-            name: "{{ $template->name ?? '' }}",
-            dosage: "{{ $template->dosage_form ?? '' }}",
+            code: "{{ $template->category_code ?? '' }}",
+            edition: "{{ $template->version ?? '1' }}",
+            name: "{{ $template->category_name ?? '' }}",
+            dosage: "{{ $template->dosage_name ?? '' }}",
             batch_size: "{{ $template->batch_size ?? '' }}",
             effective_date: "{{ $template->effective_date ?? '' }}"
         };

@@ -11,8 +11,20 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (Schema::hasTable('ebmr_runs') && !Schema::hasTable('ebmr_records')) {
+            Schema::rename('ebmr_runs', 'ebmr_records');
+        }
+
         Schema::table('ebmr_records', function (Blueprint $table) {
-            $table->string('batch_number')->nullable()->after('template_id');
+            if (!Schema::hasColumn('ebmr_records', 'batch_number')) {
+                $table->string('batch_number')->nullable()->after('template_id');
+            } else {
+                $table->string('batch_number')->nullable()->change();
+            }
+
+            if (!Schema::hasColumn('ebmr_records', 'created_by')) {
+                $table->unsignedBigInteger('created_by')->nullable()->after('template_id');
+            }
         });
     }
 
@@ -22,7 +34,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('ebmr_records', function (Blueprint $table) {
-            $table->dropColumn('batch_number');
+            $table->dropColumn(['batch_number', 'created_by']);
         });
     }
 };

@@ -1,9 +1,11 @@
-<style>
-  .selectProductModal-modal-size {
-    max-width: 90% !important;
-    width: 90% !important;
-  }
-</style>
+@section('css')
+    <style>
+        .selectProductModal-modal-size {
+            max-width: 90% !important;
+            width: 90% !important;
+        }
+    </style>
+@append
 
 <div class="modal fade" id="createBOMModal" tabindex="-1" role="dialog" aria-hidden="true">
   <div class="modal-dialog selectProductModal-modal-size" role="document">
@@ -14,10 +16,6 @@
           <img src="{{ asset('img/iconstella.svg') }}" style="opacity: 0.8; max-width:45px;">
         </a>
         
-        {{-- <h4 class="modal-title w-100 text-center" id="createModal" style="color: #CDC717; font-size: 30px">
-            Công Thức Bán Thành Phẩm
-        </h4> --}}
-
         <h4 class="modal-title w-100 text-center" id="createModal"
             style="color: #CDC717; font-size: 30px">
               Tạo Mới Công Thức Nguyên Liệu Giả Định
@@ -91,90 +89,92 @@
   </div>
 </div>
 
-<script>
-  let rowIndex = 1;
-  $('#btn_add_row').on('click', function () {
-     
-      let code = $('#input_code').val().trim();
-      let name = $('#input_name').val().trim();
-      let qty = $('#input_qty').val().trim();
-      let uom = $('#input_uom').val().trim();
-      
+@section('script')
+    <script>
+        $(document).ready(function() {
+            let rowIndex = 1;
+            $('#btn_add_row').on('click', function() {
 
-      if (!code || !name || !qty || !uom) {
-          alert("Vui lòng nhập đầy đủ thông tin bắt buộc!");
-          return;
-      }
+                let code = $('#input_code').val().trim();
+                let name = $('#input_name').val().trim();
+                let qty = $('#input_qty').val().trim();
+                let uom = $('#input_uom').val().trim();
 
-      let newRow = `
-          <tr>
-              <td>${rowIndex}</td>
-              <td><input type="text" class="form-control code" value="${code}"></td>
-              <td><input type="text" class="form-control name" value="${name}"></td>
-              <td><input type="number" class="form-control qty" value="${qty}"></td>
-              <td><input type="text" class="form-control uom" value="${uom}"></td>
-            
-              <td>
-                  <button class="btn btn-danger btn-sm btn_remove">
-                      <i class="fa fa-trash"></i>
-                  </button>
-              </td>
-          </tr>
-      `;
 
-      $('#data_table_create_recipe_body').append(newRow);
+                if (!code || !name || !qty || !uom) {
+                    alert("Vui lòng nhập đầy đủ thông tin bắt buộc!");
+                    return;
+                }
 
-      rowIndex++;
+                let newRow = `
+                  <tr>
+                      <td>${rowIndex}</td>
+                      <td><input type="text" class="form-control code" value="${code}"></td>
+                      <td><input type="text" class="form-control name" value="${name}"></td>
+                      <td><input type="number" class="form-control qty" value="${qty}"></td>
+                      <td><input type="text" class="form-control uom" value="${uom}"></td>
+                    
+                      <td>
+                          <button class="btn btn-danger btn-sm btn_remove">
+                              <i class="fa fa-trash"></i>
+                          </button>
+                      </td>
+                  </tr>
+              `;
 
-      // Clear input trên cùng
-      $('#input_code, #input_name, #input_qty, #input_uom').val('');
-  });
+                $('#data_table_create_recipe_body').append(newRow);
 
-  $(document).on('click', '.btn_remove', function () {
-    $(this).closest('tr').remove();
-  });
+                rowIndex++;
 
-  $('.btn_save_recipe').on('click', function () {
- 
-    let data = [];
+                // Clear input trên cùng
+                $('#input_code, #input_name, #input_qty, #input_uom').val('');
+            });
 
-    $('#data_table_create_recipe_body tr').each(function () {
+            $(document).on('click', '.btn_remove', function() {
+                $(this).closest('tr').remove();
+            });
 
-        let row = {
-            product_caterogy_id: $('#product_caterogy_id').val(),
-            code: $(this).find('.code').val(),
-            name: $(this).find('.name').val(),
-            qty: $(this).find('.qty').val(),
-            uom: $(this).find('.uom').val(),
-            version: $(this).find('.version').val(),
-            mat_par_type : 0
-        };
+            $('.btn_save_recipe').on('click', function() {
 
-        data.push(row);
-    });
+                let data = [];
 
-    if (data.length === 0) {
-        alert("Chưa có dữ liệu để lưu!");
-        return;
-    }
+                $('#data_table_create_recipe_body tr').each(function() {
 
-    $.ajax({
-        url: "{{ route('pages.category.product.save_bom') }}",
-        type: "POST",
-        data: {
-            _token: "{{ csrf_token() }}",
-            items: data
-        },
-        success: function (res) {
-            alert("Lưu thành công!");
-            location.reload();
-        },
-        error: function (err) {
-            alert("Có lỗi xảy ra!");
-        }
-    });
+                    let row = {
+                        product_caterogy_id: $('#product_caterogy_id').val(),
+                        code: $(this).find('.code').val(),
+                        name: $(this).find('.name').val(),
+                        qty: $(this).find('.qty').val(),
+                        uom: $(this).find('.uom').val(),
+                        version: $(this).find('.version').val(),
+                        mat_par_type: 0
+                    };
 
-  });
-  
-</script>
+                    data.push(row);
+                });
 
+                if (data.length === 0) {
+                    alert("Chưa có dữ liệu để lưu!");
+                    return;
+                }
+
+                $.ajax({
+                    url: "{{ route('pages.category.product.save_bom') }}",
+                    type: "POST",
+                    data: {
+                        _token: "{{ csrf_token() }}",
+                        items: data
+                    },
+                    success: function(res) {
+                        alert("Lưu thành công!");
+                        location.reload();
+                    },
+                    error: function(err) {
+                        alert("Có lỗi xảy ra!");
+                    }
+                });
+
+            });
+        });
+    </script>
+@append

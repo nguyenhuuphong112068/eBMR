@@ -1,68 +1,104 @@
 <style>
-    /* Modern Sidebar Styles */
+    /* Elegant Light eBMR Sidebar Styles */
     .main-sidebar {
-        background-color: white !important;
-        box-shadow: 4px 0 10px rgba(0, 0, 0, 0.03) !important;
-        border-right: 1px solid rgba(0, 0, 0, 0.05);
+        background-color: rgba(255, 255, 255, 0.8) !important;
+        backdrop-filter: blur(10px);
+        box-shadow: 4px 0 20px rgba(8, 145, 178, 0.05) !important;
+        border-right: 1px solid rgba(8, 145, 178, 0.1);
     }
 
     .sidebar {
-        padding-top: 20px;
+        padding-top: 10px;
     }
 
     .nav-pills .nav-link {
-        color: #64748b !important;
-        margin: 4px 15px;
-        border-radius: var(--border-radius-md);
-        transition: all var(--transition-fast);
+        color: #334155 !important;
+        /* Deeper slate for contrast */
+        margin: 2px 2px;
+        border-radius: 12px;
+        transition: all var(--transition);
         display: flex;
         align-items: center;
-        padding: 10px 15px;
+        padding: 11px 16px;
+        font-weight: 600;
+        font-size: 0.9rem;
     }
 
     .nav-pills .nav-link i {
-        font-size: 1.1rem;
-        width: 25px;
-        margin-right: 10px;
+        font-size: 1.15rem;
+        width: 30px;
+        margin-right: 12px;
+        color: #64748b;
+        transition: transform 0.3s, color 0.3s;
     }
 
     .nav-pills .nav-link:hover {
-        background-color: rgba(0, 58, 79, 0.05) !important;
-        color: var(--primary-navy) !important;
-        transform: translateX(5px);
+        background-color: #ecfeff !important;
+        /* Pale Cyan hover */
+        color: var(--primary) !important;
+        transform: translateX(4px);
+    }
+
+    .nav-pills .nav-link:hover i {
+        color: var(--primary);
     }
 
     .nav-pills .nav-link.active {
-        background-color: var(--primary-navy) !important;
+        background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%) !important;
         color: white !important;
-        box-shadow: 0 4px 12px rgba(0, 58, 79, 0.2);
+        box-shadow: 0 8px 15px -3px rgba(8, 145, 178, 0.3);
     }
 
     .nav-pills .nav-link.active i {
         color: white !important;
+        transform: scale(1.1);
     }
 
     .brand-link {
-        border-bottom: 0 !important;
-        padding: 15px 0;
+        border-bottom: 1px solid rgba(8, 145, 178, 0.1) !important;
+        padding: 24px 0 !important;
+        margin-bottom: 10px;
+    }
+
+    .brand-text {
+        font-weight: 800;
+        letter-spacing: -0.025em;
+        font-size: 1.45rem !important;
+        margin-top: 10px;
+        color: #0f172a !important;
+        /* Dark text for brand */
+    }
+
+    .brand-text span {
+        color: var(--primary);
     }
 
     .nav-header {
-        padding: 15px 25px 5px !important;
+        padding: 20px 25px 8px !important;
         color: #94a3b8 !important;
-        font-size: 0.75rem;
+        font-size: 0.72rem;
         text-transform: uppercase;
-        letter-spacing: 1px;
-        font-weight: 700;
+        letter-spacing: 0.12em;
+        font-weight: 800;
+    }
+
+    .nav-treeview {
+        margin-left: 6px;
+        border-left: 2px solid #ecfeff;
+    }
+
+    .nav-treeview .nav-link {
+        font-weight: 500;
+        padding-left: 12px;
     }
 </style>
 
 <aside class="main-sidebar elevation-4">
     <!-- Brand Logo -->
-    <a href="{{ route('pages.general.home') }}" class="brand-link text-center">
-        <img src="{{ asset('img/iconstella.svg') }}" alt="Logo" style="width: 50px; height: auto;">
-        <span class="brand-text fw-bold d-block mt-2 library-title"
-            style="color: var(--primary-navy); font-size: 1.2rem;">eBR-SYSTEM</span>
+    <a href="{{ route('pages.general.home') }}" class="brand-link text-center px-0">
+        <img src="{{ asset('img/iconstella.svg') }}" alt="Logo"
+            style="width: 52px; height: auto; filter: drop-shadow(0 4px 6px rgba(8, 145, 178, 0.1));">
+        <span class="brand-text d-block">e<span>BMR</span> System</span>
     </a>
 
     <!-- Sidebar Menu -->
@@ -123,6 +159,19 @@
                             </a>
                         </li>
 
+                        <li class="nav-item">
+                            <a href="{{ route('pages.category.gf.list') }}" class="nav-link">
+                                <i class="far fa-circle nav-icon"></i>
+                                <p>Biểu mẫu dùng chung</p>
+                            </a>
+                        </li>
+
+                        <li class="nav-item">
+                            <a href="{{ route('pages.category.mf.list') }}" class="nav-link">
+                                <i class="far fa-circle nav-icon"></i>
+                                <p>Biểu mẫu gốc</p>
+                            </a>
+                        </li>
                     </ul>
                 </li>
 
@@ -139,10 +188,31 @@
                     </a>
                     <ul class="nav nav-treeview pl-3">
                         <li class="nav-item">
-                            <a href="{{ route('pages.ebmr.templates') }}"
-                                class="nav-link {{ str_contains(url()->current(), 'ebmr/templates') ? 'active' : '' }}">
-                                <i class="fas fa-file-medical"></i>
-                                <p>Hồ Sơ Sản Xuất</p>
+                            <a href="{{ route('pages.ebmr.templates') }}?type=GF"
+                                class="nav-link {{ request('type') == 'GF' ? 'active' : '' }}">
+                                <i class="fas fa-layer-group nav-icon"></i>
+                                <p>Biểu mẫu dùng chung</p>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="{{ route('pages.ebmr.templates') }}?type=MF"
+                                class="nav-link {{ request('type') == 'MF' ? 'active' : '' }}">
+                                <i class="fas fa-file-invoice nav-icon"></i>
+                                <p>Biểu mẫu gốc</p>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="{{ route('pages.ebmr.templates') }}?type=BMR"
+                                class="nav-link {{ request('type') == 'BMR' || !request('type') ? 'active' : '' }}">
+                                <i class="fas fa-file-medical nav-icon"></i>
+                                <p>Hồ sơ sản xuất</p>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="{{ route('pages.ebmr.templates') }}?type=BPR"
+                                class="nav-link {{ request('type') == 'BPR' ? 'active' : '' }}">
+                                <i class="fas fa-box-open nav-icon"></i>
+                                <p>Hồ sơ đóng gói</p>
                             </a>
                         </li>
                     </ul>

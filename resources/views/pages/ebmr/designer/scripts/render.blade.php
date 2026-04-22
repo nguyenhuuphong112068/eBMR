@@ -46,7 +46,7 @@
                 if (!item.hideHeader) {
                     thead = `<thead><tr>${item.columns.map((c, cIdx) => {
                         const bg = (item.columns[cIdx].style && item.columns[cIdx].style.backgroundColor) ? item.columns[cIdx].style.backgroundColor : '';
-                        return `<th contenteditable="false" spellcheck="false" style="width: ${c.width || 'auto'}; background-color: ${bg};">${c.label}</th>`;
+                        return `<th contenteditable="false" spellcheck="false" data-row="0" data-col="${cIdx}" style="width: ${c.width || 'auto'}; background-color: ${bg};">${c.label}</th>`;
                     }).join('')}</tr></thead>`;
                 }
 
@@ -68,6 +68,10 @@
                         const cellBg = (cell.backgroundColor) ? cell.backgroundColor : '';
 
                         let displayContent = cell.content;
+                        if (displayContent === null || displayContent === 'null' || displayContent === undefined) {
+                            displayContent = '';
+                        }
+                        
                         let cellClass = "";
                         let onclickAttr = "";
                         let finalEditable = "false";

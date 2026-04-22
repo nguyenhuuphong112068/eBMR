@@ -10,4 +10,11 @@
             <!-- Dynamic Props populated by selectItem() -->
         </div>
     </div>
+
+    <!-- Minimized Sidebar Trigger -->
+    <div id="sidebar-minimized" class="bg-white rounded-start shadow-sm py-3 text-center cursor-pointer transition-all" onclick="toggleSidebar(false)" 
+        style="width: 30px; position: fixed; right: 0; top: 250px; height: 180px; display: flex; flex-direction: column; align-items: center; border: 1px solid #dadce0; border-right: none; z-index: 1040;">
+        <i class="fas fa-chevron-left text-muted mt-2"></i>
+        <div style="writing-mode: vertical-rl; transform: rotate(180deg); font-size: 0.75rem; font-weight: bold; color: #6c757d; white-space: nowrap; flex-grow: 1; display: flex; align-items: center; justify-content: center; letter-spacing: 1px;">CÀI ĐẶT</div>
+    </div>
 </div>

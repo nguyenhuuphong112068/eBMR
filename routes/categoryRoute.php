@@ -4,6 +4,8 @@
 use App\Http\Controllers\Pages\Category\IntermediateCategoryController;
 use App\Http\Controllers\Pages\Category\MaintenanceCategoryController;
 use App\Http\Controllers\Pages\Category\ProductCategoryController;
+use App\Http\Controllers\Pages\Category\GfCategoryController;
+use App\Http\Controllers\Pages\Category\MfCategoryController;
 
 use App\Http\Middleware\CheckLogin;
 use Illuminate\Support\Facades\Route;
@@ -54,5 +56,25 @@ Route::prefix('/category')
                                 Route::post('is_HVAC', 'is_HVAC')->name('is_HVAC');
                                 Route::post('updateRoom', 'updateRoom')->name('updateRoom');
                                 Route::post('updateDepartment', 'updateDepartment')->name('updateDepartment');
+                        });
+
+                Route::prefix('/gf')
+                        ->name('gf.')
+                        ->controller(GfCategoryController::class)
+                        ->group(function () {
+                                Route::get('', 'index')->name('list');
+                                Route::post('store', 'store')->name('store');
+                                Route::post('update', 'update')->name('update');
+                                Route::get('delete', 'delete')->name('delete');
+                        });
+
+                Route::prefix('/mf')
+                        ->name('mf.')
+                        ->controller(MfCategoryController::class)
+                        ->group(function () {
+                                Route::get('', 'index')->name('list');
+                                Route::post('store', 'store')->name('store');
+                                Route::post('update', 'update')->name('update');
+                                Route::get('delete', 'delete')->name('delete');
                         });
         });

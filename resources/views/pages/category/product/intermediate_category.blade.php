@@ -1,4 +1,3 @@
-<link href="{{ asset('css/bootstrap.min.css') }}" rel="stylesheet">
 <style>
   .selectProductModal-modal-size {
     max-width: 90% !important;
@@ -215,69 +214,67 @@
     </div>
   </div>
 </div>
-<!-- Scripts -->
-<script src="{{ asset('js/vendor/jquery-1.12.4.min.js') }}"></script>
-<script src="{{ asset('js/popper.min.js') }}"></script>
-<script src="{{ asset('js/bootstrap.min.js') }}"></script>
+@section('script')
+    <script>
+        let currentModalTarget = '#create_modal';
+        $(document).ready(function() {
+            // Khởi tạo DataTable
+            if ($.fn.DataTable.isDataTable('#intermediate_category_dt')) {
+                $('#intermediate_category_dt').DataTable().destroy();
+            }
+
+            $('#intermediate_category_dt').DataTable({
+                paging: true,
+                lengthChange: true,
+                searching: true,
+                ordering: true,
+                info: true,
+                autoWidth: false,
+                pageLength: 10,
+                language: {
+                    search: "Tìm kiếm:",
+                    lengthMenu: "Hiển thị _MENU_ dòng",
+                    info: "Hiển thị _START_ đến _END_ của _TOTAL_ dòng",
+                    paginate: {
+                        previous: "Trước",
+                        next: "Sau"
+                    }
+                }
+            });
+
+            // Click nút +
+            $('#intermediate_category').on('click', '.btn-plus', function() {
+                const button = $(this);
+                const modalSelector = currentModalTarget; //button.attr('data-target'); // lấy selector
+                button.blur();
+
+                //$('#intermediate_category').modal('hide');
+
+                const modal = $(modalSelector);
+
+                modal.find('input[name="intermediate_code"]').val(button.data('intermediate_code'));
+                modal.find('select[name="product_name_id"]').val(button.data('product_name_id'));
+                modal.find('input[name="batch_size"]').val(button.data('batch_size'));
+                modal.find('input[name="unit_batch_size"]').val(button.data('unit_batch_size'));
+                modal.find('input[name="batch_qty"]').val(button.data('batch_qty')).attr('max', button.data(
+                    'batch_qty'));
+                modal.find('input[name="unit_batch_qty"]').val(button.data('unit_batch_qty'));
+
+                modal.modal('show');
+
+            });
+
+            // default
+
+            // Khi mở intermediate_category
+            $('#intermediate_category').on('show.bs.modal', function(event) {
+
+                const button = $(event.relatedTarget);
+                const modal_type = button.data('modal_type');
+                currentModalTarget = modal_type;
 
 
-<script>
-  let currentModalTarget = '#create_modal';
-  $(document).ready(function () {
-      // Khởi tạo DataTable
-      $('#intermediate_category_dt').DataTable({
-          paging: true,
-          lengthChange: true,
-          searching: true,
-          ordering: true,
-          info: true,
-          autoWidth: false,
-          pageLength: 10,
-          language: {
-              search: "Tìm kiếm:",
-              lengthMenu: "Hiển thị _MENU_ dòng",
-              info: "Hiển thị _START_ đến _END_ của _TOTAL_ dòng",
-              paginate: {
-                  previous: "Trước",
-                  next: "Sau"
-              }
-          }
-      });
-
-      // Click nút +
-      $('#intermediate_category').on('click', '.btn-plus', function () {
-        const button = $(this);
-        const modalSelector = currentModalTarget ;//button.attr('data-target'); // lấy selector
-        button.blur();
-
-        //$('#intermediate_category').modal('hide');
-
-        const modal = $(modalSelector); 
- 
-          modal.find('input[name="intermediate_code"]').val(button.data('intermediate_code'));
-          modal.find('select[name="product_name_id"]').val(button.data('product_name_id'));
-          modal.find('input[name="batch_size"]').val(button.data('batch_size'));
-          modal.find('input[name="unit_batch_size"]').val(button.data('unit_batch_size'));
-          modal.find('input[name="batch_qty"]').val(button.data('batch_qty')).attr('max', button.data('batch_qty'));
-          modal.find('input[name="unit_batch_qty"]').val(button.data('unit_batch_qty'));
-          
-          modal.modal('show');
-      
-      });
-
-       // default
-
-      // Khi mở intermediate_category
-      $('#intermediate_category').on('show.bs.modal', function (event) {
-
-          const button = $(event.relatedTarget);
-          const modal_type = button.data('modal_type');
-          currentModalTarget = modal_type;
-
-
-      });
-
-
-
-  });
-</script>
+            });
+        });
+    </script>
+@append

@@ -62,11 +62,16 @@
 
     .page-a4 {
         background: white;
-        min-height: 1100px;
-        width: 100%;
-        border-radius: 2px;
-        margin: 0 auto;
+        min-height: 100vh;
+        width: 100% !important;
+        max-width: none !important;
+        border-radius: 4px;
+        margin: 0 !important;
         position: relative;
+        padding: 40px 40px !important; /* Reduced margins for even more space */
+        transition: padding 0.3s ease;
+        box-shadow: none !important;
+        border: 1px solid #ddd;
     }
 
     .btn-navy {
@@ -88,22 +93,32 @@
     /* Component Styling in Doc Mode */
     .block-item {
         position: relative;
-        padding: 10px;
-        border: 1px solid transparent;
+        padding: 5px;
+        border: 1px solid #eef0f2; /* Viền mờ mặc định */
         border-radius: 4px;
-        margin-bottom: 5px;
+        margin-bottom: 2px;
         cursor: pointer;
-        transition: 0.2s;
+        transition: all 0.2s ease;
     }
 
     .block-item:hover {
-        border-color: #1a73e8;
-        background: #f8faff;
+        border-color: #cbd5e0;
+        background: #fdfdfd;
     }
 
     .block-item.active {
         border-color: #1a73e8;
+        background: #f8faff;
         box-shadow: 0 0 0 1px #1a73e8;
+    }
+
+    /* Ẩn viền hoàn toàn ở chế độ ghi chép/in */
+    .execution-mode.block-item,
+    .page-a4.readonly .block-item {
+        border: 1px solid transparent !important;
+        padding: 0 !important;
+        margin-bottom: 0 !important;
+        background: transparent !important;
     }
 
     .block-label {
@@ -161,7 +176,7 @@
         text-align: left;
         color: #333;
         font-size: 0.95rem;
-        height: 40px;
+        min-height: 40px;
         vertical-align: middle;
     }
 
@@ -441,11 +456,24 @@
     }
 
     @media print {
-        .border-dashed th,
-        .border-dashed td,
-        .border-none th,
-        .border-none td {
-            border-color: transparent !important;
+        @page {
+            size: A4 portrait;
+            margin: 0;
+        }
+        
+        body.printing-landscape @page {
+            size: A4 landscape;
+        }
+
+        .page-a4 {
+            box-shadow: none !important;
+            margin: 0 !important;
+            width: 100% !important;
+            padding: 0 !important;
+        }
+        
+        .no-print {
+            display: none !important;
         }
     }
 

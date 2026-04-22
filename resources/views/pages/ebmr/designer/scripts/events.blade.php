@@ -58,6 +58,75 @@
                 if (typeof saveStateDebounced === 'function') saveStateDebounced();
                 return;
             }
+
+            // --- Multi-cell Deletion ---
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                const selectedCells = document.querySelectorAll('.selected-cell');
+                // Only trigger bulk delete if 2+ cells are selected, or if focus is not on a contenteditable
+                const isWriting = e.target.closest('[contenteditable="true"]');
+                
+                if (selectedCells.length > 1 || (selectedCells.length === 1 && !isWriting)) {
+                    e.preventDefault();
+                    saveState();
+                    let dataChanged = false;
+
+                    selectedCells.forEach(cell => {
+                        const table = cell.closest('.mini-table');
+                        if (!table) return;
+                        const blockItem = table.closest('.block-item');
+                        if (!blockItem) return;
+                        
+                        const itemId = blockItem.getAttribute('data-id');
+                        const item = items.find(i => i.id === itemId);
+                        
+                        if (!item) {
+                            console.warn("Item not found for ID:", itemId);
+                            return;
+                        }
+
+                        const rStr = cell.dataset.row;
+                        const cStr = cell.dataset.col;
+                        if (rStr === undefined || cStr === undefined) return;
+                        
+                        const r = parseInt(rStr);
+                        const c = parseInt(cStr);
+
+                        console.log("Cleaning cell:", r, c, "in item:", itemId);
+
+                        if (r === 0) {
+                            if (item.columns && item.columns[c]) {
+                                item.columns[c].label = '';
+                                dataChanged = true;
+                            }
+                        } else {
+                            if (item.data && item.data[r - 1]) {
+                                let cellRef = item.data[r - 1][c];
+                                if (typeof cellRef !== 'object' || cellRef === null) {
+                                    item.data[r - 1][c] = { content: '', rs: 1, cs: 1, hidden: false };
+                                    cellRef = item.data[r - 1][c];
+                                }
+                                cellRef.content = '';
+                                dataChanged = true;
+                            }
+                        }
+                    });
+
+                    if (dataChanged) {
+                        renderBlocks();
+                        // Re-highlight selection after render
+                        setTimeout(() => {
+                            const newTable = document.querySelector('.block-item.active .mini-table');
+                            if (newTable) {
+                                // Logic to re-apply the classes if we want, but renderBlocks clears them.
+                                // Actually better to NOT re-render if only content changes?
+                                // No, renderBlocks is needed for consistency.
+                            }
+                        }, 50);
+                    }
+                    return;
+                }
+            }
+
             if (e.ctrlKey && e.key.toLowerCase() === 'z') {
                 e.preventDefault(); undo();
             } else if (e.ctrlKey && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) {
@@ -102,8 +171,13 @@
                 if (node.nodeName === 'TABLE') {
                     flushPending();
                     addPastedTableBlock(node, insertIndex++);
-                } else if (node.nodeType === Node.ELEMENT_NODE || (node.nodeType === Node.TEXT_NODE && node.textContent.trim())) {
-                    pendingContent += (node.outerHTML || node.textContent);
+                } else {
+                    // Collect everything else (div, p, span, br, text) into pending
+                    if (node.nodeType === Node.ELEMENT_NODE) {
+                        pendingContent += node.outerHTML;
+                    } else if (node.nodeType === Node.TEXT_NODE) {
+                        pendingContent += node.textContent;
+                    }
                 }
             });
             flushPending();
@@ -242,24 +316,6 @@
         } else if (e.key === 'ArrowRight') {
             const sel = window.getSelection();
             if (sel.rangeCount > 0 && sel.getRangeAt(0).startOffset === active.innerText.length) target = table.querySelector(`[data-row="${r}"][data-col="${c + 1}"]`);
-        } else if (e.key === 'Delete') {
-            const selectedCells = table.querySelectorAll('.selected-cell');
-            if (selectedCells.length > 0) {
-                e.preventDefault();
-                const blockItem = active.closest('.block-item');
-                const item = items.find(i => blockItem && blockItem.contains(table));
-                selectedCells.forEach(cell => {
-                    const cellR = parseInt(cell.dataset.row);
-                    const cellC = parseInt(cell.dataset.col);
-                    if (cellR === 0) item.columns[cellC].label = '';
-                    else {
-                        if (typeof item.data[cellR-1][cellC] === 'object') item.data[cellR-1][cellC].content = '';
-                        else item.data[cellR-1][cellC] = {content:'', rs:1, cs:1, hidden:false};
-                    }
-                });
-                renderBlocks();
-                return;
-            }
         }
         if (target) { e.preventDefault(); target.focus(); }
     }

@@ -10,7 +10,7 @@
             <button class="btn btn-toolbar" onclick="openHistoryModal()" title="Lịch sử thay đổi">
                 <i class="fas fa-history"></i>
             </button>
-            <button class="btn btn-toolbar" onclick="window.print()" title="Print"><i
+            <button class="btn btn-toolbar" onclick="window.print()" title="In hồ sơ"><i
                     class="fas fa-print"></i></button>
         </div>
 

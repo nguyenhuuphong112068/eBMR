@@ -185,34 +185,31 @@
 </div>
 
 
-{{-- Tự động mở modal nếu có lỗi --}}
-@if ($errors->createErrors->any()) 
+@section('script')
+    {{-- Tự động mở modal nếu có lỗi --}}
+    @if ($errors->createErrors->any())
+        <script>
+            $(document).ready(function() {
+                $('#create_hypothesis_modal').modal('show');
+            });
+        </script>
+    @endif
+
+    {{-- Gán mã chỉ tiêu tương ứng với chọn lựa --}}
     <script>
         $(document).ready(function() {
-            $('#create_hypothesis_modal').modal('show');
+
+            // Set process_code
+            const intermediateInput = $('input[name="intermediate_code"]');
+            const finishedInput = $('input[name="finished_product_code"]');
+            const processInput = $('input[name="process_code"]');
+
+            finishedInput.on('input change', function() {
+                const intermediateCode = intermediateInput.val() || "";
+                const finishedCode = $(this).val() || "";
+                processInput.val(intermediateCode + "_" + finishedCode);
+            });
+
         });
     </script>
-@endif
-
-{{-- Gán mã chỉ tiêu tương ứng với chọn lựa --}}
-<script>
-    $(document).ready(function() {
-       
-        // Set process_code
-        const intermediateInput = $('input[name="intermediate_code"]');
-        const finishedInput = $('input[name="finished_product_code"]');
-        const processInput = $('input[name="process_code"]');
-
-        finishedInput.on('input change', function () {
-            const intermediateCode = intermediateInput.val() || "";
-            const finishedCode = $(this).val() || "";
-            processInput.val(intermediateCode + "_" + finishedCode);
-        });
-
-
-         
-    });
-
-
-    
-</script>
+@append

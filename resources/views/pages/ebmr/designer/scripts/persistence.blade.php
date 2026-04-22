@@ -3,6 +3,7 @@
         const name = document.getElementById('templateName').value || 'Hồ sơ không tên';
         const schema = {
             type: 'document-flow',
+            pageOrientation: pageOrientation,
             fieldsConfig: fieldsConfig,
             fields: items.map(i => ({
                 id: i.id,
@@ -30,12 +31,23 @@
                 _token: '{{ csrf_token() }}'
             })
         })
-        .then(res => res.json())
+        .then(res => {
+            if (!res.ok) {
+                return res.json().then(err => { throw new Error(err.message || 'Lỗi hệ thống') });
+            }
+            return res.json();
+        })
         .then(res => {
             if (res.success) {
                 currentTemplateId = res.id;
                 Swal.fire({ title: 'Thành công', text: 'Đã lưu hồ sơ mẫu!', icon: 'success', showConfirmButton: false, timer: 1500 });
+            } else {
+                Swal.fire('Thất bại', res.message || 'Không thể lưu hồ sơ', 'error');
             }
+        })
+        .catch(err => {
+            console.error(err);
+            Swal.fire('Lỗi kết nối', err.message || 'Vui lòng kiểm tra lại kết nối mạng hoặc thử lại sau.', 'error');
         });
     }
 

@@ -40,11 +40,11 @@
             </div>
             @endif
 
-            <!-- Flex container to hold page and gutter side-by-side -->
-            <div id="designer-workspace" class="d-flex justify-content-start align-items-start" style="width: fit-content; margin: 0 auto; min-width: 1200px; padding-right: 350px;">
+            <!-- Fluid Workplace -->
+            <div id="designer-workspace" class="d-flex justify-content-start align-items-start" style="width: 100%; margin: 0; padding-right: 20px;">
                 <!-- Main A4 Page -->
                 <div class="page-a4 shadow mt-2" style="border-radius: 4px; flex-shrink: 0; position: relative;" id="document-page" ondblclick="if(event.target.id === 'document-page' || event.target.id === 'editor-content' || event.target.id === 'drop-hint') { if(typeof quickAddText === 'function') quickAddText(event, typeof items !== 'undefined' ? items.length : 0); }">
-                    <div id="editor-content" class="p-5">
+                    <div id="editor-content" class="p-0">
                         <!-- Elements flow here like a real document -->
                         <div id="drop-hint" class="text-center py-5 opacity-25" style="pointer-events: none;">
                             <i class="fas fa-plus-circle fa-3x mb-3"></i>
