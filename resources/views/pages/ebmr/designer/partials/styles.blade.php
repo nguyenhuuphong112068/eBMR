@@ -261,7 +261,7 @@
     /* Static Text Styling (Seamless Editor Mode) */
     .block-item.type-static-text {
         padding: 2px 0;
-        border: none !important;
+        /* Removed border: none !important to allow borderMode classes */
         box-shadow: none !important;
         background: transparent !important;
         margin-bottom: 0;
@@ -280,10 +280,12 @@
         font-size: 1.15rem; /* ~16px usually, let's keep it close to 14pt */
         color: #3c4043;
         line-height: 1.6;
-        white-space: pre-wrap;
+        white-space: normal; /* Changed from pre-wrap to support natural wrapping and fix unwanted breaks on paste */
         outline: none;
         padding: 0;
         min-height: 1.6em;
+        border: 1px solid transparent; /* Default border */
+        border-radius: 4px;
     }
 
     /* Hierarchical Heading Numbering */
@@ -444,15 +446,36 @@
         word-wrap: break-word;
     }
 
-    .border-dashed th,
-    .border-dashed td {
+    /* Global Border Classes */
+    .border-dashed {
+        border-style: dashed !important;
+        border-color: #ddd !important;
+    }
+    
+    .mini-table.border-dashed th,
+    .mini-table.border-dashed td {
         border-style: dashed !important;
         border-color: #ddd !important;
     }
 
-    .border-none th,
-    .border-none td {
+    .border-none {
         border-color: transparent !important;
+        border-width: 0 !important;
+    }
+    
+    .mini-table.border-none th,
+    .mini-table.border-none td {
+        border-color: transparent !important;
+    }
+
+    .border-visible {
+        border: 1px solid #dadce0 !important;
+        border-style: solid !important;
+    }
+
+    .static-text-display.border-visible,
+    .static-text-display.border-dashed {
+        padding: 8px 12px !important;
     }
 
     @media print {
@@ -533,6 +556,28 @@
         cursor: pointer;
     }
 
+    .outline-sidebar {
+        max-height: calc(100vh - 120px);
+        overflow-y: auto;
+        position: sticky;
+        top: 110px;
+    }
+
+    /* Custom Scrollbar for Sidebar */
+    .outline-sidebar::-webkit-scrollbar {
+        width: 4px;
+    }
+    .outline-sidebar::-webkit-scrollbar-track {
+        background: #f1f1f1;
+    }
+    .outline-sidebar::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 10px;
+    }
+    .outline-sidebar::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+    }
+    
     .outline-item:hover {
         background-color: #f1f3f4;
         color: #1a73e8;
@@ -731,5 +776,119 @@
     .ebmr-comment-highlight.active, .ebmr-comment-highlight:hover {
         background-color: rgba(255, 235, 59, 1);
         box-shadow: 0 0 0 2px rgba(255, 235, 59, 0.3);
+    }
+    .page-break-divider {
+        height: 25px;
+        background: #f1f3f4 !important; /* Match the main workspace background */
+        margin-left: -41px !important; /* Pull out to cover page padding */
+        margin-right: -41px !important;
+        margin-top: 50px !important;
+        margin-bottom: 50px !important;
+        border-top: 1px solid #ddd;
+        border-bottom: 1px solid #ddd;
+        box-shadow: inset 0 4px 6px -4px rgba(0,0,0,0.1), inset 0 -4px 6px -4px rgba(0,0,0,0.1);
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .page-break-divider span {
+        background-color: #cbd5e1 !important;
+        color: white !important;
+        font-size: 0.65rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+
+    /* Section Group Highlighting */
+    .section-group-wrapper {
+        border: 2px solid transparent;
+        border-radius: 8px;
+        padding: 10px;
+        margin: 5px -10px;
+        transition: all 0.3s ease;
+        position: relative;
+    }
+
+    .section-group-wrapper.active {
+        border-color: #0ea5e9;
+        background-color: rgba(14, 165, 233, 0.02);
+        box-shadow: 0 0 15px rgba(14, 165, 233, 0.1);
+    }
+
+    .section-group-wrapper.active::before {
+        content: "PHÂN ĐOẠN ĐANG CHỌN";
+        position: absolute;
+        top: -12px;
+        right: 20px;
+        background: #0ea5e9;
+        color: white;
+        font-size: 0.6rem;
+        font-weight: bold;
+        padding: 2px 8px;
+        border-radius: 10px;
+        z-index: 20;
+    }
+        padding: 2px 12px;
+        border-radius: 10px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    /* Variable Badges (Dynamic Fields) */
+    .ebmr-field-badge {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        border: 2px solid #d97706 !important; /* Vàng đậm */
+        background-color: #fffbeb !important; /* Vàng cực nhạt (amber-50) */
+        color: #92400e !important; /* Chữ hổ phách đậm */
+        box-shadow: 0 2px 4px rgba(217, 119, 6, 0.1);
+        user-select: none;
+        white-space: nowrap;
+        margin: 2px;
+        min-width: 80px;
+        text-align: center;
+    }
+
+    /* Make variable fill the whole table cell */
+    td .ebmr-field-badge {
+        display: flex !important;
+        width: 100% !important;
+        min-height: 38px;
+        margin: 0 !important;
+        border-radius: 0 !important;
+        border-width: 0 0 0 4px !important; /* Chỉ để lại viền trái làm điểm nhấn */
+        justify-content: center;
+        align-items: center;
+        background-color: #fff9db !important; /* Màu vàng nhận diện vùng nhập liệu */
+        white-space: normal; /* Cho phép xuống dòng nếu ô hẹp */
+        text-align: center;
+        padding: 5px !important;
+    }
+
+    td:has(.ebmr-field-badge) {
+        padding: 0 !important;
+        vertical-align: stretch;
+    }
+
+    .ebmr-field-badge:hover {
+        background-color: #fef3c7 !important; /* amber-100 */
+    }
+
+    .ebmr-field-badge.active {
+        background-color: #fde68a !important; /* amber-200 */
+        box-shadow: inset 0 0 0 2px #d97706;
+    }
+
+    .ebmr-field-badge i {
+        margin-right: 5px;
+        font-size: 0.9em;
     }
 </style>

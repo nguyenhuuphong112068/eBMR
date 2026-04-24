@@ -13,10 +13,58 @@
             if (!window.isExecutionMode) container.appendChild(hint);
             else hint.remove();
         }
+        let lastSectionId = null;
+        let currentGroup = container;
+        let activeSectionIdTracker = null;
 
         items.forEach((item, idx) => {
+            // Determine the section this item belongs to based on sequence
+            if (item.type === 'section') {
+                activeSectionIdTracker = item.id;
+            }
+            
+            const itemSectionId = activeSectionIdTracker || 'section_0';
+            item.section_id = itemSectionId; // Sync data with sequence
+
+            // Skip rendering if it's the old signature block (being deprecated)
+            if (item.type === 'signature') return;
+
+            // Page Break & Grouping Logic
+            if (window.isViewAllMode || !window.activeSectionId) {
+                if (lastSectionId === null || itemSectionId !== lastSectionId) {
+                    // Create Page Break if not the first section
+                    if (lastSectionId !== null) {
+                        const pageBreak = document.createElement('div');
+                        pageBreak.className = 'page-break-divider my-4 d-flex align-items-center justify-content-center';
+                        const parts = (itemSectionId || '').split('_');
+                        const labelText = parts.length > 1 ? `Công đoạn ${parts[parts.length-1]}` : 'Phân đoạn mới';
+                        pageBreak.innerHTML = `<span class="bg-light px-3 py-1 rounded-pill small fw-bold text-muted border"><i class="fas fa-file-alt me-2"></i>${labelText}</span>`;
+                        container.appendChild(pageBreak);
+                    }
+
+                    // Create a new Section Group Wrapper
+                    currentGroup = document.createElement('div');
+                    currentGroup.className = 'section-group-wrapper' + (window.activeSectionId === itemSectionId ? ' active' : '');
+                    currentGroup.setAttribute('data-section-id', itemSectionId);
+                    currentGroup.onclick = (e) => {
+                        // Activate section when clicking its wrapper background
+                        if (e.target === currentGroup) {
+                            window.activeSectionId = itemSectionId;
+                            selectedId = null; // Deselect specific block
+                            renderBlocks();
+                        }
+                    };
+                    container.appendChild(currentGroup);
+                    
+                    lastSectionId = itemSectionId;
+                }
+            } else {
+                // If filtered to a specific section, no wrappers needed or just one
+                currentGroup = container;
+            }
+
             if (!window.isReadOnly && !window.isExecutionMode) {
-                addInsertionDivider(container, idx);
+                addInsertionDivider(currentGroup, idx);
             }
 
             const div = document.createElement('div');
@@ -31,9 +79,9 @@
                 div.onclick = (e) => {
                     e.stopPropagation();
                     if (selectedId !== item.id) {
-                        document.querySelectorAll('.block-item').forEach(el => el.classList.remove('active'));
-                        div.classList.add('active');
-                        selectItem(item.id, false);
+                        // Update active section highlight without full re-render if possible
+                        // But for simplicity, we call selectItem which might re-render
+                        selectItem(item.id, true); // doRender=true to update the wrapper's 'active' class
                     }
                 };
             }
@@ -67,7 +115,7 @@
                         const cellWidth = (item.columns && item.columns[c] && item.columns[c].width) ? item.columns[c].width : 'auto';
                         const cellBg = (cell.backgroundColor) ? cell.backgroundColor : '';
 
-                        let displayContent = cell.content;
+                        let displayContent = decorateContent(cell.content);
                         if (displayContent === null || displayContent === 'null' || displayContent === undefined) {
                             displayContent = '';
                         }
@@ -95,7 +143,7 @@
                             <td contenteditable="${finalEditable}" spellcheck="false" data-row="${r+1}" data-col="${c}" 
                                 rowspan="${cell.rs || 1}" colspan="${cell.cs || 1}" ${onclickAttr}
                                 class="${cellClass} ${item.locked ? 'locked-cell' : ''}" 
-                                style="width: ${cellWidth}; height: ${rowH}; background-color: ${cellBg};"
+                                style="width: ${cellWidth}; height: ${rowH}; background-color: ${cellBg}; text-align: ${cell.textAlign || ''}; font-weight: ${cell.fontWeight || ''}; font-style: ${cell.fontStyle || ''}; font-size: ${cell.fontSize || ''}; color: ${cell.textColor || ''};"
                                 oninput="updateTableInline('${item.id}', 'cell', ${r}, ${c}, this.innerHTML)">
                                 ${displayContent}
                             </td>`;
@@ -103,20 +151,58 @@
                     rowsHtml += `<tr>${cellsHtml}</tr>`;
                 }
                 content = `<table class="mini-table ${borderClass}">${thead}<tbody>${rowsHtml}</tbody></table>`;
-            } else if (item.type === 'signature') {
-                const blockKey = item.uuid || item.id;
-                const runVal = window.executionValues[blockKey];
-                const onclickAttr = window.isExecutionMode ? `onclick="openExecutionInputModal('${blockKey}', 0, 0, 'signature')"` : '';
-                content = `<div class="block-mock d-flex align-items-center justify-content-center text-muted py-5" ${onclickAttr} style="cursor: pointer;">
-                             ${runVal ? `<div class="text-success capitalise"><i class="fas fa-check-circle me-2"></i>Đã ký: ${runVal}</div>` : `<i class="fas fa-pen-nib me-2"></i>${item.content || 'Ký xác nhận (Click để ký)'}`}
-                           </div>`;
             } else if (item.type === 'static-text') {
-                const displayContent = item.content || '';
+                const displayContent = decorateContent(item.content || '');
                 const textEditable = (window.isReadOnly || window.isExecutionMode) ? 'false' : 'true';
-                content = `<div class="static-text-display" contenteditable="${textEditable}" spellcheck="false" 
-                                oninput="updateStaticTextInline('${item.id}', this.innerHTML); handleAutoCapitalize(this)">
-                                ${displayContent}
+                const borderClass = item.borderMode === 'dashed' ? 'border-dashed' : (item.borderMode === 'visible' ? 'border-visible' : 'border-none');
+                
+                content = `<div class="static-text-display ${borderClass}" contenteditable="${textEditable}" spellcheck="false" 
+                                oninput="updateStaticTextInline('${item.id}', this.innerHTML); handleAutoCapitalize(this)">${displayContent}</div>`;
+            } else if (item.type === 'linked-template') {
+                const isPreviewing = item.showPreview || false;
+                const previewContent = isPreviewing ? `<div id="preview-${item.id}" class="mt-3 p-4 border rounded bg-white w-100 shadow-sm" style="pointer-events: none; opacity: 0.9;">
+                    <div class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>
+                </div>` : '';
+                
+                content = `<div class="block-mock d-flex flex-column align-items-center justify-content-center py-4 px-3 position-relative" style="background-color: #f8f9fa; border: 2px dashed #0d6efd; border-radius: 12px; min-height: 120px;">
+                             <div class="position-absolute" style="top: 10px; right: 10px; z-index: 100;">
+                                <button class="btn btn-sm btn-primary shadow-sm px-3" onclick="event.stopPropagation(); toggleGfPreview('${item.id}')" style="border-radius: 20px;">
+                                    <i class="fas ${isPreviewing ? 'fa-eye-slash' : 'fa-eye'} me-1"></i> ${isPreviewing ? 'Ẩn nội dung' : 'Xem nội dung'}
+                                </button>
+                             </div>
+                             <i class="fas fa-link fa-2x text-primary mb-2 ${isPreviewing ? 'd-none' : ''}"></i>
+                             <div class="fw-bold text-navy ${isPreviewing ? 'mb-2 border-bottom pb-2 w-100' : ''}">Biểu mẫu chung: ${item.label || 'Đang tải...'}</div>
+                             ${!isPreviewing ? `<div class="small text-muted mt-1">Nội dung sẽ được tự động chèn vào khi ban hành/thực thi</div>` : ''}
+                             ${previewContent}
                            </div>`;
+
+                if (isPreviewing) {
+                    setTimeout(() => fetchAndRenderGfPreview(item.id, item.template_id), 50);
+                }
+            } else if (item.type === 'section') {
+                const labelEditable = (window.isReadOnly || window.isExecutionMode) ? 'false' : 'true';
+                content = `<div class="ebmr-section-header d-flex align-items-center" id="section-${item.id}">
+                             <div class="section-icon bg-info text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px; min-width: 40px;">
+                                <i class="fas fa-layer-group"></i>
+                             </div>
+                             <div class="flex-grow-1">
+                                <div class="section-title fw-bold text-uppercase" contenteditable="${labelEditable}" 
+                                     onblur="updateItemProp('label', this.innerText)" 
+                                     style="font-size: 1.2rem; color: #164e63; letter-spacing: 1px;">${item.label || 'Tên phân đoạn'}</div>
+                                <div class="section-line mt-1" style="height: 3px; background: linear-gradient(to right, #0ea5e9, transparent); border-radius: 2px;"></div>
+                             </div>
+                           </div>`;
+            } else if (item.type === 'chart') {
+                const canvasId = 'chart_canvas_' + item.id;
+                content = `<div class="chart-container" style="position: relative; height:300px; width:100%; padding: 15px; background: #fff; border: 1px solid #eee; border-radius: 8px;">
+                             <canvas id="${canvasId}"></canvas>
+                           </div>`;
+                // Schedule chart initialization after DOM is ready
+                setTimeout(() => {
+                    if (typeof renderChart === 'function') {
+                        renderChart(canvasId, item.chartConfig);
+                    }
+                }, 50);
             }
 
             const actions = (item.locked || window.isReadOnly || window.isExecutionMode) ? '' : `
@@ -128,15 +214,15 @@
 
             div.innerHTML = `
                 ${actions}
-                ${item.type !== 'static-text' && !window.isExecutionMode ? `<span class="block-label">${item.label} ${item.locked ? '<i class="fas fa-lock ms-1 small"></i>' : ''}</span>` : ''}
+                ${item.type !== 'static-text' && !window.isExecutionMode && item.label && item.label !== 'null' ? `<span class="block-label">${item.label} ${item.locked ? '<i class="fas fa-lock ms-1 small"></i>' : ''}</span>` : ''}
                 ${content}
             `;
-            container.appendChild(div);
+            currentGroup.appendChild(div);
         });
 
         if (items.length > 0) {
             if (!window.isReadOnly && !window.isExecutionMode) {
-                addInsertionDivider(container, items.length);
+                addInsertionDivider(currentGroup, items.length);
             }
         }
         
@@ -162,6 +248,8 @@
                 <div class="small fw-bold text-muted px-2 mb-1">KHÁC</div>
                 <button onclick="addItem('static-text', ${idx})"><i class="fas fa-paragraph me-2" style="width: 15px;"></i> Văn bản</button>
                 <button onclick="showTableSelectorAt(${idx}, this)"><i class="fas fa-table me-2" style="width: 15px;"></i> Bảng</button>
+                <hr class="my-1 mx-2">
+                <button onclick="pasteAt(${idx})"><i class="fas fa-paste me-2" style="width: 15px;"></i> Dán nội dung</button>
             </div>
         `;
 
@@ -188,7 +276,8 @@
             id: newItemId,
             type: 'static-text',
             label: 'Nội dung',
-            content: ''
+            content: '',
+            borderMode: 'none'
         });
         saveStateDebounced();
         renderBlocks();
@@ -204,4 +293,87 @@
             }
         }, 50);
     };
+    window.pasteAt = async function(idx) {
+        try {
+            const clipboardItems = await navigator.clipboard.read();
+            let htmlData = "";
+            let plainText = "";
+
+            for (const item of clipboardItems) {
+                if (item.types.includes('text/html')) {
+                    const blob = await item.getType('text/html');
+                    htmlData = await blob.text();
+                }
+                if (item.types.includes('text/plain')) {
+                    const blob = await item.getType('text/plain');
+                    plainText = await blob.text();
+                }
+            }
+
+            if (!htmlData && !plainText) {
+                Swal.fire('Chú ý', 'Bộ nhớ tạm trống hoặc không có nội dung hợp lệ.', 'warning');
+                return;
+            }
+
+            // Create a mock event for handleGlobalPaste or just call logic
+            const mockEvent = {
+                clipboardData: {
+                    getData: (type) => (type === 'text/html' ? htmlData : plainText)
+                },
+                preventDefault: () => {},
+                target: { closest: () => null } // Ensure it doesn't think it's a table paste
+            };
+
+            // Temporarily set a global flag or pass index?
+            // Let's just manually trigger the paste logic but with our index
+            handleGlobalPaste(mockEvent, idx);
+
+        } catch (err) {
+            console.error(err);
+            Swal.fire('Quyền truy cập', 'Vui lòng cho phép trình duyệt truy cập bộ nhớ tạm (Clipboard) để dán nội dung.', 'info');
+        }
+    };
+
+    /**
+     * Decorates variable badges with visual icons based on their data type
+     */
+    function decorateContent(html) {
+        if (!html) return '';
+        const div = document.createElement('div');
+        div.innerHTML = html;
+        const badges = div.querySelectorAll('.ebmr-field-badge');
+        
+        badges.forEach(badge => {
+            const fieldId = badge.getAttribute('data-field-id');
+            const field = fieldsConfig[fieldId];
+            if (field) {
+                let icon = 'fa-edit';
+                let typeLabel = '';
+                
+                if (field.type === 'signature') {
+                    icon = 'fa-signature';
+                    typeLabel = 'Chữ ký';
+                } else if (field.type === 'date') {
+                    icon = 'fa-calendar-alt';
+                    typeLabel = 'Ngày';
+                } else if (field.type === 'checkbox') {
+                    icon = 'fa-check-square';
+                    typeLabel = 'Tick';
+                } else if (field.type === 'number') {
+                    icon = 'fa-calculator';
+                    typeLabel = 'Số';
+                } else if (field.type === 'select') {
+                    icon = 'fa-list-ul';
+                    typeLabel = 'Chọn';
+                } else {
+                    typeLabel = 'Text';
+                }
+                
+                const label = field.label || `[${typeLabel}]`;
+                badge.className = `ebmr-field-badge ${selectedFieldId === fieldId ? 'active' : ''}`;
+                badge.innerHTML = `<i class="fas ${icon}"></i> ${label}`;
+            }
+        });
+        return div.innerHTML;
+    }
 </script>

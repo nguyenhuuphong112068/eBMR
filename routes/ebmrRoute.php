@@ -13,6 +13,7 @@ Route::group(['prefix' => 'ebmr', 'as' => 'pages.ebmr.'], function () {
     Route::post('/templates/metadata', [EbmrTemplateController::class, 'storeMetadata'])->name('storeTemplateMetadata');
     Route::get('/templates/{id}/data', [EbmrTemplateController::class, 'getMetadata'])->name('getTemplateMetadata');
     Route::get('/get-templates', [EbmrTemplateController::class, 'getTemplates'])->name('getTemplates');
+    Route::get('/templates/{id}/blocks', [EbmrTemplateController::class, 'getTemplateBlocks'])->name('getTemplateBlocks');
     Route::get('/get-history/{id}', [EbmrTemplateController::class, 'getHistory'])->name('getHistory');
     Route::get('/templates/next-version', [EbmrTemplateController::class, 'getNextVersion'])->name('getNextVersion');
 
@@ -21,6 +22,9 @@ Route::group(['prefix' => 'ebmr', 'as' => 'pages.ebmr.'], function () {
     Route::post('/store-template', [EbmrDesignerController::class, 'save'])->name('storeTemplate');
     Route::post('/store-comment', [EbmrDesignerController::class, 'storeComment'])->name('storeComment');
     Route::post('/delete-comment', [EbmrDesignerController::class, 'deleteComment'])->name('deleteComment');
+    Route::post('/translate', [EbmrDesignerController::class, 'aiTranslate'])->name('aiTranslate');
+    Route::post('/translate-single', [EbmrDesignerController::class, 'aiTranslateSingle'])->name('aiTranslateSingle');
+
 
     // 3. Workflow & Approvals
     Route::get('/approvals', [EbmrApprovalController::class, 'index'])->name('approvals');

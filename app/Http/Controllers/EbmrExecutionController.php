@@ -26,6 +26,21 @@ class EbmrExecutionController extends Controller
             ->orderBy('ebmr_records.created_at', 'desc')
             ->get();
 
+        foreach($records as $r) {
+            $r->sections = DB::table('ebmr_template_blocks')
+                ->where('template_id', $r->template_id)
+                ->where('type', 'section')
+                ->orderBy('order')
+                ->get()
+                ->map(function($b) {
+                    $prop = json_decode($b->properties);
+                    return [
+                        'id' => $b->section_id, // Use composite string ID
+                        'label' => $prop->label ?? 'N/A'
+                    ];
+                });
+        }
+
         return view('pages.ebmr.records.list', [
             'records' => $records,
             'mode' => $mode
@@ -35,9 +50,10 @@ class EbmrExecutionController extends Controller
     /**
      * Execution interface for a specific record
      */
-    public function execute($id)
+    public function execute(Request $request, $id)
     {
         session(['title' => 'Ghi Chép Hồ Sơ BMR']);
+        $sectionId = $request->query('section');
 
         $record = DB::table('ebmr_records')->where('id', $id)->first();
         if (!$record) return redirect()->back()->with('error', 'Hồ sơ không tồn tại.');
@@ -49,14 +65,95 @@ class EbmrExecutionController extends Controller
         $fieldsConfig = new \stdClass();
 
         $blocks = DB::table('ebmr_template_blocks')->where('template_id', $template->id)->orderBy('order')->get();
-        if ($blocks->isNotEmpty()) {
-            $fieldsConfig = json_decode($blocks->first()->fields_config);
-        }
+        
+        // Fetch content blocks
+        $blockIds = $blocks->pluck('id')->toArray();
+        $contentBlocks = DB::table('ebmr_content_blocks')->whereIn('ebmr_template_blocks_id', $blockIds)->get()->groupBy('ebmr_template_blocks_id');
 
+        if ($blocks->isNotEmpty()) {
+            $fieldsConfig = json_decode($blocks->first()->fields_config, true) ?? [];
+        } else {
+            $fieldsConfig = [];
+        }
+    
+        $allFields = [];
         foreach ($blocks as $block) {
             $f = json_decode($block->properties, true);
-            $fields[] = $f;
+            $this->injectContent($f, $block, $contentBlocks->get($block->id));
+            $f['db_id'] = $block->id; // Track DB ID for section matching
+            if (isset($f['type']) && $f['type'] === 'linked-template') {
+                $linkedTemplateId = $f['template_id'] ?? null;
+                if ($linkedTemplateId) {
+                    $linkedBlocks = DB::table('ebmr_template_blocks')->where('template_id', $linkedTemplateId)->orderBy('order')->get();
+                    
+                    // Fetch linked content blocks
+                    $lbIds = $linkedBlocks->pluck('id')->toArray();
+                    $lContentBlocks = DB::table('ebmr_content_blocks')->whereIn('ebmr_template_blocks_id', $lbIds)->get()->groupBy('ebmr_template_blocks_id');
+
+                    if ($linkedBlocks->isNotEmpty()) {
+                        $linkedConfig = json_decode($linkedBlocks->first()->fields_config, true) ?? [];
+                        $fieldsConfig = array_merge((array)$fieldsConfig, (array)$linkedConfig);
+                    }
+                    foreach ($linkedBlocks as $lb) {
+                        $linkedF = json_decode($lb->properties, true);
+                        $this->injectContent($linkedF, $lb, $lContentBlocks->get($lb->id));
+                        $linkedF['is_linked'] = true; // Mark as linked if needed by frontend
+                        $allFields[] = $linkedF;
+                    }
+                }
+            } else {
+                $allFields[] = $f;
+            }
         }
+
+        // --- Section Filtering Logic ---
+        if ($sectionId) {
+            $blocksQuery = DB::table('ebmr_template_blocks')
+                ->where('template_id', $template->id)
+                ->where('section_id', $sectionId)
+                ->orderBy('order')
+                ->get();
+            
+            $bqIds = $blocksQuery->pluck('id')->toArray();
+            $bqContentBlocks = DB::table('ebmr_content_blocks')->whereIn('ebmr_template_blocks_id', $bqIds)->get()->groupBy('ebmr_template_blocks_id');
+
+            $activeSectionLabel = null;
+            foreach ($blocksQuery as $block) {
+                $f = json_decode($block->properties, true);
+                $this->injectContent($f, $block, $bqContentBlocks->get($block->id));
+                if (isset($f['type']) && $f['type'] === 'section') {
+                    $activeSectionLabel = $f['label'] ?? 'Phân đoạn';
+                }
+                
+                if (isset($f['type']) && $f['type'] === 'linked-template') {
+                    $linkedTemplateId = $f['template_id'] ?? null;
+                    if ($linkedTemplateId) {
+                        $linkedBlocks = DB::table('ebmr_template_blocks')->where('template_id', $linkedTemplateId)->orderBy('order')->get();
+                        
+                        $lbIds = $linkedBlocks->pluck('id')->toArray();
+                        $lContentBlocks = DB::table('ebmr_content_blocks')->whereIn('ebmr_template_blocks_id', $lbIds)->get()->groupBy('ebmr_template_blocks_id');
+
+                        if ($linkedBlocks->isNotEmpty()) {
+                            $linkedConfig = json_decode($linkedBlocks->first()->fields_config, true) ?? [];
+                            $fieldsConfig = array_merge((array)$fieldsConfig, (array)$linkedConfig);
+                        }
+                        foreach ($linkedBlocks as $lb) {
+                            $linkedF = json_decode($lb->properties, true);
+                            $this->injectContent($linkedF, $lb, $lContentBlocks->get($lb->id));
+                            $linkedF['is_linked'] = true;
+                            $fields[] = $linkedF;
+                        }
+                    }
+                } else {
+                    $fields[] = $f;
+                }
+            }
+        } else {
+            // Use the already fetched allFields if no section filtering
+            $fields = $allFields;
+        }
+
+        $fieldsConfig = (object)$fieldsConfig;
 
         // Lấy dữ liệu và gộp lại theo block_uuid
         $runDataRaw = DB::table('ebmr_run_data')->where('record_id', $id)->get();
@@ -79,7 +176,9 @@ class EbmrExecutionController extends Controller
             'template' => $template,
             'executionValues' => $executionValues,
             'isExecutionMode' => true,
-            'isReadOnly' => false
+            'isReadOnly' => false,
+            'activeSectionId' => $sectionId,
+            'activeSectionLabel' => $activeSectionLabel
         ]);
     }
 
@@ -90,7 +189,7 @@ class EbmrExecutionController extends Controller
     {
         Log::info('--- SAVE ATTEMPT ---');
         Log::info($request->all());
-        
+
         $validated = $request->validate([
             'record_id' => 'required',
             'data' => 'nullable',
@@ -106,7 +205,7 @@ class EbmrExecutionController extends Controller
             if (!empty($validated['status'])) {
                 DB::table('ebmr_records')
                     ->where('id', $validated['record_id'])
-                    
+
                     ->update(['status' => $validated['status'], 'updated_at' => $now]);
             }
 
@@ -121,7 +220,7 @@ class EbmrExecutionController extends Controller
                         Log::info("Saving cell: " . $cellId . " = " . $rawValue);
                         DB::table('ebmr_run_data')->updateOrInsert(
                             [
-                                'record_id' => $validated['record_id'], 
+                                'record_id' => $validated['record_id'],
                                 'block_uuid' => $blockUuid,
                                 'cell_id' => $cellId
                             ],
@@ -140,7 +239,7 @@ class EbmrExecutionController extends Controller
                     // Nếu là giá trị đơn
                     DB::table('ebmr_run_data')->updateOrInsert(
                         [
-                            'record_id' => $validated['record_id'], 
+                            'record_id' => $validated['record_id'],
                             'block_uuid' => $blockUuid,
                             'cell_id' => 'default'
                         ],
@@ -183,5 +282,47 @@ class EbmrExecutionController extends Controller
         }
 
         return response()->json(['success' => false, 'message' => 'Mật khẩu xác nhận không chính xác.']);
+    }
+    private function injectContent(&$field, $block, $contentBlocks)
+    {
+        if (!$contentBlocks || empty($block->content)) return;
+
+        // 1. Rebuild the full HTML by replacing placeholders with text
+        $fullHtml = $block->content;
+        foreach ($contentBlocks as $cb) {
+            $placeholder = "[[CONTENT_$cb->id]]";
+            $text = $cb->vi_contents ?? '';
+            $fullHtml = str_replace($placeholder, $text, $fullHtml);
+        }
+
+        if ($block->type === 'static-text') {
+            if (preg_match('/<div class="static-text-display"[^>]*>(.*?)<\/div>/is', $fullHtml, $matches)) {
+                $field['content'] = $matches[1];
+            } else {
+                $field['content'] = $fullHtml;
+            }
+        } elseif ($block->type === 'table') {
+            $rows = $field['rows'] ?? 0;
+            $cols = $field['cols'] ?? 0;
+            $data = [];
+            
+            preg_match_all('/<td[^>]*>(.*?)<\/td>/is', $fullHtml, $matches);
+            $tdContents = $matches[1] ?? [];
+            
+            $idx = 0;
+            if (!isset($field['data'])) $field['data'] = [];
+            for ($r = 0; $r < $rows; $r++) {
+                if (!isset($field['data'][$r])) $field['data'][$r] = [];
+                for ($c = 0; $c < $cols; $c++) {
+                    $content = $tdContents[$idx] ?? '';
+                    if (isset($field['data'][$r][$c]) && is_array($field['data'][$r][$c])) {
+                        $field['data'][$r][$c]['content'] = $content;
+                    } else {
+                        $field['data'][$r][$c] = ['content' => $content, 'rs' => 1, 'cs' => 1, 'hidden' => false];
+                    }
+                    $idx++;
+                }
+            }
+        }
     }
 }

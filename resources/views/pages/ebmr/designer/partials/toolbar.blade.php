@@ -1,9 +1,11 @@
 <!-- Google Docs Style Toolbar -->
 <div class="editor-toolbar shadow-sm d-flex flex-column px-4 py-2 bg-white">
     <div class="d-flex align-items-center w-100">
-        <div class="d-flex align-items-center border-end pe-3 me-3 gap-1">
-            <button class="btn btn-toolbar" onclick="undo()" title="Undo"><i class="fas fa-undo"></i></button>
-            <button class="btn btn-toolbar" onclick="redo()" title="Redo"><i class="fas fa-redo"></i></button>
+        <div class="d-flex align-items-center border-end pe-3 me-3 gap-1 {{ $isReadOnly ? 'opacity-50 pointer-events-none' : '' }}">
+            <button class="btn btn-toolbar" onclick="undo()" title="Undo" {{ $isReadOnly ? 'disabled' : '' }}><i class="fas fa-undo"></i></button>
+            <button class="btn btn-toolbar" onclick="redo()" title="Redo" {{ $isReadOnly ? 'disabled' : '' }}><i class="fas fa-redo"></i></button>
+            <button class="btn btn-toolbar" id="btn-format-painter" onclick="toggleFormatPainter()" title="Sao chép định dạng" {{ $isReadOnly ? 'disabled' : '' }}><i class="fas fa-paint-roller"></i></button>
+            <button class="btn btn-toolbar" onclick="clearFormatting()" title="Xóa định dạng" {{ $isReadOnly ? 'disabled' : '' }}><i class="fas fa-remove-format"></i></button>
             <button class="btn btn-toolbar" onclick="openTemplateModal()" title="Mở hồ sơ">
                 <i class="fas fa-folder-open"></i>
             </button>
@@ -14,14 +16,12 @@
                     class="fas fa-print"></i></button>
         </div>
 
-        <div class="d-flex align-items-center border-end pe-3 me-3 gap-2">
-            <span class="small fw-bold text-muted me-2">CHÈN:</span>
-
-            <!-- Table Dropdown -->
+        <div class="d-flex align-items-center border-end pe-3 me-3 gap-2 {{ $isReadOnly ? 'd-none' : '' }}">
+            <!-- ... existing items ... -->
             <div class="dropdown d-inline-block">
                 <button class="btn btn-toolbar-action dropdown-toggle" type="button" id="tableDropdown"
-                    data-toggle="dropdown" aria-expanded="false">
-                    <i class="fas fa-table me-1"></i> Bảng
+                    data-toggle="dropdown" aria-expanded="false" title="Chèn Bảng">
+                    <i class="fas fa-table"></i>
                 </button>
                 <div class="dropdown-menu table-selector-dropdown p-3" aria-labelledby="tableDropdown">
                     <div class="grid-container" id="table-grid">
@@ -30,42 +30,127 @@
                 </div>
             </div>
 
-            <button class="btn btn-toolbar-action" onmousedown="event.preventDefault();" onclick="addItem('static-text')"><i
-                    class="fas fa-paragraph me-1"></i>
-                Mô tả</button>
+            <div class="d-flex align-items-center gap-1 border-start ps-2 ms-2 me-2 border-end pe-2">
+                <button class="btn btn-toolbar-action" onclick="mergeSelectedCells()" title="Gộp ô">
+                    <i class="fas fa-object-group"></i>
+                </button>
+                <button class="btn btn-toolbar-action" onclick="openSplitModal()" title="Tách ô">
+                    <i class="fas fa-columns"></i>
+                </button>
+            </div>
 
-            <button class="btn btn-toolbar-action" onmousedown="event.preventDefault();" onclick="handleSignatureClick()"><i class="fas fa-signature me-1"></i>
-                Chữ ký</button>
+            <button class="btn btn-toolbar-action" onmousedown="event.preventDefault();"
+                onclick="addItem('static-text')" title="Chèn Mô tả">
+                <i class="fas fa-paragraph"></i>
+            </button>
 
-            <button class="btn btn-toolbar-action text-primary fw-bold" onmousedown="event.preventDefault();" onclick="insertDynamicField()"><i class="fas fa-keyboard me-1"></i>
-                Biến số</button>
+
+            <button class="btn btn-toolbar-action" onmousedown="event.preventDefault();" onclick="openLinkGfModal()" title="BM Chung">
+                <i class="fas fa-link"></i>
+            </button>
+
+            <button class="btn btn-toolbar-action text-info fw-bold" onmousedown="event.preventDefault();"
+                onclick="addSection()" title="Thêm Phân đoạn">
+                <i class="fas fa-layer-group"></i>
+            </button>
+
+            <div class="btn-group">
+                <button class="btn btn-toolbar-action text-primary fw-bold" onmousedown="event.preventDefault();"
+                    onclick="insertDynamicField()" title="Chèn Biến số">
+                    <i class="fas fa-keyboard"></i>
+                </button>
+                <button type="button" class="btn btn-toolbar-action text-primary dropdown-toggle dropdown-toggle-split" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                    <span class="sr-only">Toggle Dropdown</span>
+                </button>
+                <div class="dropdown-menu shadow-lg p-2" style="border-radius: 12px; min-width: 180px;">
+                    <button class="dropdown-item rounded mb-1" onclick="insertDynamicField('text')">✒️ Nhập Văn bản</button>
+                    <button class="dropdown-item rounded mb-1" onclick="insertDynamicField('number')">🔢 Nhập Số</button>
+                    <button class="dropdown-item rounded mb-1" onclick="insertDynamicField('date')">📅 Nhập Ngày</button>
+                    <button class="dropdown-item rounded mb-1" onclick="insertDynamicField('signature')">✍️ Nhập Chữ ký</button>
+                    <button class="dropdown-item rounded mb-1" onclick="insertDynamicField('checkbox')">☑️ Nhập Tick</button>
+                    <button class="dropdown-item rounded mb-1" onclick="insertDynamicField('select')">🔘 Nhập Lựa chọn</button>
+                </div>
+            </div>
+            <button class="btn btn-toolbar-action text-muted ms-1" onmousedown="event.preventDefault();" onclick="openSymbolModal()" title="Ký hiệu đặc biệt">
+                <i class="fas fa-omega"></i>
+            </button>
         </div>
 
-        <div class="ms-auto">
-            <button class="btn btn-navy px-4" onclick="saveTemplate()" style="border-radius: 20px;">
-                <i class="fas fa-cloud-upload-alt me-2"></i> LƯU HỒ SƠ MẪU
+        <div class="ms-auto d-flex gap-2">
+            <!-- Language Selector -->
+            <div class="btn-group" role="group">
+                <button id="langModeBtn" type="button" class="btn btn-outline-secondary px-2 dropdown-toggle" data-toggle="dropdown" style="border-radius: 20px;" title="Ngôn ngữ">
+                    <i class="fas fa-language"></i>
+                </button>
+                <div class="dropdown-menu dropdown-menu-right shadow-lg p-2" style="border-radius: 12px; min-width: 200px;">
+                    <button class="dropdown-item rounded mb-1" onclick="setLanguageMode('vi')">
+                        <i class="fas fa-check me-2 text-success" id="check-vi"></i> 1. Tiếng Việt (Gốc)
+                    </button>
+                    <button class="dropdown-item rounded mb-1" onclick="setLanguageMode('en')">
+                        <i class="fas fa-check me-2 d-none" id="check-en"></i> 2. Tiếng Anh (Dịch)
+                    </button>
+                    <button class="dropdown-item rounded mb-1" onclick="setLanguageMode('dual')">
+                        <i class="fas fa-check me-2 d-none" id="check-dual"></i> 3. Song ngữ (Xem)
+                    </button>
+                    <div class="dropdown-divider"></div>
+                    <button class="dropdown-item rounded text-primary fw-bold" onclick="translateCurrentDocument()">
+                        <i class="fas fa-robot me-2"></i> Phiên dịch bằng AI...
+                    </button>
+                </div>
+            </div>
+
+            <button id="viewModeToggle" class="btn {{ empty($activeSectionId) ? 'btn-info' : 'btn-outline-info' }} px-3"
+                onclick="toggleViewMode()" style="border-radius: 20px;" title="Thay đổi chế độ xem">
+                @if (empty($activeSectionId))
+                    <i class="fas fa-th-list"></i>
+                @else
+                    <i class="fas fa-expand-arrows-alt"></i>
+                @endif
+            </button>
+            <button class="btn btn-navy px-3" onclick="saveTemplate()" style="border-radius: 20px;" {{ $isReadOnly ? 'disabled' : '' }} title="Lưu hồ sơ mẫu">
+                <i class="fas fa-cloud-upload-alt"></i>
             </button>
         </div>
     </div>
 
     <!-- Additional RTE formatting toolbar -->
-    <div class="d-flex align-items-center w-100 mt-2 pt-2 border-top gap-1">
+    <div class="d-flex align-items-center w-100 mt-2 pt-2 border-top gap-1 {{ $isReadOnly ? 'd-none' : '' }}">
+        <!-- ... all the formatting tools ... -->
         <select class="form-select form-select-sm" style="width: 140px; font-size: 0.8rem;"
             onchange="formatDoc('formatBlock', this.value); this.selectedIndex=0;" title="Định dạng Tiêu đề / Thẻ">
             <option value="">Kiểu tài liệu...</option>
-            <option value="H1">Tiêu đề cấp 1 (22pt)</option>
-            <option value="H2">Tiêu đề cấp 2 (18pt)</option>
-            <option value="H3">Tiêu đề cấp 3 (16pt)</option>
-            <option value="H4">Tiêu đề cấp 4 (16pt)</option>
+            <option value="H1">Tiêu đề cấp 1 (16pt)</option>
+            <option value="H2">Tiêu đề cấp 2 (15pt)</option>
+            <option value="H3">Tiêu đề cấp 3 (14pt)</option>
+            <option value="H4">Tiêu đề cấp 4 (14pt)</option>
             <option value="P">Đoạn văn (14pt)</option>
         </select>
-        <div class="border-end mx-1" style="height: 18px;"></div>
-        <div class="input-group input-group-sm" style="width: 70px;" title="Cỡ chữ">
-            <input type="number" class="form-control text-center px-1" id="customFontSize" value="16"
-                min="8" max="72" step="1" onmousedown="saveCurrentSelection()"
-                onchange="applyCustomFontSize(this.value)">
+        <div class="d-flex align-items-center gap-1 border-start ps-2 ms-2 border-end pe-2">
+            <button class="btn btn-toolbar-action p-0 d-flex align-items-center justify-content-center" style="width: 24px; height: 24px; border-radius: 4px;" onclick="changeFontSize(-1)" title="Giảm cỡ chữ">
+                <i class="fas fa-minus" style="font-size: 0.7rem;"></i>
+            </button>
+            <div class="dropdown d-inline-block" title="Cỡ chữ">
+                <button class="btn btn-toolbar dropdown-toggle px-2 fw-bold" type="button" data-toggle="dropdown" aria-expanded="false" style="min-width: 45px;">
+                    <span id="fontSizeDisplay">16</span>
+                </button>
+                <div class="dropdown-menu shadow-lg p-2" style="min-width: 80px; max-height: 300px; overflow-y: auto;">
+                    <button class="dropdown-item rounded mb-1" onclick="applyCustomFontSize(10)">10</button>
+                    <button class="dropdown-item rounded mb-1" onclick="applyCustomFontSize(12)">12</button>
+                    <button class="dropdown-item rounded mb-1" onclick="applyCustomFontSize(14)">14</button>
+                    <button class="dropdown-item rounded mb-1" onclick="applyCustomFontSize(16)">16</button>
+                    <button class="dropdown-item rounded mb-1" onclick="applyCustomFontSize(18)">18</button>
+                    <button class="dropdown-item rounded mb-1" onclick="applyCustomFontSize(20)">20</button>
+                    <button class="dropdown-item rounded mb-1" onclick="applyCustomFontSize(24)">24</button>
+                    <button class="dropdown-item rounded mb-1" onclick="applyCustomFontSize(28)">28</button>
+                    <button class="dropdown-item rounded mb-1" onclick="applyCustomFontSize(32)">32</button>
+                    <button class="dropdown-item rounded mb-1" onclick="applyCustomFontSize(36)">36</button>
+                    <button class="dropdown-item rounded mb-1" onclick="applyCustomFontSize(48)">48</button>
+                </div>
+            </div>
+            <button class="btn btn-toolbar-action p-0 d-flex align-items-center justify-content-center" style="width: 24px; height: 24px; border-radius: 4px;" onclick="changeFontSize(1)" title="Tăng cỡ chữ">
+                <i class="fas fa-plus" style="font-size: 0.7rem;"></i>
+            </button>
         </div>
-        <div class="border-end mx-1" style="height: 18px;"></div>
         <button class="btn btn-toolbar" onclick="formatDoc('bold')" title="In đậm (Ctrl+B)"><i
                 class="fas fa-bold"></i></button>
         <button class="btn btn-toolbar" onclick="formatDoc('italic')" title="In nghiêng (Ctrl+I)"><i
@@ -146,6 +231,9 @@
                 class="fas fa-list-ul"></i></button>
         <button class="btn btn-toolbar" onclick="formatDoc('insertOrderedList')" title="Danh sách đánh số"><i
                 class="fas fa-list-ol"></i></button>
+        <button class="btn btn-toolbar ms-1" onclick="addComment()" title="Thêm bình luận">
+            <i class="far fa-comment-dots"></i>
+        </button>
         <div class="border-end mx-1" style="height: 18px;"></div>
 
         <div class="dropdown d-inline-block">
@@ -172,12 +260,6 @@
         <input type="file" id="imageUploader" class="d-none" accept="image/*"
             onchange="uploadImageBase64(this)">
 
-        <div class="ms-auto d-flex align-items-center">
-            <div class="input-group input-group-sm" style="width: 200px;">
-                <input type="text" class="form-control" id="searchBox" placeholder="Tìm kiếm Text...">
-                <button class="btn btn-outline-secondary" type="button" onclick="searchDoc()"><i
-                        class="fas fa-search"></i></button>
-            </div>
-        </div>
+
     </div>
 </div>

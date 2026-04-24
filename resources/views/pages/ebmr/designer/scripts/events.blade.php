@@ -10,9 +10,18 @@
                 startCell = cell;
                 activeRowIdx = parseInt(cell.dataset.row);
                 activeColIdx = parseInt(cell.dataset.col);
-                clearSelection();
-                cell.classList.add('selected-cell');
-                selectItem(selectedId, false);
+                
+                // Only clear and restart selection if not shift-clicking an already selected range
+                if (!e.shiftKey || !cell.classList.contains('selected-cell')) {
+                    clearSelection();
+                    cell.classList.add('selected-cell');
+                }
+                
+                const blockItem = cell.closest('.block-item');
+                const bId = blockItem ? blockItem.getAttribute('data-id') : null;
+                
+                // Default: select table/item (we handle field selection on mouseup if it was a single click)
+                if (bId) selectItem(bId, false);
             } else if (!e.target.closest('#property-panel') && !e.target.closest('.editor-toolbar')) {
                 clearSelection();
             }
@@ -26,13 +35,50 @@
             }
         });
 
-        document.addEventListener('mouseup', () => {
+        document.addEventListener('mouseup', (e) => {
             isSelecting = false;
+            
+            // --- Batch Field Selection Logic (Shift + Drag) ---
+            if (e.shiftKey) {
+                const selectedCells = document.querySelectorAll('.selected-cell');
+                if (selectedCells.length > 1) {
+                    let fieldIdsInSelection = [];
+                    selectedCells.forEach(td => {
+                        const badge = td.querySelector('.ebmr-field-badge');
+                        if (badge) {
+                            const fid = badge.getAttribute('data-field-id');
+                            if (fid) fieldIdsInSelection.push(fid);
+                        }
+                    });
+
+                    if (fieldIdsInSelection.length > 0) {
+                        // Use a tiny timeout to ensure it runs AFTER any other mousedown/mouseup logic that might update the panel
+                        setTimeout(() => {
+                            if (typeof selectMultipleFields === 'function') {
+                                selectMultipleFields(fieldIdsInSelection);
+                            }
+                        }, 50);
+                    }
+                } else if (selectedCells.length === 1) {
+                    const badge = selectedCells[0].querySelector('.ebmr-field-badge');
+                    if (badge) {
+                        const fid = badge.getAttribute('data-field-id');
+                        if (fid) {
+                            setTimeout(() => {
+                                selectField(null, fid);
+                            }, 50);
+                        }
+                    }
+                }
+            }
         });
 
         // 2. Paste Logic (Smart Paste)
         document.addEventListener('paste', (e) => {
-            if (window.isExecutionMode) return; // Không cho phép paste cấu trúc/khối mới
+            if (window.isExecutionMode) return;
+            // Ignore if target is a standard input or textarea (allow native paste)
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
             const cell = e.target.closest('td, th');
             if (cell) {
                 saveState();
@@ -57,6 +103,124 @@
                 document.execCommand('insertHTML', false, '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;');
                 if (typeof saveStateDebounced === 'function') saveStateDebounced();
                 return;
+            }
+
+            // --- Ctrl + F / H for Search & Replace ---
+            if (e.ctrlKey) {
+                const key = e.key.toLowerCase();
+                if (key === 'f' || key === 'h') {
+                    e.preventDefault();
+                    if (typeof openSearchModal === 'function') openSearchModal(key === 'h');
+                    return;
+                }
+            }
+
+            // --- Ctrl + C / X / V for Cells ---
+            if (e.ctrlKey) {
+                const selectedCells = document.querySelectorAll('.selected-cell');
+                const key = e.key.toLowerCase();
+                
+                if (['c', 'x', 'v'].includes(key)) {
+                    const isInput = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
+                    const isWriting = isInput || e.target.closest('[contenteditable="true"]');
+                    const hasMultiSelection = selectedCells.length > 0;
+
+                    // If NOT writing in a text box/input, or if we have a table selection, handle cell-level operations
+                    if (!isWriting || (hasMultiSelection && !isInput)) {
+                        const targetCell = hasMultiSelection ? selectedCells[0] : e.target.closest('td, th');
+                        if (!targetCell) return;
+                        
+                        const table = targetCell.closest('.mini-table');
+                        if (!table) return;
+                        const blockItem = table.closest('.block-item');
+                        const itemId = blockItem ? blockItem.getAttribute('data-id') : null;
+                        const item = items.find(i => i.id === itemId);
+                        if (!item) return;
+
+                        if (key === 'c' || key === 'x') {
+                            e.preventDefault();
+                            let minR = 999, maxR = -1, minC = 999, maxC = -1;
+                            const selection = hasMultiSelection ? selectedCells : [targetCell];
+                            
+                            selection.forEach(c => {
+                                const r = parseInt(c.dataset.row);
+                                const co = parseInt(c.dataset.col);
+                                minR = Math.min(minR, r);
+                                maxR = Math.max(maxR, r);
+                                minC = Math.min(minC, co);
+                                maxC = Math.max(maxC, co);
+                            });
+
+                            // Capture the grid
+                            const capturedGrid = [];
+                            for (let r = minR; r <= maxR; r++) {
+                                const rowData = [];
+                                for (let c = minC; c <= maxC; c++) {
+                                    if (r === 0) rowData.push({ type: 'header', content: item.columns[c].label });
+                                    else {
+                                        const cell = item.data[r-1][c];
+                                        rowData.push({ 
+                                            type: 'cell', 
+                                            data: (typeof cell === 'object' && cell !== null) ? {...cell} : {content: cell, rs:1, cs:1, hidden:false}
+                                        });
+                                    }
+                                }
+                                capturedGrid.push(rowData);
+                            }
+                            cellClipboard = capturedGrid;
+                            
+                            if (key === 'x') {
+                                saveState();
+                                selection.forEach(c => {
+                                    const r = parseInt(c.dataset.row);
+                                    const co = parseInt(c.dataset.col);
+                                    if (r === 0) item.columns[co].label = '';
+                                    else {
+                                        if (typeof item.data[r-1][co] === 'object') item.data[r-1][co].content = '';
+                                        else item.data[r-1][co] = '';
+                                    }
+                                });
+                                renderBlocks();
+                                saveStateDebounced();
+                            }
+                            
+                            toastr.info(key === 'c' ? 'Đã sao chép ô' : 'Đã cắt ô');
+                        } else if (key === 'v') {
+                            if (!cellClipboard) return;
+                            e.preventDefault();
+                            saveState();
+                            
+                            const startR = parseInt(targetCell.dataset.row);
+                            const startC = parseInt(targetCell.dataset.col);
+                            
+                            cellClipboard.forEach((rowData, rOff) => {
+                                const targetR = startR + rOff;
+                                rowData.forEach((clipCell, cOff) => {
+                                    const targetC = startC + cOff;
+                                    
+                                    if (targetR === 0) {
+                                        if (item.columns[targetC]) item.columns[targetC].label = clipCell.content || '';
+                                    } else {
+                                        const rIdx = targetR - 1;
+                                        if (item.data[rIdx] && item.data[rIdx][targetC] !== undefined) {
+                                            if (clipCell.type === 'header') {
+                                                if (typeof item.data[rIdx][targetC] === 'object') item.data[rIdx][targetC].content = clipCell.content;
+                                                else item.data[rIdx][targetC] = clipCell.content;
+                                            } else {
+                                                item.data[rIdx][targetC] = {...clipCell.data};
+                                            }
+                                        }
+                                    }
+                                });
+                            });
+                            
+                            renderBlocks();
+                            saveStateDebounced();
+                            toastr.success('Đã dán nội dung ô');
+                        }
+                        return; // Handled
+                    }
+                }
             }
 
             // --- Multi-cell Deletion ---
@@ -139,7 +303,37 @@
         });
     }
 
-    function handleGlobalPaste(e) {
+    function sanitizePastedHtml(html) {
+        if (!html) return html;
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        
+        // Remove style attributes that might cause issues, but keep important ones
+        // AND enforce min font size 14pt
+        const allElements = doc.querySelectorAll('*');
+        allElements.forEach(el => {
+            if (el.style.fontSize) {
+                const size = parseFloat(el.style.fontSize);
+                const unit = el.style.fontSize.replace(/[0-9.]/g, '').trim().toLowerCase();
+                
+                if (unit === 'pt' && size < 14) el.style.fontSize = '14pt';
+                else if (unit === 'px' && size < 18.6) el.style.fontSize = '14pt';
+                else if (unit === 'em' && size < 1.1) el.style.fontSize = '14pt';
+                else if (unit === 'rem' && size < 1.1) el.style.fontSize = '14pt';
+            } else {
+                // If no font size specified, default to 14pt for modern look
+                el.style.fontSize = '14pt';
+            }
+            
+            // Clean up other intrusive styles
+            el.style.fontFamily = "'Inter', 'Roboto', sans-serif";
+            if (el.style.lineHeight && parseFloat(el.style.lineHeight) < 1.5) el.style.lineHeight = '1.5';
+        });
+
+        return doc.body.innerHTML;
+    }
+
+    function handleGlobalPaste(e, forcedIndex = null) {
         if (e.target.closest('[contenteditable="true"]')) return;
         const htmlData = (e.clipboardData || window.clipboardData).getData('text/html');
         const plainText = (e.clipboardData || window.clipboardData).getData('text/plain');
@@ -149,9 +343,22 @@
         saveState();
 
         let insertIndex = items.length;
-        if (selectedId) {
+        if (forcedIndex !== null) {
+            insertIndex = forcedIndex;
+        } else if (selectedId) {
             const currentIdx = items.findIndex(i => i.id === selectedId);
             if (currentIdx !== -1) insertIndex = currentIdx + 1;
+        } else if (window.activeSectionId) {
+            // Fallback: Add to the end of the active section if no specific block is selected
+            let lastIdxInSection = -1;
+            for (let i = items.length - 1; i >= 0; i--) {
+                const itemSectId = (items[i].type === 'section') ? items[i].id : items[i].section_id;
+                if (itemSectId === window.activeSectionId) {
+                    lastIdxInSection = i;
+                    break;
+                }
+            }
+            if (lastIdxInSection !== -1) insertIndex = lastIdxInSection + 1;
         }
 
         if (htmlData) {
@@ -174,7 +381,7 @@
                 } else {
                     // Collect everything else (div, p, span, br, text) into pending
                     if (node.nodeType === Node.ELEMENT_NODE) {
-                        pendingContent += node.outerHTML;
+                        pendingContent += sanitizePastedHtml(node.outerHTML);
                     } else if (node.nodeType === Node.TEXT_NODE) {
                         pendingContent += node.textContent;
                     }
@@ -189,12 +396,32 @@
 
     function addPastedTextBlock(html, index) {
         const id = 'blk_' + Date.now() + Math.random().toString(36).substr(2, 5);
-        items.splice(index, 0, { id: id, type: 'static-text', label: 'Ghi chú (Pasted)', content: html, columns: [] });
+        let sectionId = window.activeSectionId || null;
+        if (!sectionId && index !== null) {
+            if (index > 0 && items[index-1]) sectionId = items[index - 1].section_id;
+            else if (items.length > 0) sectionId = items[0].section_id;
+        }
+
+        items.splice(index, 0, { 
+            id: id, 
+            type: 'static-text', 
+            section_id: sectionId,
+            label: 'Ghi chú (Pasted)', 
+            content: html, 
+            columns: [],
+            borderMode: 'none'
+        });
     }
 
     function addPastedTableBlock(tableEl, index) {
         const rows = Array.from(tableEl.querySelectorAll('tr'));
         if (rows.length === 0) return;
+        
+        let sectionId = window.activeSectionId || null;
+        if (!sectionId && index !== null) {
+            if (index > 0 && items[index-1]) sectionId = items[index - 1].section_id;
+            else if (items.length > 0) sectionId = items[0].section_id;
+        }
         const rowCount = rows.length;
         let colCount = 0;
         rows.forEach(r => {
@@ -223,13 +450,13 @@
             rowHeights.push(height);
             const cells = r.querySelectorAll('td, th');
             for (let c = 0; c < colCount; c++) {
-                rowData.push({ content: cells[c] ? cells[c].innerHTML : '', rs: 1, cs: 1, hidden: false });
+                rowData.push({ content: cells[c] ? sanitizePastedHtml(cells[c].innerHTML) : '', rs: 1, cs: 1, hidden: false });
             }
             data.push(rowData);
         });
 
         items.splice(index, 0, {
-            id: id, type: 'table', label: 'Bảng (Pasted)', rows: rowCount, cols: colCount,
+            id: id, type: 'table', section_id: sectionId, label: 'Bảng (Pasted)', rows: rowCount, cols: colCount,
             columns: columns, data: data, rowHeights: rowHeights, borderMode: 'visible', hideHeader: true
         });
     }
@@ -249,11 +476,52 @@
             const doc = parser.parseFromString(htmlData, 'text/html');
             const table = doc.querySelector('table');
             if (table) {
-                table.querySelectorAll('tr').forEach(row => {
-                    const rowData = [];
-                    row.querySelectorAll('td, th').forEach(cell => rowData.push(cell.innerHTML));
-                    if (rowData.length > 0) grid.push(rowData);
+                // Better parsing for rowspan/colspan
+                const rows = table.querySelectorAll('tr');
+                const virtualGrid = [];
+                
+                rows.forEach((tr, rIdx) => {
+                    if (!virtualGrid[rIdx]) virtualGrid[rIdx] = [];
+                    let cIdx = 0;
+                    
+                    tr.querySelectorAll('td, th').forEach(cell => {
+                        // Find next available column
+                        while (virtualGrid[rIdx][cIdx]) cIdx++;
+                        
+                        const rs = parseInt(cell.getAttribute('rowspan')) || 1;
+                        const cs = parseInt(cell.getAttribute('colspan')) || 1;
+                        const content = sanitizePastedHtml(cell.innerHTML);
+                        
+                        // Extract styling
+                        const style = cell.style || {};
+                        const bgColor = cell.getAttribute('bgcolor') || style.backgroundColor || '';
+                        const textAlign = cell.getAttribute('align') || style.textAlign || '';
+                        const fontWeight = style.fontWeight || '';
+                        const fontStyle = style.fontStyle || '';
+
+                        // Place main cell
+                        virtualGrid[rIdx][cIdx] = { 
+                            content, rs, cs, hidden: false,
+                            backgroundColor: bgColor,
+                            textAlign: textAlign,
+                            fontWeight: fontWeight,
+                            fontStyle: fontStyle
+                        };
+                        
+                        // Fill shadow cells
+                        for (let dr = 0; dr < rs; dr++) {
+                            for (let dc = 0; dc < cs; dc++) {
+                                if (dr === 0 && dc === 0) continue;
+                                const trIndex = rIdx + dr;
+                                const tcIndex = cIdx + dc;
+                                if (!virtualGrid[trIndex]) virtualGrid[trIndex] = [];
+                                virtualGrid[trIndex][tcIndex] = { content: '', rs: 1, cs: 1, hidden: true };
+                            }
+                        }
+                        cIdx += cs;
+                    });
                 });
+                grid = virtualGrid;
             }
         }
         if (grid.length === 0) {
@@ -271,10 +539,12 @@
             const rIndex = startR + rOffset;
             if (rIndex > item.rows) {
                 item.rows++;
-                item.data.push(new Array(item.cols).fill({content:'', rs:1, cs:1, hidden:false}));
+                const newRow = [];
+                for(let i=0; i<item.cols; i++) newRow.push({content:'', rs:1, cs:1, hidden:false});
+                item.data.push(newRow);
                 dataChanged = true;
             }
-            rowData.forEach((cellContent, cOffset) => {
+            rowData.forEach((cellObj, cOffset) => {
                 const cIndex = startC + cOffset;
                 if (cIndex >= item.cols) {
                     item.cols++;
@@ -282,10 +552,21 @@
                     item.data.forEach(row => row.push({content:'', rs:1, cs:1, hidden:false}));
                     dataChanged = true;
                 }
-                if (rIndex === 0) item.columns[cIndex].label = cellContent;
-                else {
-                    if (typeof item.data[rIndex - 1][cIndex] === 'object') item.data[rIndex - 1][cIndex].content = cellContent;
-                    else item.data[rIndex - 1][cIndex] = {content: cellContent, rs:1, cs:1, hidden:false};
+                
+                // cellObj is now an object: { content, rs, cs, hidden, backgroundColor, textAlign, ... }
+                if (rIndex === 0) {
+                    item.columns[cIndex].label = cellObj.content || cellObj;
+                } else {
+                    item.data[rIndex - 1][cIndex] = {
+                        content: cellObj.content || cellObj,
+                        rs: cellObj.rs || 1,
+                        cs: cellObj.cs || 1,
+                        hidden: cellObj.hidden || false,
+                        backgroundColor: cellObj.backgroundColor || '',
+                        textAlign: cellObj.textAlign || '',
+                        fontWeight: cellObj.fontWeight || '',
+                        fontStyle: cellObj.fontStyle || ''
+                    };
                 }
                 dataChanged = true;
             });
@@ -337,5 +618,30 @@
             };
         }
         selectItem(null, false);
+    });
+    // --- Real-time Toolbar Updates ---
+    document.addEventListener('selectionchange', () => {
+        // Only update if we are in a contenteditable area
+        const selection = window.getSelection();
+        if (selection.rangeCount > 0) {
+            let node = selection.anchorNode;
+            if (!node) return;
+            if (node.nodeType === 3) node = node.parentElement;
+            
+            if (node && (node.closest('[contenteditable="true"]') || node.getAttribute('contenteditable') === 'true')) {
+                const styles = window.getComputedStyle(node);
+                const fontSize = styles.fontSize;
+                
+                // Convert px back to pt for the display
+                // 1pt = 1.333px -> pt = px * 0.75
+                const sizeInPx = parseFloat(fontSize);
+                const sizeInPt = Math.round(sizeInPx * 0.75);
+                
+                const fontSizeInput = document.getElementById('customFontSize');
+                if (fontSizeInput && document.activeElement !== fontSizeInput) {
+                    fontSizeInput.value = sizeInPt;
+                }
+            }
+        }
     });
 </script>

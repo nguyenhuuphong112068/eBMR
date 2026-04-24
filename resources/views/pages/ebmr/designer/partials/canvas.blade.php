@@ -72,7 +72,4 @@
 </div>
 
 
-<!-- Floating Comment Trigger Button -->
-<button id="floating-comment-btn" class="btn btn-primary rounded-circle shadow-lg d-none" style="position: absolute; width: 40px; height: 40px; z-index: 2000; padding: 0;">
-    <i class="fas fa-comment-medical"></i>
-</button>
+

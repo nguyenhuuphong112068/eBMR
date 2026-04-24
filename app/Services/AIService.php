@@ -8,19 +8,19 @@ use Illuminate\Support\Facades\Log;
 class AIService
 {
     /**
-     * Xử lý tin nhắn và trả về phản hồi từ AI
+     * Xử lý tin nhắn và trả về phản hồi từ AI (Tích hợp Ollama)
      */
     public static function getResponse($message)
     {
+        $originalMessage = $message;
         $message = mb_strtolower($message);
 
         // 1. Phản hồi chào hỏi cơ bản
         if (preg_match('/(chào|hello|hi|bạn là ai)/u', $message)) {
-            return "Xin chào! Tôi là **AI Agent Search PMS**. Tôi được tạo ra để giúp bạn tìm kiếm thông tin nhanh trong hệ thống quản lý sản xuất (PMS).\n\nBạn có thể hỏi tôi về:\n- Danh mục bảo trì/hiệu chuẩn\n- Thông tin máy móc\n- Kế hoạch sản xuất";
+            return "Xin chào! Tôi là **AI Agent eBMR**. Tôi được tạo ra để giúp bạn tìm kiếm thông tin nhanh trong hệ thống quản lý sản xuất (PMS) và hỗ trợ soạn thảo hồ sơ lô điện tử (eBMR).\n\nBạn có thể hỏi tôi về:\n- Danh mục bảo trì/hiệu chuẩn\n- Thông tin máy móc\n- Kế hoạch sản xuất\n- Hoặc chat bất kỳ điều gì!";
         }
 
-        // 2. Tra cứu Kế hoạch sản xuất (Sản lượng lý thuyết/thực tế)
-        // Ví dụ: Kế hoạch sản xuất tháng 4 của PXVH có sản lượng lý thuyết bao nhiêu?
+        // 2. Tra cứu Kế hoạch sản xuất
         if (preg_match('/(kế hoạch|sản lượng) (.+?) của (.+)/u', $message, $matches)) {
             $timeInfo = trim($matches[2]);
             $dept = trim($matches[3]);
@@ -30,7 +30,6 @@ class AIService
         // 3. Tra cứu tri thức hệ thống từ Metadata
         if (preg_match('/(bạn biết gì về|thông tin về|bảng|dữ liệu) (.+)/u', $message, $matches)) {
             $topic = trim($matches[2]);
-            // Loại bỏ dấu hỏi chấm và từ "bảng" thừa ở đầu nếu có
             $topic = str_replace(['?', '.', '!'], '', $topic);
             $topic = preg_replace('/^(bảng|dữ liệu|thông tin) /u', '', $topic);
             $topic = trim($topic);
@@ -38,8 +37,38 @@ class AIService
             return self::searchMetadata($topic);
         }
 
-        // 4. Phản hồi mặc định
-        return "Hiện tại tôi đang được huấn luyện để hiểu sâu hơn về dữ liệu dự án. Bạn thử hỏi tôi bằng từ khóa như: *'Tìm thiết bị [tên máy]'* hoặc *'Sản lượng lý thuyết tháng 4 của PXVH'* nhé.";
+        // 4. Nếu không khớp các lệnh đặc biệt, chuyển sang dùng Ollama
+        return self::getOllamaResponse($originalMessage);
+    }
+
+    /**
+     * Gọi Ollama để trả lời chat tự do
+     */
+    private static function getOllamaResponse($prompt)
+    {
+        try {
+            $ollamaUrl = env('OLLAMA_URL', 'http://localhost:11434');
+            $ollamaModel = env('OLLAMA_MODEL', 'qwen2.5:14b');
+
+            $response = \Illuminate\Support\Facades\Http::timeout(60)->withoutVerifying()
+                ->post("$ollamaUrl/api/generate", [
+                    'model' => $ollamaModel,
+                    'prompt' => "You are AI Agent eBMR, a helpful assistant in a Pharmaceutical Management System (PMS). 
+                                 Answer the user's question politely and accurately. 
+                                 Question: " . $prompt,
+                    'stream' => false,
+                ]);
+
+            if ($response->failed()) {
+                return "Rất tiếc, tôi (AI Agent) không thể kết nối tới máy chủ AI (Ollama) lúc này.";
+            }
+
+            $data = $response->json();
+            return $data['response'] ?? "Tôi không nhận được phản hồi từ AI.";
+
+        } catch (\Exception $e) {
+            return "Lỗi AI Chat: " . $e->getMessage();
+        }
     }
 
     /**

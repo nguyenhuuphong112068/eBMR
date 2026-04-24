@@ -1,6 +1,5 @@
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        const floatingBtn = document.getElementById('floating-comment-btn');
         const gutter = document.getElementById('comment-gutter');
         const editorContent = document.getElementById('editor-content');
         const documentPage = document.getElementById('document-page');
@@ -124,33 +123,21 @@
         // Initial render
         renderComments();
 
-        // Selection handling for comments
-        document.addEventListener('selectionchange', handleSelection);
 
-        function handleSelection() {
+
+        window.addComment = function() {
             const sel = window.getSelection();
             if (sel.rangeCount > 0 && !sel.isCollapsed) {
                 const range = sel.getRangeAt(0);
-                const rect = range.getBoundingClientRect();
                 
-                // Only show if selection is within editor content
+                // Ensure selection is inside editor content
                 let node = sel.anchorNode;
                 if (node.nodeType === 3) node = node.parentNode;
-                if (editorContent.contains(node)) {
-                    floatingBtn.classList.remove('d-none');
-                    floatingBtn.style.top = (window.scrollY + rect.top - 45) + 'px';
-                    floatingBtn.style.left = (window.scrollX + rect.left + rect.width / 2 - 20) + 'px';
+                if (!editorContent.contains(node)) {
+                    toastr.warning('Vui lòng chọn văn bản trong vùng soạn thảo');
                     return;
                 }
-            }
-            floatingBtn.classList.add('d-none');
-        }
 
-        floatingBtn.onclick = function() {
-            const sel = window.getSelection();
-            if (sel.rangeCount > 0) {
-                const range = sel.getRangeAt(0);
-                
                 Swal.fire({
                     title: 'Thêm bình luận',
                     input: 'textarea',
@@ -166,14 +153,25 @@
                         const span = document.createElement('span');
                         span.id = commentId;
                         span.className = 'ebmr-comment-highlight';
-                        range.surroundContents(span);
+                        try {
+                            range.surroundContents(span);
+                        } catch (e) {
+                            // If selection spans across multiple blocks, surroundContents might fail
+                            // We can use a simpler approach or notify user
+                            toastr.error('Không thể bình luận trên vùng chọn phức tạp. Vui lòng chọn trong cùng một đoạn.');
+                            return;
+                        }
 
                         // Save to DB
                         saveComment(commentId, result.value);
                     }
                 });
+            } else {
+                toastr.warning('Vui lòng quét chọn đoạn văn bản để bình luận');
             }
         };
+
+        // floatingBtn.onclick = window.addComment; // Removed
 
         function saveComment(selectionId, content) {
             $.post('{{ route('pages.ebmr.storeComment') }}', {

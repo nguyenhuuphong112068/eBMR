@@ -34,10 +34,10 @@
                                             <th>Mã danh mục</th>
                                             <th>Tên nội dung</th>
                                             <th>Phiên bản</th>
+                                            <th>Công đoạn</th>
                                             <th>Trạng thái</th>
                                             <th>Người sở hữu</th>
                                             <th>Ngày ban hành</th>
-                                            <th>Ngày hiệu lực</th>
                                             <th class="text-center">Thao tác</th>
                                         </tr>
                                     </thead>
@@ -47,6 +47,19 @@
                                                 <td class="fw-bold text-navy">{{ $t->category_code }}</td>
                                                 <td>{{ $t->category_name }}</td>
                                                 <td><span class="badge bg-soft-info">V.{{ $t->version }}</span></td>
+                                                <td>
+                                                    <div class="d-flex flex-wrap gap-1">
+                                                        @forelse($t->sections as $s)
+                                                            <button class="btn btn-xs btn-outline-info rounded-pill py-0 px-2" 
+                                                                    style="font-size: 0.7rem;"
+                                                                    onclick="window.location.href='{{ route('pages.ebmr.designer', $t->id) }}?section={{ $s['id'] }}'">
+                                                                {{ $s['label'] }}
+                                                            </button>
+                                                        @empty
+                                                            <span class="text-muted small">N/A</span>
+                                                        @endforelse
+                                                    </div>
+                                                </td>
                                                 <td>
                                                     @if ($t->status === 'draft')
                                                         <span class="badge bg-secondary"><i class="fas fa-edit me-1"></i>
@@ -58,10 +71,7 @@
                                                 </td>
                                                 <td><i class="fas fa-user-circle me-1 text-muted"></i>
                                                     {{ $t->owner_name ?? 'N/A' }}</td>
-                                                <td>{{ $t->issued_date ? \Carbon\Carbon::parse($t->issued_date)->format('d/m/Y') : '-' }}
-                                                </td>
-                                                <td>{{ $t->effective_date ? \Carbon\Carbon::parse($t->effective_date)->format('d/m/Y') : '-' }}
-                                                </td>
+                                                <td>{{ $t->issued_date ? \Carbon\Carbon::parse($t->issued_date)->format('d/m/Y') : '-' }}</td>
                                                 <td class="text-center">
                                                     <div class="btn-group shadow-sm rounded-pill overflow-hidden">
                                                         <a href="{{ route('pages.ebmr.designer', $t->id) }}"
@@ -173,7 +183,10 @@
                                                 <td>{{ $item->batch_qty }}</td>
                                                 <td class="text-center">
                                                     <button class="btn btn-sm btn-primary rounded-pill px-3"
-                                                        onclick="selectCategory({{ $item->id }}, '{{ $item->finished_product_code }}', '{{ addslashes($item->product_name) }}', 'Cỡ lô: {{ $item->batch_qty }}')">
+                                                        onclick="selectCategory({{ $item->id }}, '{{ $item->finished_product_code }}', '{{ addslashes($item->product_name) }}', 'Cỡ lô: {{ $item->batch_qty }}', {
+                                                            7: 1,
+                                                            8: 1
+                                                        })">
                                                         <i class="fas fa-check me-1"></i> Chọn
                                                     </button>
                                                 </td>
@@ -186,7 +199,14 @@
                                                 <td>{{ $item->dosage_name ?? 'N/A' }}</td>
                                                 <td class="text-center">
                                                     <button class="btn btn-sm btn-primary rounded-pill px-3"
-                                                        onclick="selectCategory({{ $item->id }}, '{{ $item->intermediate_code }}', '{{ addslashes($item->product_name) }}', 'Cỡ lô: {{ $item->batch_size }} {{ $item->unit_batch_size }} | Dạng: {{ $item->dosage_name ?? 'N/A' }}')">
+                                                        onclick="selectCategory({{ $item->id }}, '{{ $item->intermediate_code }}', '{{ addslashes($item->product_name) }}', 'Cỡ lô: {{ $item->batch_size }} {{ $item->unit_batch_size }} | Dạng: {{ $item->dosage_name ?? 'N/A' }}', {
+                                                            1: {{ $item->weight_1 ? 1 : 0 }},
+                                                            2: {{ $item->weight_2 ? 1 : 0 }},
+                                                            3: {{ $item->prepering ? 1 : 0 }},
+                                                            4: {{ $item->blending ? 1 : 0 }},
+                                                            5: {{ $item->forming ? 1 : 0 }},
+                                                            6: {{ $item->coating ? 1 : 0 }}
+                                                        })">
                                                         <i class="fas fa-check me-1"></i> Chọn
                                                     </button>
                                                 </td>
@@ -254,6 +274,29 @@
                                     <label class="form-label fw-bold">Trạng Thái hồ sơ</label>
                                     <input type="text" class="form-control rounded-pill bg-light fw-bold text-primary"
                                         id="statusDisplay" readonly value="Nháp (Draft)">
+                                </div>
+                            </div>
+
+                            <div id="sectionsChecklistContainer" class="mt-2" style="display: none;">
+                                <label class="form-label fw-bold text-navy mb-2"><i class="fas fa-list-check me-2"></i>Chọn các công đoạn (Sections) muốn tạo:</label>
+                                <div class="p-3 bg-light rounded border border-info-subtle">
+                                    <div class="row" id="sectionsChecklist">
+                                        @foreach($all_sections as $sec)
+                                            <div class="col-md-6 mb-2 section-item" data-code="{{ $sec->code }}">
+                                                <div class="form-check custom-checkbox">
+                                                    <input class="form-check-input section-checkbox" type="checkbox" 
+                                                           name="selected_sections[]" 
+                                                           value="{{ $sec->code }}" 
+                                                           id="sec_{{ $sec->code }}"
+                                                           {{ ($sec->code == 0 || $sec->code == 9) ? 'checked' : '' }}>
+                                                    <label class="form-check-label small fw-bold" for="sec_{{ $sec->code }}">
+                                                        {{ $sec->code }}. {{ $sec->name }}
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                    <small class="text-info"><i class="fas fa-info-circle me-1"></i> Các mục (0) và (9) là mặc định. Các mục khác được gợi ý dựa trên quy trình sản xuất của sản phẩm.</small>
                                 </div>
                             </div>
                         </div>
@@ -431,7 +474,7 @@
             // Initialize the main drafting table
             $('.bmr-datatable').DataTable({
                 language: {
-                    url: '//cdn.datatables.net/plug-ins/1.10.24/i18n/Vietnamese.json'
+                    url: '{{ asset('vendor/datatables/i18n/Vietnamese.json') }}'
                 },
                 order: [
                     [0, 'asc']
@@ -441,7 +484,7 @@
             // Initialize the BTP selection table in modal
             $('#btpSelectionTable').DataTable({
                 language: {
-                    url: '//cdn.datatables.net/plug-ins/1.10.24/i18n/Vietnamese.json'
+                    url: '{{ asset('vendor/datatables/i18n/Vietnamese.json') }}'
                 },
                 pageLength: 10
             });
@@ -472,7 +515,7 @@
             $('#modalBtpList').modal('show');
         }
 
-        function selectCategory(id, code, name, info) {
+        function selectCategory(id, code, name, info, stages = {}) {
             $('#modalBtpList').modal('hide');
 
             openCreateModal();
@@ -480,6 +523,37 @@
             $('#templateType').val(new URLSearchParams(window.location.search).get('type') || 'BMR');
             $('#selectedBtpName').html(code + ' - ' + name);
             $('#selectedBtpInfo').html(`<i class="fas fa-info-circle me-1"></i> ${info}`);
+
+            // Handle Sections Checklist
+            const type = $('#templateType').val();
+            if (type === 'BMR' || type === 'BPR') {
+                $('#sectionsChecklistContainer').show();
+                // Reset checks and visibility
+                $('.section-checkbox').prop('checked', false);
+                $('.section-item').show();
+
+                // Default checks (0 and 9)
+                $('#sec_0, #sec_9').prop('checked', true);
+                
+                if (type === 'BMR') {
+                    // Hide 7 and 8 for BMR
+                    $('.section-item[data-code="7"], .section-item[data-code="8"]').hide();
+                    
+                    // Check based on passed stages (1-6)
+                    Object.keys(stages).forEach(code => {
+                        if (stages[code]) {
+                            $(`#sec_${code}`).prop('checked', true);
+                        }
+                    });
+                } else if (type === 'BPR') {
+                    // Hide 1-6 for BPR
+                    $('.section-item[data-code="1"], .section-item[data-code="2"], .section-item[data-code="3"], .section-item[data-code="4"], .section-item[data-code="5"], .section-item[data-code="6"]').hide();
+                    // Check 7 and 8 for BPR
+                    $('#sec_7, #sec_8').prop('checked', true);
+                }
+            } else {
+                $('#sectionsChecklistContainer').hide();
+            }
 
             // Fetch next version
             $('#version').val('...').prop('disabled', true);
@@ -552,6 +626,7 @@
                 $('#dosageForm').val(data.dosage_form);
                 $('#batchSize').val(data.batch_size);
                 $('#effectiveDate').val(data.effective_date);
+                $('#sectionsChecklistContainer').hide(); // Hide when editing existing
                 $('#templateMetadataModal').modal('show');
             });
         }

@@ -58,7 +58,6 @@ class ChatController extends Controller
      */
     public function getMessages(Request $request, $groupId)
     {
-        /* 
         $userId = session('user')['userId'];
         $beforeId = $request->query('before_id');
 
@@ -103,11 +102,6 @@ class ChatController extends Controller
         return response()->json([
             'messages' => $messages,
             'group_members_read_status' => $groupMembersReadStatus
-        ]);
-        */
-        return response()->json([
-            'messages' => [],
-            'group_members_read_status' => []
         ]);
     }
 
@@ -171,7 +165,6 @@ class ChatController extends Controller
             'created_at' => now(),
         ]);
 
-        /* 
         // Xử lý Phản hồi tự động nếu gửi cho AI Agent (ID: 9999)
         $targetUser = DB::table('chat_group_members')
             ->where('group_id', $groupId)
@@ -188,7 +181,6 @@ class ChatController extends Controller
                 'created_at' => now()->addSecond(), // Đảm bảo sau tin nhắn người dùng
             ]);
         }
-        */
 
         /* 
         // Xử lý Tag @mention trong nhóm chat

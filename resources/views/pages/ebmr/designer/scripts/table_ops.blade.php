@@ -60,9 +60,22 @@
             data.push(rowData);
         }
 
+        // Determine section_id for the new item
+        let sectionId = window.activeSectionId || null;
+        if (!sectionId && insertIndex !== null) {
+            if (insertIndex > 0) {
+                sectionId = items[insertIndex - 1].section_id;
+            } else if (items.length > 0) {
+                sectionId = items[0].section_id;
+            }
+        } else if (!sectionId && items.length > 0) {
+            sectionId = items[items.length - 1].section_id;
+        }
+
         const item = {
             id: id,
             type: 'table',
+            section_id: sectionId,
             label: 'Bảng ' + cols + 'x' + rows,
             rows: rows,
             cols: cols,
@@ -75,6 +88,17 @@
 
         if (insertIndex !== null) {
             items.splice(insertIndex, 0, item);
+        } else if (sectionId) {
+            // Find last block of this section and insert after it
+            let lastIdx = -1;
+            for (let i = items.length - 1; i >= 0; i--) {
+                if (items[i].section_id === sectionId || items[i].id === sectionId) {
+                    lastIdx = i;
+                    break;
+                }
+            }
+            if (lastIdx !== -1) items.splice(lastIdx + 1, 0, item);
+            else items.push(item);
         } else {
             items.push(item);
         }

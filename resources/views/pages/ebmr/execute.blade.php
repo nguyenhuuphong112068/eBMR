@@ -17,10 +17,22 @@
         <!-- Top Action Bar for Execution -->
         <div class="bg-white border-bottom px-4 py-3 d-flex justify-content-between align-items-center sticky-top shadow-sm" style="z-index: 1020;">
             <div>
-                <h5 class="mb-0 fw-bold text-navy"><i class="fas fa-edit me-2"></i> Ghi chép: Số lô <span class="text-primary">{{ $record->batch_number }}</span></h5>
+                <h5 class="mb-0 fw-bold text-navy">
+                    <i class="fas fa-edit me-2"></i> Ghi chép: Số lô <span class="text-primary">{{ $record->batch_number }}</span>
+                    @if($activeSectionLabel)
+                        <span class="ms-2 badge bg-info rounded-pill" style="font-size: 0.8rem; font-weight: 500;">
+                            <i class="fas fa-layer-group me-1"></i> {{ $activeSectionLabel }}
+                        </span>
+                    @endif
+                </h5>
                 <div class="small text-muted mt-1">Mẫu hồ sơ: <strong>{{ $template->name }}</strong> ({{ $template->document_code }})</div>
             </div>
             <div>
+                @if($activeSectionId)
+                <button class="btn btn-outline-info me-2" onclick="window.location.href='{{ route('pages.ebmr.execute', $record->id) }}'">
+                    <i class="fas fa-eye me-1"></i> Xem tất cả công đoạn
+                </button>
+                @endif
                 <button class="btn btn-outline-secondary me-2" onclick="saveRecordData('draft')">
                     <i class="fas fa-save me-1"></i> Lưu bản nháp
                 </button>

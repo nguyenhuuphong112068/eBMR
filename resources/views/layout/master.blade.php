@@ -7,6 +7,7 @@
     <title>eBMR | Electronic Batch Manufacturing Record</title>
     <!-- Tell the browser to be responsive to screen width -->
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="icon" type="image/png" href="{{ asset('img/iconstella.svg') }}">
 
     @include('layout.css')
@@ -789,6 +790,49 @@
             color: #666;
             white-space: nowrap;
         }
+        /* AI Quick Access Button */
+        .ai-float-btn {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, #28a745, #1b5e20);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            z-index: 1060;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .ai-float-btn:hover {
+            transform: scale(1.1) rotate(5deg);
+            box-shadow: 0 6px 20px rgba(40, 167, 69, 0.4);
+        }
+
+        .ai-float-btn i {
+            font-size: 24px;
+        }
+
+        .ai-float-btn .pulse-ring {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: rgba(40, 167, 69, 0.4);
+            animation: ai-pulse 2s infinite;
+            z-index: -1;
+        }
+
+        @keyframes ai-pulse {
+            0% { transform: scale(1); opacity: 1; }
+            100% { transform: scale(1.8); opacity: 0; }
+        }
     </style>
 
 </head>
@@ -917,6 +961,12 @@
     </div>
     </div>
     <!-- ./wrapper -->
+
+    <!-- AI Quick Access Button -->
+    <div class="ai-float-btn" onclick="openAiChat()" title="Chat với AI Agent eBMR">
+        <div class="pulse-ring"></div>
+        <i class="bi bi-robot"></i>
+    </div>
 
     <!-- jQuery -->
     @include('layout.js')
@@ -1082,6 +1132,11 @@
                     document.title = document.title === originalTitle ? msg : originalTitle;
                 }, 1000);
             }
+            window.openAiChat = function() {
+                // Mở cửa sổ chat trực tiếp với AI (ID: 9999)
+                startDirectChat(9999, 'AI Agent eBMR', true);
+            };
+
             $(window).on('focus click keydown', function() {
                 if (blinkInterval) {
                     clearInterval(blinkInterval);
@@ -1094,8 +1149,8 @@
                 if (show) {
                     $('#chat-sidebar').addClass('active');
                     $('#chat-overlay').fadeIn();
-                    // loadChatGroups();
-                    // loadContacts();
+                    loadChatGroups();
+                    loadContacts();
                     switchChatTab('contacts');
                 } else {
                     $('#chat-sidebar').removeClass('active');
@@ -1116,104 +1171,82 @@
                 }
             };
 
-            // function loadChatGroups() {
-            //     $.get("{{ route('chat.groups') }}", function(data) {
-            //         let html = '';
-            //         let totalUnread = 0;
+            function loadChatGroups() {
+                $.get("{{ route('chat.groups', [], false) }}", function(data) {
+                    let html = '';
+                    let totalUnread = 0;
 
-            //         data.forEach(g => {
-            //             // Ẩn hội thoại với AI Agent nếu không phải Admin
-            //             let userGroup = "{{ session('user')['userGroup'] ?? '' }}";
-            //             if (g.type == 0 && g.display_name === 'AI Agent Search PMS' && userGroup !==
-            //                 'Admin') {
-            //                 return;
-            //             }
+                    data.forEach(g => {
+                        let unreadHtml = g.unread_count > 0 ?
+                            `<span class="unread-badge">${g.unread_count}</span>` : '';
+                        let onlineHtml = g.is_online ?
+                            `<span class="online-dot" title="Online"></span>` : '';
+                        totalUnread += g.unread_count;
 
-            //             let unreadHtml = g.unread_count > 0 ?
-            //                 `<span class="unread-badge">${g.unread_count}</span>` : '';
-            //             let onlineHtml = g.is_online ?
-            //                 `<span class="online-dot" title="Online"></span>` : '';
-            //             totalUnread += g.unread_count;
+                        html += `
+                            <div class="chat-group-item" onclick="openChatWindow(${g.id}, '${g.display_name}', ${g.is_online || false})">
+                                <div class="chat-group-info">
+                                    <div class="chat-group-name">
+                                        ${onlineHtml}
+                                        <b>${g.display_name}</b>
+                                        ${unreadHtml}
+                                    </div>
+                                    <div class="chat-group-last-msg">${g.last_message || 'Chưa có tin nhắn'}</div>
+                                </div>
+                            </div>
+                        `;
 
-            //             html += `
-        //                 <div class="chat-group-item" onclick="openChatWindow(${g.id}, '${g.display_name}', ${g.is_online || false})">
-        //                     <div class="chat-group-info">
-        //                         <div class="chat-group-name">
-        //                             ${onlineHtml}
-        //                             <b>${g.display_name}</b>
-        //                             ${unreadHtml}
-        //                         </div>
-        //                         <div class="chat-group-last-msg">${g.last_message || 'Chưa có tin nhắn'}</div>
-        //                     </div>
-        //                 </div>
-        //             `;
+                        if (g.last_time) {
+                            if (chatGroupLastTimes[g.id] && g.last_time > chatGroupLastTimes[g.id]) {
+                                if (g.last_sender_id != currentUserId) {
+                                    blinkTitle("Có tin nhắn mới...");
+                                    if (!openChatGroups.includes(g.id)) {
+                                        openChatWindow(g.id, g.display_name, g.is_online || false);
+                                    }
+                                }
+                            }
+                            chatGroupLastTimes[g.id] = g.last_time;
+                        }
+                    });
 
-            //             // Tự động mở cửa sổ chat nếu có tin nhắn mới và không phải mình gửi
-            //             if (g.last_time) {
-            //                 if (chatGroupLastTimes[g.id] && g.last_time > chatGroupLastTimes[g.id]) {
-            //                     if (g.last_sender_id != currentUserId) {
+                    if (totalUnread > 0) {
+                        $('#unread-total-badge').text(totalUnread).removeClass('d-none');
+                        $('.chat-trigger').addClass('blinking');
+                    } else {
+                        $('#unread-total-badge').addClass('d-none');
+                        $('.chat-trigger').removeClass('blinking');
+                    }
 
-            //                         blinkTitle("Có tin nhắn mới...");
-            //                         if (!openChatGroups.includes(g.id)) {
-            //                             openChatWindow(g.id, g.display_name, g.is_online || false);
-            //                         }
-            //                     }
-            //                 }
-            //                 chatGroupLastTimes[g.id] = g.last_time;
-            //             }
-            //         });
+                    $('#chatList').html(html ||
+                        '<div class="text-center p-3 text-muted">Chưa có hội thoại nào</div>');
+                });
+            }
 
-            //         // The original code had a block here to update lastChatCheckTime, which is now handled by chatGroupLastTimes
-            //         // if (data.length > 0) {
-            //         //     let maxTime = data.reduce((max, obj) => obj.last_time > max ? obj.last_time : max, lastChatCheckTime);
-            //         //     lastChatCheckTime = maxTime;
-            //         // }
-
-            //         if (totalUnread > 0) {
-            //             $('#unread-total-badge').text(totalUnread).removeClass('d-none');
-            //             $('.chat-trigger').addClass('blinking');
-            //         } else {
-            //             $('#unread-total-badge').addClass('d-none');
-            //             $('.chat-trigger').removeClass('blinking');
-            //         }
-
-            //         $('#chatList').html(html ||
-            //             '<div class="text-center p-3 text-muted">Chưa có hội thoại nào</div>');
-            //     });
-            // }
-
-            // function loadContacts() {
-            //     $.get("{{ route('chat.users') }}", function(data) {
-            //         let html = '';
-            //         data.forEach(u => {
-            //             let isAI = u.id == 9999;
-
-            //             // Ẩn AI Agent nếu không phải Admin
-            //             let userGroup = "{{ session('user')['userGroup'] ?? '' }}";
-            //             if (isAI && userGroup !== 'Admin') {
-            //                 return;
-            //             }
-
-            //             let badgeHtml = isAI ?
-            //                 `<span class="badge badge-primary ml-1" style="font-size: 10px; background: #007bff;">AI BOT</span>` :
-            //                 '';
-            //             let onlineHtml = (u.is_online || isAI) ?
-            //                 `<span class="online-dot" title="Online"></span>` : '';
-            //             html += `
-        //                 <div class="chat-group-item contact-item ${isAI ? 'ai-agent-item' : ''}" onclick="startDirectChat(${u.id}, '${u.fullName}', ${u.is_online || isAI})">
-        //                     <div class="chat-group-info">
-        //                         <div class="chat-group-name">
-        //                             ${onlineHtml}
-        //                             <b>${u.fullName}</b> ${badgeHtml}
-        //                         </div>
-        //                         <div class="chat-group-last-msg">@${u.userName}</div>
-        //                     </div>
-        //                 </div>
-        //             `;
-            //         });
-            //         $('#contactList').html(html);
-            //     });
-            // }
+            function loadContacts() {
+                $.get("{{ route('chat.users', [], false) }}", function(data) {
+                    let html = '';
+                    data.forEach(u => {
+                        let isAI = u.id == 9999;
+                        let badgeHtml = isAI ?
+                            `<span class="badge badge-primary ml-1" style="font-size: 10px; background: #007bff;">AI BOT</span>` :
+                            '';
+                        let onlineHtml = (u.is_online || isAI) ?
+                            `<span class="online-dot" title="Online"></span>` : '';
+                        html += `
+                            <div class="chat-group-item contact-item ${isAI ? 'ai-agent-item' : ''}" onclick="startDirectChat(${u.id}, '${u.fullName}', ${u.is_online || isAI})">
+                                <div class="chat-group-info">
+                                    <div class="chat-group-name">
+                                        ${onlineHtml}
+                                        <b>${u.fullName}</b> ${badgeHtml}
+                                    </div>
+                                    <div class="chat-group-last-msg">@${u.userName}</div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    $('#contactList').html(html);
+                });
+            }
 
             window.startDirectChat = function(userId, fullName, isOnline) {
                 $.post("{{ route('chat.getDirectChat', [], false) }}", {
@@ -1790,7 +1823,6 @@
                 window.addEventListener('mouseup', stopResize);
             };
 
-            /* 
             // Polling cập nhật tin nhắn
             loadChatGroups(); // Gọi ngay lần đầu khi load trang
             setInterval(function() {
@@ -1799,7 +1831,6 @@
                 });
                 loadChatGroups(); // Luôn gọi để cập nhật Badge chưa đọc và hiệu ứng nhấp nháy
             }, 10000);
-            */
 
             // --- CÁC HÀM XỬ LÝ NHÓM & EMOJI ---
             let allUsersForGroup = [];

@@ -18,6 +18,38 @@ class EbmrController extends Controller
             ->orderBy('ebmr_templates.updated_at', 'desc')
             ->get();
 
+        foreach($templates as $t) {
+            if ($t->type === 'GF') {
+                $t->name = DB::table('gf_category')->where('id', $t->caterogy_id)->value('name') ?? 'N/A';
+            } elseif ($t->type === 'MF') {
+                $t->name = DB::table('mf_category')->where('id', $t->caterogy_id)->value('name') ?? 'N/A';
+            } elseif ($t->type === 'BPR') {
+                $t->name = DB::table('finished_product_category')
+                    ->leftJoin('product_name', 'finished_product_category.product_name_id', '=', 'product_name.id')
+                    ->where('finished_product_category.id', $t->caterogy_id)
+                    ->value('product_name.name') ?? 'N/A';
+            } else {
+                $t->name = DB::table('intermediate_category')
+                    ->leftJoin('product_name', 'intermediate_category.product_name_id', '=', 'product_name.id')
+                    ->where('intermediate_category.id', $t->caterogy_id)
+                    ->value('product_name.name') ?? 'N/A';
+            }
+
+            // --- Fetch Stages (Sections) ---
+            $t->sections = DB::table('ebmr_template_blocks')
+                ->where('template_id', $t->id)
+                ->where('type', 'section')
+                ->orderBy('order')
+                ->get()
+                ->map(function($b) {
+                    $prop = json_decode($b->properties);
+                    return [
+                        'id' => $b->id,
+                        'label' => $prop->label ?? 'N/A'
+                    ];
+                });
+        }
+
         $users = DB::table('user_management')->select('id', 'fullName as name')->orderBy('fullName')->get();
 
         return view('pages.ebmr.templates.list', [
@@ -34,6 +66,32 @@ class EbmrController extends Controller
             ->orderBy('updated_at', 'desc')
             ->get();
 
+        foreach($templates as $t) {
+            if ($t->type === 'GF') {
+                $t->name = DB::table('gf_category')->where('id', $t->caterogy_id)->value('name') ?? 'N/A';
+                $t->document_code = DB::table('gf_category')->where('id', $t->caterogy_id)->value('code') ?? 'N/A';
+            } elseif ($t->type === 'MF') {
+                $t->name = DB::table('mf_category')->where('id', $t->caterogy_id)->value('name') ?? 'N/A';
+                $t->document_code = DB::table('mf_category')->where('id', $t->caterogy_id)->value('code') ?? 'N/A';
+            } elseif ($t->type === 'BPR') {
+                $cat = DB::table('finished_product_category')
+                    ->leftJoin('product_name', 'finished_product_category.product_name_id', '=', 'product_name.id')
+                    ->where('finished_product_category.id', $t->caterogy_id)
+                    ->select('finished_product_category.finished_product_code', 'product_name.name')
+                    ->first();
+                $t->name = $cat->name ?? 'N/A';
+                $t->document_code = $cat->finished_product_code ?? 'N/A';
+            } else {
+                $cat = DB::table('intermediate_category')
+                    ->leftJoin('product_name', 'intermediate_category.product_name_id', '=', 'product_name.id')
+                    ->where('intermediate_category.id', $t->caterogy_id)
+                    ->select('intermediate_category.intermediate_code', 'product_name.name')
+                    ->first();
+                $t->name = $cat->name ?? 'N/A';
+                $t->document_code = $cat->intermediate_code ?? 'N/A';
+            }
+        }
+
         return view('pages.ebmr.issuance.index', [
             'templates' => $templates
         ]);
@@ -49,9 +107,49 @@ class EbmrController extends Controller
         $records = DB::table('ebmr_records')
             ->join('ebmr_templates', 'ebmr_records.template_id', '=', 'ebmr_templates.id')
             ->leftJoin('user_management', 'ebmr_records.created_by', '=', 'user_management.id')
-            ->select('ebmr_records.*', 'ebmr_templates.name as template_name', 'ebmr_templates.document_code', 'user_management.fullName as issuer_name')
+            ->select('ebmr_records.*', 'user_management.fullName as issuer_name', 'ebmr_templates.type', 'ebmr_templates.caterogy_id')
             ->orderBy('ebmr_records.created_at', 'desc')
             ->get();
+
+        foreach($records as $r) {
+            if ($r->type === 'GF') {
+                $r->template_name = DB::table('gf_category')->where('id', $r->caterogy_id)->value('name') ?? 'N/A';
+                $r->document_code = DB::table('gf_category')->where('id', $r->caterogy_id)->value('code') ?? 'N/A';
+            } elseif ($r->type === 'MF') {
+                $r->template_name = DB::table('mf_category')->where('id', $r->caterogy_id)->value('name') ?? 'N/A';
+                $r->document_code = DB::table('mf_category')->where('id', $r->caterogy_id)->value('code') ?? 'N/A';
+            } elseif ($r->type === 'BPR') {
+                $cat = DB::table('finished_product_category')
+                    ->leftJoin('product_name', 'finished_product_category.product_name_id', '=', 'product_name.id')
+                    ->where('finished_product_category.id', $r->caterogy_id)
+                    ->select('finished_product_category.finished_product_code', 'product_name.name')
+                    ->first();
+                $r->template_name = $cat->name ?? 'N/A';
+                $r->document_code = $cat->finished_product_code ?? 'N/A';
+            } else {
+                $cat = DB::table('intermediate_category')
+                    ->leftJoin('product_name', 'intermediate_category.product_name_id', '=', 'product_name.id')
+                    ->where('intermediate_category.id', $r->caterogy_id)
+                    ->select('intermediate_category.intermediate_code', 'product_name.name')
+                    ->first();
+                $r->template_name = $cat->name ?? 'N/A';
+                $r->document_code = $cat->intermediate_code ?? 'N/A';
+            }
+
+            // --- Fetch Stages (Sections) ---
+            $r->sections = DB::table('ebmr_template_blocks')
+                ->where('template_id', $r->template_id)
+                ->where('type', 'section')
+                ->orderBy('order')
+                ->get()
+                ->map(function($b) {
+                    $prop = json_decode($b->properties);
+                    return [
+                        'id' => $b->id,
+                        'label' => $prop->label ?? 'N/A'
+                    ];
+                });
+        }
 
         return view('pages.ebmr.records.list', [
             'records' => $records,
@@ -66,18 +164,14 @@ class EbmrController extends Controller
     {
         $validated = $request->validate([
             'id' => 'nullable|integer',
-            'document_code' => 'required|string|max:50',
             'edition' => 'required|string|max:10',
-            'name' => 'required|string|max:255',
             'effective_date' => 'required|date',
             'dosage_form' => 'nullable|string|max:100',
             'batch_size' => 'nullable|string|max:100'
         ]);
 
         $data = [
-            'document_code' => $validated['document_code'],
             'edition' => $validated['edition'],
-            'name' => $validated['name'],
             'effective_date' => $validated['effective_date'],
             'dosage_form' => $validated['dosage_form'],
             'batch_size' => $validated['batch_size'],
@@ -435,9 +529,27 @@ class EbmrController extends Controller
     public function getTemplates()
     {
         $templates = DB::table('ebmr_templates')
-            ->select('id', 'name', 'updated_at', 'log_history')
+            ->select('id', 'updated_at', 'log_history', 'type', 'caterogy_id')
             ->orderBy('updated_at', 'desc')
             ->get();
+
+        foreach($templates as $t) {
+            if ($t->type === 'GF') {
+                $t->name = DB::table('gf_category')->where('id', $t->caterogy_id)->value('name') ?? 'N/A';
+            } elseif ($t->type === 'MF') {
+                $t->name = DB::table('mf_category')->where('id', $t->caterogy_id)->value('name') ?? 'N/A';
+            } elseif ($t->type === 'BPR') {
+                $t->name = DB::table('finished_product_category')
+                    ->leftJoin('product_name', 'finished_product_category.product_name_id', '=', 'product_name.id')
+                    ->where('finished_product_category.id', $t->caterogy_id)
+                    ->value('product_name.name') ?? 'N/A';
+            } else {
+                $t->name = DB::table('intermediate_category')
+                    ->leftJoin('product_name', 'intermediate_category.product_name_id', '=', 'product_name.id')
+                    ->where('intermediate_category.id', $t->caterogy_id)
+                    ->value('product_name.name') ?? 'N/A';
+            }
+        }
 
         return response()->json($templates);
     }
@@ -462,7 +574,6 @@ class EbmrController extends Controller
     {
         $validated = $request->validate([
             'id' => 'nullable|integer',
-            'name' => 'required|string|max:255',
             'schema' => 'required|array',
             'log_history' => 'nullable|boolean'
         ]);
@@ -472,8 +583,6 @@ class EbmrController extends Controller
         $fieldsConfig = $schemaData['fieldsConfig'] ?? null;
 
         $data = [
-            'name' => $validated['name'],
-            // 'category' => 'Custom', // removed as it was not in migration natively
             'updated_at' => now()
         ];
 
@@ -619,13 +728,33 @@ class EbmrController extends Controller
 
         $blocks = DB::table('ebmr_template_blocks')->where('template_id', $template->id)->orderBy('order')->get();
         if ($blocks->isNotEmpty()) {
-            $fieldsConfig = json_decode($blocks->first()->fields_config);
+            $fieldsConfig = json_decode($blocks->first()->fields_config, true) ?? [];
+        } else {
+            $fieldsConfig = [];
         }
 
         foreach ($blocks as $block) {
             $f = json_decode($block->properties, true);
-            $fields[] = $f;
+            if (isset($f['type']) && $f['type'] === 'linked-template') {
+                $linkedTemplateId = $f['template_id'] ?? null;
+                if ($linkedTemplateId) {
+                    $linkedBlocks = DB::table('ebmr_template_blocks')->where('template_id', $linkedTemplateId)->orderBy('order')->get();
+                    if ($linkedBlocks->isNotEmpty()) {
+                        $linkedConfig = json_decode($linkedBlocks->first()->fields_config, true) ?? [];
+                        $fieldsConfig = array_merge((array)$fieldsConfig, (array)$linkedConfig);
+                    }
+                    foreach ($linkedBlocks as $lb) {
+                        $linkedF = json_decode($lb->properties, true);
+                        $linkedF['is_linked'] = true;
+                        $fields[] = $linkedF;
+                    }
+                }
+            } else {
+                $fields[] = $f;
+            }
         }
+        
+        $fieldsConfig = (object)$fieldsConfig;
 
         $runDataRaw = DB::table('ebmr_run_data')->where('record_id', $id)->get();
         $executionValues = [];

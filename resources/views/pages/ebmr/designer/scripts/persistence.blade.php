@@ -6,6 +6,8 @@
             pageOrientation: pageOrientation,
             fieldsConfig: fieldsConfig,
             fields: items.map(i => ({
+                db_id: i.db_id || null, 
+                content_db_id: i.content_db_id || null,
                 id: i.id,
                 type: i.type,
                 label: i.label,
@@ -16,7 +18,13 @@
                 data: i.data || [],
                 rowHeights: i.rowHeights || [],
                 borderMode: i.borderMode || 'visible',
-                hideHeader: i.hideHeader || false
+                hideHeader: i.hideHeader || false,
+                template_id: i.template_id || null,
+                showPreview: i.showPreview || false,
+                stage_code: i.stage_code || null,
+                chartConfig: i.chartConfig || null,
+                backgroundColor: i.backgroundColor || null,
+                section_id: i.section_id || null
             }))
         };
 
@@ -25,9 +33,10 @@
             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
             body: JSON.stringify({
                 id: currentTemplateId,
-                name: name,
                 schema: schema,
                 log_history: historyEnabled,
+                section_id: '{{ $activeSectionId ?? '' }}',
+                lang: window.currentLangMode || 'vi',
                 _token: '{{ csrf_token() }}'
             })
         })
@@ -153,4 +162,89 @@
             `;
         }).join('');
     }
+
+    // --- Language & AI Logic ---
+    window.currentLangMode = @json($lang ?? 'vi');
+    function setLanguageMode(mode) {
+        if (mode === window.currentLangMode) return;
+        
+        const url = new URL(window.location.href);
+        url.searchParams.set('lang', mode);
+        window.location.href = url.toString();
+    }
+
+    function translateCurrentDocument() {
+        if (!currentTemplateId) {
+            Swal.fire('Chú ý', 'Vui lòng lưu hồ sơ trước khi phiên dịch', 'warning');
+            return;
+        }
+
+        Swal.fire({
+            title: 'Khởi động AI Translation',
+            text: 'Bạn có muốn dùng Google Gemini AI để dịch toàn bộ nội dung Tiếng Việt sang Tiếng Anh không? Quá trình này có thể mất vài giây.',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'Bắt đầu dịch',
+            cancelButtonText: 'Để sau',
+            confirmButtonColor: '#0ea5e9'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                Swal.fire({
+                    title: 'Đang xử lý...',
+                    text: 'AI đang biên dịch dữ liệu, vui lòng đợi...',
+                    allowOutsideClick: false,
+                    didOpen: () => { Swal.showLoading(); }
+                });
+
+                fetch('{{ route('pages.ebmr.aiTranslate') }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({
+                        template_id: currentTemplateId,
+                        _token: '{{ csrf_token() }}'
+                    })
+                })
+                .then(res => res.json())
+                .then(res => {
+                    if (res.success) {
+                        Swal.fire({
+                            title: 'Hoàn tất!',
+                            text: `Đã dịch thành công ${res.count} khối nội dung. Hệ thống sẽ tải lại ở chế độ Tiếng Anh để bạn kiểm tra và lưu lại.`,
+                            icon: 'success'
+                        }).then(() => {
+                            window.location.href = '{{ route('pages.ebmr.designer', $template->id) }}?lang=en';
+                        });
+                    } else {
+                        Swal.fire('Lỗi AI', res.message || 'Không thể thực hiện phiên dịch', 'error');
+                    }
+                })
+                .catch(err => {
+                    Swal.fire('Lỗi kết nối', 'Không thể kết nối với máy chủ AI', 'error');
+                });
+            }
+        });
+    }
+
+    // Initialize UI state
+    document.addEventListener('DOMContentLoaded', () => {
+        const mode = window.currentLangMode;
+        const labels = { 'vi': 'Tiếng Việt', 'en': 'Tiếng Anh', 'dual': 'Song ngữ' };
+        if (document.getElementById('currentLangLabel')) {
+            document.getElementById('currentLangLabel').innerText = labels[mode] || labels['vi'];
+        }
+        
+        // Highlight active mode in dropdown
+        ['vi', 'en', 'dual'].forEach(m => {
+            const el = document.getElementById('check-' + m);
+            if (el) {
+                if (m === mode) {
+                    el.classList.remove('d-none');
+                    el.parentElement.classList.add('bg-light', 'fw-bold');
+                } else {
+                    el.classList.add('d-none');
+                    el.parentElement.classList.remove('bg-light', 'fw-bold');
+                }
+            }
+        });
+    });
 </script>

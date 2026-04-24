@@ -18,6 +18,13 @@
     <!-- Right User Info + Notification + Logout -->
     <ul class="navbar-nav ms-auto align-items-center">
         <li class="nav-item d-flex align-items-center me-3">
+            <div class="chat-trigger" onclick="toggleChat(true)">
+                <i class="bi bi-chat-dots" style="font-size: 18px;"></i>
+                <span class="unread-badge-total" id="chat-badge-total" style="display:none;">0</span>
+            </div>
+        </li>
+
+        <li class="nav-item d-flex align-items-center me-3">
             <div id="notif-bell-btn"
                 style="border: 2px solid var(--accent); border-radius: 50%; width: 40px; height: 40px; display: flex; justify-content: center; align-items: center; cursor: pointer; transition: all var(--transition); background: rgba(34, 211, 238, 0.05);">
                 <i class="bi bi-bell" style="font-size: 18px; color: var(--accent);"></i>

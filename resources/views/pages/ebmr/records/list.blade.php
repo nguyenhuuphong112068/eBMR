@@ -23,8 +23,7 @@
                                         <th>Số Lô (Batch No.)</th>
                                         <th>Mã Hồ Sơ</th>
                                         <th>Tên Hồ Sơ Mẫu</th>
-                                        <th>Người Ban Hành</th>
-                                        <th>Ngày Ban Hành</th>
+                                        <th>Công đoạn</th>
                                         <th>Trạng Thái</th>
                                         @if($mode != 'history')
                                         <th class="text-center">Thao tác</th>
@@ -37,8 +36,19 @@
                                         <td class="fw-bold text-primary" style="font-size: 1.1rem;">{{ $r->batch_number }}</td>
                                         <td>{{ $r->document_code }}</td>
                                         <td>{{ $r->template_name }}</td>
-                                        <td><i class="fas fa-user-tie me-1 text-muted"></i> {{ $r->issuer_name ?? 'Hệ thống' }}</td>
-                                        <td><i class="far fa-calendar-alt me-1 text-muted"></i> {{ \Carbon\Carbon::parse($r->created_at)->format('d/m/Y H:i') }}</td>
+                                        <td>
+                                            <div class="d-flex flex-wrap gap-1">
+                                                @forelse($r->sections as $s)
+                                                    <button class="btn btn-xs btn-outline-info rounded-pill py-0 px-2" 
+                                                            style="font-size: 0.7rem;"
+                                                            onclick="window.location.href='{{ route('pages.ebmr.execute', ['id' => $r->id, 'section' => $s['id']]) }}'">
+                                                        {{ $s['label'] }}
+                                                    </button>
+                                                @empty
+                                                    <span class="text-muted small">N/A</span>
+                                                @endforelse
+                                            </div>
+                                        </td>
                                         <td>
                                             @if($r->status === 'active')
                                                 <span class="badge bg-soft-success text-success border border-success"><i class="fas fa-spinner fa-spin me-1"></i> Đang sản xuất</span>

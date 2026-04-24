@@ -14,9 +14,7 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     
     <div class="content-wrapper" id="mainContent" style="background-color: #f1f3f4; min-height: 100vh;">
-        @if(!$isReadOnly)
         @include('pages.ebmr.designer.partials.toolbar')
-        @endif
         @include('pages.ebmr.designer.partials.canvas')
     </div>
 
@@ -34,7 +32,12 @@
     @include('pages.ebmr.designer.scripts.table_ops')
     @include('pages.ebmr.designer.scripts.table_advanced')
     @include('pages.ebmr.designer.scripts.ui_handlers')
+    @include('pages.ebmr.designer.scripts.variable_ops')
+    @include('pages.ebmr.designer.scripts.batch_field_ops')
     @include('pages.ebmr.designer.scripts.persistence')
+    @include('pages.ebmr.designer.scripts.outline')
     @include('pages.ebmr.designer.scripts.comments')
+    @include('pages.ebmr.designer.scripts.chart_ops')
     @include('pages.ebmr.designer.scripts.events')
+    @include('pages.ebmr.designer.scripts.symbol_ops')
 @endsection

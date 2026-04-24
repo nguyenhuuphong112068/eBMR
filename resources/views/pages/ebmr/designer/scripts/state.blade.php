@@ -1,6 +1,8 @@
 <script>
     window.isReadOnly = @json($isReadOnly ?? false);
     window.isExecutionMode = @json($isExecutionMode ?? false);
+    window.activeSectionId = @json($activeSectionId ?? null);
+    window.isViewAllMode = !window.activeSectionId;
     window.executionValues = @json($executionValues ?? (object)[]);
 
     let items = @json($template->schema->fields ?? []);
@@ -14,6 +16,8 @@
     let historyEnabled = {{ $template->log_history ?? 0 }} == 1;
     let selectedId = null;
     let selectedFieldId = null;
+    let selectedFieldIds = [];
+    let cellClipboard = null;
 
     if (items.length === 0) {
         const type = "{{ $template->type ?? 'BMR' }}";
@@ -28,7 +32,7 @@
         // Wait for DOM
         document.addEventListener('DOMContentLoaded', () => {
             const nameField = document.getElementById('templateName');
-            if (nameField) nameField.value = "{{ $template->name ?? '' }}";
+            if (nameField) nameField.value = "{{ $template->category_name ?? $template->name ?? '' }}";
             const hint = document.getElementById('drop-hint');
             if (hint) {
                 if (items.length > 0) hint.classList.add('d-none');
@@ -111,14 +115,11 @@
             edition: "{{ $template->version ?? '1' }}",
             name: "{{ $template->category_name ?? '' }}",
             dosage: "{{ $template->dosage_name ?? '' }}",
+            type_name: "{{ $template->type_name ?? 'Thuốc Kê Đơn' }}",
             batch_size: "{{ $template->batch_size ?? '' }}",
             effective_date: "{{ $template->effective_date ?? '' }}"
         };
 
-        // Standard 6-row, 4-column structure (as per Stella BMR standard)
-        // Col 1 & 2 combined for some rows, Col 3 & 4 for others.
-        // But for simplicity, we use 4 columns and use colspan.
-        
         let columns = [
             { label: 'C1', type: 'text', width: '25%' },
             { label: 'C2', type: 'text', width: '25%' },
@@ -134,40 +135,33 @@
                 { content: '', hidden: true },
                 { content: '', hidden: true }
             ],
-            // Row 2: Product & Page No (User said no page no, but we keep the row for layout)
+            // Row 2: Product & Dosage unit
             [
                 { content: '<span style="font-size: 0.85rem; font-style: italic;">Product/Sản phẩm</span>', rs: 1, cs: 1 },
-                { content: '<strong style="font-size: 1rem;">' + t.name + '</strong>', rs: 1, cs: 1 },
-                { content: '<span style="font-size: 0.85rem; font-style: italic;">Page No./Số trang</span>', rs: 1, cs: 1 },
-                { content: '<strong>-</strong>', rs: 1, cs: 1 }
+                { content: '<strong style="font-size: 1rem;">: ' + t.name + '</strong>', rs: 1, cs: 1 },
+                { content: '<span style="font-size: 0.85rem; font-style: italic;">Dosage unit<br>Dạng bào chế</span>', rs: 1, cs: 1 },
+                { content: '<strong>: ' + t.dosage + '</strong>', rs: 1, cs: 1 }
             ],
-            // Row 3: BMR No & Dosage
+            // Row 3: BMR No & Grade
             [
                 { content: '<span style="font-size: 0.85rem; font-style: italic;">BMR No./Số BMR</span>', rs: 1, cs: 1 },
-                { content: '<strong>' + t.code + '</strong>', rs: 1, cs: 1 },
-                { content: '<span style="font-size: 0.85rem; font-style: italic;">Dosage unit / Dạng bào chế</span>', rs: 1, cs: 1 },
-                { content: '<strong>' + t.dosage + '</strong>', rs: 1, cs: 1 }
+                { content: '<strong>: ' + t.code + '</strong>', rs: 1, cs: 1 },
+                { content: '<span style="font-size: 0.85rem; font-style: italic;">Grade/Phân loại</span>', rs: 1, cs: 1 },
+                { content: '<strong>: ' + t.type_name + '</strong>', rs: 1, cs: 1 }
             ],
-             // Row 4: Version & Grade
+             // Row 4: Version & Batch Size
              [
                 { content: '<span style="font-size: 0.85rem; font-style: italic;">Version No./Số ấn bản</span>', rs: 1, cs: 1 },
-                { content: '<strong style="color: red;">' + t.edition + '</strong>', rs: 1, cs: 1 },
-                { content: '<span style="font-size: 0.85rem; font-style: italic;">Grade/Phân loại</span>', rs: 1, cs: 1 },
-                { content: '<strong>NA</strong>', rs: 1, cs: 1 }
-            ],
-            // Row 5: Supersedes & Batch Size
-            [
-                { content: '<span style="font-size: 0.85rem; font-style: italic;">Supersedes/Ấn bản thay thế</span>', rs: 1, cs: 1 },
-                { content: '<strong>NA</strong>', rs: 1, cs: 1 },
+                { content: '<strong style="color: red;">: ' + t.edition + '</strong>', rs: 1, cs: 1 },
                 { content: '<span style="font-size: 0.85rem; font-style: italic;">Batch size/Cỡ lô</span>', rs: 1, cs: 1 },
-                { content: '<strong>' + t.batch_size + '</strong>', rs: 1, cs: 1 }
+                { content: '<strong>: ' + t.batch_size + '</strong>', rs: 1, cs: 1 }
             ],
-            // Row 6: Effective Date & Batch No
+            // Row 5: Supersedes & Effective Date
             [
+                { content: '<span style="font-size: 0.85rem; font-style: italic;">Supersedes/<br>Ấn bản thay thế</span>', rs: 1, cs: 1 },
+                { content: '<strong>: 00</strong>', rs: 1, cs: 1 },
                 { content: '<span style="font-size: 0.85rem; font-style: italic;">Effective date/Ngày hiệu lực</span>', rs: 1, cs: 1 },
-                { content: '<strong>' + t.effective_date + '</strong>', rs: 1, cs: 1 },
-                { content: '<span style="font-size: 0.85rem; font-style: italic;">Batch No./Số lô</span>', rs: 1, cs: 1 },
-                { content: '<strong>:</strong>', rs: 1, cs: 1 }
+                { content: '<strong>: ' + t.effective_date + '</strong>', rs: 1, cs: 1 }
             ]
         ];
 
@@ -175,11 +169,11 @@
             id: id,
             type: 'table',
             label: 'BMR Header',
-            rows: 6,
+            rows: 5,
             cols: 4,
             columns: columns,
             data: data,
-            rowHeights: new Array(6).fill('auto'),
+            rowHeights: new Array(5).fill('auto'),
             borderMode: 'visible',
             hideHeader: true,
             locked: true,
