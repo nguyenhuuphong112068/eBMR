@@ -6,7 +6,7 @@
             pageOrientation: pageOrientation,
             fieldsConfig: fieldsConfig,
             fields: items.map(i => ({
-                db_id: i.db_id || null, 
+                db_id: i.db_id || null,
                 content_db_id: i.content_db_id || null,
                 id: i.id,
                 type: i.type,
@@ -19,6 +19,8 @@
                 rowHeights: i.rowHeights || [],
                 borderMode: i.borderMode || 'visible',
                 hideHeader: i.hideHeader || false,
+                canAddRows: i.canAddRows || false,
+                locked: i.locked || false,
                 template_id: i.template_id || null,
                 showPreview: i.showPreview || false,
                 stage_code: i.stage_code || null,
@@ -29,38 +31,51 @@
         };
 
         fetch('{{ route('pages.ebmr.storeTemplate') }}', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-            body: JSON.stringify({
-                id: currentTemplateId,
-                schema: schema,
-                log_history: historyEnabled,
-                section_id: '{{ $activeSectionId ?? '' }}',
-                lang: window.currentLangMode || 'vi',
-                _token: '{{ csrf_token() }}'
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({
+                    id: currentTemplateId,
+                    schema: schema,
+                    log_history: historyEnabled,
+                    section_id: '{{ $activeSectionId ?? '' }}',
+                    lang: window.currentLangMode || 'vi',
+                    _token: '{{ csrf_token() }}'
+                })
             })
-        })
-        .then(res => {
-            if (!res.ok) {
-                return res.json().then(err => { throw new Error(err.message || 'Lỗi hệ thống') });
-            }
-            return res.json();
-        })
-        .then(res => {
-            if (res.success) {
-                currentTemplateId = res.id;
-                Swal.fire({ title: 'Thành công', text: 'Đã lưu hồ sơ mẫu!', icon: 'success', showConfirmButton: false, timer: 1500 });
-            } else {
-                Swal.fire('Thất bại', res.message || 'Không thể lưu hồ sơ', 'error');
-            }
-        })
-        .catch(err => {
-            console.error(err);
-            Swal.fire('Lỗi kết nối', err.message || 'Vui lòng kiểm tra lại kết nối mạng hoặc thử lại sau.', 'error');
-        });
+            .then(res => {
+                if (!res.ok) {
+                    return res.json().then(err => {
+                        throw new Error(err.message || 'Lỗi hệ thống')
+                    });
+                }
+                return res.json();
+            })
+            .then(res => {
+                if (res.success) {
+                    currentTemplateId = res.id;
+                    Swal.fire({
+                        title: 'Thành công',
+                        text: 'Đã lưu hồ sơ mẫu!',
+                        icon: 'success',
+                        showConfirmButton: false,
+                        timer: 1500
+                    });
+                } else {
+                    Swal.fire('Thất bại', res.message || 'Không thể lưu hồ sơ', 'error');
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                Swal.fire('Lỗi kết nối', err.message || 'Vui lòng kiểm tra lại kết nối mạng hoặc thử lại sau.',
+                    'error');
+            });
     }
 
     let allTemplates = [];
+
     function openTemplateModal() {
         if (window.bootstrap) {
             const modal = new bootstrap.Modal(document.getElementById('openTemplateModal'));
@@ -165,9 +180,10 @@
 
     // --- Language & AI Logic ---
     window.currentLangMode = @json($lang ?? 'vi');
+
     function setLanguageMode(mode) {
         if (mode === window.currentLangMode) return;
-        
+
         const url = new URL(window.location.href);
         url.searchParams.set('lang', mode);
         window.location.href = url.toString();
@@ -188,39 +204,64 @@
             cancelButtonText: 'Để sau',
             confirmButtonColor: '#0ea5e9'
         }).then((result) => {
-            if (result.isConfirmed) {
+            if (result.value) {
                 Swal.fire({
                     title: 'Đang xử lý...',
                     text: 'AI đang biên dịch dữ liệu, vui lòng đợi...',
                     allowOutsideClick: false,
-                    didOpen: () => { Swal.showLoading(); }
+                    didOpen: () => {
+                        Swal.showLoading();
+                    }
                 });
 
-                fetch('{{ route('pages.ebmr.aiTranslate') }}', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                    body: JSON.stringify({
-                        template_id: currentTemplateId,
-                        _token: '{{ csrf_token() }}'
-                    })
-                })
-                .then(res => res.json())
-                .then(res => {
-                    if (res.success) {
-                        Swal.fire({
-                            title: 'Hoàn tất!',
-                            text: `Đã dịch thành công ${res.count} khối nội dung. Hệ thống sẽ tải lại ở chế độ Tiếng Anh để bạn kiểm tra và lưu lại.`,
-                            icon: 'success'
-                        }).then(() => {
-                            window.location.href = '{{ route('pages.ebmr.designer', $template->id) }}?lang=en';
+                console.log("Starting translation for template:", currentTemplateId);
+
+                // Add a small delay to ensure the 'Đang xử lý...' modal finishes its opening animation
+                // This prevents SweetAlert2 from glitching and closing all modals if the backend returns an error instantly.
+                setTimeout(() => {
+                    fetch('{{ route('pages.ebmr.aiTranslate') }}', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                template_id: currentTemplateId,
+                                _token: '{{ csrf_token() }}'
+                            })
+                        })
+                        .then(res => {
+                            if (!res.ok) {
+                                return res.text().then(text => {
+                                    throw new Error(text || res.statusText)
+                                });
+                            }
+                            return res.json();
+                        })
+                        .then(res => {
+                            console.log("Translation response:", res);
+                            if (res.success) {
+                                Swal.fire({
+                                    title: 'Hoàn tất!',
+                                    text: `Đã dịch thành công ${res.count} khối nội dung. Hệ thống sẽ tải lại ở chế độ Tiếng Anh để bạn kiểm tra và lưu lại.`,
+                                    icon: 'success'
+                                }).then(() => {
+                                    const redirectUrl =
+                                        `{{ url('/ebmr/designer') }}/${currentTemplateId}?lang=en`;
+                                    window.location.href = redirectUrl;
+                                });
+                            } else {
+                                Swal.fire('Chú ý', res.message || 'Không thể thực hiện phiên dịch',
+                                    'warning');
+                            }
+                        })
+                        .catch(err => {
+                            console.error("Translation Error:", err);
+                            Swal.fire('Lỗi hệ thống',
+                                'Đã xảy ra lỗi trong quá trình kết nối với máy chủ AI. Vui lòng kiểm tra console hoặc log server.',
+                                'error');
                         });
-                    } else {
-                        Swal.fire('Lỗi AI', res.message || 'Không thể thực hiện phiên dịch', 'error');
-                    }
-                })
-                .catch(err => {
-                    Swal.fire('Lỗi kết nối', 'Không thể kết nối với máy chủ AI', 'error');
-                });
+                }, 600);
             }
         });
     }
@@ -228,11 +269,15 @@
     // Initialize UI state
     document.addEventListener('DOMContentLoaded', () => {
         const mode = window.currentLangMode;
-        const labels = { 'vi': 'Tiếng Việt', 'en': 'Tiếng Anh', 'dual': 'Song ngữ' };
+        const labels = {
+            'vi': 'Tiếng Việt',
+            'en': 'Tiếng Anh',
+            'dual': 'Song ngữ'
+        };
         if (document.getElementById('currentLangLabel')) {
             document.getElementById('currentLangLabel').innerText = labels[mode] || labels['vi'];
         }
-        
+
         // Highlight active mode in dropdown
         ['vi', 'en', 'dual'].forEach(m => {
             const el = document.getElementById('check-' + m);

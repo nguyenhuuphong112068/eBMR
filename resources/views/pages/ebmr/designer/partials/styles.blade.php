@@ -1,7 +1,8 @@
 <style>
     .editor-toolbar {
         position: sticky;
-        top: 57px; /* AdminLTE header height */
+        top: 57px;
+        /* AdminLTE header height */
         z-index: 1000;
         border-bottom: 1px solid #ddd;
     }
@@ -68,7 +69,8 @@
         border-radius: 4px;
         margin: 0 !important;
         position: relative;
-        padding: 40px 40px !important; /* Reduced margins for even more space */
+        padding: 40px 40px !important;
+        /* Reduced margins for even more space */
         transition: padding 0.3s ease;
         box-shadow: none !important;
         border: 1px solid #ddd;
@@ -94,7 +96,8 @@
     .block-item {
         position: relative;
         padding: 5px;
-        border: 1px solid #eef0f2; /* Viền mờ mặc định */
+        border: 1px solid #eef0f2;
+        /* Viền mờ mặc định */
         border-radius: 4px;
         margin-bottom: 2px;
         cursor: pointer;
@@ -258,6 +261,73 @@
         text-align: center;
     }
 
+    /* Spreadsheet Block Styling */
+    .spreadsheet-table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+    }
+
+    .spreadsheet-table th {
+        background: #f1f3f4;
+        color: #5f6368;
+        font-size: 0.7rem;
+        font-weight: bold;
+        text-align: center;
+        border: 1px solid #dadce0;
+        padding: 2px 5px;
+    }
+
+    .spreadsheet-table td {
+        border: 1px solid #dadce0;
+        padding: 4px 8px;
+        font-size: 0.9rem;
+        min-height: 28px;
+        vertical-align: middle;
+        position: relative;
+    }
+
+    .spreadsheet-cell-input {
+        width: 100%;
+        border: none;
+        outline: none;
+        background: transparent;
+        font-family: inherit;
+        font-size: inherit;
+        text-align: inherit;
+    }
+
+    .spreadsheet-cell-input:focus {
+        background: #fff;
+        box-shadow: inset 0 0 0 2px #1a73e8;
+        z-index: 10;
+    }
+
+    .spreadsheet-formula-indicator {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 0;
+        height: 0;
+        border-style: solid;
+        border-width: 6px 6px 0 0;
+        border-color: #1a73e8 transparent transparent transparent;
+        pointer-events: none;
+    }
+
+    .spreadsheet-value {
+        word-break: break-all;
+    }
+
+    .spreadsheet-row-index {
+        background: #f1f3f4 !important;
+        font-weight: bold;
+        color: #5f6368 !important;
+        width: 30px;
+        text-align: center;
+        font-size: 0.7rem;
+    }
+
     /* Static Text Styling (Seamless Editor Mode) */
     .block-item.type-static-text {
         padding: 2px 0;
@@ -277,14 +347,17 @@
     }
 
     .static-text-display {
-        font-size: 1.15rem; /* ~16px usually, let's keep it close to 14pt */
+        font-size: 1.15rem;
+        /* ~16px usually, let's keep it close to 14pt */
         color: #3c4043;
         line-height: 1.6;
-        white-space: normal; /* Changed from pre-wrap to support natural wrapping and fix unwanted breaks on paste */
+        white-space: normal;
+        /* Changed from pre-wrap to support natural wrapping and fix unwanted breaks on paste */
         outline: none;
         padding: 0;
         min-height: 1.6em;
-        border: 1px solid transparent; /* Default border */
+        border: 1px solid transparent;
+        /* Default border */
         border-radius: 4px;
     }
 
@@ -293,19 +366,62 @@
         counter-reset: hb1 hb2 hb3 hb4;
     }
 
-    #editor-content h1 { counter-increment: hb1; counter-reset: hb2 hb3 hb4; font-size: 22pt !important; margin: 10px 0 !important; font-weight: bold; color: #000 !important; }
-    #editor-content h1::before { content: counter(hb1) ". "; }
+    #editor-content h1 {
+        counter-increment: hb1;
+        counter-reset: hb2 hb3 hb4;
+        font-size: 22pt !important;
+        margin: 10px 0 !important;
+        font-weight: bold;
+        color: #000 !important;
+    }
 
-    #editor-content h2 { counter-increment: hb2; counter-reset: hb3 hb4; font-size: 18pt !important; margin: 10px 0 !important; font-weight: bold; color: #000 !important; }
-    #editor-content h2::before { content: counter(hb1) "." counter(hb2) " "; }
+    #editor-content h1::before {
+        content: counter(hb1) ". ";
+    }
 
-    #editor-content h3 { counter-increment: hb3; counter-reset: hb4; font-size: 16pt !important; margin: 10px 0 !important; font-weight: bold; color: #000 !important; }
-    #editor-content h3::before { content: counter(hb1) "." counter(hb2) "." counter(hb3) " "; }
+    #editor-content h2 {
+        counter-increment: hb2;
+        counter-reset: hb3 hb4;
+        font-size: 18pt !important;
+        margin: 10px 0 !important;
+        font-weight: bold;
+        color: #000 !important;
+    }
 
-    #editor-content h4 { counter-increment: hb4; font-size: 16pt !important; margin: 10px 0 !important; font-weight: bold; color: #000 !important; }
-    #editor-content h4::before { content: counter(hb1) "." counter(hb2) "." counter(hb3) "." counter(hb4) " "; }
+    #editor-content h2::before {
+        content: counter(hb1) "." counter(hb2) " ";
+    }
 
-    #editor-content p { font-size: 14pt !important; margin-bottom: 0.5rem; color: #000 !important; }
+    #editor-content h3 {
+        counter-increment: hb3;
+        counter-reset: hb4;
+        font-size: 16pt !important;
+        margin: 10px 0 !important;
+        font-weight: bold;
+        color: #000 !important;
+    }
+
+    #editor-content h3::before {
+        content: counter(hb1) "." counter(hb2) "." counter(hb3) " ";
+    }
+
+    #editor-content h4 {
+        counter-increment: hb4;
+        font-size: 16pt !important;
+        margin: 10px 0 !important;
+        font-weight: bold;
+        color: #000 !important;
+    }
+
+    #editor-content h4::before {
+        content: counter(hb1) "." counter(hb2) "." counter(hb3) "." counter(hb4) " ";
+    }
+
+    #editor-content p {
+        font-size: 14pt !important;
+        margin-bottom: 0.5rem;
+        color: #000 !important;
+    }
 
     .static-text-display[contenteditable="true"]:focus {
         background: transparent;
@@ -325,10 +441,33 @@
     }
 
     /* Support placeholders even when a heading tag is present but empty */
-    .static-text-display h1:empty:before { content: "Nhập Tiêu đề Cấp 1..."; color: #9aa0a6; font-style: italic; font-weight: normal; }
-    .static-text-display h2:empty:before { content: "Nhập Tiêu đề Cấp 2..."; color: #9aa0a6; font-style: italic; font-weight: normal; }
-    .static-text-display h3:empty:before { content: "Nhập Tiêu đề Cấp 3..."; color: #9aa0a6; font-style: italic; font-weight: normal; }
-    .static-text-display h4:empty:before { content: "Nhập Tiêu đề Cấp 4..."; color: #9aa0a6; font-style: italic; font-weight: normal; }
+    .static-text-display h1:empty:before {
+        content: "Nhập Tiêu đề Cấp 1...";
+        color: #9aa0a6;
+        font-style: italic;
+        font-weight: normal;
+    }
+
+    .static-text-display h2:empty:before {
+        content: "Nhập Tiêu đề Cấp 2...";
+        color: #9aa0a6;
+        font-style: italic;
+        font-weight: normal;
+    }
+
+    .static-text-display h3:empty:before {
+        content: "Nhập Tiêu đề Cấp 3...";
+        color: #9aa0a6;
+        font-style: italic;
+        font-weight: normal;
+    }
+
+    .static-text-display h4:empty:before {
+        content: "Nhập Tiêu đề Cấp 4...";
+        color: #9aa0a6;
+        font-style: italic;
+        font-weight: normal;
+    }
 
     /* For contenteditable, ensure the cursor stays visible */
     [contenteditable]:empty:before {
@@ -451,7 +590,7 @@
         border-style: dashed !important;
         border-color: #ddd !important;
     }
-    
+
     .mini-table.border-dashed th,
     .mini-table.border-dashed td {
         border-style: dashed !important;
@@ -462,7 +601,7 @@
         border-color: transparent !important;
         border-width: 0 !important;
     }
-    
+
     .mini-table.border-none th,
     .mini-table.border-none td {
         border-color: transparent !important;
@@ -483,7 +622,7 @@
             size: A4 portrait;
             margin: 0;
         }
-        
+
         body.printing-landscape @page {
             size: A4 landscape;
         }
@@ -494,7 +633,7 @@
             width: 100% !important;
             padding: 0 !important;
         }
-        
+
         .no-print {
             display: none !important;
         }
@@ -522,12 +661,14 @@
         background: transparent;
     }
 
-    .resize-h:hover, .resize-h:active {
+    .resize-h:hover,
+    .resize-h:active {
         background: rgba(26, 115, 232, 0.3);
         border-right: 2px solid #1a73e8;
     }
 
-    .resize-v:hover, .resize-v:active {
+    .resize-v:hover,
+    .resize-v:active {
         background: rgba(26, 115, 232, 0.3);
         border-bottom: 2px solid #1a73e8;
     }
@@ -567,30 +708,56 @@
     .outline-sidebar::-webkit-scrollbar {
         width: 4px;
     }
+
     .outline-sidebar::-webkit-scrollbar-track {
         background: #f1f1f1;
     }
+
     .outline-sidebar::-webkit-scrollbar-thumb {
         background: #cbd5e1;
         border-radius: 10px;
     }
+
     .outline-sidebar::-webkit-scrollbar-thumb:hover {
         background: #94a3b8;
     }
-    
+
     .outline-item:hover {
         background-color: #f1f3f4;
         color: #1a73e8;
     }
 
-    .outline-h1 { font-weight: bold; }
-    .outline-h2 { padding-left: 20px !important; }
-    .outline-h3 { padding-left: 35px !important; }
-    .outline-h4 { padding-left: 50px !important; font-style: italic; }
+    .outline-h1 {
+        font-weight: bold;
+    }
 
-    .outline-h1 { margin-left: 0; font-weight: 600; color: #202124; }
-    .outline-h2 { margin-left: 15px; }
-    .outline-h3 { margin-left: 30px; font-size: 0.8rem; }
+    .outline-h2 {
+        padding-left: 20px !important;
+    }
+
+    .outline-h3 {
+        padding-left: 35px !important;
+    }
+
+    .outline-h4 {
+        padding-left: 50px !important;
+        font-style: italic;
+    }
+
+    .outline-h1 {
+        margin-left: 0;
+        font-weight: 600;
+        color: #202124;
+    }
+
+    .outline-h2 {
+        margin-left: 15px;
+    }
+
+    .outline-h3 {
+        margin-left: 30px;
+        font-size: 0.8rem;
+    }
 
     .outline-empty {
         color: #9aa0a6;
@@ -602,7 +769,10 @@
     /* Clickable insert zone */
     .insert-click-zone {
         position: absolute;
-        top: 0; bottom: 0; left: 0; right: 0;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        right: 0;
         z-index: 5;
     }
 
@@ -610,18 +780,20 @@
     .color-swatch {
         width: 22px;
         height: 22px;
-        border: 1px solid rgba(0,0,0,0.1);
+        border: 1px solid rgba(0, 0, 0, 0.1);
         border-radius: 2px;
         padding: 0;
         cursor: pointer;
         transition: 0.1s;
     }
+
     .color-swatch:hover {
         border-color: #000;
         transform: scale(1.1);
         z-index: 10;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
     }
+
     .color-swatch.light-color {
         border: 1px solid #dadce0;
     }
@@ -629,7 +801,8 @@
     /* Editor Ruler */
     .editor-ruler {
         position: sticky;
-        top: 170px; /* 57px header + ~113px toolbar/header margins */
+        top: 170px;
+        /* 57px header + ~113px toolbar/header margins */
         z-index: 990;
         height: 24px;
         background-color: #f8f9fa;
@@ -640,49 +813,69 @@
         align-items: flex-end;
         overflow: hidden;
     }
+
     .ruler-scale {
         position: absolute;
-        bottom: 0; left: 0; right: 0;
+        bottom: 0;
+        left: 0;
+        right: 0;
         height: 10px;
         background-image: repeating-linear-gradient(to right, transparent, transparent 9px, #ccc 9px, #ccc 10px);
     }
+
     .ruler-scale::after {
         content: "";
         position: absolute;
-        top: -4px; bottom: 0; left: 0; right: 0;
+        top: -4px;
+        bottom: 0;
+        left: 0;
+        right: 0;
         background-image: repeating-linear-gradient(to right, transparent, transparent 49px, #888 49px, #888 50px);
     }
-    
-    .ruler-marker-left, .ruler-marker-right {
+
+    .ruler-marker-left,
+    .ruler-marker-right {
         position: absolute;
         top: 0;
-        width: 0; height: 0;
+        width: 0;
+        height: 0;
         border-style: solid;
         z-index: 20;
         cursor: ew-resize;
         border-width: 10px 5px 0 5px;
         border-color: #1a73e8 transparent transparent transparent;
     }
-    
+
     .ruler-marker-left {
-        left: 48px; /* default p-5 padding ~ 48px */
+        left: 48px;
+        /* default p-5 padding ~ 48px */
         transform: translateX(-50%);
     }
-    
+
     .ruler-marker-right {
         right: 48px;
         transform: translateX(50%);
     }
 
-    .ruler-margin-left, .ruler-margin-right {
+    .ruler-margin-left,
+    .ruler-margin-right {
         position: absolute;
-        top: 0; bottom: 0;
+        top: 0;
+        bottom: 0;
         background-color: #e8eaed;
         z-index: 10;
         width: 48px;
     }
-    .ruler-margin-left { left: 0; border-right: 1px solid #aaa; }
-    .ruler-margin-right { right: 0; border-left: 1px solid #aaa; }
+
+    .ruler-margin-left {
+        left: 0;
+        border-right: 1px solid #aaa;
+    }
+
+    .ruler-margin-right {
+        right: 0;
+        border-left: 1px solid #aaa;
+    }
 
     /* Layout Transitions */
     .transition-all {
@@ -693,9 +886,11 @@
         cursor: pointer;
     }
 
-    #outline-minimized:hover, #sidebar-minimized:hover {
+    #outline-minimized:hover,
+    #sidebar-minimized:hover {
         background-color: #f1f3f4 !important;
     }
+
     /* Comments Gutter Styling */
     .comment-gutter {
         /* No longer absolute, part of flex flow */
@@ -710,15 +905,16 @@
         border: 1px solid #e0e0e0;
         border-radius: 12px;
         padding: 14px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
         font-size: 0.88rem;
         transition: all 0.25s ease;
         pointer-events: auto;
         border-left: 5px solid #1a73e8;
     }
 
-    .comment-item:hover, .comment-item.active {
-        box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    .comment-item:hover,
+    .comment-item.active {
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
         border-color: #1a73e8;
         transform: scale(1.02);
         z-index: 2000;
@@ -773,20 +969,24 @@
         padding: 2px 0;
     }
 
-    .ebmr-comment-highlight.active, .ebmr-comment-highlight:hover {
+    .ebmr-comment-highlight.active,
+    .ebmr-comment-highlight:hover {
         background-color: rgba(255, 235, 59, 1);
         box-shadow: 0 0 0 2px rgba(255, 235, 59, 0.3);
     }
+
     .page-break-divider {
         height: 25px;
-        background: #f1f3f4 !important; /* Match the main workspace background */
-        margin-left: -41px !important; /* Pull out to cover page padding */
+        background: #f1f3f4 !important;
+        /* Match the main workspace background */
+        margin-left: -41px !important;
+        /* Pull out to cover page padding */
         margin-right: -41px !important;
         margin-top: 50px !important;
         margin-bottom: 50px !important;
         border-top: 1px solid #ddd;
         border-bottom: 1px solid #ddd;
-        box-shadow: inset 0 4px 6px -4px rgba(0,0,0,0.1), inset 0 -4px 6px -4px rgba(0,0,0,0.1);
+        box-shadow: inset 0 4px 6px -4px rgba(0, 0, 0, 0.1), inset 0 -4px 6px -4px rgba(0, 0, 0, 0.1);
         position: relative;
         display: flex;
         align-items: center;
@@ -806,8 +1006,8 @@
     .section-group-wrapper {
         border: 2px solid transparent;
         border-radius: 8px;
-        padding: 10px;
-        margin: 5px -10px;
+        padding: 40px;
+        margin: 0 -40px;
         transition: all 0.3s ease;
         position: relative;
     }
@@ -827,16 +1027,14 @@
         color: white;
         font-size: 0.6rem;
         font-weight: bold;
-        padding: 2px 8px;
-        border-radius: 10px;
-        z-index: 20;
-    }
         padding: 2px 12px;
         border-radius: 10px;
+        z-index: 20;
         text-transform: uppercase;
         letter-spacing: 1px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     }
+
     /* Variable Badges (Dynamic Fields) */
     .ebmr-field-badge {
         display: inline-block;
@@ -846,9 +1044,12 @@
         font-weight: 600;
         cursor: pointer;
         transition: all 0.2s ease;
-        border: 2px solid #d97706 !important; /* Vàng đậm */
-        background-color: #fffbeb !important; /* Vàng cực nhạt (amber-50) */
-        color: #92400e !important; /* Chữ hổ phách đậm */
+        border: 2px solid #d97706 !important;
+        /* Vàng đậm */
+        background-color: #fffbeb !important;
+        /* Vàng cực nhạt (amber-50) */
+        color: #92400e !important;
+        /* Chữ hổ phách đậm */
         box-shadow: 0 2px 4px rgba(217, 119, 6, 0.1);
         user-select: none;
         white-space: nowrap;
@@ -864,11 +1065,14 @@
         min-height: 38px;
         margin: 0 !important;
         border-radius: 0 !important;
-        border-width: 0 0 0 4px !important; /* Chỉ để lại viền trái làm điểm nhấn */
+        border-width: 0 0 0 4px !important;
+        /* Chỉ để lại viền trái làm điểm nhấn */
         justify-content: center;
         align-items: center;
-        background-color: #fff9db !important; /* Màu vàng nhận diện vùng nhập liệu */
-        white-space: normal; /* Cho phép xuống dòng nếu ô hẹp */
+        background-color: #fff9db !important;
+        /* Màu vàng nhận diện vùng nhập liệu */
+        white-space: normal;
+        /* Cho phép xuống dòng nếu ô hẹp */
         text-align: center;
         padding: 5px !important;
     }
@@ -879,16 +1083,27 @@
     }
 
     .ebmr-field-badge:hover {
-        background-color: #fef3c7 !important; /* amber-100 */
+        background-color: #fef3c7 !important;
+        /* amber-100 */
     }
 
     .ebmr-field-badge.active {
-        background-color: #fde68a !important; /* amber-200 */
+        background-color: #fde68a !important;
+        /* amber-200 */
         box-shadow: inset 0 0 0 2px #d97706;
     }
 
     .ebmr-field-badge i {
         margin-right: 5px;
         font-size: 0.9em;
+    }
+    .execution-delete-cell button {
+        opacity: 0.3;
+        transition: all 0.2s;
+        font-size: 1.1rem;
+    }
+    .execution-delete-cell:hover button {
+        opacity: 1;
+        transform: scale(1.2);
     }
 </style>

@@ -107,6 +107,67 @@
         selectItem(id);
     }
 
+    window.executeAddTableRow = function(itemId) {
+        saveState();
+        const item = items.find(i => i.id === itemId);
+        if (!item || item.type !== 'table') return;
+
+        if (item.rows > 0) {
+            const lastRowIndex = item.rows - 1;
+            const lastRow = item.data[lastRowIndex];
+            
+            // Create a deep copy of the last row's structure
+            let newRow = lastRow.map(cell => {
+                return {
+                    ...cell,
+                    content: cell.content // Keep the template content (including placeholders)
+                };
+            });
+
+            item.rows++;
+            item.data.push(newRow);
+            
+            // Handle row heights if defined
+            if (item.rowHeights) {
+                const lastHeight = item.rowHeights[lastRowIndex] || 'auto';
+                item.rowHeights.push(lastHeight);
+            }
+
+            renderBlocks();
+            toastr.success('Đã thêm dòng mới vào bảng');
+        }
+    };
+
+    window.executeDeleteTableRow = function(itemId, rowIdx) {
+        const item = items.find(i => i.id === itemId);
+        if (!item || item.type !== 'table') return;
+
+        Swal.fire({
+            title: 'Xóa dòng?',
+            text: "Bạn có chắc chắn muốn xóa dòng này không?",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'Xóa ngay',
+            cancelButtonText: 'Hủy'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                if (item.data && item.data.length > 1) {
+                    item.data.splice(rowIdx, 1);
+                    item.rows--;
+                    if (item.rowHeights) item.rowHeights.splice(rowIdx, 1);
+                    
+                    renderBlocks();
+                    saveStateDebounced();
+                    toastr.info('Đã xóa dòng');
+                } else {
+                    Swal.fire('Lỗi', 'Không thể xóa dòng duy nhất còn lại', 'error');
+                }
+            }
+        });
+    };
+
     // --- Table Manipulations ---
     function modifyTable(action, param) {
         saveState();
@@ -131,10 +192,26 @@
             item.data.splice(insertAt, 0, newRow);
             item.rowHeights.splice(insertAt, 0, 'auto');
         } else if (action === 'deleteRow') {
-            if (item.rows > 1 && rIdx > 0) {
-                item.rows--;
-                item.data.splice(rIdx - 1, 1);
-                item.rowHeights.splice(rIdx - 1, 1);
+            const selectedCells = Array.from(document.querySelectorAll('.selected-cell:not([data-row="0"])'))
+                .filter(cell => cell.closest('.block-item').getAttribute('data-id') === selectedId);
+            
+            const rowsToDelete = new Set();
+            if (selectedCells.length > 0) {
+                selectedCells.forEach(cell => rowsToDelete.add(parseInt(cell.dataset.row) - 1));
+            } else if (rIdx > 0) {
+                rowsToDelete.add(rIdx - 1);
+            }
+
+            if (rowsToDelete.size > 0 && item.rows > rowsToDelete.size) {
+                const sortedRows = Array.from(rowsToDelete).sort((a, b) => b - a);
+                sortedRows.forEach(idx => {
+                    item.data.splice(idx, 1);
+                    if (item.rowHeights) item.rowHeights.splice(idx, 1);
+                    item.rows--;
+                });
+                toastr.success(`Đã xóa ${rowsToDelete.size} hàng`);
+            } else if (rowsToDelete.size > 0) {
+                toastr.warning('Không thể xóa tất cả các hàng của bảng');
             }
         } else if (action === 'addCol') {
             item.cols++;
@@ -151,10 +228,26 @@
                 hidden: false
             }));
         } else if (action === 'deleteCol') {
-            if (item.cols > 1) {
-                item.cols--;
-                item.columns.splice(cIdx, 1);
-                item.data.forEach(row => row.splice(cIdx, 1));
+            const selectedCells = Array.from(document.querySelectorAll('.selected-cell'))
+                .filter(cell => cell.closest('.block-item').getAttribute('data-id') === selectedId);
+            
+            const colsToDelete = new Set();
+            if (selectedCells.length > 0) {
+                selectedCells.forEach(cell => colsToDelete.add(parseInt(cell.dataset.col)));
+            } else {
+                colsToDelete.add(cIdx);
+            }
+
+            if (colsToDelete.size > 0 && item.cols > colsToDelete.size) {
+                const sortedCols = Array.from(colsToDelete).sort((a, b) => b - a);
+                sortedCols.forEach(idx => {
+                    item.columns.splice(idx, 1);
+                    item.data.forEach(row => row.splice(idx, 1));
+                    item.cols--;
+                });
+                toastr.success(`Đã xóa ${colsToDelete.size} cột`);
+            } else if (colsToDelete.size > 0) {
+                toastr.warning('Không thể xóa tất cả các cột của bảng');
             }
         }
         renderBlocks();

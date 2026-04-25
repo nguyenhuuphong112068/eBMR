@@ -125,7 +125,7 @@
             confirmButtonText: 'Xóa ngay',
             cancelButtonText: 'Hủy'
         }).then((result) => {
-            if (result.isConfirmed) {
+            if (result.value) {
                 const ids = [...selectedFieldIds];
                 
                 // Update data model to clear content for all selected field IDs

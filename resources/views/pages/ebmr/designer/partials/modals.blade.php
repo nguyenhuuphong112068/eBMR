@@ -213,12 +213,34 @@
 </div>
 
 <!-- Find & Replace Modal (Word Style) -->
-<div class="modal fade" id="searchReplaceModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content shadow-lg border-0" style="border-radius: 8px; overflow: hidden;">
-            <div class="modal-header bg-light py-2 px-3 border-bottom">
+<style>
+    #searchReplaceModal {
+        pointer-events: none; /* Allow clicking the document behind the modal container */
+    }
+    #searchReplaceModal .modal-dialog {
+        pointer-events: auto; /* Re-enable clicks for the modal itself */
+        margin: 0;
+        position: absolute;
+        top: 100px;
+        left: calc(50% - 250px);
+        width: 500px;
+    }
+    #searchReplaceModal .modal-content {
+        cursor: default;
+    }
+    #searchReplaceModal .modal-header {
+        cursor: move; /* Indicate draggability */
+        user-select: none;
+    }
+</style>
+<div class="modal fade" id="searchReplaceModal" tabindex="-1" aria-hidden="true" data-backdrop="false">
+    <div class="modal-dialog">
+        <div class="modal-content shadow-lg border" style="border-radius: 8px; overflow: hidden;">
+            <div class="modal-header bg-light py-2 px-3 border-bottom d-flex align-items-center">
                 <h6 class="modal-title fw-bold text-muted mb-0" style="font-size: 0.85rem;">Find and Replace</h6>
-                <button type="button" class="btn-close" style="font-size: 0.6rem;" data-bs-dismiss="modal" aria-label="Close"></button>
+                <button type="button" class="close ml-auto" style="font-size: 1.2rem; line-height: 1;" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
             </div>
             <div class="modal-body p-0">
                 <!-- Word-style Tabs -->
@@ -229,9 +251,6 @@
                     <li class="nav-item" role="presentation">
                         <button class="nav-link py-1 px-4 small fw-bold border-bottom-0" id="replace-tab" data-toggle="tab" href="#replace-pane" role="tab" style="font-size: 0.75rem; border-radius: 4px 4px 0 0;">Replace</button>
                     </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link py-1 px-4 small fw-bold border-bottom-0 disabled" id="goto-tab" data-toggle="tab" href="#goto-pane" role="tab" style="font-size: 0.75rem; border-radius: 4px 4px 0 0;">Go To</button>
-                    </li>
                 </ul>
                 
                 <div class="tab-content p-4 bg-white" id="searchTabContent" style="border-top: 1px solid #dee2e6;">
@@ -239,12 +258,7 @@
                     <div class="mb-3 row align-items-center">
                         <label class="col-sm-3 small fw-normal text-muted mb-0">Find what:</label>
                         <div class="col-sm-9">
-                            <div class="input-group input-group-sm shadow-sm">
-                                <input type="text" id="findInput" class="form-control rounded-0" style="font-family: inherit;" onkeydown="if(event.key==='Enter') executeSearch(false)">
-                                <div class="input-group-append">
-                                    <button class="btn btn-outline-secondary dropdown-toggle px-1" type="button" data-toggle="dropdown" aria-expanded="false"></button>
-                                </div>
-                            </div>
+                            <input type="text" id="findInput" class="form-control form-control-sm rounded-0 shadow-sm" style="font-family: inherit;" onkeydown="if(event.key==='Enter') executeSearch(false)">
                         </div>
                     </div>
 
@@ -253,12 +267,7 @@
                         <div class="mb-4 row align-items-center">
                             <label class="col-sm-3 small fw-normal text-muted mb-0">Replace with:</label>
                             <div class="col-sm-9">
-                                <div class="input-group input-group-sm shadow-sm">
-                                    <input type="text" id="replaceInput" class="form-control rounded-0" style="font-family: inherit;">
-                                    <div class="input-group-append">
-                                        <button class="btn btn-outline-secondary dropdown-toggle px-1" type="button" data-toggle="dropdown" aria-expanded="false"></button>
-                                    </div>
-                                </div>
+                                <input type="text" id="replaceInput" class="form-control form-control-sm rounded-0 shadow-sm" style="font-family: inherit;">
                             </div>
                         </div>
                     </div>
@@ -267,20 +276,17 @@
                         <!-- Empty for Find tab as it only uses the shared "Find what" -->
                     </div>
 
-                    <!-- Actions Footer Area (Internal to body like Word) -->
-                    <div class="d-flex justify-content-between align-items-center mt-5 pt-3 border-top">
-                        <button class="btn btn-light border btn-sm px-3" style="font-size: 0.7rem;">More &gt;&gt;</button>
-                        
-                        <div class="d-flex gap-1" id="actionButtonsFind">
-                             <button class="btn btn-light border btn-sm px-3" onclick="executeSearch(false)" style="font-size: 0.7rem;">Find Next</button>
-                             <button class="btn btn-light border btn-sm px-3" data-bs-dismiss="modal" style="font-size: 0.7rem;">Cancel</button>
+                    <!-- Actions Footer Area -->
+                    <div class="d-flex justify-content-end align-items-center mt-4 pt-3 border-top gap-2">
+                        <div class="gap-2" id="actionButtonsFind" style="display: flex;">
+                             <button class="btn btn-light border btn-sm px-4" onclick="executeSearch(false)" style="font-size: 0.75rem; border-radius: 4px;">Find Next</button>
+                             <button class="btn btn-light border btn-sm px-4" data-dismiss="modal" style="font-size: 0.75rem; border-radius: 4px;">Cancel</button>
                         </div>
                         
-                        <div class="d-flex gap-1 d-none" id="actionButtonsReplace">
-                             <button class="btn btn-light border btn-sm px-3" onclick="executeReplace()" style="font-size: 0.7rem;">Replace</button>
-                             <button class="btn btn-light border btn-sm px-3" onclick="executeReplaceAll()" style="font-size: 0.7rem;">Replace All</button>
-                             <button class="btn btn-light border btn-sm px-3" onclick="executeSearch(false)" style="font-size: 0.7rem;">Find Next</button>
-                             <button class="btn btn-light border btn-sm px-3" data-bs-dismiss="modal" style="font-size: 0.7rem;">Cancel</button>
+                        <div class="gap-2" id="actionButtonsReplace" style="display: none;">
+                             <button class="btn btn-light border btn-sm px-3" onclick="executeReplace()" style="font-size: 0.75rem; border-radius: 4px;">Replace</button>
+                             <button class="btn btn-light border btn-sm px-3" onclick="executeReplaceAll()" style="font-size: 0.75rem; border-radius: 4px;">Replace All</button>
+                             <button class="btn btn-light border btn-sm px-3" data-dismiss="modal" style="font-size: 0.75rem; border-radius: 4px;">Cancel</button>
                         </div>
                     </div>
                     <div id="searchStats" class="mt-2 text-end text-muted" style="font-size: 0.65rem; font-style: italic; min-height: 15px;"></div>
@@ -291,24 +297,58 @@
 </div>
 
 <script>
-    // Toggle footer buttons based on tab
     document.addEventListener('DOMContentLoaded', function() {
+        const modal = document.getElementById('searchReplaceModal');
         const findTab = document.getElementById('find-tab');
         const replaceTab = document.getElementById('replace-tab');
         const findBtns = document.getElementById('actionButtonsFind');
         const replaceBtns = document.getElementById('actionButtonsReplace');
 
+        window.updateSearchButtons = function(isReplace) {
+            if (!findBtns || !replaceBtns) return;
+            if (isReplace) {
+                findBtns.style.display = 'none';
+                replaceBtns.style.display = 'flex';
+            } else {
+                findBtns.style.display = 'flex';
+                replaceBtns.style.display = 'none';
+            }
+        };
+
         if(findTab) {
             $(findTab).on('shown.bs.tab', function () {
-                findBtns.classList.remove('d-none');
-                replaceBtns.classList.add('d-none');
+                updateSearchButtons(false);
             });
         }
         if(replaceTab) {
             $(replaceTab).on('shown.bs.tab', function () {
-                findBtns.classList.add('d-none');
-                replaceBtns.classList.remove('d-none');
+                updateSearchButtons(true);
             });
         }
+
+        // Draggable Implementation
+        const dialog = modal.querySelector('.modal-dialog');
+        const header = modal.querySelector('.modal-header');
+        let isDragging = false;
+        let offset = { x: 0, y: 0 };
+
+        header.addEventListener('mousedown', (e) => {
+            if (e.target.closest('button')) return; // Don't drag if clicking close button
+            isDragging = true;
+            offset.x = e.clientX - dialog.offsetLeft;
+            offset.y = e.clientY - dialog.offsetTop;
+            header.style.cursor = 'grabbing';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            dialog.style.left = (e.clientX - offset.x) + 'px';
+            dialog.style.top = (e.clientY - offset.y) + 'px';
+        });
+
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+            header.style.cursor = 'move';
+        });
     });
 </script>

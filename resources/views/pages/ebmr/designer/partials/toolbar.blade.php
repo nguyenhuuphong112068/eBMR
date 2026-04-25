@@ -23,7 +23,7 @@
                     data-toggle="dropdown" aria-expanded="false" title="Chèn Bảng">
                     <i class="fas fa-table"></i>
                 </button>
-                <div class="dropdown-menu table-selector-dropdown p-3" aria-labelledby="tableDropdown">
+                    <div class="dropdown-menu table-selector-dropdown p-3" aria-labelledby="tableDropdown">
                     <div class="grid-container" id="table-grid">
                     </div>
                     <div class="grid-label" id="grid-selection-label">1 x 1 Table</div>

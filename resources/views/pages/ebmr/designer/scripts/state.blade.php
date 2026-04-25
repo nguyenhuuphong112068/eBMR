@@ -67,26 +67,33 @@
             name: "{{ $template->category_name ?? $template->name ?? '' }}",
         };
 
-        // Table with 2 columns, no border, just text layout as per image 2
+        // Table with 2 columns, no border
         let columns = [
             { label: 'C1', type: 'text', width: '60%' },
             { label: 'C2', type: 'text', width: '40%' }
         ];
 
         let data = [
-            // Row 1: SOP and Format No
+            // Row 1: SOP and Format No (Using cell properties for styling)
             [
-                { content: `<div style="text-align: left; font-size: 1.1rem;"><em>Reference SOP / Số SOP đối chiếu: ${t.sop}</em></div>`, rs: 1, cs: 1 },
-                { content: `<div style="text-align: right; font-size: 1.1rem;">| <em>Format no. / Số biểu mẫu: ${t.format}-${t.version}</em></div>`, rs: 1, cs: 1 }
+                { 
+                    content: `Reference SOP / Số SOP đối chiếu: ${t.sop}`, 
+                    rs: 1, cs: 1, 
+                    textAlign: 'left', fontStyle: 'italic', fontSize: '1.1rem' 
+                },
+                { 
+                    content: `Format no. / Số biểu mẫu: ${t.format}-${t.version}`, 
+                    rs: 1, cs: 1, 
+                    textAlign: 'right', fontStyle: 'italic', fontSize: '1.1rem' 
+                }
             ],
-            // Row 2: Main Title (UPPERCASE)
+            // Row 2: Main Title (UPPERCASE, Centered)
             [
-                { content: `<div style="text-align: center; font-size: 1.4rem; font-weight: bold; margin-top: 15px; text-transform: uppercase;">${t.name}</div>`, rs: 1, cs: 2 },
-                { content: '', hidden: true }
-            ],
-            // Row 3: Sub Title (Vietnamese or just a line)
-            [
-                { content: `<div style="text-align: center; font-size: 1.4rem; font-weight: bold;">PHIẾU KIỂM TRA ...</div>`, rs: 1, cs: 2 },
+                { 
+                    content: t.name, 
+                    rs: 1, cs: 2, 
+                    textAlign: 'center', fontSize: '1.4rem', fontWeight: 'bold', textTransform: 'uppercase'
+                },
                 { content: '', hidden: true }
             ]
         ];
@@ -95,12 +102,12 @@
             id: id,
             type: 'table',
             label: 'GF Header',
-            rows: 3,
+            rows: 2,
             cols: 2,
             columns: columns,
             data: data,
-            rowHeights: new Array(3).fill('auto'),
-            borderMode: 'none', // Header GF is usually borderless
+            rowHeights: new Array(2).fill('auto'),
+            borderMode: 'none', 
             hideHeader: true,
             locked: true,
             isGfHeader: true

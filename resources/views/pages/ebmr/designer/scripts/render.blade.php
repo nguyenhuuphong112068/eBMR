@@ -7,7 +7,7 @@
         if (window.isExecutionMode) {
             selectedId = null; // Luôn bỏ chọn khối ở chế độ ghi chép
         }
-        
+
         container.innerHTML = '';
         if (hint) {
             if (!window.isExecutionMode) container.appendChild(hint);
@@ -18,84 +18,99 @@
         let activeSectionIdTracker = null;
 
         items.forEach((item, idx) => {
-            // Determine the section this item belongs to based on sequence
-            if (item.type === 'section') {
-                activeSectionIdTracker = item.id;
-            }
-            
-            const itemSectionId = activeSectionIdTracker || 'section_0';
-            item.section_id = itemSectionId; // Sync data with sequence
+                // Determine the section this item belongs to based on sequence
+                if (item.type === 'section') {
+                    activeSectionIdTracker = item.id;
+                }
 
-            // Skip rendering if it's the old signature block (being deprecated)
-            if (item.type === 'signature') return;
+                const itemSectionId = activeSectionIdTracker || 'section_0';
+                item.section_id = itemSectionId; // Sync data with sequence
 
-            // Page Break & Grouping Logic
-            if (window.isViewAllMode || !window.activeSectionId) {
-                if (lastSectionId === null || itemSectionId !== lastSectionId) {
-                    // Create Page Break if not the first section
-                    if (lastSectionId !== null) {
-                        const pageBreak = document.createElement('div');
-                        pageBreak.className = 'page-break-divider my-4 d-flex align-items-center justify-content-center';
-                        const parts = (itemSectionId || '').split('_');
-                        const labelText = parts.length > 1 ? `Công đoạn ${parts[parts.length-1]}` : 'Phân đoạn mới';
-                        pageBreak.innerHTML = `<span class="bg-light px-3 py-1 rounded-pill small fw-bold text-muted border"><i class="fas fa-file-alt me-2"></i>${labelText}</span>`;
-                        container.appendChild(pageBreak);
+                // Skip rendering if it's the old signature block (being deprecated)
+                if (item.type === 'signature') return;
+
+                // Page Break & Grouping Logic
+                if (window.isViewAllMode || !window.activeSectionId) {
+                    if (lastSectionId === null || itemSectionId !== lastSectionId) {
+                        // Create Page Break if not the first section
+                        if (lastSectionId !== null) {
+                            const pageBreak = document.createElement('div');
+                            pageBreak.className =
+                                'page-break-divider my-4 d-flex align-items-center justify-content-center';
+                            const parts = (itemSectionId || '').split('_');
+                            const labelText = parts.length > 1 ? `Công đoạn ${parts[parts.length-1]}` :
+                                'Phân đoạn mới';
+                            pageBreak.innerHTML =
+                                `<span class="bg-light px-3 py-1 rounded-pill small fw-bold text-muted border"><i class="fas fa-file-alt me-2"></i>${labelText}</span>`;
+                            container.appendChild(pageBreak);
+                        }
+
+                        // Create a new Section Group Wrapper
+                        currentGroup = document.createElement('div');
+                        currentGroup.className = 'section-group-wrapper' + (window.activeSectionId ===
+                            itemSectionId ? ' active' : '');
+                        currentGroup.setAttribute('data-section-id', itemSectionId);
+                        currentGroup.onclick = (e) => {
+                            // Activate section when clicking its wrapper background
+                            if (e.target === currentGroup) {
+                                window.activeSectionId = itemSectionId;
+                                selectedId = null; // Deselect specific block
+                                renderBlocks();
+                            }
+                        };
+                        container.appendChild(currentGroup);
+
+                        lastSectionId = itemSectionId;
                     }
+                } else {
+                    // If filtered to a specific section, no wrappers needed or just one
+                    currentGroup = container;
+                }
 
-                    // Create a new Section Group Wrapper
-                    currentGroup = document.createElement('div');
-                    currentGroup.className = 'section-group-wrapper' + (window.activeSectionId === itemSectionId ? ' active' : '');
-                    currentGroup.setAttribute('data-section-id', itemSectionId);
-                    currentGroup.onclick = (e) => {
-                        // Activate section when clicking its wrapper background
-                        if (e.target === currentGroup) {
-                            window.activeSectionId = itemSectionId;
-                            selectedId = null; // Deselect specific block
-                            renderBlocks();
+                if (!window.isReadOnly && !window.isExecutionMode) {
+                    addInsertionDivider(currentGroup, idx);
+                }
+
+                const div = document.createElement('div');
+                // 'active' class will never be added in execution mode because selectedId is null
+                div.className =
+                    `block-item type-${item.type} ${selectedId === item.id ? 'active' : ''} ${window.isExecutionMode ? 'execution-mode' : ''}`;
+                div.setAttribute('data-id', item.id);
+                if (item.marginLeft) div.style.marginLeft = item.marginLeft;
+                if (item.marginRight) div.style.marginRight = item.marginRight;
+                if (item.backgroundColor) div.style.backgroundColor = item.backgroundColor;
+
+                if (!window.isExecutionMode) {
+                    div.onclick = (e) => {
+                        e.stopPropagation();
+                        if (selectedId !== item.id) {
+                            // Update active section highlight without full re-render if possible
+                            // But for simplicity, we call selectItem which might re-render
+                            selectItem(item.id, true); // doRender=true to update the wrapper's 'active' class
                         }
                     };
-                    container.appendChild(currentGroup);
-                    
-                    lastSectionId = itemSectionId;
                 }
-            } else {
-                // If filtered to a specific section, no wrappers needed or just one
-                currentGroup = container;
-            }
 
-            if (!window.isReadOnly && !window.isExecutionMode) {
-                addInsertionDivider(currentGroup, idx);
-            }
+                let content = `<div class="block-mock"></div>`;
+                if (item.type === 'table') {
+                    const borderClass = item.borderMode === 'dashed' ? 'border-dashed' : (item.borderMode ===
+                        'none' ? 'border-none' : '');
 
-            const div = document.createElement('div');
-            // 'active' class will never be added in execution mode because selectedId is null
-            div.className = `block-item type-${item.type} ${selectedId === item.id ? 'active' : ''} ${window.isExecutionMode ? 'execution-mode' : ''}`;
-            div.setAttribute('data-id', item.id);
-            if (item.marginLeft) div.style.marginLeft = item.marginLeft;
-            if (item.marginRight) div.style.marginRight = item.marginRight;
-            if (item.backgroundColor) div.style.backgroundColor = item.backgroundColor;
-            
-            if (!window.isExecutionMode) {
-                div.onclick = (e) => {
-                    e.stopPropagation();
-                    if (selectedId !== item.id) {
-                        // Update active section highlight without full re-render if possible
-                        // But for simplicity, we call selectItem which might re-render
-                        selectItem(item.id, true); // doRender=true to update the wrapper's 'active' class
-                    }
-                };
-            }
-
-            let content = `<div class="block-mock"></div>`;
-            if (item.type === 'table') {
-                const borderClass = item.borderMode === 'dashed' ? 'border-dashed' : (item.borderMode === 'none' ? 'border-none' : '');
-
-                let thead = '';
-                if (!item.hideHeader) {
-                    thead = `<thead><tr>${item.columns.map((c, cIdx) => {
-                        const bg = (item.columns[cIdx].style && item.columns[cIdx].style.backgroundColor) ? item.columns[cIdx].style.backgroundColor : '';
-                        return `<th contenteditable="false" spellcheck="false" data-row="0" data-col="${cIdx}" style="width: ${c.width || 'auto'}; background-color: ${bg};">${c.label}</th>`;
-                    }).join('')}</tr></thead>`;
+                    let thead = '';
+                    if (!item.hideHeader) {
+                        thead = `<thead><tr>${item.columns.map((c, cIdx) => {
+                        const s = c.style || {};
+                        const bg = s.backgroundColor || '';
+                        const align = s.textAlign || '';
+                        const fw = s.fontWeight || '';
+                        const fs = s.fontStyle || '';
+                        const td = s.textDecoration || '';
+                        const fsz = s.fontSize || '';
+                        const tc = s.textColor || '';
+                        return `<th contenteditable="false" spellcheck="false" data-row="0" data-col="${cIdx}" style="width: ${c.width || 'auto'}; background-color: ${bg}; text-align: ${align}; font-weight: ${fw}; font-style: ${fs}; text-decoration: ${td}; font-size: ${fsz}; color: ${tc};">${c.label}</th>`;
+                    }).join('')}
+                    ${window.isExecutionMode && item.canAddRows ? '<th style="width: 30px; border: none; background: transparent;"></th>' : ''}
+                </tr></thead>`;
                 }
 
                 let rowsHtml = '';
@@ -139,32 +154,49 @@
                             finalEditable = (item.locked || window.isReadOnly) ? 'false' : 'true';
                         }
 
-                        cellsHtml += `
-                            <td contenteditable="${finalEditable}" spellcheck="false" data-row="${r+1}" data-col="${c}" 
-                                rowspan="${cell.rs || 1}" colspan="${cell.cs || 1}" ${onclickAttr}
-                                class="${cellClass} ${item.locked ? 'locked-cell' : ''}" 
-                                style="width: ${cellWidth}; height: ${rowH}; background-color: ${cellBg}; text-align: ${cell.textAlign || ''}; font-weight: ${cell.fontWeight || ''}; font-style: ${cell.fontStyle || ''}; font-size: ${cell.fontSize || ''}; color: ${cell.textColor || ''};"
-                                oninput="updateTableInline('${item.id}', 'cell', ${r}, ${c}, this.innerHTML)">
-                                ${displayContent}
-                            </td>`;
-                    }
-                    rowsHtml += `<tr>${cellsHtml}</tr>`;
-                }
-                content = `<table class="mini-table ${borderClass}">${thead}<tbody>${rowsHtml}</tbody></table>`;
-            } else if (item.type === 'static-text') {
-                const displayContent = decorateContent(item.content || '');
-                const textEditable = (window.isReadOnly || window.isExecutionMode) ? 'false' : 'true';
-                const borderClass = item.borderMode === 'dashed' ? 'border-dashed' : (item.borderMode === 'visible' ? 'border-visible' : 'border-none');
-                
-                content = `<div class="static-text-display ${borderClass}" contenteditable="${textEditable}" spellcheck="false" 
+                        cellsHtml += `<td contenteditable="${finalEditable}" spellcheck="false" data-row="${r+1}" data-col="${c}" rowspan="${cell.rs || 1}" colspan="${cell.cs || 1}" ${onclickAttr} class="${cellClass} ${item.locked ? 'locked-cell' : ''}" style="width: ${cellWidth}; height: ${rowH}; background-color: ${cellBg}; text-align: ${cell.textAlign || ''}; font-weight: ${cell.fontWeight || ''}; font-style: ${cell.fontStyle || ''}; text-decoration: ${cell.textDecoration || ''}; font-size: ${cell.fontSize || ''}; color: ${cell.textColor || ''}; text-transform: ${cell.textTransform || ''};" oninput="updateTableInline('${item.id}', 'cell', ${r}, ${c}, this.innerHTML)">${displayContent}</td>`;
+        }
+        let deleteCell = '';
+        if (window.isExecutionMode && item.canAddRows) {
+            deleteCell = `<td class="execution-delete-cell" style="width: 30px; border: none; background: transparent; vertical-align: middle;">
+                                        <button class="btn btn-link text-danger p-0" title="Xóa dòng" onclick="executeDeleteTableRow('${item.id}', ${r})">
+                                            <i class="fas fa-times-circle"></i>
+                                        </button>
+                                      </td>`;
+        }
+        rowsHtml += `<tr>${cellsHtml}${deleteCell}</tr>`;
+    }
+
+    let addRowBtn = '';
+    if (item.canAddRows) {
+        const btnLabel = window.isExecutionMode ? 'THÊM DÒNG CUỐI' : 'THỬ THÊM DÒNG (CẤP 2)';
+        addRowBtn = `
+                        <div class="mt-2 text-start">
+                            <button class="btn btn-xs btn-outline-primary py-0 px-2 fw-bold" style="font-size: 0.65rem; border-radius: 4px;" onclick="executeAddTableRow('${item.id}')">
+                                <i class="fas fa-plus me-1"></i> ${btnLabel}
+                            </button>
+                        </div>
+                    `;
+    }
+
+    content = `<table class="mini-table ${borderClass}">${thead}<tbody>${rowsHtml}</tbody></table>${addRowBtn}`;
+    }
+    else if (item.type === 'static-text') {
+        const displayContent = decorateContent(item.content || '');
+        const textEditable = (window.isReadOnly || window.isExecutionMode) ? 'false' : 'true';
+        const borderClass = item.borderMode === 'dashed' ? 'border-dashed' : (item.borderMode === 'visible' ?
+            'border-visible' : 'border-none');
+
+        content =
+            `<div class="static-text-display ${borderClass}" contenteditable="${textEditable}" spellcheck="false" 
                                 oninput="updateStaticTextInline('${item.id}', this.innerHTML); handleAutoCapitalize(this)">${displayContent}</div>`;
-            } else if (item.type === 'linked-template') {
-                const isPreviewing = item.showPreview || false;
-                const previewContent = isPreviewing ? `<div id="preview-${item.id}" class="mt-3 p-4 border rounded bg-white w-100 shadow-sm" style="pointer-events: none; opacity: 0.9;">
+    } else if (item.type === 'linked-template') {
+        const isPreviewing = item.showPreview || false;
+        const previewContent = isPreviewing ? `<div id="preview-${item.id}" class="mt-3 p-4 border rounded bg-white w-100 shadow-sm" style="pointer-events: none; opacity: 0.9;">
                     <div class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>
                 </div>` : '';
-                
-                content = `<div class="block-mock d-flex flex-column align-items-center justify-content-center py-4 px-3 position-relative" style="background-color: #f8f9fa; border: 2px dashed #0d6efd; border-radius: 12px; min-height: 120px;">
+
+        content = `<div class="block-mock d-flex flex-column align-items-center justify-content-center py-4 px-3 position-relative" style="background-color: #f8f9fa; border: 2px dashed #0d6efd; border-radius: 12px; min-height: 120px;">
                              <div class="position-absolute" style="top: 10px; right: 10px; z-index: 100;">
                                 <button class="btn btn-sm btn-primary shadow-sm px-3" onclick="event.stopPropagation(); toggleGfPreview('${item.id}')" style="border-radius: 20px;">
                                     <i class="fas ${isPreviewing ? 'fa-eye-slash' : 'fa-eye'} me-1"></i> ${isPreviewing ? 'Ẩn nội dung' : 'Xem nội dung'}
@@ -176,12 +208,12 @@
                              ${previewContent}
                            </div>`;
 
-                if (isPreviewing) {
-                    setTimeout(() => fetchAndRenderGfPreview(item.id, item.template_id), 50);
-                }
-            } else if (item.type === 'section') {
-                const labelEditable = (window.isReadOnly || window.isExecutionMode) ? 'false' : 'true';
-                content = `<div class="ebmr-section-header d-flex align-items-center" id="section-${item.id}">
+        if (isPreviewing) {
+            setTimeout(() => fetchAndRenderGfPreview(item.id, item.template_id), 50);
+        }
+    } else if (item.type === 'section') {
+        const labelEditable = (window.isReadOnly || window.isExecutionMode) ? 'false' : 'true';
+        content = `<div class="ebmr-section-header d-flex align-items-center" id="section-${item.id}">
                              <div class="section-icon bg-info text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px; min-width: 40px;">
                                 <i class="fas fa-layer-group"></i>
                              </div>
@@ -192,44 +224,44 @@
                                 <div class="section-line mt-1" style="height: 3px; background: linear-gradient(to right, #0ea5e9, transparent); border-radius: 2px;"></div>
                              </div>
                            </div>`;
-            } else if (item.type === 'chart') {
-                const canvasId = 'chart_canvas_' + item.id;
-                content = `<div class="chart-container" style="position: relative; height:300px; width:100%; padding: 15px; background: #fff; border: 1px solid #eee; border-radius: 8px;">
+    } else if (item.type === 'chart') {
+        const canvasId = 'chart_canvas_' + item.id;
+        content = `<div class="chart-container" style="position: relative; height:300px; width:100%; padding: 15px; background: #fff; border: 1px solid #eee; border-radius: 8px;">
                              <canvas id="${canvasId}"></canvas>
                            </div>`;
-                // Schedule chart initialization after DOM is ready
-                setTimeout(() => {
-                    if (typeof renderChart === 'function') {
-                        renderChart(canvasId, item.chartConfig);
-                    }
-                }, 50);
+        // Schedule chart initialization after DOM is ready
+        setTimeout(() => {
+            if (typeof renderChart === 'function') {
+                renderChart(canvasId, item.chartConfig);
             }
+        }, 50);
+    }
 
-            const actions = (item.locked || window.isReadOnly || window.isExecutionMode) ? '' : `
+    const actions = (item.locked || window.isReadOnly || window.isExecutionMode) ? '' : `
                 <div class="block-actions">
                     <button class="btn btn-sm btn-light border shadow-sm text-danger" onclick="removeItem('${item.id}')"><i class="fas fa-trash"></i></button>
                     <button class="btn btn-sm btn-light border shadow-sm" onclick="moveItem(${idx}, -1)"><i class="fas fa-chevron-up"></i></button>
                     <button class="btn btn-sm btn-light border shadow-sm" onclick="moveItem(${idx}, 1)"><i class="fas fa-chevron-down"></i></button>
                 </div>`;
 
-            div.innerHTML = `
+    div.innerHTML = `
                 ${actions}
-                ${item.type !== 'static-text' && !window.isExecutionMode && item.label && item.label !== 'null' ? `<span class="block-label">${item.label} ${item.locked ? '<i class="fas fa-lock ms-1 small"></i>' : ''}</span>` : ''}
+                ${item.type !== 'static-text' && !window.isExecutionMode && item.label && item.label !== 'null' && !item.isGfHeader ? `<span class="block-label">${item.label} ${item.locked ? '<i class="fas fa-lock ms-1 small"></i>' : ''}</span>` : ''}
                 ${content}
             `;
-            currentGroup.appendChild(div);
-        });
+    currentGroup.appendChild(div);
+    });
 
-        if (items.length > 0) {
-            if (!window.isReadOnly && !window.isExecutionMode) {
-                addInsertionDivider(currentGroup, items.length);
-            }
+    if (items.length > 0) {
+        if (!window.isReadOnly && !window.isExecutionMode) {
+            addInsertionDivider(currentGroup, items.length);
         }
-        
-        // Rebuild Outline when DOM changes
-        if (typeof buildOutline === 'function') {
-            setTimeout(buildOutline, 100);
-        }
+    }
+
+    // Rebuild Outline when DOM changes
+    if (typeof buildOutline === 'function') {
+        setTimeout(buildOutline, 100);
+    }
     }
 
     function addInsertionDivider(container, idx) {
@@ -281,12 +313,12 @@
         });
         saveStateDebounced();
         renderBlocks();
-        
+
         setTimeout(() => {
             const blocks = document.querySelectorAll('.block-item');
-            if(blocks[idx]) {
+            if (blocks[idx]) {
                 const textEl = blocks[idx].querySelector('.static-text-display');
-                if(textEl) {
+                if (textEl) {
                     textEl.focus();
                     // Optional: remove placeholder class if typing
                 }
@@ -321,7 +353,9 @@
                     getData: (type) => (type === 'text/html' ? htmlData : plainText)
                 },
                 preventDefault: () => {},
-                target: { closest: () => null } // Ensure it doesn't think it's a table paste
+                target: {
+                    closest: () => null
+                } // Ensure it doesn't think it's a table paste
             };
 
             // Temporarily set a global flag or pass index?
@@ -330,7 +364,8 @@
 
         } catch (err) {
             console.error(err);
-            Swal.fire('Quyền truy cập', 'Vui lòng cho phép trình duyệt truy cập bộ nhớ tạm (Clipboard) để dán nội dung.', 'info');
+            Swal.fire('Quyền truy cập',
+                'Vui lòng cho phép trình duyệt truy cập bộ nhớ tạm (Clipboard) để dán nội dung.', 'info');
         }
     };
 
@@ -342,38 +377,129 @@
         const div = document.createElement('div');
         div.innerHTML = html;
         const badges = div.querySelectorAll('.ebmr-field-badge');
-        
+
         badges.forEach(badge => {
             const fieldId = badge.getAttribute('data-field-id');
             const field = fieldsConfig[fieldId];
             if (field) {
-                let icon = 'fa-edit';
-                let typeLabel = '';
-                
-                if (field.type === 'signature') {
-                    icon = 'fa-signature';
-                    typeLabel = 'Chữ ký';
-                } else if (field.type === 'date') {
-                    icon = 'fa-calendar-alt';
-                    typeLabel = 'Ngày';
-                } else if (field.type === 'checkbox') {
-                    icon = 'fa-check-square';
-                    typeLabel = 'Tick';
-                } else if (field.type === 'number') {
-                    icon = 'fa-calculator';
-                    typeLabel = 'Số';
-                } else if (field.type === 'select') {
-                    icon = 'fa-list-ul';
-                    typeLabel = 'Chọn';
+                if (window.isExecutionMode) {
+                    if (field.type === 'formula') {
+                        const result = calculateFormula(field.formula || '');
+                        badge.innerHTML = result;
+                        badge.className = 'ebmr-field-value formula-result';
+                        return;
+                    }
+
+                    const val = window.executionValues[fieldId] || '';
+                    if (val) {
+                        badge.innerHTML = val;
+                        badge.className = 'ebmr-field-value';
+                    } else {
+                        badge.innerHTML = `[${field.label}]`;
+                    }
                 } else {
-                    typeLabel = 'Text';
+                    let icon = 'fa-edit';
+                    let typeLabel = '';
+                    let extra = '';
+
+                    if (field.type === 'signature') {
+                        icon = 'fa-signature';
+                        typeLabel = 'Chữ ký';
+                    } else if (field.type === 'date') {
+                        icon = 'fa-calendar-alt';
+                        typeLabel = 'Ngày';
+                    } else if (field.type === 'checkbox') {
+                        icon = 'fa-check-square';
+                        typeLabel = 'Tick';
+                    } else if (field.type === 'number') {
+                        icon = 'fa-calculator';
+                        typeLabel = 'Số';
+                    } else if (field.type === 'formula') {
+                        icon = 'fa-square-root-alt';
+                        typeLabel = 'Công thức';
+                        const testResult = calculateFormula(field.formula || '');
+                        extra = `<span class="ms-1 border-start ps-1 text-primary">${testResult}</span>`;
+                    } else if (field.type === 'select') {
+                        icon = 'fa-list-ul';
+                        typeLabel = 'Chọn';
+                    } else {
+                        typeLabel = 'Text';
+                    }
+
+                    const label = field.label || `[${typeLabel}]`;
+                    badge.className =
+                        `ebmr-field-badge ${selectedFieldId === fieldId ? 'active' : ''} ${field.type === 'formula' ? 'formula-preview' : ''}`;
+                    badge.innerHTML = `<i class="fas ${icon}"></i> ${label}${extra}`;
                 }
-                
-                const label = field.label || `[${typeLabel}]`;
-                badge.className = `ebmr-field-badge ${selectedFieldId === fieldId ? 'active' : ''}`;
-                badge.innerHTML = `<i class="fas ${icon}"></i> ${label}`;
             }
         });
         return div.innerHTML;
     }
+
+    window.calculateFormula = function(formula) {
+        if (!formula) return '0';
+
+        const valMap = {};
+
+        // 1. Build value map from all table cells with IDs
+        items.forEach(item => {
+            if (item.type === 'table' && item.data) {
+                item.data.forEach(row => {
+                    row.forEach(cell => {
+                        if (cell && cell.cellId) {
+                            const raw = (cell.defaultValue !== undefined && cell
+                                .defaultValue !== '') ? cell.defaultValue : (cell
+                                .content || '0');
+                            const clean = typeof raw === 'string' ? raw.replace(/<[^>]*>/g,
+                                '').trim() : raw;
+                            valMap[cell.cellId] = parseFloat(clean) || 0;
+                        }
+                    });
+                });
+            }
+        });
+
+        // 2. Build value map from all Dynamic Fields (by Label or Name)
+        Object.values(fieldsConfig).forEach(field => {
+            if (field.label || field.name) {
+                const val = (field.defaultValue !== undefined && field.defaultValue !== '') ? field
+                    .defaultValue : 0;
+                if (field.label) valMap[field.label] = parseFloat(val) || 0;
+                if (field.name) valMap[field.name] = parseFloat(val) || 0;
+            }
+        });
+
+        // 3. Replace IDs in formula: (1) -> valMap['1']
+        let processed = formula.replace(/\(([^)]+)\)/g, (match, id) => {
+            const trimmedId = id.trim();
+            return valMap[trimmedId] !== undefined ? valMap[trimmedId] : 0;
+        });
+
+        // 4. Evaluate basic math
+        try {
+            const result = new Function(`return ${processed}`)();
+            return (typeof result === 'number') ? result.toLocaleString('en-US', {
+                maximumFractionDigits: 2
+            }) : result;
+        } catch (e) {
+            return '#ERR';
+        }
+    };
+
+    window.recalculateAllFormulas = function() {
+        // Find all formula result elements in the DOM and update them
+        document.querySelectorAll('.formula-result').forEach(el => {
+            const blockItem = el.closest('.block-item');
+            if (blockItem) {
+                // If it's inside a static text, we might need to re-render or just update the innerHTML
+                // For performance, let's just find the parent badge and update
+                const badge = el.closest('.ebmr-field-badge') || el;
+                const fieldId = badge.getAttribute('data-field-id');
+                const field = fieldsConfig[fieldId];
+                if (field && field.type === 'formula') {
+                    badge.innerHTML = calculateFormula(field.formula || '');
+                }
+            }
+        });
+    };
 </script>

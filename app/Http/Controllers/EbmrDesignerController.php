@@ -281,7 +281,7 @@ class EbmrDesignerController extends Controller
                     $rawHtml = $field['content'] ?? '';
                     $preserved = null;
                     $contentDbId = $field['content_db_id'] ?? null;
-                    
+
                     if ($contentDbId) {
                         $preserved = $existingContent->get($contentDbId);
                     }
@@ -313,12 +313,11 @@ class EbmrDesignerController extends Controller
                         DB::table('ebmr_content_blocks')->where('id', $contentId)->update([$updateCol => $cleanText]);
                     }
                     $htmlStructure = '<div class="static-text-display">' . $structure . '</div>';
-
                 } elseif ($type === 'table') {
                     $tableResult = $this->generateTableHtmlStructure($field, $blockId, $id, $finalSectionId, $lang, $existingContent);
                     $htmlStructure = $tableResult['html'];
                     $touchedContentIds = array_merge($touchedContentIds, $tableResult['touchedIds']);
-                    
+
                     // CRITICAL: Update properties with the IDs we just generated/matched
                     $properties = $tableResult['updatedField'];
                     DB::table('ebmr_template_blocks')->where('id', $blockId)->update(['properties' => json_encode($properties)]);
@@ -448,22 +447,19 @@ class EbmrDesignerController extends Controller
     {
         if (!$contentBlocks || empty($block->content)) return;
 
-        // Group content blocks by ID for easy lookup if needed, 
-        // though we mostly rely on the placeholders in the HTML structure.
+        if (!$contentBlocks) {
+            Log::warning("AI Translation: No content blocks found for block #{$block->id}");
+            return;
+        }
+
+        // Group content blocks by ID for easy lookup if needed
         $cbMap = $contentBlocks->keyBy('id');
 
         // 1. Rebuild the full HTML by replacing placeholders with text
         $fullHtml = $block->content;
-        
-        // We will store the IDs found in the placeholders to inject them into the data structure later
-        $placeholdersFound = [];
 
         foreach ($contentBlocks as $cb) {
             $placeholder = "[[CONTENT_$cb->id]]";
-            
-            if (strpos($fullHtml, $placeholder) !== false) {
-                $placeholdersFound[$placeholder] = $cb->id;
-            }
 
             $text = '';
             if ($lang === 'en') {
@@ -480,7 +476,6 @@ class EbmrDesignerController extends Controller
         }
 
         if ($block->type === 'static-text') {
-            // Extract the inner HTML from <div class="static-text-display">...</div>
             if (preg_match('/<div class="static-text-display"[^>]*>(.*?)<\/div>/is', $fullHtml, $matches)) {
                 $field['content'] = $matches[1];
             } else {
@@ -499,10 +494,10 @@ class EbmrDesignerController extends Controller
                 if (!isset($field['data'][$r])) continue;
                 for ($c = 0; $c < $cols; $c++) {
                     if (!isset($field['data'][$r][$c]) || !is_array($field['data'][$r][$c])) continue;
-                    
+
                     $cell = &$field['data'][$r][$c];
                     $dbId = $cell['db_id'] ?? null;
-                    
+
                     if ($dbId && $cbMap->has($dbId)) {
                         $cb = $cbMap->get($dbId);
                         $text = '';
@@ -572,7 +567,7 @@ class EbmrDesignerController extends Controller
                     $contentId = DB::table('ebmr_content_blocks')->insertGetId($contentData);
                 }
                 $touchedIds[] = $contentId;
-                
+
                 // CRITICAL: Update the ID back in the data structure
                 if (is_array($field['data'][$r][$c])) {
                     $field['data'][$r][$c]['db_id'] = $contentId;
@@ -652,76 +647,69 @@ class EbmrDesignerController extends Controller
     public function aiTranslate(Request $request)
     {
         $startTimeTotal = microtime(true);
-        Log::info("--- AI Translation Started ---");
-        try {
-            $templateId = $request->template_id;
-            $lang = $request->lang ?? 'en'; // Target language
+        $templateId = $request->template_id;
 
-            $contents = DB::table('ebmr_content_blocks')
+        Log::info("--- AI Translation Started for Template #$templateId ---");
+        try {
+            // Select blocks that have Vietnamese content
+            $query = DB::table('ebmr_content_blocks')
                 ->where('template_id', $templateId)
                 ->whereNotNull('vi_contents')
                 ->where('vi_contents', '!=', '')
-                ->whereRaw("TRIM(REPLACE(vi_contents, CHAR(160), '')) != ''") // Exclude blocks that are only nbsp or whitespace
-                ->where(function ($q) {
-                    $q->whereNull('en_contents')->orWhere('en_contents', '');
-                })
-                ->get();
+                ->whereRaw("TRIM(REPLACE(vi_contents, CHAR(160), '')) != ''");
+
+            // Only translate if en_contents is empty OR if user explicitly requested (we assume they did if they called this)
+            // To be safe and helpful, we'll translate everything that has VI content but no EN content,
+            // OR if they want to force update. For now, let's just get all VI content.
+            $contents = $query->get();
 
             if ($contents->isEmpty()) {
-                Log::info("AI Translation: No new content to translate.");
-                return response()->json(['success' => false, 'message' => 'Không có nội dung mới để dịch (hoặc nội dung chỉ chứa khoảng trắng)']);
+                Log::info("AI Translation: No content found in ebmr_content_blocks for this template.");
+                return response()->json(['success' => false, 'message' => 'Không tìm thấy nội dung Tiếng Việt nào để dịch. Hãy đảm bảo bạn đã bấm "Lưu" biểu mẫu trước khi dịch.']);
             }
 
-            Log::info("AI Translation: Found " . $contents->count() . " blocks to translate.");
-
-            // Clean strings in memory too
-            foreach ($contents as $cb) {
-                $cb->vi_contents = trim(str_replace(["\xc2\xa0", "&nbsp;"], ' ', $cb->vi_contents));
-            }
+            Log::info("AI Translation: Found " . $contents->count() . " blocks to process.");
 
             $allTranslatedArray = [];
-            $chunkSize = 15;
-            $chunks = $contents->chunk($chunkSize); 
+            $chunkSize = 20; // Gemini can handle more
+            $chunks = $contents->chunk($chunkSize);
             $totalChunks = $chunks->count();
-            Log::info("AI Translation: Processing in $totalChunks chunks (Batch size: $chunkSize).");
 
             foreach ($chunks as $chunkIndex => $chunk) {
                 $chunkStartTime = microtime(true);
                 $textsToTranslate = $chunk->pluck('vi_contents')->toArray();
-                
-                Log::info("AI Translation: [Chunk " . ($chunkIndex + 1) . "/$totalChunks] Sending " . count($textsToTranslate) . " items to Ollama...");
 
-                $prompt = "You are a professional pharmaceutical translator. 
-                Translate the following list of Vietnamese strings into accurate technical English for a pharmaceutical Batch Manufacturing Record (BMR).
-                Return ONLY a JSON array of strings in the EXACT same order.
-                Input: " . json_encode($textsToTranslate, JSON_UNESCAPED_UNICODE);
+                $prompt = "Translate these Vietnamese strings into English for a pharmaceutical Batch Manufacturing Record (BMR).\n" .
+                    "Guidelines:\n" .
+                    "- Use formal technical pharmaceutical terminology.\n" .
+                    "- Keep codes like SOP-123 or BMR-V1 unchanged.\n" .
+                    "- Return ONLY a JSON array of strings.\n" .
+                    "- Input: " . json_encode($textsToTranslate, JSON_UNESCAPED_UNICODE);
 
-                $ollamaUrl = env('OLLAMA_URL', 'http://localhost:11434');
-                $ollamaModel = env('OLLAMA_MODEL', 'qwen2.5:14b');
-
-                $ollamaStartTime = microtime(true);
-                $response = \Illuminate\Support\Facades\Http::timeout(180)->withoutVerifying()
+                $ollamaUrl = env('OLLAMA_URL', 'http://127.0.0.1:11434');
+                $modelName = env('OLLAMA_MODEL', 'qwen2.5');
+                $response = \Illuminate\Support\Facades\Http::timeout(300)->withoutVerifying()
                     ->post("$ollamaUrl/api/generate", [
-                        'model' => $ollamaModel,
+                        'model' => $modelName,
                         'prompt' => $prompt,
-                        'stream' => false,
-                        'format' => 'json'
+                        'format' => 'json',
+                        'stream' => false
                     ]);
-                $ollamaEndTime = microtime(true);
-                $ollamaDuration = round($ollamaEndTime - $ollamaStartTime, 2);
 
                 if ($response->failed()) {
-                    Log::error("AI Translation: Ollama request failed after {$ollamaDuration}s. Error: " . $response->body());
-                    return response()->json(['success' => false, 'message' => 'Ollama Error: ' . $response->body()]);
+                    Log::error("AI Translation: Ollama failed.");
+                    return response()->json(['success' => false, 'message' => "Lỗi kết nối tới máy chủ cục bộ Ollama (qwen2.5)."]);
                 }
 
                 $resData = $response->json();
-                $translatedText = $resData['response'] ?? null;
+                $translatedText = $resData['response'] ?? '[]';
+
+                // Strip markdown blocks if present
+                $translatedText = preg_replace('/^```(?:json)?\s+|\s+```$/', '', trim($translatedText));
+
                 $translatedArray = json_decode($translatedText, true);
 
-                Log::info("AI Translation: [Chunk " . ($chunkIndex + 1) . "] Received response from Ollama in {$ollamaDuration}s.");
-
-                // Find array in response if wrapped
+                // If it's an object with a single array property, extract it
                 if (is_array($translatedArray) && !isset($translatedArray[0])) {
                     foreach ($translatedArray as $val) {
                         if (is_array($val) && count($val) === count($textsToTranslate)) {
@@ -731,42 +719,39 @@ class EbmrDesignerController extends Controller
                     }
                 }
 
-                if (!is_array($translatedArray) || count($translatedArray) !== count($textsToTranslate)) {
-                    Log::error("AI Translation: [Chunk " . ($chunkIndex + 1) . "] Data mismatch. Expected: " . count($textsToTranslate) . ", Received: " . (is_array($translatedArray) ? count($translatedArray) : 0));
-                    return response()->json([
-                        'success' => false, 
-                        'message' => 'Lỗi khớp dữ liệu tại cụm tin nhắn. AI dịch thiếu hoặc sai định dạng.',
-                        'expected_count' => count($textsToTranslate),
-                        'received_count' => is_array($translatedArray) ? count($translatedArray) : 0,
-                        'raw' => $translatedText
-                    ]);
+                if (!is_array($translatedArray) || count($translatedArray) === 0) {
+                    Log::error("AI Translation: Invalid response format from AI. Body: " . $translatedText);
+                    return response()->json(['success' => false, 'message' => 'Lỗi định dạng dữ liệu từ AI.']);
+                }
+
+                // If AI returned fewer items, pad it to avoid offset errors
+                while (count($translatedArray) < count($textsToTranslate)) {
+                    $translatedArray[] = '';
                 }
 
                 $allTranslatedArray = array_merge($allTranslatedArray, $translatedArray);
-                $chunkEndTime = microtime(true);
-                $chunkDuration = round($chunkEndTime - $chunkStartTime, 2);
-                Log::info("AI Translation: [Chunk " . ($chunkIndex + 1) . "] Completed in {$chunkDuration}s.");
             }
 
-            // Update database with AI translations
-            Log::info("AI Translation: Updating database with " . count($allTranslatedArray) . " translations...");
+            // Update database
+            $updateCount = 0;
             foreach ($contents as $index => $cb) {
-                DB::table('ebmr_content_blocks')
-                    ->where('id', $cb->id)
-                    ->update([
-                        'en_contents' => $allTranslatedArray[$index] ?? '',
-                        'updated_at' => now()
-                    ]);
+                if (isset($allTranslatedArray[$index]) && !empty($allTranslatedArray[$index])) {
+                    DB::table('ebmr_content_blocks')
+                        ->where('id', $cb->id)
+                        ->update([
+                            'en_contents' => $allTranslatedArray[$index],
+                            'updated_at' => now()
+                        ]);
+                    $updateCount++;
+                }
             }
+            Log::info("AI Translation: Updated $updateCount records in database.");
 
-            $endTimeTotal = microtime(true);
-            $durationTotal = round($endTimeTotal - $startTimeTotal, 2);
-            Log::info("--- AI Translation Finished successfully in {$durationTotal}s ---");
-
+            $durationTotal = round(microtime(true) - $startTimeTotal, 2);
             return response()->json(['success' => true, 'count' => count($allTranslatedArray), 'duration' => $durationTotal]);
         } catch (\Exception $e) {
             Log::error("AI Translation Exception: " . $e->getMessage());
-            return response()->json(['success' => false, 'message' => $e->getMessage()]);
+            return response()->json(['success' => false, 'message' => 'Lỗi hệ thống: ' . $e->getMessage()]);
         }
     }
 
@@ -791,7 +776,7 @@ class EbmrDesignerController extends Controller
             Log::info("AI Single Translation: Starting for " . $blocks->count() . " blocks.");
 
             $textsToTranslate = $blocks->pluck('vi_contents')->toArray();
-            
+
             // Filter out empty or whitespace-only strings
             $filteredTexts = [];
             $mapping = [];
@@ -812,26 +797,31 @@ class EbmrDesignerController extends Controller
             Return ONLY a JSON array of strings in the EXACT same order.
             Input: " . json_encode($filteredTexts, JSON_UNESCAPED_UNICODE);
 
-            $ollamaUrl = env('OLLAMA_URL', 'http://localhost:11434');
-            $ollamaModel = env('OLLAMA_MODEL', 'qwen2.5:14b');
-
-            $response = \Illuminate\Support\Facades\Http::timeout(180)->withoutVerifying()
+            $ollamaUrl = env('OLLAMA_URL', 'http://127.0.0.1:11434');
+            $modelName = env('OLLAMA_MODEL', 'qwen2.5');
+            $response = \Illuminate\Support\Facades\Http::timeout(300)->withoutVerifying()
                 ->post("$ollamaUrl/api/generate", [
-                    'model' => $ollamaModel,
+                    'model' => $modelName,
                     'prompt' => $prompt,
-                    'stream' => false,
-                    'format' => 'json'
+                    'format' => 'json',
+                    'stream' => false
                 ]);
 
             if ($response->failed()) {
-                return response()->json(['success' => false, 'message' => 'Ollama Error: ' . $response->body()]);
+                return response()->json(['success' => false, 'message' => 'Lỗi kết nối Ollama AI (qwen2.5).']);
             }
 
             $resData = $response->json();
             $translatedText = $resData['response'] ?? null;
+
+            // Strip markdown blocks if present
+            if ($translatedText) {
+                $translatedText = preg_replace('/^```(?:json)?\s+|\s+```$/', '', trim($translatedText));
+            }
+
             $translatedArray = json_decode($translatedText, true);
 
-            // Find array in response if wrapped
+            // Find array in response if wrapped in a property
             if (is_array($translatedArray) && !isset($translatedArray[0])) {
                 foreach ($translatedArray as $val) {
                     if (is_array($val) && count($val) === count($filteredTexts)) {
@@ -849,7 +839,7 @@ class EbmrDesignerController extends Controller
             foreach ($translatedArray as $i => $translatedValue) {
                 $originalIndex = $mapping[$i];
                 $block = $blocks[$originalIndex];
-                
+
                 DB::table('ebmr_content_blocks')
                     ->where('id', $block->id)
                     ->update([
@@ -862,13 +852,12 @@ class EbmrDesignerController extends Controller
             Log::info("AI Single Translation: Finished in {$duration}s.");
 
             return response()->json([
-                'success' => true, 
+                'success' => true,
                 'count' => count($translatedArray),
                 'translations' => $translatedArray,
                 'mapping' => $mapping,
                 'ids' => $blocks->pluck('id')->toArray()
             ]);
-
         } catch (\Exception $e) {
             Log::error("AI Single Translation Error: " . $e->getMessage());
             return response()->json(['success' => false, 'message' => $e->getMessage()]);

@@ -146,7 +146,7 @@
                     confirmButtonText: 'Lưu',
                     cancelButtonText: 'Hủy'
                 }).then((result) => {
-                    if (result.isConfirmed && result.value) {
+                    if (result.value) {
                         const commentId = 'comment_mark_' + Date.now();
                         
                         // Wrap selection in a highlight span
@@ -198,7 +198,7 @@
                 confirmButtonText: 'Xóa',
                 cancelButtonText: 'Hủy'
             }).then((result) => {
-                if (result.isConfirmed) {
+                if (result.value) {
                     $.post('{{ route('pages.ebmr.deleteComment') }}', {
                         _token: '{{ csrf_token() }}',
                         id: id

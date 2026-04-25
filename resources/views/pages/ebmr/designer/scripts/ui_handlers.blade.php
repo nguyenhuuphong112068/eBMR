@@ -2,10 +2,10 @@
     function selectItem(id, doRender = true) {
         selectedId = id;
         if (doRender) renderBlocks();
-        if (window.isReadOnly) return; 
+        if (window.isReadOnly) return;
 
         const item = items.find(i => i.id === id);
-        
+
         // Update active section context based on selection
         if (item) {
             const newActiveId = (item.type === 'section') ? item.id : item.section_id;
@@ -50,7 +50,7 @@
             }
             return;
         }
-        
+
         if (panel) panel.classList.remove('d-none');
         if (typeof updateRulerForCurrentBlock === 'function') updateRulerForCurrentBlock();
 
@@ -99,9 +99,13 @@
         if (item.type === 'table') {
             html += `
                 <div class="mb-3">
-                    <div class="form-check form-switch mb-3">
+                    <div class="form-check form-switch mb-1">
                         <input class="form-check-input" type="checkbox" id="hideHeaderCheck" ${!item.hideHeader ? 'checked' : ''} onchange="updateItemProp('hideHeader', !this.checked)">
                         <label class="form-check-label small fw-bold" for="hideHeaderCheck">Hiển thị hàng tiêu đề</label>
+                    </div>
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="canAddRowsCheck" ${item.canAddRows ? 'checked' : ''} onchange="updateItemProp('canAddRows', this.checked)">
+                        <label class="form-check-label small fw-bold text-primary" for="canAddRowsCheck"><i class="fas fa-plus-circle me-1"></i>Cho phép thêm dòng (Cấp 2)</label>
                     </div>
 
                     <label class="small fw-bold mb-2">Công cụ Bảng (${item.cols}x${item.rows})</label>
@@ -127,7 +131,26 @@
                         </button>
                     </div>
 
-                    <label class="small fw-bold mt-3 mb-2">Ô đã chọn</label>
+                    <label class="small fw-bold mt-3 mb-2">Cài đặt ô đang chọn</label>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="small text-muted mb-1">Mã ID ô</label>
+                            <input type="text" class="form-control form-control-sm" placeholder="VD: 1, 2" 
+                                   value="${(item.data[activeRowIdx-1] && item.data[activeRowIdx-1][activeColIdx]) ? (item.data[activeRowIdx-1][activeColIdx].cellId || '') : ''}" 
+                                   oninput="updateTableCellProp('${item.id}', ${activeRowIdx-1}, ${activeColIdx}, 'cellId', this.value)">
+                        </div>
+                        <div class="col-6">
+                            <label class="small text-muted mb-1">Giá trị mặc định</label>
+                            <input type="text" class="form-control form-control-sm" placeholder="VD: 4.6" 
+                                   value="${(item.data[activeRowIdx-1] && item.data[activeRowIdx-1][activeColIdx]) ? (item.data[activeRowIdx-1][activeColIdx].defaultValue || '') : ''}" 
+                                   oninput="updateTableCellProp('${item.id}', ${activeRowIdx-1}, ${activeColIdx}, 'defaultValue', this.value); renderBlocks();">
+                        </div>
+                        <div class="col-12 mt-1">
+                            <div class="form-text small" style="font-size: 0.65rem;">Dùng ID này để đặt công thức. Giá trị mặc định sẽ dùng để tính thử.</div>
+                        </div>
+                    </div>
+
+                    <label class="small fw-bold mt-1 mb-2">Công cụ Bảng</label>
                     <div class="btn-group btn-group-sm w-100">
                         <button class="btn btn-outline-primary" id="mergeBtn" onclick="mergeSelectedCells()" title="Gộp các ô đã quét"><i class="fas fa-object-group"></i> Gộp ô</button>
                         <button class="btn btn-outline-primary" id="splitBtn" onclick="openSplitModal()" title="Tách ô chuyên sâu"><i class="fas fa-columns"></i> Tách ô</button>
@@ -187,16 +210,56 @@
         if (item && item.type === 'table') {
             const hInput = document.getElementById('manualHeight');
             const wInput = document.getElementById('manualWidth');
-            if (hInput) hInput.value = (item.rowHeights && item.rowHeights[activeRowIdx-1]) ? item.rowHeights[activeRowIdx-1] : 'auto';
-            if (wInput) wInput.value = (item.columns && item.columns[activeColIdx]) ? item.columns[activeColIdx].width : 'auto';
+            if (hInput) hInput.value = (item.rowHeights && item.rowHeights[activeRowIdx - 1]) ? item.rowHeights[
+                activeRowIdx - 1] : 'auto';
+            if (wInput) wInput.value = (item.columns && item.columns[activeColIdx]) ? item.columns[activeColIdx].width :
+                'auto';
         }
     }
+
+    window.addSpreadsheet = function(rows = 5, cols = 5, insertIndex = null) {
+        const hint = document.getElementById('drop-hint');
+        if (hint) hint.classList.add('d-none');
+
+        saveState();
+        const id = 'blk_' + Date.now();
+
+        let data = [];
+        for (let r = 0; r < rows; r++) {
+            let rowData = [];
+            for (let c = 0; c < cols; c++) rowData.push({
+                v: '',
+                f: ''
+            }); // v: value, f: formula
+            data.push(rowData);
+        }
+
+        let sectionId = window.activeSectionId || null;
+        if (!sectionId && items.length > 0) sectionId = items[items.length - 1].section_id;
+
+        const item = {
+            id: id,
+            type: 'spreadsheet',
+            section_id: sectionId,
+            label: 'Trang tính ' + cols + 'x' + rows,
+            rows: rows,
+            cols: cols,
+            data: data,
+            borderMode: 'visible'
+        };
+
+        if (insertIndex !== null) items.splice(insertIndex, 0, item);
+        else items.push(item);
+
+        renderBlocks();
+        selectItem(id);
+    };
 
     function addItem(type, insertIndex = null, initialTag = null) {
         if (type === 'table') return;
         const hint = document.getElementById('drop-hint');
         if (hint) hint.classList.add('d-none');
-        
+
         const id = 'blk_' + Date.now();
         let defaultContent = '';
         if (initialTag) {
@@ -249,7 +312,7 @@
 
     function addSection() {
         const id = 'blk_section_' + Date.now();
-        
+
         // When adding a new section block, we should ideally know its stage code
         // For now, it will inherit the current section until saved/configured
         const item = {
@@ -305,12 +368,22 @@
         if (type === 'col') item.columns[c].label = val;
         else if (type === 'cell') {
             if (!item.data[r][c] || typeof item.data[r][c] !== 'object') {
-                item.data[r][c] = { content: val, rs: 1, cs: 1, hidden: false };
+                item.data[r][c] = {
+                    content: val,
+                    rs: 1,
+                    cs: 1,
+                    hidden: false
+                };
             } else {
                 item.data[r][c].content = val;
             }
         }
         if (typeof syncLinkedCharts === 'function') syncLinkedCharts(id);
+
+        // Recalculate all formula fields if we are in execution mode
+        if (window.isExecutionMode && typeof recalculateAllFormulas === 'function') {
+            recalculateAllFormulas();
+        }
     }
 
     function updateStaticTextInline(id, val) {
@@ -328,7 +401,7 @@
         }
 
         item.content = (processedVal === '<br>' || processedVal === '') ? '' : processedVal;
-        
+
         // Debounce outline rebuild while typing
         if (window.outlineTimeout) clearTimeout(window.outlineTimeout);
         window.outlineTimeout = setTimeout(() => {
@@ -340,10 +413,10 @@
         // Real-time capitalization of the first letter as you type
         const selection = window.getSelection();
         if (!selection.rangeCount) return;
-        
+
         const range = selection.getRangeAt(0);
         const node = range.startContainer;
-        
+
         // If we're at the very beginning of the editable area
         if (node.nodeType === Node.TEXT_NODE && range.startOffset === 1 && node.textContent.length === 1) {
             const text = node.textContent;
@@ -358,6 +431,240 @@
     };
 
     function formatDoc(command, value = null) {
+        const selection = window.getSelection();
+        const selectedText = selection.toString().trim();
+        const selectedCells = document.querySelectorAll('.selected-cell');
+
+        // Priority 1: If text is selected within a cell/block, use standard execCommand
+        // EXCEPT if it's a command that can be applied to the entire cell (like Bold/Italic)
+        // and we are inside a table cell.
+        const cellCommands = ['bold', 'italic', 'underline', 'strikethrough', 'justifyLeft', 'justifyCenter',
+            'justifyRight', 'justifyFull'
+        ];
+        const selectionNode = selection.anchorNode;
+        const activeCell = selectionNode ? (selectionNode.nodeType === 3 ? selectionNode.parentElement : selectionNode)
+            .closest('.mini-table td') : null;
+
+        if (selectedText.length > 0) {
+            document.execCommand(command, false, value);
+
+            // Force data sync for the active cell/block
+            const editable = activeCell || (selectionNode ? (selectionNode.nodeType === 3 ? selectionNode
+                .parentElement : selectionNode).closest('[contenteditable="true"]') : null);
+            if (editable && editable.oninput) {
+                editable.oninput();
+            }
+            saveStateDebounced();
+            return;
+        }
+
+        // Priority 2: If no text selected but cells are selected, use bulk cell formatting
+        if (selectedCells.length > 0) {
+            saveState();
+            selectedCells.forEach(cell => {
+                const rStr = cell.dataset.row;
+                const cStr = cell.dataset.col;
+                const r = parseInt(rStr);
+                const c = parseInt(cStr);
+
+                const table = cell.closest('.mini-table');
+                const blockItem = table ? table.closest('.block-item') : null;
+                const itemId = blockItem ? blockItem.getAttribute('data-id') : null;
+                const item = items.find(i => i.id === itemId);
+
+                if (item) {
+                    let prop = null;
+                    let val = null;
+                    let domProp = null;
+
+                    if (command === 'bold') {
+                        prop = 'fontWeight';
+                        const currentVal = (r === 0) ?
+                            (item.columns[c].style ? item.columns[c].style.fontWeight : 'normal') :
+                            (item.data[r - 1] && item.data[r - 1][c] && item.data[r - 1][c].fontWeight);
+                        val = (currentVal === 'bold') ? 'normal' : 'bold';
+                        domProp = 'fontWeight';
+                    } else if (command === 'italic') {
+                        prop = 'fontStyle';
+                        const currentVal = (r === 0) ?
+                            (item.columns[c].style ? item.columns[c].style.fontStyle : 'normal') :
+                            (item.data[r - 1] && item.data[r - 1][c] && item.data[r - 1][c].fontStyle);
+                        val = (currentVal === 'italic') ? 'normal' : 'italic';
+                        domProp = 'fontStyle';
+                    } else if (command === 'underline') {
+                        prop = 'textDecoration';
+                        const currentVal = (r === 0) ?
+                            (item.columns[c].style ? item.columns[c].style.textDecoration : 'none') :
+                            (item.data[r - 1] && item.data[r - 1][c] && item.data[r - 1][c].textDecoration);
+                        val = (currentVal === 'underline') ? 'none' : 'underline';
+                        domProp = 'textDecoration';
+                    } else if (command === 'strikethrough') {
+                        prop = 'textDecoration';
+                        const currentVal = (r === 0) ?
+                            (item.columns[c].style ? item.columns[c].style.textDecoration : 'none') :
+                            (item.data[r - 1] && item.data[r - 1][c] && item.data[r - 1][c].textDecoration);
+                        val = (currentVal === 'line-through') ? 'none' : 'line-through';
+                        domProp = 'textDecoration';
+                    } else if (command === 'foreColor') {
+                        prop = 'textColor';
+                        val = value;
+                        domProp = 'color';
+                    } else if (command === 'superscript' || command === 'subscript') {
+                        const tag = command === 'superscript' ? 'sup' : 'sub';
+                        if (r > 0) {
+                            const rIdx = r - 1;
+                            if (item.data && item.data[rIdx] && item.data[rIdx][c] !== undefined) {
+                                if (typeof item.data[rIdx][c] !== 'object') {
+                                    item.data[rIdx][c] = {
+                                        content: item.data[rIdx][c],
+                                        rs: 1,
+                                        cs: 1,
+                                        hidden: false
+                                    };
+                                }
+
+                                const cellData = item.data[rIdx][c];
+                                let content = cellData.content || "";
+
+                                if (content.includes(`<${tag}>`) && content.includes(`</${tag}>`)) {
+                                    const regex = new RegExp(`<\/?${tag}>`, 'g');
+                                    cellData.content = content.replace(regex, '');
+                                } else {
+                                    cellData.content = `<${tag}>${content}</${tag}>`;
+                                }
+                                cell.innerHTML = decorateContent(cellData.content);
+                            }
+                        }
+                    } else if (command === 'justifyLeft') {
+                        prop = 'textAlign';
+                        val = 'left';
+                        domProp = 'textAlign';
+                    } else if (command === 'justifyCenter') {
+                        prop = 'textAlign';
+                        val = 'center';
+                        domProp = 'textAlign';
+                    } else if (command === 'justifyRight') {
+                        prop = 'textAlign';
+                        val = 'right';
+                        domProp = 'textAlign';
+                    } else if (command === 'justifyFull') {
+                        prop = 'textAlign';
+                        val = 'justify';
+                        domProp = 'textAlign';
+                    }
+
+                    if (prop && r > 0) {
+                        const rIdx = r - 1;
+                        if (item.data && item.data[rIdx] && item.data[rIdx][c] !== undefined) {
+                            if (typeof item.data[rIdx][c] !== 'object') {
+                                item.data[rIdx][c] = {
+                                    content: item.data[rIdx][c],
+                                    rs: 1,
+                                    cs: 1,
+                                    hidden: false
+                                };
+                            }
+                            item.data[rIdx][c][prop] = val;
+                        }
+                        if (domProp) cell.style[domProp] = val;
+                    } else if (prop && r === 0) {
+                        if (item.columns && item.columns[c]) {
+                            if (!item.columns[c].style) item.columns[c].style = {};
+                            item.columns[c].style[prop] = val;
+                        }
+                        if (domProp) cell.style[domProp] = val;
+                    }
+                }
+            });
+            saveStateDebounced();
+            return;
+        }
+
+        // Priority 3: If NO multiple cells selected but cursor is in a single table cell and it's a cell command
+        if (activeCell && cellCommands.includes(command)) {
+            const r = parseInt(activeCell.dataset.row);
+            const c = parseInt(activeCell.dataset.col);
+            const table = activeCell.closest('.mini-table');
+            const blockItem = table ? table.closest('.block-item') : null;
+            const itemId = blockItem ? blockItem.getAttribute('data-id') : null;
+            const item = items.find(i => i.id === itemId);
+
+            if (item) {
+                let prop = null;
+                let val = null;
+                let domProp = null;
+
+                const getCellData = () => {
+                    if (r === 0) return {
+                        style: item.columns[c].style || {}
+                    };
+                    const rIdx = r - 1;
+                    if (!item.data[rIdx][c] || typeof item.data[rIdx][c] !== 'object') {
+                        item.data[rIdx][c] = {
+                            content: activeCell.innerHTML,
+                            rs: 1,
+                            cs: 1,
+                            hidden: false
+                        };
+                    }
+                    return item.data[rIdx][c];
+                };
+
+                const cellData = getCellData();
+
+                if (command === 'bold') {
+                    prop = 'fontWeight';
+                    val = (r === 0 ? (cellData.style ? cellData.style.fontWeight : 'normal') : cellData.fontWeight) ===
+                        'bold' ? 'normal' : 'bold';
+                    domProp = 'fontWeight';
+                } else if (command === 'italic') {
+                    prop = 'fontStyle';
+                    val = (r === 0 ? (cellData.style ? cellData.style.fontStyle : 'normal') : cellData.fontStyle) ===
+                        'italic' ? 'normal' : 'italic';
+                    domProp = 'fontStyle';
+                } else if (command === 'underline') {
+                    prop = 'textDecoration';
+                    val = (r === 0 ? (cellData.style ? cellData.style.textDecoration : 'none') : cellData
+                        .textDecoration) === 'underline' ? 'none' : 'underline';
+                    domProp = 'textDecoration';
+                } else if (command === 'strikethrough') {
+                    prop = 'textDecoration';
+                    val = (r === 0 ? (cellData.style ? cellData.style.textDecoration : 'none') : cellData
+                        .textDecoration) === 'line-through' ? 'none' : 'line-through';
+                    domProp = 'textDecoration';
+                } else if (command === 'justifyLeft') {
+                    prop = 'textAlign';
+                    val = 'left';
+                    domProp = 'textAlign';
+                } else if (command === 'justifyCenter') {
+                    prop = 'textAlign';
+                    val = 'center';
+                    domProp = 'textAlign';
+                } else if (command === 'justifyRight') {
+                    prop = 'textAlign';
+                    val = 'right';
+                    domProp = 'textAlign';
+                } else if (command === 'justifyFull') {
+                    prop = 'textAlign';
+                    val = 'justify';
+                    domProp = 'textAlign';
+                }
+
+                if (prop) {
+                    if (r === 0) {
+                        if (!item.columns[c].style) item.columns[c].style = {};
+                        item.columns[c].style[prop] = val;
+                    } else {
+                        item.data[r - 1][c][prop] = val;
+                    }
+                    if (domProp) activeCell.style[domProp] = val;
+                    saveStateDebounced();
+                    return;
+                }
+            }
+        }
+
+        // Fallback for simple cursor focus (no selection)
         document.execCommand(command, false, value);
         saveStateDebounced();
     }
@@ -368,10 +675,10 @@
         if (!target) return;
 
         e.preventDefault();
-        
+
         // Get plain text from clipboard
         let text = (e.clipboardData || window.clipboardData).getData('text');
-        
+
         // Logic: Replace single newlines with a space (reflow), but keep double newlines (paragraphs)
         // 1. Normalize line endings
         text = text.replace(/\r\n/g, '\n');
@@ -390,21 +697,30 @@
 
     function getThemeColorsHTML(callbackName) {
         const colors = [
-            '#000000', '#434343', '#666666', '#999999', '#b7b7b7', '#cccccc', '#d9d9d9', '#efefef', '#f3f3f3', '#ffffff',
-            '#980000', '#ff0000', '#ff9900', '#ffff00', '#00ff00', '#00ffff', '#4a86e8', '#0000ff', '#9900ff', '#ff00ff',
-            '#e6b8af', '#f4cccc', '#fce5cd', '#fff2cc', '#d9ead3', '#d0e0e3', '#c9daf8', '#cfe2f3', '#d9d2e9', '#ead1dc',
-            '#dd7e6b', '#ea9999', '#f9cb9c', '#ffe599', '#b6d7a8', '#a2c4c9', '#a4c2f4', '#9fc5e8', '#b4a7d6', '#d5a6bd',
-            '#cc4125', '#e06666', '#f6b26b', '#ffd966', '#93c47d', '#76a5af', '#6d9eeb', '#6fa8dc', '#8e7cc3', '#c27ba0',
-            '#a61c00', '#cc0000', '#e69138', '#f1c232', '#6aa84f', '#45818e', '#3c78d8', '#3d85c6', '#674ea7', '#a64d79',
-            '#85200c', '#990000', '#b45f06', '#bf9000', '#38761d', '#134f5c', '#1155cc', '#0b5394', '#351c75', '#741b47',
-            '#5b0f00', '#660000', '#783f04', '#7f6000', '#274e13', '#0c343d', '#1c4587', '#073763', '#20124d', '#4c1130'
+            '#000000', '#434343', '#666666', '#999999', '#b7b7b7', '#cccccc', '#d9d9d9', '#efefef', '#f3f3f3',
+            '#ffffff',
+            '#980000', '#ff0000', '#ff9900', '#ffff00', '#00ff00', '#00ffff', '#4a86e8', '#0000ff', '#9900ff',
+            '#ff00ff',
+            '#e6b8af', '#f4cccc', '#fce5cd', '#fff2cc', '#d9ead3', '#d0e0e3', '#c9daf8', '#cfe2f3', '#d9d2e9',
+            '#ead1dc',
+            '#dd7e6b', '#ea9999', '#f9cb9c', '#ffe599', '#b6d7a8', '#a2c4c9', '#a4c2f4', '#9fc5e8', '#b4a7d6',
+            '#d5a6bd',
+            '#cc4125', '#e06666', '#f6b26b', '#ffd966', '#93c47d', '#76a5af', '#6d9eeb', '#6fa8dc', '#8e7cc3',
+            '#c27ba0',
+            '#a61c00', '#cc0000', '#e69138', '#f1c232', '#6aa84f', '#45818e', '#3c78d8', '#3d85c6', '#674ea7',
+            '#a64d79',
+            '#85200c', '#990000', '#b45f06', '#bf9000', '#38761d', '#134f5c', '#1155cc', '#0b5394', '#351c75',
+            '#741b47',
+            '#5b0f00', '#660000', '#783f04', '#7f6000', '#274e13', '#0c343d', '#1c4587', '#073763', '#20124d',
+            '#4c1130'
         ];
-        
+
         let html = '<div class="d-flex flex-wrap gap-1" style="width: 240px; justify-content: space-between;">';
         colors.forEach(c => {
             const isLight = c === '#ffffff' || c === '#efefef' || c === '#f3f3f3';
             const cls = isLight ? 'color-swatch light-color' : 'color-swatch';
-            html += `<div class="${cls}" style="background-color: ${c};" onclick="${callbackName}('${c}')" onmousedown="event.preventDefault()"></div>`;
+            html +=
+                `<div class="${cls}" style="background-color: ${c};" onclick="${callbackName}('${c}')" onmousedown="event.preventDefault()"></div>`;
         });
         html += '</div>';
         return html;
@@ -427,7 +743,7 @@
                 const cStr = cell.dataset.col;
                 const r = parseInt(rStr);
                 const c = parseInt(cStr);
-                
+
                 const table = cell.closest('.mini-table');
                 const blockItem = table ? table.closest('.block-item') : null;
                 const itemId = blockItem ? blockItem.getAttribute('data-id') : null;
@@ -443,7 +759,12 @@
                         const rIdx = r - 1;
                         if (item.data && item.data[rIdx] && item.data[rIdx][c]) {
                             if (typeof item.data[rIdx][c] !== 'object') {
-                                item.data[rIdx][c] = { content: item.data[rIdx][c], rs:1, cs:1, hidden:false };
+                                item.data[rIdx][c] = {
+                                    content: item.data[rIdx][c],
+                                    rs: 1,
+                                    cs: 1,
+                                    hidden: false
+                                };
                             }
                             item.data[rIdx][c].textColor = color;
                         }
@@ -460,6 +781,7 @@
     };
 
     let savedTextSelection = null;
+
     function saveCurrentSelection() {
         const sel = window.getSelection();
         if (sel.rangeCount > 0) {
@@ -479,7 +801,7 @@
 
     function applyCustomFontSize(pt) {
         if (!pt) return;
-        
+
         const display = document.getElementById('fontSizeDisplay');
         if (display) display.innerText = pt;
 
@@ -491,7 +813,7 @@
                 const cStr = cell.dataset.col;
                 const r = parseInt(rStr);
                 const c = parseInt(cStr);
-                
+
                 const table = cell.closest('.mini-table');
                 const blockItem = table ? table.closest('.block-item') : null;
                 const itemId = blockItem ? blockItem.getAttribute('data-id') : null;
@@ -507,7 +829,12 @@
                         const rIdx = r - 1;
                         if (item.data && item.data[rIdx] && item.data[rIdx][c]) {
                             if (typeof item.data[rIdx][c] !== 'object') {
-                                item.data[rIdx][c] = { content: item.data[rIdx][c], rs:1, cs:1, hidden:false };
+                                item.data[rIdx][c] = {
+                                    content: item.data[rIdx][c],
+                                    rs: 1,
+                                    cs: 1,
+                                    hidden: false
+                                };
                             }
                             item.data[rIdx][c].fontSize = pt + 'pt';
                         }
@@ -528,14 +855,14 @@
         }
 
         document.execCommand('fontSize', false, '7');
-        
+
         const fonts = document.querySelectorAll('font[size="7"]');
         for (let i = 0; i < fonts.length; i++) {
             const font = fonts[i];
             font.removeAttribute('size');
             font.style.fontSize = pt + 'pt';
         }
-        
+
         if (typeof saveStateDebounced === 'function') saveStateDebounced();
     }
 
@@ -553,7 +880,7 @@
     window.openSearchModal = function(isReplace = false) {
         const sel = window.getSelection();
         const selectedText = sel.toString().trim();
-        
+
         const findInput = document.getElementById('findInput');
         if (selectedText) {
             findInput.value = selectedText;
@@ -565,8 +892,10 @@
         // Switch to correct tab
         if (isReplace) {
             $('#replace-tab').tab('show');
+            if (typeof updateSearchButtons === 'function') updateSearchButtons(true);
         } else {
             $('#find-tab').tab('show');
+            if (typeof updateSearchButtons === 'function') updateSearchButtons(false);
         }
 
         setTimeout(() => findInput.focus(), 500);
@@ -576,10 +905,10 @@
     window.executeSearch = function(silent = false) {
         const term = document.getElementById('findInput').value;
         if (!term) return;
-        
+
         // Use window.find(aString, aCaseSensitive, aBackwards, aWrapAround, aWholeWord, aSearchInFrames, aShowDialog);
         const found = window.find(term, false, false, true, false, true, false);
-        
+
         if (!found) {
             // Reset to top and search again
             window.getSelection().removeAllRanges();
@@ -602,7 +931,7 @@
 
         const sel = window.getSelection();
         const selectedText = sel.toString().trim().toLowerCase();
-        
+
         if (selectedText === findTerm.trim().toLowerCase()) {
             document.execCommand('insertText', false, replaceTerm);
             saveStateDebounced();
@@ -619,22 +948,24 @@
 
         saveState();
         let count = 0;
-        window.getSelection().removeAllRanges();
-        
-        // Move to start
+
+        // Move to start of the editor to begin a clean forward search
         const editor = document.getElementById('editor-content');
+        window.getSelection().removeAllRanges();
         const range = document.createRange();
         range.setStart(editor, 0);
         range.collapse(true);
         window.getSelection().addRange(range);
 
-        while (window.find(findTerm, false, false, true, false, true, false)) {
+        // IMPORTANT: aWrapAround MUST be false here to prevent finding the search term inside 
+        // the newly replaced text and causing an infinite loop.
+        while (window.find(findTerm, false, false, false, false, true, false)) {
             document.execCommand('insertText', false, replaceTerm);
             count++;
-            // Prevent infinite loop if something goes wrong
-            if (count > 1000) break;
+            // Safety break
+            if (count > 5000) break;
         }
-        
+
         if (count > 0) {
             saveStateDebounced();
             toastr.success(`Đã thay thế ${count} vị trí`);
@@ -661,16 +992,21 @@
             const cells = document.querySelectorAll('.selected-cell');
             if (cells.length > 0) {
                 cells.forEach(c => {
-                    const r = parseInt(c.dataset.row) - 1; 
+                    const r = parseInt(c.dataset.row) - 1;
                     const col = parseInt(c.dataset.col);
-                    
+
                     if (r === -1) {
                         if (!item.columns[col].style) item.columns[col].style = {};
                         item.columns[col].style.backgroundColor = color;
                         c.style.backgroundColor = color;
                     } else {
                         if (!item.data[r][col] || typeof item.data[r][col] !== 'object') {
-                            item.data[r][col] = { content: item.data[r][col] || '', rs: 1, cs: 1, hidden: false };
+                            item.data[r][col] = {
+                                content: item.data[r][col] || '',
+                                rs: 1,
+                                cs: 1,
+                                hidden: false
+                            };
                         }
                         item.data[r][col].backgroundColor = color;
                         c.style.backgroundColor = color;
@@ -701,7 +1037,7 @@
         const markerRight = document.getElementById('ruler-marker-right');
         const marginL = document.getElementById('ruler-margin-left');
         const marginR = document.getElementById('ruler-margin-right');
-        
+
         if (!ruler || !markerLeft || !markerRight) return;
 
         function onMouseDown(e, type) {
@@ -713,7 +1049,7 @@
             currentMarker = type;
             startX = e.clientX;
             rulerWidth = ruler.offsetWidth;
-            
+
             if (type === 'left') {
                 startLeft = parseFloat(markerLeft.style.left) || 48;
             } else {
@@ -728,7 +1064,7 @@
 
         document.addEventListener('mousemove', (e) => {
             if (!isDraggingRuler) return;
-            
+
             const deltaX = e.clientX - startX;
             const activeBlock = document.querySelector('.block-item.active');
             if (!activeBlock) return;
@@ -738,7 +1074,7 @@
                 newPos = startLeft + deltaX;
                 if (newPos < 0) newPos = 0;
                 if (newPos > rulerWidth / 2) newPos = rulerWidth / 2;
-                
+
                 markerLeft.style.left = newPos + 'px';
                 marginL.style.width = newPos + 'px';
                 activeBlock.style.marginLeft = (newPos - 48) + 'px';
@@ -746,7 +1082,7 @@
                 newPos = startLeft - deltaX;
                 if (newPos < 0) newPos = 0;
                 if (newPos > rulerWidth / 2) newPos = rulerWidth / 2;
-                
+
                 markerRight.style.right = newPos + 'px';
                 marginR.style.width = newPos + 'px';
                 activeBlock.style.marginRight = (newPos - 48) + 'px';
@@ -757,7 +1093,7 @@
             if (isDraggingRuler) {
                 isDraggingRuler = false;
                 document.body.style.cursor = 'default';
-                
+
                 if (selectedId) {
                     const item = items.find(i => i.id === selectedId);
                     if (item) {
@@ -778,9 +1114,9 @@
         const markerRight = document.getElementById('ruler-marker-right');
         const marginL = document.getElementById('ruler-margin-left');
         const marginR = document.getElementById('ruler-margin-right');
-        
+
         if (!markerLeft) return;
-        
+
         const item = items.find(i => i.id === selectedId);
         let leftPx = 40; // matching padding 40px
         let rightPx = 40;
@@ -851,7 +1187,7 @@
 
     function updateCanvasWidth() {
         const canvas = document.getElementById('canvas-col');
-        
+
         if (isOutlineMinimized && isSidebarMinimized) {
             canvas.className = 'col-lg-10 transition-all';
         } else if (isOutlineMinimized) {
@@ -866,7 +1202,7 @@
     // Smart Signature Handler
     function handleSignatureClick() {
         let targetRange = null;
-        
+
         // Try saved text selection first (if we have one)
         if (savedTextSelection) {
             targetRange = savedTextSelection;
@@ -877,18 +1213,18 @@
                 targetRange = sel.getRangeAt(0);
             }
         }
-        
+
         if (targetRange) {
             let node = targetRange.startContainer;
             if (node.nodeType === 3) node = node.parentNode;
-            
+
             if (node && node.closest && node.closest('[contenteditable="true"]')) {
                 // If cursor is inside a table cell or a text block, insert an inline signature tag instead of a block
                 insertDynamicField('signature');
                 return;
             }
         }
-        
+
         // Default behavior: create a new Signature Block at the root level
         if (typeof addItem === 'function') {
             addItem('signature');
@@ -897,48 +1233,107 @@
 
     // Dynamic Fields Data Handling
 
+    function updateTableCellProp(itemId, r, c, prop, val) {
+        const item = items.find(i => i.id === itemId);
+        if (!item) return;
+
+        const selectedCells = Array.from(document.querySelectorAll('.selected-cell'))
+            .filter(cell => cell.closest('.block-item').getAttribute('data-id') === itemId);
+
+        if (selectedCells.length > 1) {
+            saveStateDebounced();
+            selectedCells.forEach(cell => {
+                const row = parseInt(cell.dataset.row);
+                const col = parseInt(cell.dataset.col);
+                if (row > 0) {
+                    const rIdx = row - 1;
+                    if (!item.data[rIdx] || !item.data[rIdx][col] || typeof item.data[rIdx][col] !== 'object') {
+                        item.data[rIdx][col] = {
+                            content: item.data[rIdx][col] || '',
+                            rs: 1,
+                            cs: 1,
+                            hidden: false
+                        };
+                    }
+                    item.data[rIdx][col][prop] = val;
+                }
+            });
+        } else if (item.data && item.data[r] && item.data[r][c] !== undefined) {
+            if (typeof item.data[r][c] !== 'object') {
+                item.data[r][c] = { content: item.data[r][c], rs: 1, cs: 1, hidden: false };
+            }
+            item.data[r][c][prop] = val;
+            saveStateDebounced();
+        }
+    }
+
     function selectField(event, fieldId) {
-        if (event) event.stopPropagation(); // Prevents triggering block selection
-        
+        if (event) event.stopPropagation();
+
         selectedFieldId = fieldId;
-        selectedId = null; // Clear block selection
-        
-        // Remove active class from blocks
+        selectedId = null;
+
         document.querySelectorAll('.block-item').forEach(el => el.classList.remove('active'));
-        
+
         const field = fieldsConfig[fieldId];
         if (!field) return;
 
-        // Ensure validation object exists to prevent crashes
         if (!field.validation) {
-            field.validation = { required: false, min: null, max: null, decimal_places: null };
+            field.validation = {
+                required: false,
+                min: null,
+                max: null,
+                decimal_places: null
+            };
         }
 
         const panel = document.getElementById('property-panel');
         const body = document.getElementById('prop-body');
-        
+
         if (panel) {
             panel.classList.remove('d-none');
-            // If sidebar is hidden, open it
-            if (isSidebarMinimized) {
-                toggleSidebar(false);
-            }
+            if (isSidebarMinimized) toggleSidebar(false);
         }
 
         let typeHtml = `
             <div class="mb-3">
-                <label class="small fw-bold mb-2">Biến số Hệ thống</label>
-                <div class="alert alert-warning py-2 mb-2 small">
-                    <i class="fas fa-info-circle me-1"></i> Đây là trường dữ liệu động để thu thập thông tin trong quá trình sản xuất.
-                </div>
+                <label class="small fw-bold mb-2">Loại dữ liệu</label>
+                <select class="form-select form-select-sm" onchange="syncFieldConfig('${fieldId}', 'type', this.value)">
+                    <option value="text" ${field.type === 'text' ? 'selected' : ''}>Văn bản tự do</option>
+                    <option value="number" ${field.type === 'number' ? 'selected' : ''}>Số liệu (Tính toán)</option>
+                    <option value="formula" ${field.type === 'formula' ? 'selected' : ''}>Công thức tự động (=)</option>
+                    <option value="date" ${field.type === 'date' ? 'selected' : ''}>Ngày tháng</option>
+                    <option value="signature" ${field.type === 'signature' ? 'selected' : ''}>Chữ ký điện tử</option>
+                </select>
             </div>
+        `;
+
+        if (field.type === 'formula') {
+            typeHtml += `
+                <div class="mb-3">
+                    <label class="small fw-bold text-primary mb-1"><i class="fas fa-calculator me-1"></i>Công thức tính</label>
+                    <input type="text" class="form-control form-control-sm border-primary" value="${field.formula || ''}" 
+                           placeholder="VD: (2)/(1)*100" 
+                           oninput="syncFieldConfig('${fieldId}', 'formula', this.value)">
+                    <div class="form-text small" style="font-size: 0.65rem;">Sử dụng Mã ID ô trong ngoặc đơn. VD: (kl_tong) + (kl_le)</div>
+                </div>
+            `;
+        }
+
+        typeHtml += `
             <div class="mb-3">
                 <label class="small fw-bold text-muted text-uppercase mb-2">Tên thẻ (Nhãn hiển thị)</label>
                 <input type="text" class="form-control form-control-sm" value="${field.label || ''}" oninput="syncFieldConfig('${fieldId}', 'label', this.value)">
                 <div class="form-text small" style="font-size: 0.7rem;">Hiển thị ngắn gọn cho người dùng. VD: Khối lượng (g).</div>
             </div>
+
+            <div class="mb-3">
+                <label class="small fw-bold text-muted text-uppercase mb-2">Giá trị mặc định (Dùng chạy thử)</label>
+                <input type="text" class="form-control form-control-sm" value="${field.defaultValue || ''}" placeholder="VD: 4.6" oninput="syncFieldConfig('${fieldId}', 'defaultValue', this.value); recalculateAllFormulas();">
+                <div class="form-text small" style="font-size: 0.7rem;">Giá trị này sẽ dùng để tính toán các công thức liên quan ngay trong trình thiết kế.</div>
+            </div>
             
-            @if(session('user') && session('user')['userGroup'] === 'Admin')
+            @if (session('user') && session('user')['userGroup'] === 'Admin')
             <div class="mb-3">
                 <label class="small fw-bold text-muted text-uppercase mb-2 text-danger"><i class="fas fa-tools me-1"></i>Tên biến (Machine-readable)</label>
                 <div class="input-group input-group-sm">
@@ -951,18 +1346,6 @@
 
             <hr class="my-3">
 
-            <div class="mb-3">
-                <label class="small fw-bold text-muted text-uppercase mb-2">Kiểu dữ liệu</label>
-                <select class="form-select form-select-sm" onchange="syncFieldConfig('${fieldId}', 'type', this.value)">
-                    <option value="text" ${field.type === 'text' ? 'selected' : ''}>✒️ Văn bản (Text)</option>
-                    <option value="number" ${field.type === 'number' ? 'selected' : ''}>🔢 Số (Number)</option>
-                    <option value="date" ${field.type === 'date' ? 'selected' : ''}>📅 Ngày tháng (Date)</option>
-                    <option value="select" ${field.type === 'select' ? 'selected' : ''}>🔘 Khóa chọn (Dropdown)</option>
-                    <option value="signature" ${field.type === 'signature' ? 'selected' : ''}>✍️ Chữ ký (Signature)</option>
-                    <option value="checkbox" ${field.type === 'checkbox' ? 'selected' : ''}>☑️ Hộp kiểm tra (Checkbox)</option>
-                </select>
-            </div>
-            
             <div class="mb-3">
                 <div class="form-check form-switch ps-4 pt-1">
                     <input class="form-check-input ms-n4" type="checkbox" id="fieldRequired" ${field.validation.required ? 'checked' : ''} onchange="syncFieldConfig('${fieldId}', 'validation.required', this.checked)">
@@ -1002,7 +1385,7 @@
                 </div>
             `;
         }
-        
+
         typeHtml += `
             <div class="mt-4 text-center">
                 <button class="btn btn-sm btn-outline-danger w-100" onclick="deleteDynamicField('${fieldId}')"><i class="fas fa-trash-alt me-1"></i> Xóa biến số</button>
@@ -1014,11 +1397,11 @@
 
     function syncFieldConfig(fieldId, path, value) {
         if (!fieldsConfig[fieldId]) return;
-        
+
         let target = fieldsConfig[fieldId];
         const keys = path.split('.');
         const lastKey = keys.pop();
-        
+
         // Traverse path to deeply update
         for (let key of keys) {
             if (!target[key]) target[key] = {};
@@ -1034,7 +1417,7 @@
         }
 
         target[lastKey] = value;
-        
+
         // If label changes, update the DOM badge immediately
         if (path === 'label') {
             const el = document.querySelector(`.ebmr-field-badge[data-field-id="${fieldId}"]`);
@@ -1042,10 +1425,10 @@
         } else if (path === 'type') {
             selectField(null, fieldId); // Re-render panel
         }
-        
+
         saveStateDebounced();
     }
-    
+
     function deleteDynamicField(fieldId) {
         // Find which item/cell this field belongs to
         let found = false;
@@ -1053,7 +1436,8 @@
             if (item.type === 'table' && item.data) {
                 item.data.forEach((row, r) => {
                     row.forEach((cell, c) => {
-                        if (cell.content && cell.content.includes(`data-field-id="${fieldId}"`)) {
+                        if (cell.content && cell.content.includes(
+                                `data-field-id="${fieldId}"`)) {
                             cell.content = ''; // Clear cell content
                             found = true;
                         }
@@ -1070,6 +1454,7 @@
 
     // --- Linked Template (GF) Logic ---
     let allGfs = [];
+
     function openLinkGfModal() {
         if (window.bootstrap) {
             const modal = new bootstrap.Modal(document.getElementById('linkGfModal'));
@@ -1122,7 +1507,7 @@
     function insertLinkedGf(templateId, templateName) {
         const hint = document.getElementById('drop-hint');
         if (hint) hint.classList.add('d-none');
-        
+
         const id = 'blk_' + Date.now();
         const item = {
             id: id,
@@ -1135,7 +1520,7 @@
         };
         items.push(item);
         renderBlocks();
-        
+
         const modalEl = document.getElementById('linkGfModal');
         if (modalEl && window.bootstrap) {
             const modal = bootstrap.Modal.getInstance(modalEl);
@@ -1190,17 +1575,19 @@
                     </table>
                 </div>`;
             } else if (b.type === 'signature') {
-                html += `<div class="mb-2 p-1 border rounded bg-light small text-muted"><i class="fas fa-signature me-1"></i> [Chữ ký: ${b.label || ''}]</div>`;
+                html +=
+                    `<div class="mb-2 p-1 border rounded bg-light small text-muted"><i class="fas fa-signature me-1"></i> [Chữ ký: ${b.label || ''}]</div>`;
             } else {
                 html += `<div class="mb-2 small text-muted">[Khối: ${b.type}]</div>`;
             }
         });
         container.innerHTML = html;
     }
+
     function toggleViewMode() {
         const currentSection = '{{ $activeSectionId ?? '' }}';
         const templateId = '{{ $template->id }}';
-        
+
         if (currentSection) {
             // Currently in a section, toggle to VIEW ALL
             // Store current section so we can come back
@@ -1209,13 +1596,13 @@
         } else {
             // Currently in VIEW ALL, toggle back to LAST section or first one
             let lastSection = localStorage.getItem('ebmr_last_section_' + templateId);
-            
+
             // If no last section, try to find the first section ID from the items
             if (!lastSection && typeof items !== 'undefined' && items.length > 0) {
                 const firstBlock = items.find(i => i.section_id);
                 if (firstBlock) lastSection = firstBlock.section_id;
             }
-            
+
             if (lastSection) {
                 window.location.href = '{{ route('pages.ebmr.designer', $template->id) }}?section=' + lastSection;
             } else {
@@ -1237,13 +1624,14 @@
         // 1. Get Style from current cursor position or selection
         const selection = window.getSelection();
         let targetEl = null;
-        
+
         if (selection.rangeCount > 0) {
             // Even if no text is selected, anchorNode tells us where the cursor is
             targetEl = selection.anchorNode.nodeType === 3 ? selection.anchorNode.parentElement : selection.anchorNode;
         }
 
-        if (targetEl && (targetEl.closest('[contenteditable="true"]') || targetEl.getAttribute('contenteditable') === 'true')) {
+        if (targetEl && (targetEl.closest('[contenteditable="true"]') || targetEl.getAttribute('contenteditable') ===
+                'true')) {
             const styles = window.getComputedStyle(targetEl);
             storedFormat = {
                 type: 'text',
@@ -1283,7 +1671,7 @@
             btn.style.color = '#1a73e8';
         }
         document.body.style.cursor = 'copy'; // Visual indicator
-        
+
         // Use a persistent listener for the next interaction
         // We listen for mouseup to detect the "highlight" (selection) completion
         document.addEventListener('mouseup', handlePainterMouseUp);
@@ -1302,7 +1690,7 @@
 
     function handlePainterMouseUp(e) {
         if (!isFormatPainterActive || !storedFormat) return;
-        
+
         // Ignore if clicking the painter button itself or toolbar
         if (e.target.closest('.editor-toolbar')) {
             if (!e.target.closest('#btn-format-painter')) disableFormatPainter();
@@ -1314,17 +1702,17 @@
 
         if (storedFormat.type === 'text' && selectedText.length > 0) {
             // User has highlighted text, apply styles!
-            
+
             // Note: execCommand is a bit temperamental with "forcing" styles.
             // We use a small delay to ensure the selection is finalized.
             setTimeout(() => {
                 if (storedFormat.bold) document.execCommand('bold', false, null);
                 if (storedFormat.italic) document.execCommand('italic', false, null);
                 if (storedFormat.underline) document.execCommand('underline', false, null);
-                
+
                 // For font size and color, we apply them directly
                 if (storedFormat.color) document.execCommand('foreColor', false, storedFormat.color);
-                
+
                 disableFormatPainter();
                 saveStateDebounced();
             }, 10);
@@ -1375,7 +1763,9 @@
                 contentId = item.data[r][c].db_id;
             }
             if (!contentId) {
-                Swal.fire('Lưu ý', 'Không tìm thấy dữ liệu gốc để dịch ô này. Vui lòng nhấn LƯU HỒ SƠ trước khi dịch.', 'warning');
+                Swal.fire('Lưu ý',
+                    'Không tìm thấy dữ liệu gốc để dịch ô này. Vui lòng nhấn LƯU HỒ SƠ trước khi dịch.',
+                    'warning');
                 return;
             }
         } else {
@@ -1413,7 +1803,7 @@
                     timer: 2000,
                     showConfirmButton: false
                 });
-                
+
                 // If we are currently in English or Dual mode, we might want to refresh the UI
                 // But since the DB updated, a reload or re-fetching might be needed.
                 // For now, we just notify.

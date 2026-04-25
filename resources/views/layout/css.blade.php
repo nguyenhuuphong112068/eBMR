@@ -24,6 +24,10 @@
       <link rel="stylesheet" href="{{asset ('dataTable/plugins/select2-bootstrap4-theme/select2-bootstrap4.min.css')}}">
       <!-- Bootstrap4 Duallistbox -->
       <link rel="stylesheet" href="{{asset ('dataTable/plugins/bootstrap4-duallistbox/bootstrap-duallistbox.min.css')}}">
+      <!-- Toastr -->
+      <link rel="stylesheet" href="{{asset ('dataTable/plugins/toastr/toastr.min.css')}}">
+      <!-- SweetAlert2 -->
+      <link rel="stylesheet" href="{{asset ('dataTable/plugins/sweetalert2-theme-bootstrap-4/bootstrap-4.min.css')}}">
 
       <link href="{{ asset('css/bootstrap.min.css') }}" rel="stylesheet">
       

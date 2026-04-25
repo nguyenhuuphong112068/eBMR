@@ -29,6 +29,11 @@
         <script src="{{ asset('dataTable/plugins/chart.js/Chart.min.js') }}"></script>
         <script src="{{ asset('dataTable/dist/js/demo.js') }}?v={{ filemtime(public_path('dataTable/dist/js/demo.js')) }}"></script>
         <script src="{{ asset('dataTable/dist/js/pages/dashboard3.js') }}?v={{ filemtime(public_path('dataTable/dist/js/pages/dashboard3.js')) }}"></script>
+        
+        <!-- Toastr -->
+        <script src="{{ asset('dataTable/plugins/toastr/toastr.min.js') }}"></script>
+        <!-- SweetAlert2 -->
+        <script src="{{ asset('dataTable/plugins/sweetalert2/sweetalert2.min.js') }}"></script>
 
         <!-- DataTables JS (Local) -->
         <script src="{{ asset('dataTable/plugins/datatables/jquery.dataTables.min.js') }}"></script>  
