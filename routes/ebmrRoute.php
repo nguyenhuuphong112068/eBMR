@@ -1,10 +1,10 @@
 <?php
 
-use App\Http\Controllers\EbmrTemplateController;
-use App\Http\Controllers\EbmrDesignerController;
 use App\Http\Controllers\EbmrApprovalController;
-use App\Http\Controllers\EbmrIssuanceController;
+use App\Http\Controllers\EbmrDesignerController;
 use App\Http\Controllers\EbmrExecutionController;
+use App\Http\Controllers\EbmrIssuanceController;
+use App\Http\Controllers\EbmrTemplateController;
 use Illuminate\Support\Facades\Route;
 
 Route::group(['prefix' => 'ebmr', 'as' => 'pages.ebmr.'], function () {
@@ -24,7 +24,6 @@ Route::group(['prefix' => 'ebmr', 'as' => 'pages.ebmr.'], function () {
     Route::post('/delete-comment', [EbmrDesignerController::class, 'deleteComment'])->name('deleteComment');
     Route::post('/translate', [EbmrDesignerController::class, 'aiTranslate'])->name('aiTranslate');
     Route::post('/translate-single', [EbmrDesignerController::class, 'aiTranslateSingle'])->name('aiTranslateSingle');
-
 
     // 3. Workflow & Approvals
     Route::get('/approvals', [EbmrApprovalController::class, 'index'])->name('approvals');

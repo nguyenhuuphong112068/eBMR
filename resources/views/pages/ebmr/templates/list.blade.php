@@ -50,9 +50,10 @@
                                                 <td>
                                                     <div class="d-flex flex-wrap gap-1">
                                                         @forelse($t->sections as $s)
-                                                            <button class="btn btn-xs btn-outline-info rounded-pill py-0 px-2" 
-                                                                    style="font-size: 0.7rem;"
-                                                                    onclick="window.location.href='{{ route('pages.ebmr.designer', $t->id) }}?section={{ $s['id'] }}'">
+                                                            <button
+                                                                class="btn btn-xs btn-outline-info rounded-pill py-0 px-2"
+                                                                style="font-size: 0.7rem;"
+                                                                onclick="window.location.href='{{ route('pages.ebmr.designer', $t->id) }}?section={{ $s['id'] }}'">
                                                                 {{ $s['label'] }}
                                                             </button>
                                                         @empty
@@ -71,7 +72,8 @@
                                                 </td>
                                                 <td><i class="fas fa-user-circle me-1 text-muted"></i>
                                                     {{ $t->owner_name ?? 'N/A' }}</td>
-                                                <td>{{ $t->issued_date ? \Carbon\Carbon::parse($t->issued_date)->format('d/m/Y') : '-' }}</td>
+                                                <td>{{ $t->issued_date ? \Carbon\Carbon::parse($t->issued_date)->format('d/m/Y') : '-' }}
+                                                </td>
                                                 <td class="text-center">
                                                     <div class="btn-group shadow-sm rounded-pill overflow-hidden">
                                                         <a href="{{ route('pages.ebmr.designer', $t->id) }}"
@@ -108,7 +110,7 @@
                 <div class="modal-content border-0 shadow-lg">
                     <div class="modal-header bg-primary text-white">
                         <h5 class="modal-title font-weight-bold">
-                            <i class="fas fa-list me-2"></i> 
+                            <i class="fas fa-list me-2"></i>
                             {{ $current_type == 'GF' ? 'Danh Mục Biểu Mẫu Dùng Chung' : ($current_type == 'MF' ? 'Danh Mục Biểu Mẫu Gốc' : ($current_type == 'BPR' ? 'Danh Mục Thành Phẩm (BPR)' : 'Danh Mục Bán Thành Phẩm (BMR)')) }}
                         </h5>
                         <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
@@ -119,7 +121,7 @@
                         <div class="table-responsive">
                             <table id="btpSelectionTable" class="table table-hover align-middle w-100">
                                 <thead class="bg-light">
-                                    @if($current_type == 'GF')
+                                    @if ($current_type == 'GF')
                                         <tr>
                                             <th>Mã Biểu Mẫu</th>
                                             <th>Tên Biểu Mẫu</th>
@@ -152,7 +154,7 @@
                                 </thead>
                                 <tbody>
                                     @foreach ($category_items as $item)
-                                        @if($current_type == 'GF')
+                                        @if ($current_type == 'GF')
                                             <tr>
                                                 <td class="fw-bold text-primary">{{ $item->code }}</td>
                                                 <td>{{ $item->name }}</td>
@@ -278,25 +280,27 @@
                             </div>
 
                             <div id="sectionsChecklistContainer" class="mt-2" style="display: none;">
-                                <label class="form-label fw-bold text-navy mb-2"><i class="fas fa-list-check me-2"></i>Chọn các công đoạn (Sections) muốn tạo:</label>
+                                <label class="form-label fw-bold text-navy mb-2"><i
+                                        class="fas fa-list-check me-2"></i>Chọn các công đoạn (Sections) muốn tạo:</label>
                                 <div class="p-3 bg-light rounded border border-info-subtle">
                                     <div class="row" id="sectionsChecklist">
-                                        @foreach($all_sections as $sec)
+                                        @foreach ($all_sections as $sec)
                                             <div class="col-md-6 mb-2 section-item" data-code="{{ $sec->code }}">
                                                 <div class="form-check custom-checkbox">
-                                                    <input class="form-check-input section-checkbox" type="checkbox" 
-                                                           name="selected_sections[]" 
-                                                           value="{{ $sec->code }}" 
-                                                           id="sec_{{ $sec->code }}"
-                                                           {{ ($sec->code == 0 || $sec->code == 9) ? 'checked' : '' }}>
-                                                    <label class="form-check-label small fw-bold" for="sec_{{ $sec->code }}">
+                                                    <input class="form-check-input section-checkbox" type="checkbox"
+                                                        name="selected_sections[]" value="{{ $sec->code }}"
+                                                        id="sec_{{ $sec->code }}"
+                                                        {{ $sec->code == 0 || $sec->code == 9 ? 'checked' : '' }}>
+                                                    <label class="form-check-label small fw-bold"
+                                                        for="sec_{{ $sec->code }}">
                                                         {{ $sec->code }}. {{ $sec->name }}
                                                     </label>
                                                 </div>
                                             </div>
                                         @endforeach
                                     </div>
-                                    <small class="text-info"><i class="fas fa-info-circle me-1"></i> Các mục (0) và (9) là mặc định. Các mục khác được gợi ý dựa trên quy trình sản xuất của sản phẩm.</small>
+                                    <small class="text-info"><i class="fas fa-info-circle me-1"></i> Các mục (0) và (9) là
+                                        mặc định. Các mục khác được gợi ý dựa trên quy trình sản xuất của sản phẩm.</small>
                                 </div>
                             </div>
                         </div>
@@ -534,11 +538,11 @@
 
                 // Default checks (0 and 9)
                 $('#sec_0, #sec_9').prop('checked', true);
-                
+
                 if (type === 'BMR') {
                     // Hide 7 and 8 for BMR
                     $('.section-item[data-code="7"], .section-item[data-code="8"]').hide();
-                    
+
                     // Check based on passed stages (1-6)
                     Object.keys(stages).forEach(code => {
                         if (stages[code]) {
@@ -547,7 +551,8 @@
                     });
                 } else if (type === 'BPR') {
                     // Hide 1-6 for BPR
-                    $('.section-item[data-code="1"], .section-item[data-code="2"], .section-item[data-code="3"], .section-item[data-code="4"], .section-item[data-code="5"], .section-item[data-code="6"]').hide();
+                    $('.section-item[data-code="1"], .section-item[data-code="2"], .section-item[data-code="3"], .section-item[data-code="4"], .section-item[data-code="5"], .section-item[data-code="6"]')
+                        .hide();
                     // Check 7 and 8 for BPR
                     $('#sec_7, #sec_8').prop('checked', true);
                 }

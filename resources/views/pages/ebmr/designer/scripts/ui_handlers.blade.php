@@ -1260,7 +1260,12 @@
             });
         } else if (item.data && item.data[r] && item.data[r][c] !== undefined) {
             if (typeof item.data[r][c] !== 'object') {
-                item.data[r][c] = { content: item.data[r][c], rs: 1, cs: 1, hidden: false };
+                item.data[r][c] = {
+                    content: item.data[r][c],
+                    rs: 1,
+                    cs: 1,
+                    hidden: false
+                };
             }
             item.data[r][c][prop] = val;
             saveStateDebounced();

@@ -12,7 +12,7 @@
 
 @section('mainContent')
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    
+
     <div class="content-wrapper" id="mainContent" style="background-color: #f1f3f4; min-height: 100vh;">
         @include('pages.ebmr.designer.partials.toolbar')
         @include('pages.ebmr.designer.partials.canvas')

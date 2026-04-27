@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class EbmrTemplateController extends Controller
 {
@@ -14,14 +14,20 @@ class EbmrTemplateController extends Controller
     {
         $type = $request->query('type', 'BMR');
         $title = 'Soạn Thảo Hồ Sơ BMR';
-        if ($type === 'GF') $title = 'Biểu Mẫu Dùng Chung';
-        if ($type === 'BPR') $title = 'Hồ Sơ Đóng Gói';
-        if ($type === 'MF') $title = 'Biểu Mẫu Gốc';
-        
+        if ($type === 'GF') {
+            $title = 'Biểu Mẫu Dùng Chung';
+        }
+        if ($type === 'BPR') {
+            $title = 'Hồ Sơ Đóng Gói';
+        }
+        if ($type === 'MF') {
+            $title = 'Biểu Mẫu Gốc';
+        }
+
         session(['title' => $title]);
 
         $templatesQuery = DB::table('ebmr_templates')
-            ->whereIn('ebmr_templates.status', ['draft', 'submitted'])
+            // ->whereIn('ebmr_templates.status', ['draft', 'submitted'])
             ->where('ebmr_templates.type', $type)
             ->leftJoin('user_management', 'ebmr_templates.owner_id', '=', 'user_management.id')
             ->select('ebmr_templates.*', 'user_management.fullName as owner_name');
@@ -45,7 +51,7 @@ class EbmrTemplateController extends Controller
         $templates = $templatesQuery->orderBy('ebmr_templates.updated_at', 'desc')->get();
 
         $users = DB::table('user_management')->select('id', 'fullName as name')->orderBy('fullName')->get();
-        
+
         // Fetch items for the selection modal based on current type
         $category_items = [];
         if ($type === 'GF') {
@@ -66,10 +72,10 @@ class EbmrTemplateController extends Controller
                 ->where('intermediate_category.cancel', 0)
                 ->get();
         }
-        
+
         $sectionsMaster = DB::table('sections')->get()->keyBy('code');
-        
-        foreach($templates as $t) {
+
+        foreach ($templates as $t) {
             // Get all unique section IDs present in this template
             $presentSectionIds = DB::table('ebmr_template_blocks')
                 ->where('template_id', $t->id)
@@ -81,32 +87,32 @@ class EbmrTemplateController extends Controller
             foreach ($presentSectionIds as $sid) {
                 $parts = explode('_', $sid);
                 $code = end($parts);
-                
+
                 // Try to find the section block for the label
                 $sectionBlock = DB::table('ebmr_template_blocks')
                     ->where('template_id', $t->id)
                     ->where('section_id', $sid)
                     ->where('type', 'section')
                     ->first();
-                
+
                 $label = 'N/A';
                 if ($sectionBlock) {
                     $prop = json_decode($sectionBlock->properties);
                     $label = $prop->label ?? 'N/A';
                 } else {
                     // Fallback to sections master table
-                    $label = $sectionsMaster[$code]->name ?? ("Phân đoạn " . $code);
+                    $label = $sectionsMaster[$code]->name ?? ('Phân đoạn '.$code);
                 }
 
                 $sections[] = [
                     'id' => $sid,
                     'label' => $label,
-                    'code' => (int)$code // For numerical sorting
+                    'code' => (int) $code, // For numerical sorting
                 ];
             }
 
             // Sort sections by code numerically (0, 1, 2, 4, 5, 9)
-            usort($sections, function($a, $b) {
+            usort($sections, function ($a, $b) {
                 return $a['code'] <=> $b['code'];
             });
 
@@ -118,7 +124,7 @@ class EbmrTemplateController extends Controller
             'users' => $users,
             'category_items' => $category_items,
             'all_sections' => $sectionsMaster->values(),
-            'current_type' => $type
+            'current_type' => $type,
         ]);
     }
 
@@ -133,7 +139,7 @@ class EbmrTemplateController extends Controller
             'version' => 'required|integer',
             'issued_date' => 'nullable|date',
             'effective_date' => 'nullable|date',
-            'type' => 'nullable|string|max:10'
+            'type' => 'nullable|string|max:10',
         ]);
 
         $data = [
@@ -142,39 +148,39 @@ class EbmrTemplateController extends Controller
             'issued_date' => $request->input('issued_date'),
             'effective_date' => $request->input('effective_date'),
             'type' => $validated['type'] ?? 'BMR',
-            'updated_at' => now()
+            'updated_at' => now(),
         ];
         if (empty($validated['id'])) {
             $data['owner_id'] = session('user')['userId'] ?? null;
             $data['status'] = 'draft';
             $data['created_at'] = now();
-            
+
             $id = DB::table('ebmr_templates')->insertGetId($data);
 
             // --- Auto-generate Sections for BMR / BPR based on User Selection ---
             $selectedSections = $request->input('selected_sections', []);
-            if (!empty($selectedSections) && ($data['type'] === 'BMR' || $data['type'] === 'BPR')) {
+            if (! empty($selectedSections) && ($data['type'] === 'BMR' || $data['type'] === 'BPR')) {
                 $sectionMeta = DB::table('sections')->whereIn('code', $selectedSections)->get()->keyBy('code');
-                
+
                 $order = 0;
                 foreach ($selectedSections as $code) {
                     if (isset($sectionMeta[$code])) {
                         $s = $sectionMeta[$code];
-                        $sectionIdStr = $data['caterogy_id'] . '_' . $code;
+                        $sectionIdStr = $data['caterogy_id'].'_'.$code;
                         DB::table('ebmr_template_blocks')->insert([
                             'template_id' => $id,
                             'section_id' => $sectionIdStr,
                             'type' => 'section',
-                            'label' => 'section_' . $order,
+                            'label' => 'section_'.$order,
                             'order' => $order++,
                             'properties' => json_encode([
-                                'id' => 'blk_sec_' . uniqid(),
-                                'type' => 'section', 
-                                'label' => $s->name, 
-                                'stage_code' => $code
+                                'id' => 'blk_sec_'.uniqid(),
+                                'type' => 'section',
+                                'label' => $s->name,
+                                'stage_code' => $code,
                             ]),
                             'created_at' => now(),
-                            'updated_at' => now()
+                            'updated_at' => now(),
                         ]);
                     }
                 }
@@ -190,11 +196,12 @@ class EbmrTemplateController extends Controller
         return response()->json([
             'success' => true,
             'message' => $message,
-            'id' => $id
+            'id' => $id,
         ]);
     }
 
-    public function getNextVersion(Request $request) {
+    public function getNextVersion(Request $request)
+    {
         $categoryId = $request->category_id;
         $type = $request->type ?? 'BMR';
 
@@ -202,15 +209,16 @@ class EbmrTemplateController extends Controller
             ->where('caterogy_id', $categoryId)
             ->where('type', $type)
             ->max('version');
-        
+
         return response()->json([
-            'next_version' => ($maxVersion ?? 0) + 1
+            'next_version' => ($maxVersion ?? 0) + 1,
         ]);
     }
 
     public function getMetadata($id)
     {
         $template = DB::table('ebmr_templates')->where('id', $id)->first();
+
         return response()->json($template);
     }
 
@@ -221,7 +229,7 @@ class EbmrTemplateController extends Controller
             ->orderBy('ebmr_templates.updated_at', 'desc')
             ->get();
 
-        foreach($templates as $t) {
+        foreach ($templates as $t) {
             if ($t->type === 'GF') {
                 $t->name = DB::table('gf_category')->where('id', $t->caterogy_id)->value('name') ?? 'N/A';
             } elseif ($t->type === 'MF') {
@@ -258,18 +266,19 @@ class EbmrTemplateController extends Controller
             ->where('template_id', $id)
             ->orderBy('order')
             ->get();
-        
+
         $blockIds = $blocks->pluck('id')->toArray();
         $contentBlocks = DB::table('ebmr_content_blocks')
             ->whereIn('ebmr_template_blocks_id', $blockIds)
             ->get()
             ->groupBy('ebmr_template_blocks_id');
 
-        $result = $blocks->map(function($b) use ($contentBlocks) {
+        $result = $blocks->map(function ($b) use ($contentBlocks) {
             $prop = json_decode($b->properties, true);
             $this->injectContent($prop, $b, $contentBlocks->get($b->id));
             $prop['db_type'] = $b->type;
-            return (object)$prop;
+
+            return (object) $prop;
         });
 
         return response()->json($result);
@@ -277,7 +286,9 @@ class EbmrTemplateController extends Controller
 
     private function injectContent(&$field, $block, $contentBlocks)
     {
-        if (!$contentBlocks || empty($block->content)) return;
+        if (! $contentBlocks || empty($block->content)) {
+            return;
+        }
 
         // 1. Rebuild the full HTML by replacing placeholders with text
         $fullHtml = $block->content;
@@ -297,14 +308,18 @@ class EbmrTemplateController extends Controller
             $rows = $field['rows'] ?? 0;
             $cols = $field['cols'] ?? 0;
             $data = [];
-            
+
             preg_match_all('/<td[^>]*>(.*?)<\/td>/is', $fullHtml, $matches);
             $tdContents = $matches[1] ?? [];
-            
+
             $idx = 0;
-            if (!isset($field['data'])) $field['data'] = [];
+            if (! isset($field['data'])) {
+                $field['data'] = [];
+            }
             for ($r = 0; $r < $rows; $r++) {
-                if (!isset($field['data'][$r])) $field['data'][$r] = [];
+                if (! isset($field['data'][$r])) {
+                    $field['data'][$r] = [];
+                }
                 for ($c = 0; $c < $cols; $c++) {
                     $content = $tdContents[$idx] ?? '';
                     if (isset($field['data'][$r][$c]) && is_array($field['data'][$r][$c])) {

@@ -107,10 +107,22 @@
                         const td = s.textDecoration || '';
                         const fsz = s.fontSize || '';
                         const tc = s.textColor || '';
-                        return `<th contenteditable="false" spellcheck="false" data-row="0" data-col="${cIdx}" style="width: ${c.width || 'auto'}; background-color: ${bg}; text-align: ${align}; font-weight: ${fw}; font-style: ${fs}; text-decoration: ${td}; font-size: ${fsz}; color: ${tc};">${c.label}</th>`;
-                    }).join('')}
-                    ${window.isExecutionMode && item.canAddRows ? '<th style="width: 30px; border: none; background: transparent;"></th>' : ''}
-                </tr></thead>`;
+                        return ` < th contenteditable = "false"
+                        spellcheck = "false"
+                        data - row = "0"
+                        data - col = "${cIdx}"
+                        style =
+                            "width: ${c.width || 'auto'}; background-color: ${bg}; text-align: ${align}; font-weight: ${fw}; font-style: ${fs}; text-decoration: ${td}; font-size: ${fsz}; color: ${tc};" >
+                            $ {
+                                c.label
+                            } < /th>`;
+                    }).join('')
+            }
+            $ {
+                window.isExecutionMode && item.canAddRows ?
+                    '<th style="width: 30px; border: none; background: transparent;"></th>' : ''
+            } <
+            /tr></thead > `;
                 }
 
                 let rowsHtml = '';
@@ -140,21 +152,49 @@
                         let finalEditable = "false";
 
                         if (window.isExecutionMode) {
-                            const runVal = runDataForBlock[`${r}_${c}`];
+                            const runVal = runDataForBlock[`
+            $ {
+                r
+            }
+            _$ {
+                c
+            }
+            `];
                             if (displayContent.includes('[Nhập dữ liệu]')) {
                                 cellClass = "execution-input-cell";
-                                onclickAttr = `onclick="openExecutionInputModal('${blockKey}', ${r}, ${c}, 'text')"`;
-                                displayContent = runVal ? runVal : `<span class="execution-badge input"><i class="fas fa-edit"></i> [Nhập dữ liệu]</span>`;
+                                onclickAttr = `
+            onclick = "openExecutionInputModal('${blockKey}', ${r}, ${c}, 'text')"
+            `;
+                                displayContent = runVal ? runVal : ` < span class = "execution-badge input" > <
+            i class = "fas fa-edit" > < /i> [Nhập dữ liệu]</span > `;
                             } else if (displayContent.includes('[Ký tên]')) {
                                 cellClass = "execution-input-cell";
-                                onclickAttr = `onclick="openExecutionInputModal('${blockKey}', ${r}, ${c}, 'signature')"`;
-                                displayContent = runVal ? `<div class="e-signature-done"><i class="fas fa-check-circle text-success me-1"></i>${runVal}</div>` : `<span class="execution-badge signature"><i class="fas fa-pen"></i> [Ký tên]</span>`;
+                                onclickAttr = `
+            onclick = "openExecutionInputModal('${blockKey}', ${r}, ${c}, 'signature')"
+            `;
+                                displayContent = runVal ? ` < div class = "e-signature-done" > < i class =
+            "fas fa-check-circle text-success me-1" > < /i>${runVal}</div > ` : ` < span class =
+            "execution-badge signature" > < i class = "fas fa-pen" > < /i> [Ký tên]</span > `;
                             }
                         } else {
                             finalEditable = (item.locked || window.isReadOnly) ? 'false' : 'true';
                         }
 
-                        cellsHtml += `<td contenteditable="${finalEditable}" spellcheck="false" data-row="${r+1}" data-col="${c}" rowspan="${cell.rs || 1}" colspan="${cell.cs || 1}" ${onclickAttr} class="${cellClass} ${item.locked ? 'locked-cell' : ''}" style="width: ${cellWidth}; height: ${rowH}; background-color: ${cellBg}; text-align: ${cell.textAlign || ''}; font-weight: ${cell.fontWeight || ''}; font-style: ${cell.fontStyle || ''}; text-decoration: ${cell.textDecoration || ''}; font-size: ${cell.fontSize || ''}; color: ${cell.textColor || ''}; text-transform: ${cell.textTransform || ''};" oninput="updateTableInline('${item.id}', 'cell', ${r}, ${c}, this.innerHTML)">${displayContent}</td>`;
+                        cellsHtml += ` < td contenteditable = "${finalEditable}"
+            spellcheck = "false"
+            data - row = "${r+1}"
+            data - col = "${c}"
+            rowspan = "${cell.rs || 1}"
+            colspan = "${cell.cs || 1}"
+            $ {
+                onclickAttr
+            }
+            class = "${cellClass} ${item.locked ? 'locked-cell' : ''}"
+            style =
+            "width: ${cellWidth}; height: ${rowH}; background-color: ${cellBg}; text-align: ${cell.textAlign || ''}; font-weight: ${cell.fontWeight || ''}; font-style: ${cell.fontStyle || ''}; text-decoration: ${cell.textDecoration || ''}; font-size: ${cell.fontSize || ''}; color: ${cell.textColor || ''}; text-transform: ${cell.textTransform || ''};"
+            oninput = "updateTableInline('${item.id}', 'cell', ${r}, ${c}, this.innerHTML)" > $ {
+                displayContent
+            } < /td>`;
         }
         let deleteCell = '';
         if (window.isExecutionMode && item.canAddRows) {

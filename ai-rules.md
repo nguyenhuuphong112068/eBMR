@@ -37,3 +37,7 @@ This document defines the professional design standards for the eBMR (Electronic
 - **Sidebar**: Dark theme using `bg-dark`, high contrast for active links using `primary` color.
 - **Content Area**: Use a clean, light background (or a subtle laboratory-themed pattern) with glassmorphic containers.
 - **Animations**: Subtle transitions (`0.3s cubic-bezier(0.4, 0, 0.2, 1)`) for all interactive elements.
+## 6. Development Workflow
+- **Feature Tracking**: Before starting any task, read `featureProject.md` to understand existing dependencies.
+- **Regression Prevention**: Never delete or rename existing routes/methods listed in `featureProject.md` unless explicitly requested.
+- **Mandatory Update**: Always update `featureProject.md` after adding a new feature or sub-feature, including the relevant file paths and status.

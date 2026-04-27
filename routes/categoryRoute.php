@@ -2,7 +2,6 @@
 // use Illuminate\Routing\Route;
 
 use App\Http\Controllers\Pages\Category\IntermediateCategoryController;
-use App\Http\Controllers\Pages\Category\MaintenanceCategoryController;
 use App\Http\Controllers\Pages\Category\ProductCategoryController;
 use App\Http\Controllers\Pages\Category\GfCategoryController;
 use App\Http\Controllers\Pages\Category\MfCategoryController;
@@ -44,19 +43,6 @@ Route::prefix('/category')
                                 Route::get('getJsonFPCategory', 'getJsonFPCategory')->name('getJsonFPCategory');
                         });
 
-
-                Route::prefix('/maintenance')
-                        ->name('maintenance.')
-                        ->controller(MaintenanceCategoryController::class)
-                        ->group(function () {
-                                Route::get('', 'index')->name('list');
-                                Route::post('store', 'store')->name('store');
-                                Route::post('updateTime', 'updateTime')->name('updateTime');
-                                Route::post('deActive', 'deActive')->name('deActive');
-                                Route::post('is_HVAC', 'is_HVAC')->name('is_HVAC');
-                                Route::post('updateRoom', 'updateRoom')->name('updateRoom');
-                                Route::post('updateDepartment', 'updateDepartment')->name('updateDepartment');
-                        });
 
                 Route::prefix('/gf')
                         ->name('gf.')

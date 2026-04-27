@@ -1,21 +1,7 @@
 <?php
-use App\Http\Controllers\Pages\MaterData\DosageController;
-use App\Http\Controllers\Pages\MaterData\InstrumentController;
-use App\Http\Controllers\Pages\MaterData\MarketController;
-use App\Http\Controllers\Pages\MaterData\ProductNameController;
-use App\Http\Controllers\Pages\StorageLocation\RoomController;
-use App\Http\Controllers\Pages\MaterData\SourceMaterialController;
-use App\Http\Controllers\Pages\MaterData\SpecificationController;
-use App\Http\Controllers\Pages\MaterData\UnitController;
-use App\Http\Controllers\Pages\MaterData\OffDaysController;
-use App\Http\Controllers\Pages\MaterData\StageGroupController;
 use App\Http\Controllers\Pages\MaterData\DepartmentController;
 use App\Http\Controllers\Pages\MaterData\StatusController;
 use App\Http\Controllers\Pages\MaterData\DocumentTypeController;
-use App\Http\Controllers\Pages\StorageLocation\WarehouseController;
-use App\Http\Controllers\Pages\StorageLocation\ShelfController;
-use App\Http\Controllers\Pages\StorageLocation\LocationController;
-use App\Http\Controllers\Pages\DocumentStorage\DocumentController;
 use App\Http\Controllers\UploadDataController;
 use App\Http\Middleware\CheckLogin;
 use Illuminate\Support\Facades\Route;
@@ -42,64 +28,6 @@ Route::prefix('/materData')
             Route::post('deActive', 'deActive')->name('deActive');
         });
         Route::prefix('/documentType')->name('documentType.')->controller(DocumentTypeController::class)->group(function () {
-            Route::get('', 'index')->name('list');
-            Route::post('store', 'store')->name('store');
-            Route::post('update', 'update')->name('update');
-            Route::post('deActive', 'deActive')->name('deActive');
-        });
-        
-        // Other Master Data
-        Route::prefix('/productName')->name('productName.')->controller(ProductNameController::class)->group(function () {
-            Route::get('', 'index')->name('list');
-            Route::post('store', 'store')->name('store');
-        });
-        Route::prefix('/Dosage')->name('Dosage.')->controller(DosageController::class)->group(function () {
-            Route::get('', 'index')->name('list');
-            Route::post('store', 'store')->name('store');
-        });
-        Route::prefix('/Unit')->name('Unit.')->controller(UnitController::class)->group(function () {
-            Route::get('', 'index')->name('list');
-            Route::post('store', 'store')->name('store');
-        });
-    });
-
-// 2. Vị Trí Lưu Trữ (Storage Location)
-Route::prefix('/storageLocation')
-    ->name('pages.storageLocation.')
-    ->middleware(CheckLogin::class)
-    ->group(function () {
-        Route::prefix('/warehouse')->name('warehouse.')->controller(WarehouseController::class)->group(function () {
-            Route::get('', 'index')->name('list');
-            Route::post('store', 'store')->name('store');
-            Route::post('update', 'update')->name('update');
-            Route::post('deActive', 'deActive')->name('deActive');
-        });
-        Route::prefix('/room')->name('room.')->controller(RoomController::class)->group(function () {
-            Route::get('', 'index')->name('list');
-            Route::post('store', 'store')->name('store');
-            Route::post('update', 'update')->name('update');
-            Route::post('deActive', 'deActive')->name('deActive');
-        });
-        Route::prefix('/shelf')->name('shelf.')->controller(ShelfController::class)->group(function () {
-            Route::get('', 'index')->name('list');
-            Route::post('store', 'store')->name('store');
-            Route::post('update', 'update')->name('update');
-            Route::post('deActive', 'deActive')->name('deActive');
-        });
-        Route::prefix('/location')->name('location.')->controller(LocationController::class)->group(function () {
-            Route::get('', 'index')->name('list');
-            Route::post('store', 'store')->name('store');
-            Route::post('update', 'update')->name('update');
-            Route::post('deActive', 'deActive')->name('deActive');
-        });
-    });
-
-// 3. Quản Lý Tài Liệu (Document Storage)
-Route::prefix('/documentStorage')
-    ->name('pages.documentStorage.')
-    ->middleware(CheckLogin::class)
-    ->group(function () {
-        Route::prefix('/document')->name('document.')->controller(DocumentController::class)->group(function () {
             Route::get('', 'index')->name('list');
             Route::post('store', 'store')->name('store');
             Route::post('update', 'update')->name('update');
