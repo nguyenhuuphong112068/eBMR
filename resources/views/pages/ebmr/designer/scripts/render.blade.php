@@ -1,4 +1,8 @@
 <script>
+    /**
+     * Hàm chính để vẽ toàn bộ giao diện dựa trên mảng dữ liệu `items`.
+     * Nó dọn dẹp nội dung cũ và tạo mới các phần tử HTML tương ứng với từng loại khối (bảng, văn bản, phân đoạn...).
+     */
     function renderBlocks() {
         const container = document.getElementById('editor-content');
         const hint = document.getElementById('drop-hint');
@@ -9,6 +13,7 @@
         }
 
         container.innerHTML = '';
+
         if (hint) {
             if (!window.isExecutionMode) container.appendChild(hint);
             else hint.remove();
@@ -304,6 +309,11 @@
     }
     }
 
+    /**
+     * Thêm thanh công cụ chèn nhanh (dấu cộng) giữa các khối.
+     * @param {HTMLElement} container - Vùng chứa để chèn thanh công cụ.
+     * @param {number} idx - Vị trí chèn trong mảng items.
+     */
     function addInsertionDivider(container, idx) {
         const divider = document.createElement('div');
         divider.className = 'insert-divider';
@@ -337,10 +347,16 @@
         container.appendChild(divider);
     }
 
+    /**
+     * Mở bộ chọn để thêm bảng vào vị trí cụ thể (mặc định thêm bảng 3x2).
+     */
     function showTableSelectorAt(idx, btn) {
         addTable(3, 2, idx);
     }
 
+    /**
+     * Chèn nhanh một khối văn bản khi người dùng click đúp vào vùng trống giữa các khối.
+     */
     window.quickAddText = function(e, idx) {
         e.stopPropagation();
         const newItemId = 'item_' + Date.now();
@@ -365,6 +381,9 @@
             }
         }, 50);
     };
+    /**
+     * Dán nội dung từ bộ nhớ tạm (Clipboard) vào một vị trí cụ thể trong tài liệu.
+     */
     window.pasteAt = async function(idx) {
         try {
             const clipboardItems = await navigator.clipboard.read();
@@ -411,6 +430,11 @@
 
     /**
      * Decorates variable badges with visual icons based on their data type
+     */
+    /**
+     * Xử lý nội dung HTML để hiển thị các "Thẻ biến số" (Variable Badges).
+     * Hàm này sẽ thay thế các thẻ thô bằng giao diện có icon và màu sắc tùy theo loại dữ liệu (Ngày, Số, Chữ ký...).
+     * @param {string} html - Nội dung HTML gốc chứa thẻ biến.
      */
     function decorateContent(html) {
         if (!html) return '';
@@ -476,6 +500,11 @@
         return div.innerHTML;
     }
 
+    /**
+     * Tính toán giá trị của một công thức toán học.
+     * Nó tự động tìm kiếm các giá trị từ các ô có ID hoặc các biến số được định nghĩa trong công thức.
+     * @param {string} formula - Chuỗi công thức, ví dụ: "(kl_tong) - (kl_bao)".
+     */
     window.calculateFormula = function(formula) {
         if (!formula) return '0';
 
@@ -526,6 +555,10 @@
         }
     };
 
+    /**
+     * Quét toàn bộ tài liệu và cập nhật lại tất cả các kết quả công thức đang hiển thị.
+     * Thường được gọi sau khi người dùng thay đổi một giá trị đầu vào nào đó.
+     */
     window.recalculateAllFormulas = function() {
         // Find all formula result elements in the DOM and update them
         document.querySelectorAll('.formula-result').forEach(el => {

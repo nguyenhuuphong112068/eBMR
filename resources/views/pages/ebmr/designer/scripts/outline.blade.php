@@ -132,28 +132,7 @@
         }
     }
 
-    function toggleOutline(minimize) {
-        const sidebar = document.getElementById('outline-col');
-        const canvas = document.getElementById('canvas-col');
-        const minBtn = document.getElementById('outline-minimized');
-        const content = document.querySelector('.outline-sidebar');
 
-        if (minimize) {
-            sidebar.classList.remove('col-lg-2');
-            sidebar.style.width = '40px';
-            content.classList.add('d-none');
-            minBtn.classList.remove('d-none');
-            canvas.classList.remove('col-lg-9');
-            canvas.classList.add('col-lg-11');
-        } else {
-            sidebar.classList.add('col-lg-2');
-            sidebar.style.width = '';
-            content.classList.remove('d-none');
-            minBtn.classList.add('d-none');
-            canvas.classList.add('col-lg-9');
-            canvas.classList.remove('col-lg-11');
-        }
-    }
 </script>
 
 <style>

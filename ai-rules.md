@@ -41,3 +41,4 @@ This document defines the professional design standards for the eBMR (Electronic
 - **Feature Tracking**: Before starting any task, read `featureProject.md` to understand existing dependencies.
 - **Regression Prevention**: Never delete or rename existing routes/methods listed in `featureProject.md` unless explicitly requested.
 - **Mandatory Update**: Always update `featureProject.md` after adding a new feature or sub-feature, including the relevant file paths and status.
+- **Function Documentation**: Khi tạo hàm mới, bắt buộc phải thêm comment trên đầu để giải thích chi tiết mục đích và cách thức hoạt động của hàm đó.

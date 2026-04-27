@@ -1,4 +1,14 @@
 <script>
+    /**
+     * Chọn một khối (block) để chỉnh sửa và hiển thị bảng thuộc tính.
+     * Cách hoạt động: 
+     * 1. Cập nhật ID khối đang chọn (selectedId).
+     * 2. Tìm thông tin khối trong mảng dữ liệu `items`.
+     * 3. Tự động xác định và chuyển đổi Phân đoạn (Section) đang làm việc dựa trên vị trí khối.
+     * 4. Dựng giao diện bảng điều khiển (Property Panel) động dựa trên loại khối (Bảng, Văn bản...).
+     * @param {string} id - ID của khối cần chọn.
+     * @param {boolean} doRender - Có thực hiện render lại giao diện hay không.
+     */
     function selectItem(id, doRender = true) {
         selectedId = id;
         if (doRender) renderBlocks();
@@ -217,44 +227,66 @@
         }
     }
 
-    window.addSpreadsheet = function(rows = 5, cols = 5, insertIndex = null) {
-        const hint = document.getElementById('drop-hint');
-        if (hint) hint.classList.add('d-none');
+    /**
+     * Thêm một khối Trang tính (Spreadsheet/Table) mới vào tài liệu.
+     * Cách hoạt động:
+     * 1. Khởi tạo cấu hình dữ liệu mặc định (mảng 2 chiều chứa giá trị rỗng).
+     * 2. Tự động gán khối vào Phân đoạn (Section) đang được chọn.
+     * 3. Chèn khối vào mảng `items` tại vị trí cuối cùng hoặc vị trí được chỉ định.
+     * 4. Render lại giao diện và tự động chọn khối mới vừa tạo.
+     * @param {number} rows - Số hàng mặc định.
+     * @param {number} cols - Số cột mặc định.
+     * @param {number|null} insertIndex - Vị trí chèn khối (nếu null sẽ chèn vào cuối).
+     */
+    // window.addSpreadsheet = function(rows = 5, cols = 5, insertIndex = null) {
+    //     const hint = document.getElementById('drop-hint');
+    //     if (hint) hint.classList.add('d-none');
 
-        saveState();
-        const id = 'blk_' + Date.now();
+    //     saveState();
+    //     const id = 'blk_' + Date.now();
 
-        let data = [];
-        for (let r = 0; r < rows; r++) {
-            let rowData = [];
-            for (let c = 0; c < cols; c++) rowData.push({
-                v: '',
-                f: ''
-            }); // v: value, f: formula
-            data.push(rowData);
-        }
+    //     let data = [];
+    //     for (let r = 0; r < rows; r++) {
+    //         let rowData = [];
+    //         for (let c = 0; c < cols; c++) rowData.push({
+    //             v: '',
+    //             f: ''
+    //         }); // v: value, f: formula
+    //         data.push(rowData);
+    //     }
 
-        let sectionId = window.activeSectionId || null;
-        if (!sectionId && items.length > 0) sectionId = items[items.length - 1].section_id;
+    //     let sectionId = window.activeSectionId || null;
+    //     if (!sectionId && items.length > 0) sectionId = items[items.length - 1].section_id;
 
-        const item = {
-            id: id,
-            type: 'spreadsheet',
-            section_id: sectionId,
-            label: 'Trang tính ' + cols + 'x' + rows,
-            rows: rows,
-            cols: cols,
-            data: data,
-            borderMode: 'visible'
-        };
+    //     const item = {
+    //         id: id,
+    //         type: 'spreadsheet',
+    //         section_id: sectionId,
+    //         label: 'Trang tính ' + cols + 'x' + rows,
+    //         rows: rows,
+    //         cols: cols,
+    //         data: data,
+    //         borderMode: 'visible'
+    //     };
 
-        if (insertIndex !== null) items.splice(insertIndex, 0, item);
-        else items.push(item);
+    //     if (insertIndex !== null) items.splice(insertIndex, 0, item);
+    //     else items.push(item);
 
-        renderBlocks();
-        selectItem(id);
-    };
+    //     renderBlocks();
+    //     selectItem(id);
+    // };
 
+    /**
+     * Thêm một khối nội dung mới (không phải bảng) như Tiêu đề, Ghi chú...
+     * Cách hoạt động:
+     * 1. Tạo đối tượng dữ liệu cho khối mới với các thuộc tính mặc định.
+     * 2. Xác định Phân đoạn mục tiêu (Section) để gán khối vào đúng nhóm.
+     * 3. Sử dụng splice để chèn vào vị trí chỉ định hoặc push để thêm vào cuối mảng.
+     * 4. Gọi renderBlocks để hiển thị lên màn hình.
+     * @param {string} type - Loại khối (static-text, header...).
+     * @param {number|null} insertIndex - Vị trí chèn.
+     * @param {string|null} initialTag - Thẻ HTML khởi tạo (H1, H2...).
+     */
     function addItem(type, insertIndex = null, initialTag = null) {
         if (type === 'table') return;
         const hint = document.getElementById('drop-hint');
@@ -310,6 +342,11 @@
         selectItem(id);
     }
 
+    /**
+     * Thêm một khối Phân đoạn (Section) mới để nhóm các linh kiện.
+     * Cách hoạt động: Tạo một đối tượng có type là 'section', đối tượng này đóng vai trò là "container" 
+     * hoặc điểm đánh dấu để hàm renderBlocks biết khi nào cần ngắt trang và tạo nhóm mới.
+     */
     function addSection() {
         const id = 'blk_section_' + Date.now();
 
@@ -328,6 +365,13 @@
         selectItem(id);
     }
 
+    /**
+     * Cập nhật một thuộc tính của khối đang được chọn.
+     * Cách hoạt động: Tìm khối trong mảng `items` theo selectedId, thay đổi giá trị thuộc tính 
+     * và gọi renderBlocks để cập nhật ngay lập tức giao diện (WYSIWYG).
+     * @param {string} prop - Tên thuộc tính cần cập nhật.
+     * @param {any} value - Giá trị mới.
+     */
     function updateItemProp(prop, value) {
         const item = items.find(i => i.id === selectedId);
         if (!item) return;
@@ -336,6 +380,12 @@
         renderBlocks();
     }
 
+    /**
+     * Xóa một khối khỏi tài liệu dựa trên ID.
+     * Cách hoạt động: Kiểm tra trạng thái khóa (locked) của khối, nếu cho phép xóa thì lọc 
+     * bỏ khối đó khỏi mảng `items` và ẩn bảng thuộc tính đi.
+     * @param {string} id - ID của khối cần xóa.
+     */
     function removeItem(id) {
         const item = items.find(i => i.id === id);
         if (item && item.locked) {
@@ -351,6 +401,13 @@
         renderBlocks();
     }
 
+    /**
+     * Thay đổi thứ tự của khối (lên hoặc xuống).
+     * Cách hoạt động: Hoán đổi vị trí của khối hiện tại với khối liền kề trong mảng `items` 
+     * dựa trên hướng di chuyển (dir), sau đó vẽ lại toàn bộ giao diện.
+     * @param {number} idx - Chỉ số hiện tại của khối trong mảng items.
+     * @param {number} dir - Hướng di chuyển (-1 là lên, 1 là xuống).
+     */
     function moveItem(idx, dir) {
         saveState();
         const newIdx = idx + dir;
@@ -361,6 +418,14 @@
         renderBlocks();
     }
 
+    /**
+     * Cập nhật nội dung của bảng trực tiếp khi người dùng gõ vào ô.
+     * @param {string} id - ID của khối bảng.
+     * @param {string} type - Loại cập nhật ('col' hoặc 'cell').
+     * @param {number} r - Chỉ số hàng.
+     * @param {number} c - Chỉ số cột.
+     * @param {string} val - Nội dung mới.
+     */
     function updateTableInline(id, type, r, c, val) {
         saveStateDebounced();
         const item = items.find(i => i.id === id);
@@ -386,6 +451,11 @@
         }
     }
 
+    /**
+     * Cập nhật nội dung văn bản tĩnh trực tiếp khi người dùng gõ.
+     * @param {string} id - ID của khối văn bản.
+     * @param {string} val - Nội dung HTML mới.
+     */
     function updateStaticTextInline(id, val) {
         saveStateDebounced();
         const item = items.find(i => i.id === id);
@@ -409,6 +479,10 @@
         }, 800);
     }
 
+    /**
+     * Tự động viết hoa chữ cái đầu tiên khi người dùng bắt đầu gõ vào khối văn bản.
+     * @param {HTMLElement} el - Phần tử đang chỉnh sửa.
+     */
     window.handleAutoCapitalize = function(el) {
         // Real-time capitalization of the first letter as you type
         const selection = window.getSelection();
@@ -430,6 +504,15 @@
         }
     };
 
+    /**
+     * Thực hiện các lệnh định dạng văn bản (In đậm, Nghiêng, Căn lề...) cho vùng chọn hoặc ô bảng.
+     * Cách hoạt động: 
+     * 1. Ưu tiên 1: Áp dụng lệnh cho văn bản đang được bôi đen bằng `document.execCommand`.
+     * 2. Ưu tiên 2: Nếu có nhiều ô bảng được chọn, duyệt qua từng ô và cập nhật style vào JSON dữ liệu.
+     * 3. Ưu tiên 3: Nếu đang ở trong 1 ô đơn lẻ, cập nhật định dạng cho riêng ô đó.
+     * @param {string} command - Lệnh định dạng (bold, italic, foreColor...).
+     * @param {any} value - Tham số bổ sung cho lệnh (ví dụ: mã màu).
+     */
     function formatDoc(command, value = null) {
         const selection = window.getSelection();
         const selectedText = selection.toString().trim();
@@ -695,6 +778,10 @@
         document.execCommand("insertText", false, text.trim());
     });
 
+    /**
+     * Tạo mã HTML cho bảng chọn màu sắc (Color Picker).
+     * @param {string} callbackName - Tên hàm callback sẽ được gọi khi chọn màu.
+     */
     function getThemeColorsHTML(callbackName) {
         const colors = [
             '#000000', '#434343', '#666666', '#999999', '#b7b7b7', '#cccccc', '#d9d9d9', '#efefef', '#f3f3f3',
@@ -730,6 +817,10 @@
     window.applyCurrentTextColor = function() {
         formatDoc('foreColor', window.currentTextColor);
     };
+    /**
+     * Cập nhật màu chữ đang chọn và áp dụng cho các ô hoặc văn bản đang được chọn.
+     * @param {string} color - Mã màu HEX.
+     */
     window.updateTextColorPicker = function(color) {
         window.currentTextColor = color;
         const indicator = document.getElementById('textColorIndicator');
@@ -789,6 +880,10 @@
         }
     }
 
+    /**
+     * Thay đổi kích thước chữ (tăng hoặc giảm).
+     * @param {number} delta - Giá trị thay đổi (ví dụ: 1 hoặc -1).
+     */
     function changeFontSize(delta) {
         const display = document.getElementById('fontSizeDisplay');
         if (!display) return;
@@ -799,6 +894,10 @@
         applyCustomFontSize(next);
     }
 
+    /**
+     * Áp dụng kích thước chữ cụ thể cho vùng chọn hoặc các ô đang chọn.
+     * @param {number} pt - Kích thước chữ tính bằng point (pt).
+     */
     function applyCustomFontSize(pt) {
         if (!pt) return;
 
@@ -866,6 +965,10 @@
         if (typeof saveStateDebounced === 'function') saveStateDebounced();
     }
 
+    /**
+     * Xử lý tải ảnh lên và chèn vào vị trí con trỏ dưới dạng Base64.
+     * @param {HTMLInputElement} inputElement - Phần tử input file.
+     */
     function uploadImageBase64(inputElement) {
         const file = inputElement.files[0];
         if (!file) return;
@@ -877,6 +980,10 @@
         reader.readAsDataURL(file);
     }
 
+    /**
+     * Mở modal Tìm kiếm và Thay thế.
+     * @param {boolean} isReplace - Nếu true sẽ mở tab Thay thế, ngược lại mở tab Tìm kiếm.
+     */
     window.openSearchModal = function(isReplace = false) {
         const sel = window.getSelection();
         const selectedText = sel.toString().trim();
@@ -902,6 +1009,12 @@
         $('#searchStats').text('');
     };
 
+    /**
+     * Thực hiện lệnh tìm kiếm nội dung trong văn bản.
+     * Cách hoạt động: Sử dụng hàm `window.find()` mặc định của trình duyệt để tìm và bôi đen cụm từ. 
+     * Nếu không tìm thấy, nó sẽ xóa vùng chọn và thử tìm lại từ đầu trang.
+     * @param {boolean} silent - Nếu true sẽ không hiện thông báo khi không tìm thấy.
+     */
     window.executeSearch = function(silent = false) {
         const term = document.getElementById('findInput').value;
         if (!term) return;
@@ -924,6 +1037,9 @@
         }
     };
 
+    /**
+     * Thực hiện thay thế kết quả tìm kiếm hiện tại bằng nội dung mới.
+     */
     window.executeReplace = function() {
         const findTerm = document.getElementById('findInput').value;
         const replaceTerm = document.getElementById('replaceInput').value;
@@ -941,6 +1057,11 @@
         }
     };
 
+    /**
+     * Thực hiện thay thế tất cả các cụm từ tìm thấy trong toàn bộ tài liệu.
+     * Cách hoạt động: Sử dụng vòng lặp `while` kết hợp với `window.find()`. Mỗi khi tìm thấy 1 từ, 
+     * nó dùng `execCommand('insertText')` để thay thế, sau đó tiếp tục tìm từ tiếp theo cho đến hết.
+     */
     window.executeReplaceAll = function() {
         const findTerm = document.getElementById('findInput').value;
         const replaceTerm = document.getElementById('replaceInput').value;
@@ -977,6 +1098,10 @@
     };
 
 
+    /**
+     * Wrapper để cập nhật màu nền khối và đóng dropdown chọn màu.
+     * @param {string} color - Mã màu HEX.
+     */
     window.updateBlockBackgroundWrapper = function(color) {
         if (!selectedId) return;
         updateBlockBackground(selectedId, color);
@@ -984,6 +1109,14 @@
         $('.dropdown-toggle').dropdown('hide');
     };
 
+    /**
+     * Cập nhật màu nền cho khối hoặc các ô đang được chọn trong bảng.
+     * Cách hoạt động: 
+     * 1. Nếu có nhiều ô đang chọn (selected-cell), cập nhật màu cho từng ô trong JSON.
+     * 2. Nếu không, cập nhật màu nền cho toàn bộ khối (item.backgroundColor).
+     * @param {string} id - ID của khối.
+     * @param {string} color - Mã màu HEX.
+     */
     window.updateBlockBackground = function(id, color) {
         const item = items.find(i => i.id === id);
         if (!item) return;
@@ -1031,6 +1164,9 @@
     let startLeft = 0;
     let rulerWidth = 0;
 
+    /**
+     * Khởi tạo thanh thước kẻ (Ruler) để điều chỉnh lề trái/phải của các khối.
+     */
     function initRuler() {
         const ruler = document.getElementById('editor-ruler');
         const markerLeft = document.getElementById('ruler-marker-left');
@@ -1109,6 +1245,9 @@
         });
     }
 
+    /**
+     * Cập nhật vị trí các điểm mốc trên thước kẻ dựa theo lề của khối đang chọn.
+     */
     function updateRulerForCurrentBlock() {
         const markerLeft = document.getElementById('ruler-marker-left');
         const markerRight = document.getElementById('ruler-marker-right');
@@ -1135,6 +1274,12 @@
     let isOutlineMinimized = false;
     let isSidebarMinimized = true;
 
+    /**
+     * Thu nhỏ hoặc mở rộng thanh Mục lục (Outline) bên trái.
+     * Cách hoạt động: Thay đổi class CSS của cột mục lục để thay đổi độ rộng (Bootstrap col-lg-x) 
+     * và ẩn/hiện các phần tử con, đồng thời gọi updateCanvasWidth để căn chỉnh lại trang giấy.
+     * @param {boolean} minimize - Trạng thái thu nhỏ.
+     */
     window.toggleOutline = function(minimize) {
         isOutlineMinimized = minimize;
         const col = document.getElementById('outline-col');
@@ -1154,6 +1299,12 @@
         }
     };
 
+    /**
+     * Thu nhỏ hoặc mở rộng bảng thuộc tính (Sidebar) bên phải.
+     * Cách hoạt động: Tương tự như thanh mục lục, hàm này thay đổi class CSS của cột bên phải 
+     * và điều chỉnh lại style của Property Panel để tối ưu không gian hiển thị.
+     * @param {boolean} minimize - Trạng thái thu nhỏ.
+     */
     window.toggleSidebar = function(minimize) {
         isSidebarMinimized = minimize;
         const col = document.getElementById('sidebar-col');
@@ -1185,6 +1336,11 @@
         }
     };
 
+    /**
+     * Tự động tính toán và cập nhật chiều rộng của vùng làm việc (Canvas) dựa trên trạng thái của 2 thanh bên.
+     * Cách hoạt động: Sử dụng các điều kiện logic để gán class Bootstrap (col-lg-7/8/9/10) sao cho 
+     * tổng số cột luôn là 12, giúp trang giấy luôn nằm ở trung tâm và có kích thước phù hợp nhất.
+     */
     function updateCanvasWidth() {
         const canvas = document.getElementById('canvas-col');
 
@@ -1200,6 +1356,10 @@
     }
 
     // Smart Signature Handler
+    /**
+     * Xử lý khi nhấn nút Chèn Chữ Ký. 
+     * Tự động xác định chèn vào vị trí con trỏ (inline) hoặc tạo một khối chữ ký mới.
+     */
     function handleSignatureClick() {
         let targetRange = null;
 
@@ -1233,6 +1393,14 @@
 
     // Dynamic Fields Data Handling
 
+    /**
+     * Cập nhật một thuộc tính cụ thể của ô trong bảng (ví dụ: cellId, defaultValue).
+     * @param {string} itemId - ID của khối bảng.
+     * @param {number} r - Chỉ số hàng.
+     * @param {number} c - Chỉ số cột.
+     * @param {string} prop - Tên thuộc tính.
+     * @param {any} val - Giá trị mới.
+     */
     function updateTableCellProp(itemId, r, c, prop, val) {
         const item = items.find(i => i.id === itemId);
         if (!item) return;
@@ -1272,6 +1440,11 @@
         }
     }
 
+    /**
+     * Chọn một thẻ dữ liệu (Field) để cấu hình thuộc tính (loại dữ liệu, mã biến...).
+     * @param {Event} event - Sự kiện click.
+     * @param {string} fieldId - ID của thẻ dữ liệu.
+     */
     function selectField(event, fieldId) {
         if (event) event.stopPropagation();
 
@@ -1400,6 +1573,14 @@
         body.innerHTML = typeHtml;
     }
 
+    /**
+     * Đồng bộ cấu hình của một thẻ dữ liệu (Field) khi người dùng thay đổi trong bảng thuộc tính.
+     * Cách hoạt động: Sử dụng kỹ thuật duyệt cây (path split) để cập nhật sâu vào các thuộc tính 
+     * lồng nhau (như validation.min). Sau đó ép kiểu dữ liệu (số, mảng) tùy theo loại thuộc tính.
+     * @param {string} fieldId - ID của thẻ dữ liệu.
+     * @param {string} path - Đường dẫn đến thuộc tính (ví dụ: 'validation.min').
+     * @param {any} value - Giá trị mới.
+     */
     function syncFieldConfig(fieldId, path, value) {
         if (!fieldsConfig[fieldId]) return;
 
@@ -1434,6 +1615,10 @@
         saveStateDebounced();
     }
 
+    /**
+     * Xóa một thẻ dữ liệu khỏi tài liệu và cấu hình hệ thống.
+     * @param {string} fieldId - ID của thẻ cần xóa.
+     */
     function deleteDynamicField(fieldId) {
         // Find which item/cell this field belongs to
         let found = false;
@@ -1460,6 +1645,9 @@
     // --- Linked Template (GF) Logic ---
     let allGfs = [];
 
+    /**
+     * Mở modal để liên kết với một Biểu mẫu chung (General Form - GF).
+     */
     function openLinkGfModal() {
         if (window.bootstrap) {
             const modal = new bootstrap.Modal(document.getElementById('linkGfModal'));
@@ -1468,6 +1656,9 @@
         }
     }
 
+    /**
+     * Tải danh sách các Biểu mẫu chung (GF) từ máy chủ.
+     */
     function fetchGfs() {
         const listLoading = document.getElementById('gfListLoading');
         const list = document.getElementById('gfList');
@@ -1485,6 +1676,10 @@
             });
     }
 
+    /**
+     * Hiển thị danh sách GF vào trong modal để người dùng chọn.
+     * @param {Array} gfs - Mảng danh sách các biểu mẫu.
+     */
     function renderGfList(gfs) {
         const list = document.getElementById('gfList');
         if (gfs.length === 0) {
@@ -1504,11 +1699,22 @@
         `).join('');
     }
 
+    /**
+     * Lọc danh sách GF theo từ khóa tìm kiếm.
+     * @param {string} query - Từ khóa tìm kiếm.
+     */
     function filterGfs(query) {
         const filtered = allGfs.filter(t => t.name.toLowerCase().includes(query.toLowerCase()));
         renderGfList(filtered);
     }
 
+    /**
+     * Chèn một liên kết đến Biểu mẫu chung (GF) vào tài liệu hiện tại.
+     * Cách hoạt động: Tạo một khối có type là 'linked-template', lưu templateId của biểu mẫu gốc 
+     * để hệ thống có thể truy xuất và hiển thị nội dung khi cần thiết.
+     * @param {number} templateId - ID của biểu mẫu GF.
+     * @param {string} templateName - Tên biểu mẫu GF.
+     */
     function insertLinkedGf(templateId, templateName) {
         const hint = document.getElementById('drop-hint');
         if (hint) hint.classList.add('d-none');
@@ -1533,6 +1739,10 @@
         }
     }
 
+    /**
+     * Bật/Tắt chế độ xem trước nội dung của biểu mẫu GF đang được liên kết.
+     * @param {string} id - ID của khối liên kết.
+     */
     function toggleGfPreview(id) {
         const item = items.find(i => i.id === id);
         if (!item) return;
@@ -1540,6 +1750,13 @@
         renderBlocks();
     }
 
+    /**
+     * Tải nội dung chi tiết của GF và hiển thị bản xem trước.
+     * Cách hoạt động: Sử dụng Fetch API để lấy dữ liệu khối từ máy chủ, sau đó lưu vào bộ nhớ đệm (cache) 
+     * để tránh tải lại nhiều lần khi render giao diện.
+     * @param {string} blockId - ID khối liên kết.
+     * @param {number} templateId - ID của biểu mẫu GF gốc.
+     */
     function fetchAndRenderGfPreview(blockId, templateId) {
         const container = document.getElementById(`preview-${blockId}`);
         if (!container) return;
@@ -1562,6 +1779,11 @@
             });
     }
 
+    /**
+     * Render nội dung chi tiết của GF vào container xem trước.
+     * @param {HTMLElement} container - Vùng hiển thị xem trước.
+     * @param {Array} blocks - Danh sách các khối nội dung của GF.
+     */
     function renderGfPreviewContent(container, blocks) {
         if (!blocks || blocks.length === 0) {
             container.innerHTML = '<div class="text-muted small italic">Biểu mẫu này chưa có nội dung.</div>';
@@ -1589,6 +1811,9 @@
         container.innerHTML = html;
     }
 
+    /**
+     * Chuyển đổi giữa chế độ Xem theo Phân đoạn và Xem toàn bộ hồ sơ.
+     */
     function toggleViewMode() {
         const currentSection = '{{ $activeSectionId ?? '' }}';
         const templateId = '{{ $template->id }}';
@@ -1620,6 +1845,13 @@
     let isFormatPainterActive = false;
     let storedFormat = null;
 
+    /**
+     * Bật/Tắt công cụ Sao chép định dạng (Format Painter).
+     * Cách hoạt động: 
+     * 1. Khi bật: Lấy tất cả style (màu, font, bold...) tại vị trí con trỏ hoặc khối hiện tại.
+     * 2. Lưu các style này vào biến `storedFormat`.
+     * 3. Khi người dùng click hoặc quét vùng khác, áp dụng style này và tự động tắt công cụ.
+     */
     function toggleFormatPainter() {
         if (isFormatPainterActive) {
             disableFormatPainter();
@@ -1668,6 +1900,9 @@
         }
     }
 
+    /**
+     * Kích hoạt chế độ Sao chép định dạng, đổi con trỏ chuột thành dạng copy.
+     */
     function enableFormatPainter() {
         isFormatPainterActive = true;
         const btn = document.getElementById('btn-format-painter');
@@ -1682,6 +1917,9 @@
         document.addEventListener('mouseup', handlePainterMouseUp);
     }
 
+    /**
+     * Hủy bỏ chế độ Sao chép định dạng.
+     */
     function disableFormatPainter() {
         isFormatPainterActive = false;
         const btn = document.getElementById('btn-format-painter');
@@ -1693,6 +1931,10 @@
         document.removeEventListener('mouseup', handlePainterMouseUp);
     }
 
+    /**
+     * Xử lý khi người dùng thả chuột để áp dụng định dạng đã sao chép vào vùng chọn mới.
+     * @param {MouseEvent} e - Sự kiện chuột.
+     */
     function handlePainterMouseUp(e) {
         if (!isFormatPainterActive || !storedFormat) return;
 
@@ -1739,6 +1981,9 @@
         }
     }
 
+    /**
+     * Xóa toàn bộ định dạng của vùng văn bản đang chọn hoặc khối đang chọn.
+     */
     function clearFormatting() {
         const selection = window.getSelection();
         if (selection.rangeCount > 0 && selection.toString().trim().length > 0) {
@@ -1756,6 +2001,11 @@
         }
     }
 
+    /**
+     * Sử dụng AI để dịch nội dung của một khối hoặc một ô bảng sang Tiếng Anh.
+     * @param {string} blockId - ID của khối cần dịch.
+     * @param {boolean} isWholeBlock - Dịch toàn bộ khối (true) hay chỉ ô đang chọn (false).
+     */
     async function translateBlockWithAI(blockId, isWholeBlock = true) {
         const item = items.find(i => i.id === blockId);
         if (!item) return;

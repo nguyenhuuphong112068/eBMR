@@ -4,15 +4,16 @@
         <div id="outline-col" class="col-lg-2 transition-all">
             <div class="p-3 bg-white rounded shadow-sm outline-sidebar h-100">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h6 class="mb-0 text-muted fw-bold" style="font-size: 0.85rem;"><i class="fas fa-list-ul me-2"></i>MỤC
-                        LỤC & THẺ</h6>
+                    <h6 class="mb-0 text-muted fw-bold" style="font-size: 0.85rem;">
+                        <i class="fas fa-list-ul me-2"></i>MỤC LỤC & THẺ
+                    </h6>
                     <button class="btn btn-sm btn-light text-muted border-0" onclick="toggleOutline(true)"
                         title="Thu nhỏ"><i class="fas fa-chevron-left"></i></button>
                 </div>
                 <div id="outline-content">
                     <div id="document-outline">
-                        <div class="outline-empty">Chưa có nội dung. Nhập văn bản và định dạng Tiêu đề (H1, H2,...) để
-                            tạo thẻ.</div>
+                        <div class="outline-empty">
+                            Chưa có nội dung. Nhập văn bản và định dạng Tiêu đề (H1, H2,...) để tạo thẻ.</div>
                     </div>
                 </div>
             </div>

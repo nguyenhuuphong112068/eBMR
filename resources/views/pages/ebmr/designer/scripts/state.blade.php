@@ -3,15 +3,16 @@
     window.isExecutionMode = @json($isExecutionMode ?? false);
     window.activeSectionId = @json($activeSectionId ?? null);
     window.isViewAllMode = !window.activeSectionId;
-    window.executionValues = @json($executionValues ?? (object)[]);
+    window.executionValues = @json($executionValues ?? (object) []);
 
     let items = @json($template->schema->fields ?? []);
-    let fieldsConfigInit = @json($template->schema->fieldsConfig ?? (object)[]);
+
+    let fieldsConfigInit = @json($template->schema->fieldsConfig ?? (object) []);
     let pageOrientation = @json($template->schema->pageOrientation ?? 'portrait');
-    
+
     // Ensure fieldsConfig is strictly an Object so JSON.stringify doesn't drop assigned properties
     let fieldsConfig = (!fieldsConfigInit || Array.isArray(fieldsConfigInit)) ? {} : fieldsConfigInit;
-    
+
     let currentTemplateId = {{ $template->id ?? 'null' }};
     let historyEnabled = {{ $template->log_history ?? 0 }} == 1;
     let selectedId = null;
@@ -32,7 +33,7 @@
         // Wait for DOM
         document.addEventListener('DOMContentLoaded', () => {
             const nameField = document.getElementById('templateName');
-            if (nameField) nameField.value = "{{ $template->category_name ?? $template->name ?? '' }}";
+            if (nameField) nameField.value = "{{ $template->category_name ?? ($template->name ?? '') }}";
             const hint = document.getElementById('drop-hint');
             if (hint) {
                 if (items.length > 0) hint.classList.add('d-none');
@@ -48,7 +49,7 @@
         pageOrientation = orr;
         const page = document.getElementById('document-page');
         if (!page) return;
-        
+
         if (orr === 'landscape') {
             page.classList.add('page-landscape');
             document.body.classList.add('printing-landscape');
@@ -64,37 +65,55 @@
             sop: "{{ $template->relatived_sop_no ?? '' }}",
             format: "{{ $template->category_code ?? '' }}",
             version: "{{ $template->version ?? '1' }}",
-            name: "{{ $template->category_name ?? $template->name ?? '' }}",
+            name: "{{ $template->category_name ?? ($template->name ?? '') }}",
         };
 
         // Table with 2 columns, no border
-        let columns = [
-            { label: 'C1', type: 'text', width: '60%' },
-            { label: 'C2', type: 'text', width: '40%' }
+        let columns = [{
+                label: 'C1',
+                type: 'text',
+                width: '60%'
+            },
+            {
+                label: 'C2',
+                type: 'text',
+                width: '40%'
+            }
         ];
 
         let data = [
             // Row 1: SOP and Format No (Using cell properties for styling)
-            [
-                { 
-                    content: `Reference SOP / Số SOP đối chiếu: ${t.sop}`, 
-                    rs: 1, cs: 1, 
-                    textAlign: 'left', fontStyle: 'italic', fontSize: '1.1rem' 
+            [{
+                    content: `Reference SOP / Số SOP đối chiếu: ${t.sop}`,
+                    rs: 1,
+                    cs: 1,
+                    textAlign: 'left',
+                    fontStyle: 'italic',
+                    fontSize: '1.1rem'
                 },
-                { 
-                    content: `Format no. / Số biểu mẫu: ${t.format}-${t.version}`, 
-                    rs: 1, cs: 1, 
-                    textAlign: 'right', fontStyle: 'italic', fontSize: '1.1rem' 
+                {
+                    content: `Format no. / Số biểu mẫu: ${t.format}-${t.version}`,
+                    rs: 1,
+                    cs: 1,
+                    textAlign: 'right',
+                    fontStyle: 'italic',
+                    fontSize: '1.1rem'
                 }
             ],
             // Row 2: Main Title (UPPERCASE, Centered)
-            [
-                { 
-                    content: t.name, 
-                    rs: 1, cs: 2, 
-                    textAlign: 'center', fontSize: '1.4rem', fontWeight: 'bold', textTransform: 'uppercase'
+            [{
+                    content: t.name,
+                    rs: 1,
+                    cs: 2,
+                    textAlign: 'center',
+                    fontSize: '1.4rem',
+                    fontWeight: 'bold',
+                    textTransform: 'uppercase'
                 },
-                { content: '', hidden: true }
+                {
+                    content: '',
+                    hidden: true
+                }
             ]
         ];
 
@@ -107,7 +126,7 @@
             columns: columns,
             data: data,
             rowHeights: new Array(2).fill('auto'),
-            borderMode: 'none', 
+            borderMode: 'none',
             hideHeader: true,
             locked: true,
             isGfHeader: true
@@ -127,48 +146,136 @@
             effective_date: "{{ $template->effective_date ?? '' }}"
         };
 
-        let columns = [
-            { label: 'C1', type: 'text', width: '25%' },
-            { label: 'C2', type: 'text', width: '25%' },
-            { label: 'C3', type: 'text', width: '25%' },
-            { label: 'C4', type: 'text', width: '25%' }
+        let columns = [{
+                label: 'C1',
+                type: 'text',
+                width: '25%'
+            },
+            {
+                label: 'C2',
+                type: 'text',
+                width: '25%'
+            },
+            {
+                label: 'C3',
+                type: 'text',
+                width: '25%'
+            },
+            {
+                label: 'C4',
+                type: 'text',
+                width: '25%'
+            }
         ];
 
         let data = [
             // Row 1: Logo and Main Title
-            [
-                { content: '<img src="/img/stella-pharm.jpg" style="max-height: 40px;">', rs: 1, cs: 1 },
-                { content: '<div style="font-size: 1.1rem; font-weight: bold; text-align: center;">BATCH MANUFACTURING RECORD/ HỒ SƠ SẢN XUẤT GỐC</div>', rs: 1, cs: 3 },
-                { content: '', hidden: true },
-                { content: '', hidden: true }
+            [{
+                    content: '<img src="/img/stella-pharm.jpg" style="max-height: 40px;">',
+                    rs: 1,
+                    cs: 1
+                },
+                {
+                    content: '<div style="font-size: 1.1rem; font-weight: bold; text-align: center;">BATCH MANUFACTURING RECORD/ HỒ SƠ SẢN XUẤT GỐC</div>',
+                    rs: 1,
+                    cs: 3
+                },
+                {
+                    content: '',
+                    hidden: true
+                },
+                {
+                    content: '',
+                    hidden: true
+                }
             ],
             // Row 2: Product & Dosage unit
-            [
-                { content: '<span style="font-size: 0.85rem; font-style: italic;">Product/Sản phẩm</span>', rs: 1, cs: 1 },
-                { content: '<strong style="font-size: 1rem;">: ' + t.name + '</strong>', rs: 1, cs: 1 },
-                { content: '<span style="font-size: 0.85rem; font-style: italic;">Dosage unit<br>Dạng bào chế</span>', rs: 1, cs: 1 },
-                { content: '<strong>: ' + t.dosage + '</strong>', rs: 1, cs: 1 }
+            [{
+                    content: '<span style="font-size: 0.85rem; font-style: italic;">Product/Sản phẩm</span>',
+                    rs: 1,
+                    cs: 1
+                },
+                {
+                    content: '<strong style="font-size: 1rem;">: ' + t.name + '</strong>',
+                    rs: 1,
+                    cs: 1
+                },
+                {
+                    content: '<span style="font-size: 0.85rem; font-style: italic;">Dosage unit<br>Dạng bào chế</span>',
+                    rs: 1,
+                    cs: 1
+                },
+                {
+                    content: '<strong>: ' + t.dosage + '</strong>',
+                    rs: 1,
+                    cs: 1
+                }
             ],
             // Row 3: BMR No & Grade
-            [
-                { content: '<span style="font-size: 0.85rem; font-style: italic;">BMR No./Số BMR</span>', rs: 1, cs: 1 },
-                { content: '<strong>: ' + t.code + '</strong>', rs: 1, cs: 1 },
-                { content: '<span style="font-size: 0.85rem; font-style: italic;">Grade/Phân loại</span>', rs: 1, cs: 1 },
-                { content: '<strong>: ' + t.type_name + '</strong>', rs: 1, cs: 1 }
+            [{
+                    content: '<span style="font-size: 0.85rem; font-style: italic;">BMR No./Số BMR</span>',
+                    rs: 1,
+                    cs: 1
+                },
+                {
+                    content: '<strong>: ' + t.code + '</strong>',
+                    rs: 1,
+                    cs: 1
+                },
+                {
+                    content: '<span style="font-size: 0.85rem; font-style: italic;">Grade/Phân loại</span>',
+                    rs: 1,
+                    cs: 1
+                },
+                {
+                    content: '<strong>: ' + t.type_name + '</strong>',
+                    rs: 1,
+                    cs: 1
+                }
             ],
-             // Row 4: Version & Batch Size
-             [
-                { content: '<span style="font-size: 0.85rem; font-style: italic;">Version No./Số ấn bản</span>', rs: 1, cs: 1 },
-                { content: '<strong style="color: red;">: ' + t.edition + '</strong>', rs: 1, cs: 1 },
-                { content: '<span style="font-size: 0.85rem; font-style: italic;">Batch size/Cỡ lô</span>', rs: 1, cs: 1 },
-                { content: '<strong>: ' + t.batch_size + '</strong>', rs: 1, cs: 1 }
+            // Row 4: Version & Batch Size
+            [{
+                    content: '<span style="font-size: 0.85rem; font-style: italic;">Version No./Số ấn bản</span>',
+                    rs: 1,
+                    cs: 1
+                },
+                {
+                    content: '<strong style="color: red;">: ' + t.edition + '</strong>',
+                    rs: 1,
+                    cs: 1
+                },
+                {
+                    content: '<span style="font-size: 0.85rem; font-style: italic;">Batch size/Cỡ lô</span>',
+                    rs: 1,
+                    cs: 1
+                },
+                {
+                    content: '<strong>: ' + t.batch_size + '</strong>',
+                    rs: 1,
+                    cs: 1
+                }
             ],
             // Row 5: Supersedes & Effective Date
-            [
-                { content: '<span style="font-size: 0.85rem; font-style: italic;">Supersedes/<br>Ấn bản thay thế</span>', rs: 1, cs: 1 },
-                { content: '<strong>: 00</strong>', rs: 1, cs: 1 },
-                { content: '<span style="font-size: 0.85rem; font-style: italic;">Effective date/Ngày hiệu lực</span>', rs: 1, cs: 1 },
-                { content: '<strong>: ' + t.effective_date + '</strong>', rs: 1, cs: 1 }
+            [{
+                    content: '<span style="font-size: 0.85rem; font-style: italic;">Supersedes/<br>Ấn bản thay thế</span>',
+                    rs: 1,
+                    cs: 1
+                },
+                {
+                    content: '<strong>: 00</strong>',
+                    rs: 1,
+                    cs: 1
+                },
+                {
+                    content: '<span style="font-size: 0.85rem; font-style: italic;">Effective date/Ngày hiệu lực</span>',
+                    rs: 1,
+                    cs: 1
+                },
+                {
+                    content: '<strong>: ' + t.effective_date + '</strong>',
+                    rs: 1,
+                    cs: 1
+                }
             ]
         ];
 

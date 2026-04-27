@@ -10,6 +10,7 @@ class EbmrDesignerController extends Controller
 {
     public function designer(Request $request, $id = null)
     {
+
         try {
             $id = $id ?? $request->query('id');
             $sectionId = $request->query('section');
