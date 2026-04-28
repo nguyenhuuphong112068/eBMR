@@ -11,7 +11,6 @@
 @endsection
 
 @section('mainContent') {{-- Bắt đầu nội dung chính của trang thiết kế --}}
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script> {{-- Nhúng thư viện SweetAlert2 để hiển thị các thông báo popup đẹp mắt --}}
 
     <div class="content-wrapper" id="mainContent" style="background-color: #f1f3f4; min-height: 100vh;"> {{-- Vùng bao quanh toàn bộ nội dung, đặt màu nền xám nhạt --}}
         @include('pages.ebmr.designer.partials.toolbar') {{-- Nhúng thanh công cụ (Toolbar) chứa các nút Bold, Italic, Chèn bảng... --}}
@@ -26,6 +25,11 @@
     @include('pages.ebmr.designer.partials.modals') {{-- Nhúng các cửa sổ popup (Modals) như: chèn ảnh, cấu hình bảng, AI translate... --}}
     @include('pages.ebmr.designer.partials.styles') {{-- Nhúng các định dạng CSS riêng cho trình thiết kế (layout trang giấy, hiệu ứng hover...) --}}
 
+@endsection
+
+@section('script')
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script> {{-- Nhúng thư viện SweetAlert2 v11 để hỗ trợ showDenyButton và các tính năng mới --}}
+    
     {{-- Nhóm các Module Script - Chia nhỏ code Javascript để dễ quản lý --}}
     @include('pages.ebmr.designer.scripts.state') {{-- Quản lý trạng thái dữ liệu (mảng items, lịch sử undo/redo) --}}
     @include('pages.ebmr.designer.scripts.render') {{-- Chứa hàm renderBlocks() để vẽ dữ liệu ra màn hình --}}
@@ -40,4 +44,5 @@
     @include('pages.ebmr.designer.scripts.chart_ops') {{-- Xử lý hiển thị và cấu hình biểu đồ (Charts) --}}
     @include('pages.ebmr.designer.scripts.events') {{-- Quản lý các sự kiện phím tắt (Ctrl+S, Ctrl+Z) và các sự kiện chung --}}
     @include('pages.ebmr.designer.scripts.symbol_ops') {{-- Xử lý chèn các ký tự đặc biệt (Symbol Picker) --}}
+    @include('pages.ebmr.designer.scripts.import_word') {{-- Xử lý import file Word (.docx) --}}
 @endsection

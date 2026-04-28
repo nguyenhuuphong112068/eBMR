@@ -8,36 +8,41 @@
         const hint = document.getElementById('drop-hint');
         if (!container) return;
 
+        // Reset trạng thái chọn nếu đang ở chế độ thực thi (điền dữ liệu)
         if (window.isExecutionMode) {
-            selectedId = null; // Luôn bỏ chọn khối ở chế độ ghi chép
+            selectedId = null; 
         }
 
+        // Xóa sạch nội dung cũ trước khi vẽ lại
         container.innerHTML = '';
 
+        // Xử lý gợi ý kéo thả (chỉ hiện ở chế độ thiết kế)
         if (hint) {
             if (!window.isExecutionMode) container.appendChild(hint);
             else hint.remove();
         }
+
         let lastSectionId = null;
         let currentGroup = container;
         let activeSectionIdTracker = null;
 
+        // Duyệt qua từng phần tử trong mảng items để tạo HTML tương ứng
         items.forEach((item, idx) => {
-                // Determine the section this item belongs to based on sequence
+                // Xác định phân đoạn (section) mà item này thuộc về
                 if (item.type === 'section') {
                     activeSectionIdTracker = item.id;
                 }
 
                 const itemSectionId = activeSectionIdTracker || 'section_0';
-                item.section_id = itemSectionId; // Sync data with sequence
+                item.section_id = itemSectionId; // Gán ID phân đoạn cho item để đồng bộ dữ liệu
 
-                // Skip rendering if it's the old signature block (being deprecated)
+                // Bỏ qua các khối chữ ký cũ (đang dần thay thế bằng badge chữ ký linh hoạt hơn)
                 if (item.type === 'signature') return;
 
-                // Page Break & Grouping Logic
+                // Logic phân trang và gom nhóm theo phân đoạn (Section)
                 if (window.isViewAllMode || !window.activeSectionId) {
                     if (lastSectionId === null || itemSectionId !== lastSectionId) {
-                        // Create Page Break if not the first section
+                        // Tạo đường phân cách trang nếu không phải phân đoạn đầu tiên
                         if (lastSectionId !== null) {
                             const pageBreak = document.createElement('div');
                             pageBreak.className =
@@ -50,16 +55,16 @@
                             container.appendChild(pageBreak);
                         }
 
-                        // Create a new Section Group Wrapper
+                        // Tạo bao vùng (Wrapper) cho một nhóm các khối thuộc cùng một phân đoạn
                         currentGroup = document.createElement('div');
                         currentGroup.className = 'section-group-wrapper' + (window.activeSectionId ===
                             itemSectionId ? ' active' : '');
                         currentGroup.setAttribute('data-section-id', itemSectionId);
                         currentGroup.onclick = (e) => {
-                            // Activate section when clicking its wrapper background
+                            // Kích hoạt phân đoạn khi click vào vùng nền của nhóm
                             if (e.target === currentGroup) {
                                 window.activeSectionId = itemSectionId;
-                                selectedId = null; // Deselect specific block
+                                selectedId = null; // Bỏ chọn khối cụ thể
                                 renderBlocks();
                             }
                         };
@@ -68,35 +73,40 @@
                         lastSectionId = itemSectionId;
                     }
                 } else {
-                    // If filtered to a specific section, no wrappers needed or just one
+                    // Nếu đang lọc xem một phân đoạn cụ thể, không cần Wrapper nhóm
                     currentGroup = container;
                 }
 
+                // Thêm vạch chèn (dấu cộng) giữa các khối ở chế độ chỉnh sửa
                 if (!window.isReadOnly && !window.isExecutionMode) {
                     addInsertionDivider(currentGroup, idx);
                 }
 
+                // Tạo thẻ bao ngoài cho khối (block-item)
                 const div = document.createElement('div');
-                // 'active' class will never be added in execution mode because selectedId is null
                 div.className =
                     `block-item type-${item.type} ${selectedId === item.id ? 'active' : ''} ${window.isExecutionMode ? 'execution-mode' : ''}`;
                 div.setAttribute('data-id', item.id);
+                
+                // Áp dụng các style tùy chỉnh (lề, màu nền) từ dữ liệu
                 if (item.marginLeft) div.style.marginLeft = item.marginLeft;
                 if (item.marginRight) div.style.marginRight = item.marginRight;
                 if (item.backgroundColor) div.style.backgroundColor = item.backgroundColor;
 
+                // Xử lý sự kiện click để chọn khối (chỉ ở chế độ thiết kế)
                 if (!window.isExecutionMode) {
                     div.onclick = (e) => {
                         e.stopPropagation();
                         if (selectedId !== item.id) {
-                            // Update active section highlight without full re-render if possible
-                            // But for simplicity, we call selectItem which might re-render
-                            selectItem(item.id, true); // doRender=true to update the wrapper's 'active' class
+                            // Chọn item và vẽ lại thanh thuộc tính
+                            selectItem(item.id, true); 
                         }
                     };
                 }
 
                 let content = `<div class="block-mock"></div>`;
+                
+                // --- XỬ LÝ KHỐI BẢNG (TABLE) ---
                 if (item.type === 'table') {
                     const borderClass = item.borderMode === 'dashed' ? 'border-dashed' : (item.borderMode ===
                         'none' ? 'border-none' : '');
@@ -112,41 +122,39 @@
                         const td = s.textDecoration || '';
                         const fsz = s.fontSize || '';
                         const tc = s.textColor || '';
-                        return ` < th contenteditable = "false"
-                        spellcheck = "false"
-                        data - row = "0"
-                        data - col = "${cIdx}"
-                        style =
-                            "width: ${c.width || 'auto'}; background-color: ${bg}; text-align: ${align}; font-weight: ${fw}; font-style: ${fs}; text-decoration: ${td}; font-size: ${fsz}; color: ${tc};" >
-                            $ {
-                                c.label
-                            } < /th>`;
-                    }).join('')
-            }
-            $ {
-                window.isExecutionMode && item.canAddRows ?
-                    '<th style="width: 30px; border: none; background: transparent;"></th>' : ''
-            } <
-            /tr></thead > `;
+                        return `<th contenteditable="false"
+                        spellcheck="false"
+                        data-row="0"
+                        data-col="${cIdx}"
+                        style="width: ${c.width || 'auto'}; background-color: ${bg}; text-align: ${align}; font-weight: ${fw}; font-style: ${fs}; text-decoration: ${td}; font-size: ${fsz}; color: ${tc};">
+                            ${c.label}
+                        </th>`;
+                    }).join('')}
+                    ${window.isExecutionMode && item.canAddRows ? '<th style="width: 30px; border: none; background: transparent;"></th>' : ''}
+                    </tr></thead>`;
                 }
 
                 let rowsHtml = '';
                 const blockKey = item.uuid || item.id;
+                // Lấy dữ liệu đã nhập (nếu đang ở chế độ thực thi)
                 const runDataForBlock = window.executionValues[blockKey] || {};
 
+                // Duyệt qua từng dòng và cột để xây dựng ô (Cell)
                 for (let r = 0; r < (item.rows || 1); r++) {
                     let cellsHtml = '';
                     const rowH = (item.rowHeights && item.rowHeights[r]) ? item.rowHeights[r] : 'auto';
                     for (let c = 0; c < (item.cols || 1); c++) {
+                        // Đảm bảo dữ liệu ô luôn là object
                         if (!item.data[r][c] || typeof item.data[r][c] !== 'object') {
                             item.data[r][c] = { content: item.data[r][c] || '', rs: 1, cs: 1, hidden: false };
                         }
                         const cell = item.data[r][c];
-                        if (cell.hidden) continue;
+                        if (cell.hidden) continue; // Bỏ qua nếu ô bị ẩn do merge (rowspan/colspan)
 
                         const cellWidth = (item.columns && item.columns[c] && item.columns[c].width) ? item.columns[c].width : 'auto';
                         const cellBg = (cell.backgroundColor) ? cell.backgroundColor : '';
 
+                        // Xử lý hiển thị nội dung (badge biến số, công thức...)
                         let displayContent = decorateContent(cell.content);
                         if (displayContent === null || displayContent === 'null' || displayContent === undefined) {
                             displayContent = '';
@@ -156,146 +164,150 @@
                         let onclickAttr = "";
                         let finalEditable = "false";
 
+                        // Phân biệt chế độ Thực thi (Execution) và Thiết kế (Designer)
                         if (window.isExecutionMode) {
-                            const runVal = runDataForBlock[`
-            $ {
-                r
-            }
-            _$ {
-                c
-            }
-            `];
+                            const runVal = runDataForBlock[`${r}_${c}`];
+                            // Nếu ô chứa thẻ nhập liệu đặc biệt
                             if (displayContent.includes('[Nhập dữ liệu]')) {
                                 cellClass = "execution-input-cell";
-                                onclickAttr = `
-            onclick = "openExecutionInputModal('${blockKey}', ${r}, ${c}, 'text')"
-            `;
-                                displayContent = runVal ? runVal : ` < span class = "execution-badge input" > <
-            i class = "fas fa-edit" > < /i> [Nhập dữ liệu]</span > `;
+                                onclickAttr = `onclick="openExecutionInputModal('${blockKey}', ${r}, ${c}, 'text')"`;
+                                displayContent = runVal ? runVal : `<span class="execution-badge input"><i class="fas fa-edit"></i> [Nhập dữ liệu]</span>`;
                             } else if (displayContent.includes('[Ký tên]')) {
                                 cellClass = "execution-input-cell";
-                                onclickAttr = `
-            onclick = "openExecutionInputModal('${blockKey}', ${r}, ${c}, 'signature')"
-            `;
-                                displayContent = runVal ? ` < div class = "e-signature-done" > < i class =
-            "fas fa-check-circle text-success me-1" > < /i>${runVal}</div > ` : ` < span class =
-            "execution-badge signature" > < i class = "fas fa-pen" > < /i> [Ký tên]</span > `;
+                                onclickAttr = `onclick="openExecutionInputModal('${blockKey}', ${r}, ${c}, 'signature')"`;
+                                displayContent = runVal ? `<div class="e-signature-done"><i class="fas fa-check-circle text-success me-1"></i>${runVal}</div>` : `<span class="execution-badge signature"><i class="fas fa-pen"></i> [Ký tên]</span>`;
                             }
                         } else {
+                            // Ở chế độ thiết kế, ô có thể sửa trực tiếp nếu không bị khóa
                             finalEditable = (item.locked || window.isReadOnly) ? 'false' : 'true';
                         }
 
-                        cellsHtml += ` < td contenteditable = "${finalEditable}"
-            spellcheck = "false"
-            data - row = "${r+1}"
-            data - col = "${c}"
-            rowspan = "${cell.rs || 1}"
-            colspan = "${cell.cs || 1}"
-            $ {
-                onclickAttr
-            }
-            class = "${cellClass} ${item.locked ? 'locked-cell' : ''}"
-            style =
-            "width: ${cellWidth}; height: ${rowH}; background-color: ${cellBg}; text-align: ${cell.textAlign || ''}; font-weight: ${cell.fontWeight || ''}; font-style: ${cell.fontStyle || ''}; text-decoration: ${cell.textDecoration || ''}; font-size: ${cell.fontSize || ''}; color: ${cell.textColor || ''}; text-transform: ${cell.textTransform || ''};"
-            oninput = "updateTableInline('${item.id}', 'cell', ${r}, ${c}, this.innerHTML)" > $ {
-                displayContent
-            } < /td>`;
-        }
-        let deleteCell = '';
-        if (window.isExecutionMode && item.canAddRows) {
-            deleteCell = `<td class="execution-delete-cell" style="width: 30px; border: none; background: transparent; vertical-align: middle;">
-                                        <button class="btn btn-link text-danger p-0" title="Xóa dòng" onclick="executeDeleteTableRow('${item.id}', ${r})">
-                                            <i class="fas fa-times-circle"></i>
+                        cellsHtml += `<td contenteditable="${finalEditable}"
+                        spellcheck="false"
+                        data-row="${r+1}"
+                        data-col="${c}"
+                        rowspan="${cell.rs || 1}"
+                        colspan="${cell.cs || 1}"
+                        ${onclickAttr}
+                        class="${cellClass} ${item.locked ? 'locked-cell' : ''}"
+                        style="width: ${cellWidth}; height: ${rowH}; background-color: ${cellBg}; text-align: ${cell.textAlign || ''}; font-weight: ${cell.fontWeight || ''}; font-style: ${cell.fontStyle || ''}; text-decoration: ${cell.textDecoration || ''}; font-size: ${cell.fontSize || ''}; color: ${cell.textColor || ''}; text-transform: ${cell.textTransform || ''};"
+                        oninput="updateTableInline('${item.id}', 'cell', ${r}, ${c}, this.innerHTML)">
+                            ${displayContent}
+                        </td>`;
+                    }
+                    
+                    // Thêm nút xóa dòng ở chế độ thực thi nếu bảng cho phép thêm/xóa dòng động
+                    let deleteCell = '';
+                    if (window.isExecutionMode && item.canAddRows) {
+                        deleteCell = `<td class="execution-delete-cell" style="width: 30px; border: none; background: transparent; vertical-align: middle;">
+                                                    <button class="btn btn-link text-danger p-0" title="Xóa dòng" onclick="executeDeleteTableRow('${item.id}', ${r})">
+                                                        <i class="fas fa-times-circle"></i>
+                                                    </button>
+                                                  </td>`;
+                    }
+                    rowsHtml += `<tr>${cellsHtml}${deleteCell}</tr>`;
+                }
+
+                // Nút thêm dòng mới cho bảng có cấu trúc động
+                let addRowBtn = '';
+                if (item.canAddRows) {
+                    const btnLabel = window.isExecutionMode ? 'THÊM DÒNG CUỐI' : 'THỬ THÊM DÒNG (CẤP 2)';
+                    addRowBtn = `
+                                    <div class="mt-2 text-start">
+                                        <button class="btn btn-xs btn-outline-primary py-0 px-2 fw-bold" style="font-size: 0.65rem; border-radius: 4px;" onclick="executeAddTableRow('${item.id}')">
+                                            <i class="fas fa-plus me-1"></i> ${btnLabel}
                                         </button>
-                                      </td>`;
-        }
-        rowsHtml += `<tr>${cellsHtml}${deleteCell}</tr>`;
-    }
+                                    </div>
+                                `;
+                }
 
-    let addRowBtn = '';
-    if (item.canAddRows) {
-        const btnLabel = window.isExecutionMode ? 'THÊM DÒNG CUỐI' : 'THỬ THÊM DÒNG (CẤP 2)';
-        addRowBtn = `
-                        <div class="mt-2 text-start">
-                            <button class="btn btn-xs btn-outline-primary py-0 px-2 fw-bold" style="font-size: 0.65rem; border-radius: 4px;" onclick="executeAddTableRow('${item.id}')">
-                                <i class="fas fa-plus me-1"></i> ${btnLabel}
-                            </button>
-                        </div>
-                    `;
-    }
+                content = `<table class="mini-table ${borderClass}">${thead}<tbody>${rowsHtml}</tbody></table>${addRowBtn}`;
+                }
+                
+                // --- XỬ LÝ KHỐI VĂN BẢN TĨNH (STATIC TEXT) ---
+                else if (item.type === 'static-text') {
+                    const displayContent = decorateContent(item.content || '');
+                    const textEditable = (window.isReadOnly || window.isExecutionMode) ? 'false' : 'true';
+                    const borderClass = item.borderMode === 'dashed' ? 'border-dashed' : (item.borderMode === 'visible' ?
+                        'border-visible' : 'border-none');
 
-    content = `<table class="mini-table ${borderClass}">${thead}<tbody>${rowsHtml}</tbody></table>${addRowBtn}`;
-    }
-    else if (item.type === 'static-text') {
-        const displayContent = decorateContent(item.content || '');
-        const textEditable = (window.isReadOnly || window.isExecutionMode) ? 'false' : 'true';
-        const borderClass = item.borderMode === 'dashed' ? 'border-dashed' : (item.borderMode === 'visible' ?
-            'border-visible' : 'border-none');
+                    content =
+                        `<div class="static-text-display ${borderClass}" contenteditable="${textEditable}" spellcheck="false" 
+                                            oninput="updateStaticTextInline('${item.id}', this.innerHTML); handleAutoCapitalize(this)">${displayContent}</div>`;
+                } 
+                
+                // --- XỬ LÝ KHỐI BIỂU MẪU NHÚNG (LINKED TEMPLATE) ---
+                else if (item.type === 'linked-template') {
+                    const isPreviewing = item.showPreview || false;
+                    // Vùng chứa nội dung xem trước của biểu mẫu nhúng
+                    const previewContent = isPreviewing ? `<div id="preview-${item.id}" class="mt-3 p-4 border rounded bg-white w-100 shadow-sm" style="pointer-events: none; opacity: 0.9;">
+                                <div class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>
+                            </div>` : '';
 
-        content =
-            `<div class="static-text-display ${borderClass}" contenteditable="${textEditable}" spellcheck="false" 
-                                oninput="updateStaticTextInline('${item.id}', this.innerHTML); handleAutoCapitalize(this)">${displayContent}</div>`;
-    } else if (item.type === 'linked-template') {
-        const isPreviewing = item.showPreview || false;
-        const previewContent = isPreviewing ? `<div id="preview-${item.id}" class="mt-3 p-4 border rounded bg-white w-100 shadow-sm" style="pointer-events: none; opacity: 0.9;">
-                    <div class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>
-                </div>` : '';
+                    content = `<div class="block-mock d-flex flex-column align-items-center justify-content-center py-4 px-3 position-relative" style="background-color: #f8f9fa; border: 2px dashed #0d6efd; border-radius: 12px; min-height: 120px;">
+                                         <div class="position-absolute" style="top: 10px; right: 10px; z-index: 100;">
+                                            <button class="btn btn-sm btn-primary shadow-sm px-3" onclick="event.stopPropagation(); toggleGfPreview('${item.id}')" style="border-radius: 20px;">
+                                                <i class="fas ${isPreviewing ? 'fa-eye-slash' : 'fa-eye'} me-1"></i> ${isPreviewing ? 'Ẩn nội dung' : 'Xem nội dung'}
+                                            </button>
+                                         </div>
+                                         <i class="fas fa-link fa-2x text-primary mb-2 ${isPreviewing ? 'd-none' : ''}"></i>
+                                         <div class="fw-bold text-navy ${isPreviewing ? 'mb-2 border-bottom pb-2 w-100' : ''}">Biểu mẫu chung: ${item.label || 'Đang tải...'}</div>
+                                         ${!isPreviewing ? `<div class="small text-muted mt-1">Nội dung sẽ được tự động chèn vào khi ban hành/thực thi</div>` : ''}
+                                         ${previewContent}
+                                       </div>`;
 
-        content = `<div class="block-mock d-flex flex-column align-items-center justify-content-center py-4 px-3 position-relative" style="background-color: #f8f9fa; border: 2px dashed #0d6efd; border-radius: 12px; min-height: 120px;">
-                             <div class="position-absolute" style="top: 10px; right: 10px; z-index: 100;">
-                                <button class="btn btn-sm btn-primary shadow-sm px-3" onclick="event.stopPropagation(); toggleGfPreview('${item.id}')" style="border-radius: 20px;">
-                                    <i class="fas ${isPreviewing ? 'fa-eye-slash' : 'fa-eye'} me-1"></i> ${isPreviewing ? 'Ẩn nội dung' : 'Xem nội dung'}
-                                </button>
-                             </div>
-                             <i class="fas fa-link fa-2x text-primary mb-2 ${isPreviewing ? 'd-none' : ''}"></i>
-                             <div class="fw-bold text-navy ${isPreviewing ? 'mb-2 border-bottom pb-2 w-100' : ''}">Biểu mẫu chung: ${item.label || 'Đang tải...'}</div>
-                             ${!isPreviewing ? `<div class="small text-muted mt-1">Nội dung sẽ được tự động chèn vào khi ban hành/thực thi</div>` : ''}
-                             ${previewContent}
-                           </div>`;
+                    // Nếu đang mở xem trước, gọi hàm fetch dữ liệu từ server
+                    if (isPreviewing) {
+                        setTimeout(() => fetchAndRenderGfPreview(item.id, item.template_id), 50);
+                    }
+                } 
+                
+                // --- XỬ LÝ KHỐI PHÂN ĐOẠN (SECTION) ---
+                else if (item.type === 'section') {
+                    const labelEditable = (window.isReadOnly || window.isExecutionMode) ? 'false' : 'true';
+                    content = `<div class="ebmr-section-header d-flex align-items-center" id="section-${item.id}">
+                                         <div class="section-icon bg-info text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px; min-width: 40px;">
+                                            <i class="fas fa-layer-group"></i>
+                                         </div>
+                                         <div class="flex-grow-1">
+                                            <div class="section-title fw-bold text-uppercase" contenteditable="${labelEditable}" 
+                                                 onblur="updateItemProp('label', this.innerText)" 
+                                                 style="font-size: 1.2rem; color: #164e63; letter-spacing: 1px;">${item.label || 'Tên phân đoạn'}</div>
+                                            <div class="section-line mt-1" style="height: 3px; background: linear-gradient(to right, #0ea5e9, transparent); border-radius: 2px;"></div>
+                                         </div>
+                                       </div>`;
+                } 
+                
+                // --- XỬ LÝ KHỐI BIỂU ĐỒ (CHART) ---
+                else if (item.type === 'chart') {
+                    const canvasId = 'chart_canvas_' + item.id;
+                    content = `<div class="chart-container" style="position: relative; height:300px; width:100%; padding: 15px; background: #fff; border: 1px solid #eee; border-radius: 8px;">
+                                         <canvas id="${canvasId}"></canvas>
+                                       </div>`;
+                    // Đăng ký khởi tạo Chart.js sau khi DOM đã sẵn sàng
+                    setTimeout(() => {
+                        if (typeof renderChart === 'function') {
+                            renderChart(canvasId, item.chartConfig);
+                        }
+                    }, 50);
+                }
 
-        if (isPreviewing) {
-            setTimeout(() => fetchAndRenderGfPreview(item.id, item.template_id), 50);
-        }
-    } else if (item.type === 'section') {
-        const labelEditable = (window.isReadOnly || window.isExecutionMode) ? 'false' : 'true';
-        content = `<div class="ebmr-section-header d-flex align-items-center" id="section-${item.id}">
-                             <div class="section-icon bg-info text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px; min-width: 40px;">
-                                <i class="fas fa-layer-group"></i>
-                             </div>
-                             <div class="flex-grow-1">
-                                <div class="section-title fw-bold text-uppercase" contenteditable="${labelEditable}" 
-                                     onblur="updateItemProp('label', this.innerText)" 
-                                     style="font-size: 1.2rem; color: #164e63; letter-spacing: 1px;">${item.label || 'Tên phân đoạn'}</div>
-                                <div class="section-line mt-1" style="height: 3px; background: linear-gradient(to right, #0ea5e9, transparent); border-radius: 2px;"></div>
-                             </div>
-                           </div>`;
-    } else if (item.type === 'chart') {
-        const canvasId = 'chart_canvas_' + item.id;
-        content = `<div class="chart-container" style="position: relative; height:300px; width:100%; padding: 15px; background: #fff; border: 1px solid #eee; border-radius: 8px;">
-                             <canvas id="${canvasId}"></canvas>
-                           </div>`;
-        // Schedule chart initialization after DOM is ready
-        setTimeout(() => {
-            if (typeof renderChart === 'function') {
-                renderChart(canvasId, item.chartConfig);
-            }
-        }, 50);
-    }
+                // --- THANH HÀNH ĐỘNG (XÓA, DI CHUYỂN) ---
+                const actions = (item.locked || window.isReadOnly || window.isExecutionMode) ? '' : `
+                            <div class="block-actions">
+                                <button class="btn btn-sm btn-light border shadow-sm text-danger" onclick="removeItem('${item.id}')"><i class="fas fa-trash"></i></button>
+                                <button class="btn btn-sm btn-light border shadow-sm" onclick="moveItem(${idx}, -1)"><i class="fas fa-chevron-up"></i></button>
+                                <button class="btn btn-sm btn-light border shadow-sm" onclick="moveItem(${idx}, 1)"><i class="fas fa-chevron-down"></i></button>
+                            </div>`;
 
-    const actions = (item.locked || window.isReadOnly || window.isExecutionMode) ? '' : `
-                <div class="block-actions">
-                    <button class="btn btn-sm btn-light border shadow-sm text-danger" onclick="removeItem('${item.id}')"><i class="fas fa-trash"></i></button>
-                    <button class="btn btn-sm btn-light border shadow-sm" onclick="moveItem(${idx}, -1)"><i class="fas fa-chevron-up"></i></button>
-                    <button class="btn btn-sm btn-light border shadow-sm" onclick="moveItem(${idx}, 1)"><i class="fas fa-chevron-down"></i></button>
-                </div>`;
-
-    div.innerHTML = `
-                ${actions}
-                ${item.type !== 'static-text' && !window.isExecutionMode && item.label && item.label !== 'null' && !item.isGfHeader ? `<span class="block-label">${item.label} ${item.locked ? '<i class="fas fa-lock ms-1 small"></i>' : ''}</span>` : ''}
-                ${content}
-            `;
-    currentGroup.appendChild(div);
-    });
+                // Tổng hợp HTML của khối
+                div.innerHTML = `
+                            ${actions}
+                            ${item.type !== 'static-text' && !window.isExecutionMode && item.label && item.label !== 'null' && !item.isGfHeader ? `<span class="block-label">${item.label} ${item.locked ? '<i class="fas fa-lock ms-1 small"></i>' : ''}</span>` : ''}
+                            ${content}
+                        `;
+                currentGroup.appendChild(div);
+                });
 
     if (items.length > 0) {
         if (!window.isReadOnly && !window.isExecutionMode) {
@@ -386,6 +398,7 @@
      */
     window.pasteAt = async function(idx) {
         try {
+            // Đọc dữ liệu từ Clipboard
             const clipboardItems = await navigator.clipboard.read();
             let htmlData = "";
             let plainText = "";
@@ -406,7 +419,7 @@
                 return;
             }
 
-            // Create a mock event for handleGlobalPaste or just call logic
+            // Tạo đối tượng sự kiện giả lập để tái sử dụng hàm handleGlobalPaste hiện có
             const mockEvent = {
                 clipboardData: {
                     getData: (type) => (type === 'text/html' ? htmlData : plainText)
@@ -414,11 +427,10 @@
                 preventDefault: () => {},
                 target: {
                     closest: () => null
-                } // Ensure it doesn't think it's a table paste
+                } 
             };
 
-            // Temporarily set a global flag or pass index?
-            // Let's just manually trigger the paste logic but with our index
+            // Gọi logic xử lý dán dữ liệu tại vị trí idx đã chọn
             handleGlobalPaste(mockEvent, idx);
 
         } catch (err) {
@@ -446,7 +458,9 @@
             const fieldId = badge.getAttribute('data-field-id');
             const field = fieldsConfig[fieldId];
             if (field) {
+                // TRƯỜNG HỢP 1: Chế độ THỰC THI (Hiển thị giá trị đã nhập hoặc kết quả tính toán)
                 if (window.isExecutionMode) {
+                    // Nếu là thẻ công thức, thực hiện tính toán ngay
                     if (field.type === 'formula') {
                         const result = calculateFormula(field.formula || '');
                         badge.innerHTML = result;
@@ -454,6 +468,7 @@
                         return;
                     }
 
+                    // Nếu là thẻ biến số, lấy giá trị từ mảng window.executionValues
                     const val = window.executionValues[fieldId] || '';
                     if (val) {
                         badge.innerHTML = val;
@@ -461,11 +476,14 @@
                     } else {
                         badge.innerHTML = `[${field.label}]`;
                     }
-                } else {
+                } 
+                // TRƯỜNG HỢP 2: Chế độ THIẾT KẾ (Hiển thị badge kèm icon loại dữ liệu)
+                else {
                     let icon = 'fa-edit';
                     let typeLabel = '';
                     let extra = '';
 
+                    // Xác định Icon dựa theo loại trường (field type)
                     if (field.type === 'signature') {
                         icon = 'fa-signature';
                         typeLabel = 'Chữ ký';
@@ -510,15 +528,17 @@
 
         const valMap = {};
 
-        // 1. Build value map from all table cells with IDs
+        // BƯỚC 1: Thu thập giá trị từ các ô bảng (Table Cells) có đặt ID (cellId)
         items.forEach(item => {
             if (item.type === 'table' && item.data) {
                 item.data.forEach(row => {
                     row.forEach(cell => {
                         if (cell && cell.cellId) {
+                            // Ưu tiên giá trị mặc định nếu có, nếu không lấy nội dung ô
                             const raw = (cell.defaultValue !== undefined && cell
                                 .defaultValue !== '') ? cell.defaultValue : (cell
                                 .content || '0');
+                            // Làm sạch HTML và chuyển đổi sang số
                             const clean = typeof raw === 'string' ? raw.replace(/<[^>]*>/g,
                                 '').trim() : raw;
                             valMap[cell.cellId] = parseFloat(clean) || 0;
@@ -528,7 +548,7 @@
             }
         });
 
-        // 2. Build value map from all Dynamic Fields (by Label or Name)
+        // BƯỚC 2: Thu thập giá trị từ các "Trường động" (Dynamic Fields) theo Tên hoặc Nhãn
         Object.values(fieldsConfig).forEach(field => {
             if (field.label || field.name) {
                 const val = (field.defaultValue !== undefined && field.defaultValue !== '') ? field
@@ -538,20 +558,22 @@
             }
         });
 
-        // 3. Replace IDs in formula: (1) -> valMap['1']
+        // BƯỚC 3: Thay thế các định danh trong công thức bằng giá trị thực tế
+        // Ví dụ: "(kl_tong) - (kl_bao)" -> "100 - 5"
         let processed = formula.replace(/\(([^)]+)\)/g, (match, id) => {
             const trimmedId = id.trim();
             return valMap[trimmedId] !== undefined ? valMap[trimmedId] : 0;
         });
 
-        // 4. Evaluate basic math
+        // BƯỚC 4: Tính toán biểu thức toán học cơ bản bằng hàm Function (an toàn hơn eval một chút)
         try {
             const result = new Function(`return ${processed}`)();
+            // Định dạng kết quả hiển thị (phân tách hàng nghìn, tối đa 2 chữ số thập phân)
             return (typeof result === 'number') ? result.toLocaleString('en-US', {
                 maximumFractionDigits: 2
             }) : result;
         } catch (e) {
-            return '#ERR';
+            return '#ERR'; // Trả về lỗi nếu công thức không hợp lệ
         }
     };
 

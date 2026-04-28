@@ -14,6 +14,10 @@
             </button>
             <button class="btn btn-toolbar" onclick="window.print()" title="In hồ sơ"><i
                     class="fas fa-print"></i></button>
+            <button class="btn btn-toolbar" onclick="document.getElementById('wordImporter').click()" title="Nhập từ Word (.doc, .docx)">
+                <i class="fas fa-file-word text-primary"></i>
+            </button>
+            <input type="file" id="wordImporter" class="d-none" accept=".doc, .docx" onchange="importWordFile(this)">
         </div>
 
         <div class="d-flex align-items-center border-end pe-3 me-3 gap-2 {{ $isReadOnly ? 'd-none' : '' }}">

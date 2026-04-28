@@ -916,4 +916,14 @@ class EbmrDesignerController extends Controller
             return response()->json(['success' => false, 'message' => $e->getMessage()]);
         }
     }
+
+    public function logError(Request $request)
+    {
+        Log::error('Client-side eBMR Error: ' . $request->message, [
+            'user' => session('user')['fullName'] ?? 'Guest',
+            'url' => $request->url,
+            'details' => $request->details
+        ]);
+        return response()->json(['success' => true]);
+    }
 }
