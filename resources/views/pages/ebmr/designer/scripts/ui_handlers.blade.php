@@ -1,5 +1,62 @@
 <script>
     /**
+     * Chuyển đổi giữa chế độ Thiết kế và Chế độ Chạy thử.
+     * @param {boolean} isExecute - true nếu chuyển sang chế độ chạy thử, false nếu về thiết kế.
+     */
+    function setDesignerMode(isExecute) {
+        window.isExecutionMode = isExecute;
+
+        // Cập nhật trạng thái nút bấm trên toolbar
+        const btnDesigner = document.getElementById('btn-mode-designer');
+        const btnExecute = document.getElementById('btn-mode-execute');
+        const mainContent = document.getElementById('mainContent');
+
+        if (isExecute) {
+            if (btnDesigner) {
+                btnDesigner.classList.remove('btn-primary');
+                btnDesigner.classList.add('btn-outline-primary');
+            }
+            if (btnExecute) {
+                btnExecute.classList.remove('btn-outline-success');
+                btnExecute.classList.add('btn-success');
+            }
+            if (mainContent) mainContent.classList.add('execution-mode-active');
+
+            // Bỏ chọn khối hiện tại khi chạy thử
+            selectedId = null;
+        } else {
+            if (btnDesigner) {
+                btnDesigner.classList.remove('btn-outline-primary');
+                btnDesigner.classList.add('btn-primary');
+            }
+            if (btnExecute) {
+                btnExecute.classList.remove('btn-success');
+                btnExecute.classList.add('btn-outline-success');
+            }
+            if (mainContent) mainContent.classList.remove('execution-mode-active');
+        }
+
+        // Render lại hồ sơ để áp dụng các thay đổi logic (ví dụ: ẩn nút thêm khối)
+        renderBlocks();
+
+        // Hiển thị thông báo nhanh
+        if (typeof Swal !== 'undefined') {
+            const Toast = Swal.mixin({
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: false,
+                timer: 3000,
+                timerProgressBar: true
+            });
+
+            Toast.fire({
+                icon: isExecute ? 'success' : 'info',
+                title: isExecute ? 'Đã chuyển sang chế độ Chạy thử' : 'Đã quay lại chế độ Thiết kế'
+            });
+        }
+    }
+
+    /**
      * Chọn một khối (block) để chỉnh sửa và hiển thị bảng thuộc tính.
      * Cách hoạt động: 
      * 1. Cập nhật ID khối đang chọn (selectedId).
@@ -97,11 +154,32 @@
             html += `
                 <div class="mb-3">
                     <label class="small fw-bold mb-2">Chế độ viền</label>
-                    <select class="form-select form-select-sm mb-3" onchange="updateItemProp('borderMode', this.value)">
-                        <option value="visible" ${item.borderMode === 'visible' ? 'selected' : ''}>Hiện viền</option>
-                        <option value="dashed" ${item.borderMode === 'dashed' ? 'selected' : ''}>Mờ (Editor only)</option>
-                        <option value="none" ${item.borderMode === 'none' ? 'selected' : ''}>Ẩn hoàn toàn</option>
-                    </select>
+                    <div class="border-selector-grid d-flex flex-wrap gap-2">
+                        <button class="btn btn-sm btn-light border ${item.borderMode === 'all' || !item.borderMode ? 'active border-primary' : ''}" 
+                                onclick="setTableBorderMode('all')" title="Tất cả viền">
+                            <i class="fas fa-border-all"></i>
+                        </button>
+                        <button class="btn btn-sm btn-light border ${item.borderMode === 'none' ? 'active border-primary' : ''}" 
+                                onclick="setTableBorderMode('none')" title="Không viền">
+                            <i class="fas fa-border-none"></i>
+                        </button>
+                        <button class="btn btn-sm btn-light border ${item.borderMode === 'outer' ? 'active border-primary' : ''}" 
+                                onclick="setTableBorderMode('outer')" title="Viền ngoài">
+                            <i class="fas fa-square"></i>
+                        </button>
+                        <button class="btn btn-sm btn-light border ${item.borderMode === 'rows' ? 'active border-primary' : ''}" 
+                                onclick="setTableBorderMode('rows')" title="Chỉ viền ngang">
+                            <i class="fas fa-stream"></i>
+                        </button>
+                        <button class="btn btn-sm btn-light border ${item.borderMode === 'cols' ? 'active border-primary' : ''}" 
+                                onclick="setTableBorderMode('cols')" title="Chỉ viền dọc">
+                            <i class="fas fa-columns"></i>
+                        </button>
+                         <button class="btn btn-sm btn-light border ${item.borderMode === 'dashed' ? 'active border-primary' : ''}" 
+                                onclick="setTableBorderMode('dashed')" title="Viền nét đứt (Chỉ Editor)">
+                            <i class="fas fa-grip-lines"></i>
+                        </button>
+                    </div>
                 </div>
             `;
         }
@@ -319,7 +397,8 @@
             label: (type === 'static-text' ? 'Ghi chú' : 'Tiêu đề ' + type),
             content: defaultContent,
             columns: [],
-            borderMode: type === 'static-text' ? 'none' : 'visible'
+            borderMode: type === 'static-text' ? 'none' : 'visible',
+            dirty: true
         };
 
         if (insertIndex !== null) {
@@ -358,7 +437,8 @@
             section_id: window.activeSectionId || (items.length > 0 ? items[items.length - 1].section_id : null),
             label: 'Tên phân đoạn (VD: Pha chế, Đóng gói...)',
             content: '',
-            locked: false
+            locked: false,
+            dirty: true
         };
         items.push(item);
         renderBlocks();
@@ -373,10 +453,90 @@
      * @param {any} value - Giá trị mới.
      */
     function updateItemProp(prop, value) {
+        if (window.isExecutionMode) return;
         const item = items.find(i => i.id === selectedId);
         if (!item) return;
         saveStateDebounced();
         item[prop] = value;
+        item.dirty = true;
+        renderBlocks();
+    }
+
+    /**
+     * QUẢN LÝ BẢNG NÂNG CAO (Thêm/Xóa dòng cột nhanh)
+     */
+    function tableAddRow(index = -1) {
+        const item = items.find(i => i.id === selectedId);
+        if (!item || item.type !== 'table') return;
+        saveStateDebounced();
+
+        const numCols = item.columns.length;
+        const newRow = Array(numCols).fill('');
+
+        if (index === -1) {
+            item.data.push(newRow);
+        } else {
+            item.data.splice(index, 0, newRow);
+        }
+
+        item.rows = item.data.length;
+        item.dirty = true;
+        renderBlocks();
+    }
+
+    function tableRemoveRow(index) {
+        const item = items.find(i => i.id === selectedId);
+        if (!item || item.type !== 'table' || item.data.length <= 1) return;
+        saveStateDebounced();
+
+        item.data.splice(index, 1);
+        item.rows = item.data.length;
+        item.dirty = true;
+        renderBlocks();
+    }
+
+    function tableAddColumn(index = -1) {
+        const item = items.find(i => i.id === selectedId);
+        if (!item || item.type !== 'table') return;
+        saveStateDebounced();
+
+        const newColHeader = 'Cột mới';
+        if (index === -1) {
+            item.columns.push(newColHeader);
+            item.data.forEach(row => row.push(''));
+        } else {
+            item.columns.splice(index, 0, newColHeader);
+            item.data.forEach(row => row.splice(index, 0, ''));
+        }
+
+        item.cols = item.columns.length;
+        item.dirty = true;
+        renderBlocks();
+    }
+
+    function tableRemoveColumn(index) {
+        const item = items.find(i => i.id === selectedId);
+        if (!item || item.type !== 'table' || item.columns.length <= 1) return;
+        saveStateDebounced();
+
+        item.columns.splice(index, 1);
+        item.data.forEach(row => row.splice(index, 1));
+
+        item.cols = item.columns.length;
+        item.dirty = true;
+        renderBlocks();
+    }
+
+    /**
+     * THIẾT LẬP VIỀN BẢNG (Giống Google Doc)
+     * @param {string} mode - 'all', 'none', 'outer', 'rows', 'cols'
+     */
+    function setTableBorderMode(mode) {
+        const item = items.find(i => i.id === selectedId);
+        if (!item || item.type !== 'table') return;
+        saveStateDebounced();
+        item.borderMode = mode;
+        item.dirty = true;
         renderBlocks();
     }
 
@@ -387,16 +547,24 @@
      * @param {string} id - ID của khối cần xóa.
      */
     function removeItem(id) {
+        if (window.isExecutionMode) return;
         const item = items.find(i => i.id === id);
         if (item && item.locked) {
             Swal.fire('Thất bại', 'Không thể xóa khối đã bị khóa!', 'error');
             return;
         }
+
+        // Track DB ID for incremental deletion
+        if (item && item.db_id) {
+            window.deletedBlockIds.push(item.db_id);
+        }
+
         saveState();
         items = items.filter(i => i.id !== id);
         selectedId = null;
         if (!isSidebarMinimized) {
-            document.getElementById('property-panel').classList.add('d-none');
+            const panel = document.getElementById('property-panel');
+            if (panel) panel.classList.add('d-none');
         }
         renderBlocks();
     }
@@ -412,6 +580,11 @@
         saveState();
         const newIdx = idx + dir;
         if (newIdx < 0 || newIdx >= items.length) return;
+
+        // Mark both items as dirty because their order (and potentially section) changed
+        items[idx].dirty = true;
+        items[newIdx].dirty = true;
+
         const temp = items[idx];
         items[idx] = items[newIdx];
         items[newIdx] = temp;
@@ -427,9 +600,19 @@
      * @param {string} val - Nội dung mới.
      */
     function updateTableInline(id, type, r, c, val) {
+        if (window.isExecutionMode) {
+            // Optional: sync to executionValues if it has a cellId
+            const item = items.find(i => i.id === id);
+            if (item && item.data[r][c] && item.data[r][c].cellId) {
+                window.executionValues[item.data[r][c].cellId] = val.replace(/<[^>]*>/g, '').trim();
+                recalculateAllFormulas();
+            }
+            return;
+        }
         saveStateDebounced();
         const item = items.find(i => i.id === id);
         if (!item) return;
+        item.dirty = true;
         if (type === 'col') item.columns[c].label = val;
         else if (type === 'cell') {
             if (!item.data[r][c] || typeof item.data[r][c] !== 'object') {
@@ -457,9 +640,11 @@
      * @param {string} val - Nội dung HTML mới.
      */
     function updateStaticTextInline(id, val) {
+        if (window.isExecutionMode) return;
         saveStateDebounced();
         const item = items.find(i => i.id === id);
         if (!item) return;
+        item.dirty = true;
 
         // Auto-capitalize first visible character and trim leading/trailing whitespace
         let processedVal = val.trim();
@@ -536,6 +721,12 @@
                 .parentElement : selectionNode).closest('[contenteditable="true"]') : null);
             if (editable && editable.oninput) {
                 editable.oninput();
+            }
+            // Mark item as dirty if we're in a specific block
+            const blockItem = editable ? editable.closest('.block-item') : null;
+            if (blockItem) {
+                const item = items.find(i => i.id === blockItem.getAttribute('data-id'));
+                if (item) item.dirty = true;
             }
             saveStateDebounced();
             return;
@@ -1487,43 +1678,97 @@
         `;
 
         if (field.type === 'formula') {
+            // Find all numeric fields available in the document to help user
+            let numberFieldsOptions = '<option value="">-- Chọn biến số --</option>';
+            Object.values(fieldsConfig).forEach(f => {
+                if (f.type === 'number' || f.type === 'formula') {
+                    // Tránh vòng lặp (không tự thêm chính nó)
+                    if (f.id !== fieldId) {
+                        const displayName = f.label ? `${f.label} = ${f.name}` : f.name;
+                        numberFieldsOptions += `<option value="${f.name}">${displayName}</option>`;
+                    }
+                }
+            });
+
             typeHtml += `
                 <div class="mb-3">
                     <label class="small fw-bold text-primary mb-1"><i class="fas fa-calculator me-1"></i>Công thức tính</label>
-                    <input type="text" class="form-control form-control-sm border-primary" value="${field.formula || ''}" 
-                           placeholder="VD: (2)/(1)*100" 
-                           oninput="syncFieldConfig('${fieldId}', 'formula', this.value)">
-                    <div class="form-text small" style="font-size: 0.65rem;">Sử dụng Mã ID ô trong ngoặc đơn. VD: (kl_tong) + (kl_le)</div>
+                    <div class="input-group input-group-sm mb-2">
+                        <select class="form-select border-primary" style="max-width: 60%;" id="formula-var-helper" onchange="if(this.value) { const input = document.getElementById('formula-input-${fieldId}'); input.value += '(' + this.value + ')'; syncFieldConfig('${fieldId}', 'formula', input.value); this.value=''; }">
+                            ${numberFieldsOptions}
+                        </select>
+                        <button class="btn btn-outline-primary" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += ' + '; syncFieldConfig('${fieldId}', 'formula', input.value);">+</button>
+                        <button class="btn btn-outline-primary" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += ' - '; syncFieldConfig('${fieldId}', 'formula', input.value);">-</button>
+                        <button class="btn btn-outline-primary" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += ' * '; syncFieldConfig('${fieldId}', 'formula', input.value);">×</button>
+                        <button class="btn btn-outline-primary" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += ' / '; syncFieldConfig('${fieldId}', 'formula', input.value);">÷</button>
+                    </div>
+                    <textarea id="formula-input-${fieldId}" class="form-control form-control-sm border-primary font-monospace" 
+                              style="overflow:hidden; resize:none;"
+                              placeholder="VD: (var_1) - (var_2)" 
+                              oninput="syncFieldConfig('${fieldId}', 'formula', this.value); this.style.height = 'auto'; this.style.height = (this.scrollHeight) + 'px'; 
+                                       const preview = document.getElementById('formula-friendly-preview');
+                                       if(preview) preview.innerText = this.value.replace(/\\\(([^)]+)\\\)/g, (match, id) => {
+                                           const target = Object.values(fieldsConfig).find(f => f.name === id || f.label === id);
+                                           return target ? (target.label || id) : id;
+                                       });">${field.formula || ''}</textarea>
+                    
+                    <div class="mt-1 p-1 bg-light border rounded small" style="font-size: 0.75rem;">
+                        <span class="text-muted">Xem trước (Nhãn):</span> 
+                        <span id="formula-friendly-preview" class="text-primary fw-bold">${(field.formula || '').replace(/\(([^)]+)\)/g, (match, id) => {
+                            const target = Object.values(fieldsConfig).find(f => f.name === id || f.label === id);
+                            return target ? (target.label || id) : id;
+                        })}</span>
+                    </div>
+
+                    <div class="form-text small" style="font-size: 0.65rem;">Chọn biến số từ thanh công cụ trên, hoặc tự gõ. Biến số phải đặt trong ngoặc đơn, VD: (var_1) + (var_2)</div>
+                    
+                    <div class="mt-2">
+                        <label class="small fw-bold text-muted" style="font-size: 0.75em;">Làm tròn số thập phân</label>
+                        <input type="number" class="form-control form-control-sm" min="0" max="6" 
+                               placeholder="VD: 2" 
+                               value="${field.validation.decimal_places !== null ? field.validation.decimal_places : ''}" 
+                               oninput="syncFieldConfig('${fieldId}', 'validation.decimal_places', this.value); recalculateAllFormulas();">
+                    </div>
                 </div>
             `;
         }
 
         typeHtml += `
             <div class="mb-3">
+                <label class="small fw-bold text-muted text-uppercase mb-1"><i class="fas fa-fingerprint me-1"></i>Mã biến số (ID trong công thức)</label>
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-light border-end-0">@</span>
+                    <input type="text" class="form-control border-start-0 font-monospace" value="${field.name || ''}" 
+                           oninput="syncFieldConfig('${fieldId}', 'name', this.value)">
+                </div>
+                <div class="form-text small" style="font-size: 0.65rem;">Viết liền không dấu. VD: sl, kl_tong.</div>
+            </div>
+
+            <div class="mb-3">
+                <label class="small fw-bold text-muted text-uppercase mb-1"><i class="fas fa-star text-warning me-1"></i>Thông số quan trọng (Critical Var)</label>
+                <select class="form-select form-select-sm border-warning shadow-sm" onchange="syncFieldConfig('${fieldId}', 'important_var_id', this.value)">
+                    <option value="">-- Không --</option>
+                    ${(window.importantVars || []).map(v => `<option value="${v.id}" ${field.important_var_id == v.id ? 'selected' : ''}>${v.name} (${v.description || ''})</option>`).join('')}
+                </select>
+                <div class="form-text small" style="font-size: 0.65rem;">Gắn cờ CPP/CMA để lọc báo cáo thông số quan trọng.</div>
+            </div>
+
+            <div class="mb-3">
                 <label class="small fw-bold text-muted text-uppercase mb-2">Tên thẻ (Nhãn hiển thị)</label>
                 <input type="text" class="form-control form-control-sm" value="${field.label || ''}" oninput="syncFieldConfig('${fieldId}', 'label', this.value)">
-                <div class="form-text small" style="font-size: 0.7rem;">Hiển thị ngắn gọn cho người dùng. VD: Khối lượng (g).</div>
+                <div class="form-text small" style="font-size: 0.7rem;">Hiển thị cho người dùng. VD: Số lượng.</div>
             </div>
 
             <div class="mb-3">
                 <label class="small fw-bold text-muted text-uppercase mb-2">Giá trị mặc định (Dùng chạy thử)</label>
                 <input type="text" class="form-control form-control-sm" value="${field.defaultValue || ''}" placeholder="VD: 4.6" oninput="syncFieldConfig('${fieldId}', 'defaultValue', this.value); recalculateAllFormulas();">
-                <div class="form-text small" style="font-size: 0.7rem;">Giá trị này sẽ dùng để tính toán các công thức liên quan ngay trong trình thiết kế.</div>
+                <div class="form-text small" style="font-size: 0.7rem;">Dùng để tính toán thử ngay trong trình thiết kế.</div>
             </div>
-            
-            @if (session('user') && session('user')['userGroup'] === 'Admin')
-            <div class="mb-3">
-                <label class="small fw-bold text-muted text-uppercase mb-2 text-danger"><i class="fas fa-tools me-1"></i>Tên biến (Machine-readable)</label>
-                <div class="input-group input-group-sm">
-                    <span class="input-group-text bg-light border-end-0">@</span>
-                    <input type="text" class="form-control border-start-0" value="${field.name || ''}" oninput="syncFieldConfig('${fieldId}', 'name', this.value)">
-                </div>
-                <div class="form-text small text-muted" style="font-size: 0.7rem;">Chỉ dành cho Admin. Hệ thống tự động tạo mã này theo cấu hình vị trí.</div>
-            </div>
-            @endif
 
             <hr class="my-3">
+        `;
 
+        typeHtml += `
             <div class="mb-3">
                 <div class="form-check form-switch ps-4 pt-1">
                     <input class="form-check-input ms-n4" type="checkbox" id="fieldRequired" ${field.validation.required ? 'checked' : ''} onchange="syncFieldConfig('${fieldId}', 'validation.required', this.checked)">
@@ -1555,13 +1800,44 @@
                 </div>
             `;
         } else if (field.type === 'select') {
+            const dsType = field.dataSource ? field.dataSource.type : 'manual';
             typeHtml += `
                 <div class="mb-3">
-                    <label class="small fw-bold text-muted text-uppercase mb-2">Danh sách lựa chọn</label>
-                    <textarea class="form-control form-control-sm" rows="3" placeholder="Ví dụ: Đạt, Tốt, Không đạt" oninput="syncFieldConfig('${fieldId}', 'options', this.value)">${(field.options || []).join(', ')}</textarea>
-                    <div class="form-text small" style="font-size: 0.7rem;">Mỗi lựa chọn cách nhau bởi dấu phẩy (,).</div>
-                </div>
+                    <label class="small fw-bold text-muted text-uppercase mb-2"><i class="fas fa-database me-1"></i> Nguồn dữ liệu</label>
+                    <select class="form-select form-select-sm mb-2" onchange="syncFieldConfig('${fieldId}', 'dataSource.type', this.value); selectField(null, '${fieldId}')">
+                        <option value="manual" ${dsType === 'manual' ? 'selected' : ''}>Nhập thủ công</option>
+                        <option value="database" ${dsType === 'database' ? 'selected' : ''}>Lấy từ cơ sở dữ liệu</option>
+                    </select>
             `;
+
+            if (dsType === 'manual') {
+                typeHtml += `
+                    <textarea class="form-control form-control-sm" rows="3" placeholder="Ví dụ: Đạt, Tốt, Không đạt" oninput="syncFieldConfig('${fieldId}', 'options', this.value)">${Array.isArray(field.options) ? field.options.join(', ') : (field.options || '')}</textarea>
+                    <div class="form-text small" style="font-size: 0.7rem;">Mỗi lựa chọn cách nhau bởi dấu phẩy (,).</div>
+                </div>`;
+            } else {
+                const ds = field.dataSource || {};
+                typeHtml += `
+                    <div class="border rounded p-2 bg-light">
+                        <div class="mb-2">
+                            <label class="small text-muted" style="font-size: 0.75em;">Tên Bảng (Table)</label>
+                            <input type="text" class="form-control form-control-sm" placeholder="VD: deparments" value="${ds.table || ''}" oninput="syncFieldConfig('${fieldId}', 'dataSource.table', this.value)">
+                        </div>
+                        <div class="mb-2">
+                            <label class="small text-muted" style="font-size: 0.75em;">Cột hiển thị (Label)</label>
+                            <input type="text" class="form-control form-control-sm" placeholder="VD: name" value="${ds.labelCol || ''}" oninput="syncFieldConfig('${fieldId}', 'dataSource.labelCol', this.value)">
+                        </div>
+                        <div class="mb-2">
+                            <label class="small text-muted" style="font-size: 0.75em;">Cột giá trị (Value) - Tùy chọn</label>
+                            <input type="text" class="form-control form-control-sm" placeholder="Mặc định lấy Cột hiển thị" value="${ds.valueCol || ''}" oninput="syncFieldConfig('${fieldId}', 'dataSource.valueCol', this.value)">
+                        </div>
+                        <div class="mb-2">
+                            <label class="small text-muted" style="font-size: 0.75em;">Điều kiện Where (Tùy chọn)</label>
+                            <input type="text" class="form-control form-control-sm" placeholder="VD: active=1" value="${ds.where || ''}" oninput="syncFieldConfig('${fieldId}', 'dataSource.where', this.value)">
+                        </div>
+                    </div>
+                </div>`;
+            }
         }
 
         typeHtml += `
@@ -1571,6 +1847,15 @@
         `;
 
         body.innerHTML = typeHtml;
+
+        // Auto-adjust height for formula textarea
+        setTimeout(() => {
+            const formulaInput = document.getElementById(`formula-input-${fieldId}`);
+            if (formulaInput) {
+                formulaInput.style.height = 'auto';
+                formulaInput.style.height = (formulaInput.scrollHeight) + 'px';
+            }
+        }, 50);
     }
 
     /**
@@ -1727,7 +2012,8 @@
             label: templateName,
             content: '',
             columns: [],
-            borderMode: 'visible'
+            borderMode: 'visible',
+            locked: true // Khóa mặc định để tránh điều chỉnh cấu trúc khi đã liên kết
         };
         items.push(item);
         renderBlocks();
@@ -1757,24 +2043,45 @@
      * @param {string} blockId - ID khối liên kết.
      * @param {number} templateId - ID của biểu mẫu GF gốc.
      */
+    /**
+     * Tải và hiển thị nội dung xem trước của biểu mẫu GF được liên kết.
+     * Cách hoạt động: Sử dụng Fetch API để lấy dữ liệu khối từ máy chủ, sau đó lưu vào bộ nhớ đệm (cache) 
+     * để tránh tải lại nhiều lần khi render giao diện.
+     * @param {string} blockId - ID khối liên kết.
+     * @param {number} templateId - ID của biểu mẫu GF gốc.
+     */
     function fetchAndRenderGfPreview(blockId, templateId) {
         const container = document.getElementById(`preview-${blockId}`);
         if (!container) return;
 
-        // Use a simple cache to avoid repeated network requests during re-renders if possible
+        // Use cache if available
         if (window.gfPreviewCache && window.gfPreviewCache[templateId]) {
-            renderGfPreviewContent(container, window.gfPreviewCache[templateId]);
+            renderGfPreviewContent(container, window.gfPreviewCache[templateId], window.gfFieldsCache ? window
+                .gfFieldsCache[templateId] : {});
             return;
         }
 
         fetch(`/ebmr/templates/${templateId}/blocks`)
             .then(res => res.json())
-            .then(blocks => {
+            .then(data => {
+                const blocks = data.blocks || data;
+                const fields = data.fields || {};
+
                 if (!window.gfPreviewCache) window.gfPreviewCache = {};
+                if (!window.gfFieldsCache) window.gfFieldsCache = {};
+
                 window.gfPreviewCache[templateId] = blocks;
-                renderGfPreviewContent(container, blocks);
+                window.gfFieldsCache[templateId] = fields;
+
+                // Merge into global fieldsConfig to support formulas and execution mode logic
+                if (window.fieldsConfig) {
+                    Object.assign(window.fieldsConfig, fields);
+                }
+
+                renderGfPreviewContent(container, blocks, fields);
             })
             .catch(err => {
+                console.error("GF Preview Error:", err);
                 container.innerHTML = `<div class="text-danger small">Lỗi tải nội dung: ${err.message}</div>`;
             });
     }
@@ -1783,29 +2090,96 @@
      * Render nội dung chi tiết của GF vào container xem trước.
      * @param {HTMLElement} container - Vùng hiển thị xem trước.
      * @param {Array} blocks - Danh sách các khối nội dung của GF.
+     * @param {Object} fields - Cấu hình biến số của GF.
      */
-    function renderGfPreviewContent(container, blocks) {
+    function renderGfPreviewContent(container, blocks, fields = {}) {
         if (!blocks || blocks.length === 0) {
-            container.innerHTML = '<div class="text-muted small italic">Biểu mẫu này chưa có nội dung.</div>';
+            container.innerHTML =
+                '<div class="text-muted small italic text-center py-3">Biểu mẫu này chưa có nội dung.</div>';
             return;
         }
 
         let html = '';
         blocks.forEach(b => {
             if (b.type === 'static-text') {
-                html += `<div class="mb-2 p-1 border-bottom small">${b.content || ''}</div>`;
+                const content = typeof decorateContent === 'function' ? decorateContent(b.content || '',
+                    fields) : (b.content || '');
+                html += `<div class="mb-3 p-1 small" style="line-height: 1.6;">${content}</div>`;
             } else if (b.type === 'table') {
-                html += `<div class="mb-2 small">
-                    <table class="table table-bordered table-sm m-0" style="font-size: 0.7rem;">
-                        <thead><tr>${(b.columns || []).map(c => `<th>${c.label || ''}</th>`).join('')}</tr></thead>
-                        <tbody>${(b.data || []).slice(0, 3).map(row => `<tr>${row.map(cell => `<td>${typeof cell === 'object' ? (cell.content || '') : (cell || '')}</td>`).join('')}</tr>`).join('')}${b.data.length > 3 ? '<tr><td colspan="100%" class="text-center">...</td></tr>' : ''}</tbody>
-                    </table>
-                </div>`;
+                const borderMode = b.borderMode || 'all';
+                const borderClass = `border-mode-${borderMode}`;
+
+                let thead = '';
+                if (!b.hideHeader) {
+                    thead = `<thead><tr>${b.columns.map((c, cIdx) => {
+                        const s = c.style || {};
+                        const bg = s.backgroundColor || '';
+                        const align = s.textAlign || '';
+                        const fw = s.fontWeight || '';
+                        const fs = s.fontStyle || '';
+                        const td = s.textDecoration || '';
+                        const fsz = s.fontSize || '';
+                        const tc = s.textColor || '';
+                        return `<th contenteditable="false" spellcheck="false" data-row="0" data-col="${cIdx}" class="table-header-cell" style="width: ${c.width || 'auto'}; background-color: ${bg}; text-align: ${align}; font-weight: ${fw}; font-style: ${fs}; text-decoration: ${td}; font-size: ${fsz}; color: ${tc};"><div class="header-content">${c.label || ''}</div></th>`;
+                    }).join('')}</tr></thead>`;
+                }
+
+                let rowsHtml = '';
+                const blockKey = b.uuid || b.id;
+                const runDataForBlock = window.executionValues && window.executionValues[blockKey] ? window.executionValues[blockKey] : {};
+
+                for (let r = 0; r < (b.rows || 1); r++) {
+                    let cellsHtml = '';
+                    const rowH = (b.rowHeights && b.rowHeights[r]) ? b.rowHeights[r] : 'auto';
+                    for (let c = 0; c < (b.cols || 1); c++) {
+                        if (!b.data[r][c] || typeof b.data[r][c] !== 'object') {
+                            b.data[r][c] = { content: b.data[r][c] || '', rs: 1, cs: 1, hidden: false };
+                        }
+                        const cell = b.data[r][c];
+                        if (cell.hidden) continue;
+
+                        const cellWidth = (b.columns && b.columns[c] && b.columns[c].width) ? b.columns[c].width : 'auto';
+                        const cellBg = (cell.backgroundColor) ? cell.backgroundColor : '';
+
+                        let displayContent = typeof decorateContent === 'function' ? decorateContent(cell.content, fields) : cell.content;
+                        if (displayContent === null || displayContent === 'null' || displayContent === undefined) {
+                            displayContent = '';
+                        }
+
+                        let cellClass = "";
+                        let onclickAttr = "";
+
+                        if (window.isExecutionMode) {
+                            const runVal = runDataForBlock[`${r}_${c}`];
+                            if (displayContent.includes('[Nhập dữ liệu]')) {
+                                cellClass = "execution-input-cell";
+                                onclickAttr = `onclick="openExecutionInputModal('${blockKey}', ${r}, ${c}, 'text')"`;
+                                displayContent = runVal ? runVal : `<span class="execution-badge input"><i class="fas fa-edit"></i> [Nhập dữ liệu]</span>`;
+                            } else if (displayContent.includes('[Ký tên]')) {
+                                cellClass = "execution-input-cell";
+                                onclickAttr = `onclick="openExecutionInputModal('${blockKey}', ${r}, ${c}, 'signature')"`;
+                                displayContent = runVal ? `<div class="e-signature-done"><i class="fas fa-check-circle text-success me-1"></i>${runVal}</div>` : `<span class="execution-badge signature"><i class="fas fa-pen"></i> [Ký tên]</span>`;
+                            }
+                        }
+
+                        cellsHtml += `<td contenteditable="false" spellcheck="false" data-row="${r+1}" data-col="${c}" rowspan="${cell.rs || 1}" colspan="${cell.cs || 1}" ${onclickAttr} class="${cellClass}" style="width: ${cellWidth}; height: ${rowH}; background-color: ${cellBg}; text-align: ${cell.textAlign || ''}; font-weight: ${cell.fontWeight || ''}; font-style: ${cell.fontStyle || ''}; text-decoration: ${cell.textDecoration || ''}; font-size: ${cell.fontSize || ''}; color: ${cell.textColor || ''}; text-transform: ${cell.textTransform || ''};"><div class="cell-wrapper">${displayContent}</div></td>`;
+                    }
+                    rowsHtml += `<tr>${cellsHtml}</tr>`;
+                }
+
+                html += `<div class="table-responsive-wrapper"><table class="mini-table ${borderClass}">${thead}<tbody>${rowsHtml}</tbody></table></div>`;
             } else if (b.type === 'signature') {
-                html +=
-                    `<div class="mb-2 p-1 border rounded bg-light small text-muted"><i class="fas fa-signature me-1"></i> [Chữ ký: ${b.label || ''}]</div>`;
-            } else {
-                html += `<div class="mb-2 small text-muted">[Khối: ${b.type}]</div>`;
+                html += `<div class="mb-3 p-2 border rounded bg-light small d-flex align-items-center">
+                            <div class="bg-white rounded-circle d-flex align-items-center justify-content-center me-2 shadow-sm" style="width: 30px; height: 30px;">
+                                <i class="fas fa-signature text-primary"></i>
+                            </div>
+                            <div class="fw-bold text-muted">${b.label || 'Chữ ký'}</div>
+                        </div>`;
+            } else if (b.type === 'section') {
+                html += `<div class="mt-4 mb-2 pb-1 border-bottom d-flex align-items-center">
+                            <i class="fas fa-layer-group text-info me-2"></i>
+                            <span class="fw-bold text-uppercase small text-navy">${b.label || 'Phân đoạn'}</span>
+                        </div>`;
             }
         });
         container.innerHTML = html;
@@ -2072,4 +2446,69 @@
             btn.innerHTML = originalHtml;
         }
     }
+    /**
+     * Mở modal nhập liệu an toàn cho các biến số ở chế độ chạy thử
+     */
+    window.openVariableInputModal = function(fieldId) {
+        if (!window.isExecutionMode) return;
+
+        const field = fieldsConfig[fieldId];
+        if (!field) return;
+
+        const currentVal = window.executionValues[fieldId] || '';
+        let inputType = 'text';
+        let inputAttributes = {};
+
+        // Cấu hình loại input và validation
+        if (field.type === 'number') {
+            inputType = 'number';
+            if (field.validation) {
+                if (field.validation.min !== null && field.validation.min !== '') inputAttributes.min = field
+                    .validation.min;
+                if (field.validation.max !== null && field.validation.max !== '') inputAttributes.max = field
+                    .validation.max;
+                if (field.validation.decimal_places && parseInt(field.validation.decimal_places) > 0) {
+                    inputAttributes.step = '0.' + '0'.repeat(parseInt(field.validation.decimal_places) - 1) + '1';
+                } else {
+                    inputAttributes.step = 'any';
+                }
+            }
+        } else if (field.type === 'date') {
+            inputType = 'date';
+        }
+
+        Swal.fire({
+            title: field.label || 'Nhập dữ liệu',
+            input: inputType,
+            inputValue: currentVal,
+            inputAttributes: inputAttributes,
+            showCancelButton: true,
+            confirmButtonText: 'Xác nhận',
+            cancelButtonText: 'Hủy',
+            inputValidator: (value) => {
+                if (field.validation && field.validation.required && !value) {
+                    return 'Vui lòng không để trống ô này!';
+                }
+                if (field.type === 'number' && value !== '') {
+                    const num = Number(value);
+                    if (field.validation) {
+                        if (field.validation.min !== null && field.validation.min !== '' && num <
+                            parseFloat(field.validation.min)) {
+                            return 'Giá trị phải lớn hơn hoặc bằng ' + field.validation.min;
+                        }
+                        if (field.validation.max !== null && field.validation.max !== '' && num >
+                            parseFloat(field.validation.max)) {
+                            return 'Giá trị phải nhỏ hơn hoặc bằng ' + field.validation.max;
+                        }
+                    }
+                }
+            }
+        }).then((result) => {
+            if (result.isConfirmed) {
+                window.executionValues[fieldId] = result.value;
+                if (typeof window.recalculateAllFormulas === 'function') window.recalculateAllFormulas();
+                renderBlocks();
+            }
+        });
+    };
 </script>

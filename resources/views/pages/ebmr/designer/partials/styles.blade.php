@@ -676,10 +676,12 @@
     /* Document Outline */
     .outline-sidebar {
         position: sticky;
-        top: 170px;
-        max-height: calc(100vh - 180px);
+        top: 150px;
+        max-height: calc(100vh - 170px);
         overflow-y: auto;
         padding-right: 10px;
+        scrollbar-width: thin;
+        z-index: 100;
     }
 
     .outline-item {
@@ -697,11 +699,34 @@
         cursor: pointer;
     }
 
-    .outline-sidebar {
-        max-height: calc(100vh - 120px);
-        overflow-y: auto;
+
+    /* Right Property Panel */
+    #property-panel {
         position: sticky;
-        top: 110px;
+        top: 150px;
+        max-height: calc(100vh - 170px);
+        overflow-y: auto;
+        overflow-x: hidden;
+        scrollbar-width: thin;
+        z-index: 100;
+        padding-right: 5px;
+    }
+
+    #property-panel::-webkit-scrollbar {
+        width: 4px;
+    }
+
+    #property-panel::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    #property-panel::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 10px;
+    }
+
+    #property-panel::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
     }
 
     /* Custom Scrollbar for Sidebar */
@@ -1106,4 +1131,63 @@
         opacity: 1;
         transform: scale(1.2);
     }
+    /* Execution Mode Overrides */
+    .execution-mode-active .editor-toolbar > div:nth-child(2),
+    .execution-mode-active #editor-ruler,
+    .execution-mode-active #sidebar-col,
+    .execution-mode-active .insert-divider,
+    .execution-mode-active #drop-hint,
+    .execution-mode-active .block-actions {
+        display: none !important;
+    }
+
+    .execution-mode-active .block-item {
+        border-color: transparent !important;
+        padding: 0 !important;
+        margin-bottom: 0 !important;
+    }
+
+    .execution-mode-active .block-item:hover {
+        background: transparent !important;
+    }
+
+    .test-mode-badge {
+        position: fixed;
+        bottom: 30px;
+        right: 30px;
+        background: #28a745;
+        color: white;
+        padding: 12px 24px;
+        border-radius: 50px;
+        font-weight: bold;
+        box-shadow: 0 4px 20px rgba(40, 167, 69, 0.4);
+        z-index: 9999;
+        display: none;
+        pointer-events: none;
+        animation: pulseTest 2s infinite;
+        border: 2px solid rgba(255,255,255,0.2);
+    }
+
+    @keyframes pulseTest {
+        0% { transform: scale(1); box-shadow: 0 4px 20px rgba(40, 167, 69, 0.4); }
+        50% { transform: scale(1.05); box-shadow: 0 4px 30px rgba(40, 167, 69, 0.6); }
+        100% { transform: scale(1); box-shadow: 0 4px 20px rgba(40, 167, 69, 0.4); }
+    }
+
+    .execution-mode-active .test-mode-badge {
+        display: block;
+    }
+
+    .execution-input-test:empty::before {
+        content: attr(data-placeholder);
+        color: #6c757d;
+        pointer-events: none;
+        font-style: italic;
+    }
+
+    .execution-mode-active .page-a4 {
+        box-shadow: 0 0 50px rgba(0,0,0,0.05) !important;
+        border: 1px solid #eee;
+    }
+
 </style>

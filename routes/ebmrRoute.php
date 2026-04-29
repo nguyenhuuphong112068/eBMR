@@ -41,4 +41,5 @@ Route::group(['prefix' => 'ebmr', 'as' => 'pages.ebmr.'], function () {
     Route::post('/update-record-data', [EbmrExecutionController::class, 'updateRecordData'])->name('updateRecordData');
     Route::post('/verify-password', [EbmrExecutionController::class, 'verifyPassword'])->name('verifyPassword');
     Route::post('/log-error', [EbmrDesignerController::class, 'logError'])->name('logError');
+    Route::post('/dynamic-options', [EbmrDesignerController::class, 'getDynamicOptions'])->name('dynamicOptions');
 });

@@ -20,6 +20,8 @@
     <script> {{-- Khởi tạo các biến Javascript toàn cục từ dữ liệu phía Backend (Laravel) --}}
         window.isReadOnly = {{ $isReadOnly ? 'true' : 'false' }}; {{-- Biến kiểm tra xem người dùng chỉ được xem hay có quyền sửa --}}
         window.templateComments = @json($comments); {{-- Chuyển danh sách các phản hồi/comment từ PHP sang định dạng JSON cho Javascript xử lý --}}
+        window.importantVars = @json($importantVars ?? []); {{-- Danh sách các biến số quan trọng (CPP, CMA...) --}}
+        window.isAdmin = {{ $isAdmin ? 'true' : 'false' }}; {{-- Quyền Admin của người dùng --}}
     </script>
 
     @include('pages.ebmr.designer.partials.modals') {{-- Nhúng các cửa sổ popup (Modals) như: chèn ảnh, cấu hình bảng, AI translate... --}}

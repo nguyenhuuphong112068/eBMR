@@ -70,7 +70,23 @@ class EbmrExecutionController extends Controller
         $blockIds = $blocks->pluck('id')->toArray();
         $contentBlocks = DB::table('ebmr_content_blocks')->whereIn('ebmr_template_blocks_id', $blockIds)->get()->groupBy('ebmr_template_blocks_id');
 
-        if ($blocks->isNotEmpty()) {
+        // Load fieldsConfig from the new dedicated table (One row per variable)
+        $variants = DB::table('ebmr_variants')->where('template_id', $template->id)->get();
+        if ($variants->isNotEmpty()) {
+            $fieldsConfig = [];
+            foreach ($variants as $v) {
+                $config = json_decode($v->config, true) ?? [];
+                $fieldsConfig[$v->field_key] = array_merge([
+                    'id' => $v->field_key,
+                    'name' => $v->name,
+                    'label' => $v->label,
+                    'type' => $v->type,
+                    'section_id' => $v->section_id,
+                    'block_id' => $v->block_id,
+                ], $config);
+            }
+        } else if ($blocks->isNotEmpty()) {
+            // Fallback for legacy data
             $fieldsConfig = json_decode($blocks->first()->fields_config, true) ?? [];
         } else {
             $fieldsConfig = [];
@@ -90,10 +106,26 @@ class EbmrExecutionController extends Controller
                     $lbIds = $linkedBlocks->pluck('id')->toArray();
                     $lContentBlocks = DB::table('ebmr_content_blocks')->whereIn('ebmr_template_blocks_id', $lbIds)->get()->groupBy('ebmr_template_blocks_id');
 
-                    if ($linkedBlocks->isNotEmpty()) {
+                    $variantsLink = DB::table('ebmr_variants')->where('template_id', $linkedTemplateId)->get();
+                    if ($variantsLink->isNotEmpty()) {
+                        $linkedConfig = [];
+                        foreach ($variantsLink as $v) {
+                            $config = json_decode($v->config, true) ?? [];
+                            $linkedConfig[$v->field_key] = array_merge([
+                                'id' => $v->field_key,
+                                'name' => $v->name,
+                                'label' => $v->label,
+                                'type' => $v->type,
+                                'section_id' => $v->section_id,
+                                'block_id' => $v->block_id,
+                            ], $config);
+                        }
+                    } else if ($linkedBlocks->isNotEmpty()) {
                         $linkedConfig = json_decode($linkedBlocks->first()->fields_config, true) ?? [];
-                        $fieldsConfig = array_merge((array)$fieldsConfig, (array)$linkedConfig);
+                    } else {
+                        $linkedConfig = [];
                     }
+                    $fieldsConfig = array_merge((array)$fieldsConfig, (array)$linkedConfig);
                     foreach ($linkedBlocks as $lb) {
                         $linkedF = json_decode($lb->properties, true);
                         $this->injectContent($linkedF, $lb, $lContentBlocks->get($lb->id));
@@ -134,7 +166,23 @@ class EbmrExecutionController extends Controller
                         $lContentBlocks = DB::table('ebmr_content_blocks')->whereIn('ebmr_template_blocks_id', $lbIds)->get()->groupBy('ebmr_template_blocks_id');
 
                         if ($linkedBlocks->isNotEmpty()) {
-                            $linkedConfig = json_decode($linkedBlocks->first()->fields_config, true) ?? [];
+                            $variantsLink2 = DB::table('ebmr_variants')->where('template_id', $linkedTemplateId)->get();
+                            if ($variantsLink2->isNotEmpty()) {
+                                $linkedConfig = [];
+                                foreach ($variantsLink2 as $v) {
+                                    $config = json_decode($v->config, true) ?? [];
+                                    $linkedConfig[$v->field_key] = array_merge([
+                                        'id' => $v->field_key,
+                                        'name' => $v->name,
+                                        'label' => $v->label,
+                                        'type' => $v->type,
+                                        'section_id' => $v->section_id,
+                                        'block_id' => $v->block_id,
+                                    ], $config);
+                                }
+                            } else {
+                                $linkedConfig = json_decode($linkedBlocks->first()->fields_config, true) ?? [];
+                            }
                             $fieldsConfig = array_merge((array)$fieldsConfig, (array)$linkedConfig);
                         }
                         foreach ($linkedBlocks as $lb) {
@@ -296,11 +344,19 @@ class EbmrExecutionController extends Controller
         }
 
         if ($block->type === 'static-text') {
-            if (preg_match('/<div class="static-text-display"[^>]*>(.*?)<\/div>/is', $fullHtml, $matches)) {
-                $field['content'] = $matches[1];
+            // Flexible regex to match any wrapper tag and extract inner content
+            if (preg_match('/^<([a-z0-9]+)[^>]*>(.*)<\/\1>$/is', trim($fullHtml), $matches)) {
+                $content = $matches[2];
             } else {
-                $field['content'] = $fullHtml;
+                $content = $fullHtml;
             }
+
+            // --- VARIABLE INJECTION ---
+            $content = preg_replace_callback('/\{\{(field_[0-9]+)\}\}/', function ($m) {
+                return '<span contenteditable="false" class="ebmr-field-badge" data-field-id="'.$m[1].'" onclick="selectField(event, \''.$m[1].'\')"></span>';
+            }, $content);
+
+            $field['content'] = $content;
         } elseif ($block->type === 'table') {
             $rows = $field['rows'] ?? 0;
             $cols = $field['cols'] ?? 0;
@@ -315,6 +371,12 @@ class EbmrExecutionController extends Controller
                 if (!isset($field['data'][$r])) $field['data'][$r] = [];
                 for ($c = 0; $c < $cols; $c++) {
                     $content = $tdContents[$idx] ?? '';
+                    
+                    // --- VARIABLE INJECTION ---
+                    $content = preg_replace_callback('/\{\{(field_[0-9]+)\}\}/', function ($m) {
+                        return '<span contenteditable="false" class="ebmr-field-badge" data-field-id="'.$m[1].'" onclick="selectField(event, \''.$m[1].'\')"></span>';
+                    }, $content);
+
                     if (isset($field['data'][$r][$c]) && is_array($field['data'][$r][$c])) {
                         $field['data'][$r][$c]['content'] = $content;
                     } else {

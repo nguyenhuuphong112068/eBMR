@@ -352,3 +352,41 @@
         });
     });
 </script>
+<!-- Variable Summary Modal -->
+<div class="modal fade" id="variableSummaryModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog" style="max-width: 95%;">
+        <div class="modal-content shadow-lg border-0" style="border-radius: 12px;">
+            <div class="modal-header bg-info text-white py-2 px-3">
+                <h5 class="modal-title fw-bold small"><i class="fas fa-list-check me-2"></i> DANH SÁCH BIẾN SỐ ĐÃ CÀI ĐẶT</h5>
+                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body p-0" style="max-height: 70vh; overflow-y: auto;">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0" style="font-size: 0.85rem;">
+                        <thead class="bg-light sticky-top shadow-sm">
+                            <tr>
+                                <th class="text-center py-2" style="width: 50px;">STT</th>
+                                @if(session('user')['userGroup'] == 'Admin')
+                                <th class="py-2">Mã ID</th>
+                                @endif
+                                <th class="py-2">Tên hiển thị (Label)</th>
+                                <th class="py-2">Loại</th>
+                                <th class="text-center py-2">Thông số quan trọng</th>
+                                <th class="py-2">Cài đặt chi tiết</th>
+                                <th class="text-center py-2" style="width: 80px;">Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody id="variableSummaryTableBody">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer bg-light py-2">
+                <button type="button" class="btn btn-secondary btn-sm px-4" data-dismiss="modal">Đóng</button>
+            </div>
+        </div>
+    </div>
+</div>

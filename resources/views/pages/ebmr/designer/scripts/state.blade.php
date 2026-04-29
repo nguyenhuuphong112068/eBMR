@@ -19,14 +19,43 @@
     let selectedFieldId = null;
     let selectedFieldIds = [];
     let cellClipboard = null;
+    window.deletedBlockIds = [];
 
-    if (items.length === 0) {
+    window.initializeDefaultTemplate = function() {
         const type = "{{ $template->type ?? 'BMR' }}";
+        const catId = "{{ $template->caterogy_id ?? 0 }}";
+
+        // Push the Section Header block
+        items.push({
+            id: 'blk_sec_header_' + Date.now(),
+            type: 'section',
+            label: 'THÔNG TIN CHUNG SẢN PHẨM',
+            section_id: catId,
+            locked: true
+        });
+
         if (type === 'GF') {
             items.push(generateDefaultGfHeader());
         } else {
             items.push(generateDefaultBmrHeader());
         }
+    };
+
+    if (items.length === 0) {
+        initializeDefaultTemplate();
+    } else {
+        // Ensure Header Table has content if it was auto-created by server without properties
+        items.forEach(item => {
+            if ((item.isBmrHeader || item.isGfHeader) && (!item.data || item.data.length === 0)) {
+                const defaults = item.isBmrHeader ? generateDefaultBmrHeader() : generateDefaultGfHeader();
+                // Merge default properties into the existing item (preserving its DB id and section_id)
+                const originalId = item.id;
+                const originalSectionId = item.section_id;
+                Object.assign(item, defaults);
+                item.id = originalId;
+                item.section_id = originalSectionId;
+            }
+        });
     }
 
     if (items.length > 0 || pageOrientation !== 'portrait') {
@@ -129,7 +158,8 @@
             borderMode: 'none',
             hideHeader: true,
             locked: true,
-            isGfHeader: true
+            isGfHeader: true,
+            section_id: "{{ $template->caterogy_id ?? 0 }}"
         };
     }
 
@@ -291,7 +321,8 @@
             borderMode: 'visible',
             hideHeader: true,
             locked: true,
-            isBmrHeader: true
+            isBmrHeader: true,
+            section_id: "{{ $template->caterogy_id ?? 0 }}"
         };
     }
 

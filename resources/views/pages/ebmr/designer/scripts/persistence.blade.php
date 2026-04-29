@@ -1,33 +1,92 @@
 <script>
     function saveTemplate() {
-        const name = document.getElementById('templateName').value || 'Hồ sơ không tên';
+        if (window.isExecutionMode) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Đang ở chế độ Chạy thử',
+                text: 'Hệ thống không lưu dữ liệu trong chế độ này. Hãy quay lại chế độ Thiết kế để lưu thay đổi.',
+                confirmButtonText: 'Tôi đã hiểu'
+            });
+            return;
+        }
+
+
+        // Show loading swal to prevent multiple clicks
+        Swal.fire({
+            title: 'Đang lưu hồ sơ...',
+            text: 'Quá trình lưu có thể mất vài giây tùy vào độ lớn dữ liệu.',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            didOpen: () => {
+                Swal.showLoading();
+            }
+        });
+
+        // INCREMENTAL SAVE LOGIC: Only send dirty or new blocks
+        const dirtyFields = items.filter(i => i.dirty || !i.db_id).map(i => ({
+            db_id: i.db_id || null,
+            content_db_id: i.content_db_id || null,
+            id: i.id,
+            type: i.type,
+            label: i.label,
+            content: i.content || '',
+            rows: i.rows || 0,
+            cols: i.cols || 0,
+            columns: i.columns || [],
+            data: i.data || [],
+            rowHeights: i.rowHeights || [],
+            borderMode: i.borderMode || 'visible',
+            hideHeader: i.hideHeader || false,
+            canAddRows: i.canAddRows || false,
+            locked: i.locked || false,
+            template_id: i.template_id || null,
+            showPreview: i.showPreview || false,
+            stage_code: i.stage_code || null,
+            chartConfig: i.chartConfig || null,
+            backgroundColor: i.backgroundColor || null,
+            section_id: i.section_id || null
+        }));
+
+        // --- PRUNING & LOCATION SYNC: Only send fieldsConfig for variables that actually exist in the document ---
+        const usedFieldIds = new Set();
+        document.querySelectorAll('.ebmr-field-badge').forEach(el => {
+            const fid = el.getAttribute('data-field-id');
+            if (fid) {
+                usedFieldIds.add(fid);
+                
+                // Cập nhật lại vị trí thực tế của biến ngay lúc lưu
+                const blockEl = el.closest('.block-item');
+                if (blockEl && fieldsConfig[fid]) {
+                    fieldsConfig[fid].block_id = blockEl.getAttribute('data-id');
+                    const sectionEl = blockEl.closest('.section-group-wrapper');
+                    if (sectionEl) {
+                        fieldsConfig[fid].section_id = sectionEl.getAttribute('data-section-id');
+                    }
+                }
+            }
+        });
+        
+        // Also check if any field is used in a formula
+        Object.values(fieldsConfig).forEach(f => {
+            if (f.type === 'formula' && f.formula) {
+                const matches = f.formula.match(/field_[0-9]+/g);
+                if (matches) matches.forEach(m => usedFieldIds.add(m));
+            }
+        });
+
+        const prunedFieldsConfig = {};
+        usedFieldIds.forEach(fid => {
+            if (fieldsConfig[fid]) prunedFieldsConfig[fid] = fieldsConfig[fid];
+        });
+
         const schema = {
             type: 'document-flow',
             pageOrientation: pageOrientation,
-            fieldsConfig: fieldsConfig,
-            fields: items.map(i => ({
-                db_id: i.db_id || null,
-                content_db_id: i.content_db_id || null,
-                id: i.id,
-                type: i.type,
-                label: i.label,
-                content: i.content || '',
-                rows: i.rows || 0,
-                cols: i.cols || 0,
-                columns: i.columns || [],
-                data: i.data || [],
-                rowHeights: i.rowHeights || [],
-                borderMode: i.borderMode || 'visible',
-                hideHeader: i.hideHeader || false,
-                canAddRows: i.canAddRows || false,
-                locked: i.locked || false,
-                template_id: i.template_id || null,
-                showPreview: i.showPreview || false,
-                stage_code: i.stage_code || null,
-                chartConfig: i.chartConfig || null,
-                backgroundColor: i.backgroundColor || null,
-                section_id: i.section_id || null
-            }))
+            fieldsConfig: prunedFieldsConfig,
+            fields: dirtyFields, // Only dirty fields
+            block_order: items.map(i => i.id), // Send current order of all blocks
+            deleted_ids: window.deletedBlockIds || [],
+            incremental: true
         };
 
         fetch('{{ route('pages.ebmr.storeTemplate') }}', {
@@ -56,6 +115,27 @@
             .then(res => {
                 if (res.success) {
                     currentTemplateId = res.id;
+                    
+                    // Reset dirty flags and deleted IDs
+                    items.forEach(i => i.dirty = false);
+                    window.deletedBlockIds = [];
+                    
+                    // Update IDs and data for items if returned
+                    if (res.block_ids) {
+                        Object.keys(res.block_ids).forEach(fId => {
+                            const item = items.find(i => i.id === fId);
+                            if (item) {
+                                const info = res.block_ids[fId];
+                                if (info.db_id) item.db_id = info.db_id;
+                                if (info.content_db_id) item.content_db_id = info.content_db_id;
+                                if (info.section_id) item.section_id = info.section_id;
+                                if (info.data) item.data = info.data; // Sync cell IDs
+                            }
+                        });
+                    }
+
+                    renderBlocks();
+
                     Swal.fire({
                         title: 'Thành công',
                         text: 'Đã lưu hồ sơ mẫu!',

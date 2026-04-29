@@ -226,8 +226,8 @@
             // --- Multi-cell Deletion ---
             if (e.key === 'Delete' || e.key === 'Backspace') {
                 const selectedCells = document.querySelectorAll('.selected-cell');
-                // Only trigger bulk delete if 2+ cells are selected, or if focus is not on a contenteditable
-                const isWriting = e.target.closest('[contenteditable="true"]');
+                // Only trigger bulk delete if 2+ cells are selected, or if focus is not on an editable element
+                const isWriting = e.target.closest('[contenteditable="true"]') || e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
                 
                 if (selectedCells.length > 1 || (selectedCells.length === 1 && !isWriting)) {
                     e.preventDefault();

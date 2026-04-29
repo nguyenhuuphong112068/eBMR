@@ -99,6 +99,9 @@
 
                         if (isReplace) {
                             items = []; // Xóa hết dữ liệu cũ nếu chọn ghi đè
+                            if (typeof window.initializeDefaultTemplate === 'function') {
+                                window.initializeDefaultTemplate();
+                            }
                         }
                         const oldLength = items.length;
 

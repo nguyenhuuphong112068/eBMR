@@ -157,32 +157,74 @@ class EbmrTemplateController extends Controller
 
             $id = DB::table('ebmr_templates')->insertGetId($data);
 
-            // --- Auto-generate Sections for BMR / BPR based on User Selection ---
+            // --- 1. ALWAYS Create the Persistent Header Section (category_id) ---
+            $headerOrder = 0;
+            DB::table('ebmr_template_blocks')->insert([
+                'template_id' => $id,
+                'section_id' => $data['caterogy_id'],
+                'type' => 'section',
+                'label' => 'BMR HEADER',
+                'order' => $headerOrder++,
+                'properties' => json_encode([
+                    'id' => 'blk_sec_sys_header_' . time(),
+                    'type' => 'section',
+                    'label' => 'BMR HEADER',
+                    'locked' => true,
+                    'section_id' => $data['caterogy_id']
+                ]),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            DB::table('ebmr_template_blocks')->insert([
+                'template_id' => $id,
+                'section_id' => $data['caterogy_id'],
+                'type' => 'table',
+                'label' => 'blk_header_'.time(),
+                'order' => $headerOrder++,
+                'properties' => json_encode([
+                    'id' => 'blk_header_'.time(),
+                    'type' => 'table',
+                    'label' => ($data['type'] === 'GF' ? 'GF Header' : 'BMR Header'),
+                    'is'.($data['type'] === 'GF' ? 'GfHeader' : 'BmrHeader') => true,
+                    'locked' => true,
+                    'section_id' => $data['caterogy_id']
+                ]),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            // --- 2. Auto-generate Stages based on User Selection ---
             $selectedSections = $request->input('selected_sections', []);
             if (! empty($selectedSections) && ($data['type'] === 'BMR' || $data['type'] === 'BPR')) {
+                // Sort sections numerically (0, 1, 2... 9)
+                usort($selectedSections, function ($a, $b) {
+                    return (int)$a <=> (int)$b;
+                });
+
                 $sectionMeta = DB::table('sections')->whereIn('code', $selectedSections)->get()->keyBy('code');
 
-                $order = 0;
+                $order = $headerOrder;
                 foreach ($selectedSections as $code) {
-                    if (isset($sectionMeta[$code])) {
-                        $s = $sectionMeta[$code];
-                        $sectionIdStr = $data['caterogy_id'].'_'.$code;
-                        DB::table('ebmr_template_blocks')->insert([
-                            'template_id' => $id,
-                            'section_id' => $sectionIdStr,
+                    $sName = $sectionMeta[$code]->name ?? ('Phân đoạn '.$code);
+                    $sectionIdStr = $data['caterogy_id'].'_'.$code;
+                    
+                    DB::table('ebmr_template_blocks')->insert([
+                        'template_id' => $id,
+                        'section_id' => $sectionIdStr,
+                        'type' => 'section',
+                        'label' => 'section_'.$order,
+                        'order' => $order++,
+                        'properties' => json_encode([
+                            'id' => 'blk_sec_'.uniqid(),
                             'type' => 'section',
-                            'label' => 'section_'.$order,
-                            'order' => $order++,
-                            'properties' => json_encode([
-                                'id' => 'blk_sec_'.uniqid(),
-                                'type' => 'section',
-                                'label' => $s->name,
-                                'stage_code' => $code,
-                            ]),
-                            'created_at' => now(),
-                            'updated_at' => now(),
-                        ]);
-                    }
+                            'label' => $sName,
+                            'stage_code' => $code,
+                            'section_id' => $sectionIdStr
+                        ]),
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
                 }
             }
 
@@ -273,7 +315,7 @@ class EbmrTemplateController extends Controller
             ->get()
             ->groupBy('ebmr_template_blocks_id');
 
-        $result = $blocks->map(function ($b) use ($contentBlocks) {
+        $resultBlocks = $blocks->map(function ($b) use ($contentBlocks) {
             $prop = json_decode($b->properties, true);
             $this->injectContent($prop, $b, $contentBlocks->get($b->id));
             $prop['db_type'] = $b->type;
@@ -281,7 +323,25 @@ class EbmrTemplateController extends Controller
             return (object) $prop;
         });
 
-        return response()->json($result);
+        // Also fetch fields configuration for this template
+        $variants = DB::table('ebmr_variants')->where('template_id', $id)->get();
+        $fieldsConfig = [];
+        foreach ($variants as $v) {
+            $config = json_decode($v->config, true) ?? [];
+            $fieldsConfig[$v->field_key] = array_merge([
+                'id' => $v->field_key,
+                'name' => $v->name,
+                'label' => $v->label,
+                'type' => $v->type,
+                'section_id' => $v->section_id,
+                'block_id' => $v->block_id,
+            ], $config);
+        }
+
+        return response()->json([
+            'blocks' => $resultBlocks,
+            'fields' => $fieldsConfig,
+        ]);
     }
 
     private function injectContent(&$field, $block, $contentBlocks)
@@ -300,10 +360,17 @@ class EbmrTemplateController extends Controller
 
         if ($block->type === 'static-text') {
             if (preg_match('/<div class="static-text-display"[^>]*>(.*?)<\/div>/is', $fullHtml, $matches)) {
-                $field['content'] = $matches[1];
+                $content = $matches[1];
             } else {
-                $field['content'] = $fullHtml;
+                $content = $fullHtml;
             }
+
+            // --- VARIABLE INJECTION ---
+            $content = preg_replace_callback('/\{\{(field_[0-9]+)\}\}/', function ($m) {
+                return '<span contenteditable="false" class="ebmr-field-badge" data-field-id="'.$m[1].'" onclick="selectField(event, \''.$m[1].'\')"></span>';
+            }, $content);
+
+            $field['content'] = $content;
         } elseif ($block->type === 'table') {
             $rows = $field['rows'] ?? 0;
             $cols = $field['cols'] ?? 0;
@@ -322,6 +389,12 @@ class EbmrTemplateController extends Controller
                 }
                 for ($c = 0; $c < $cols; $c++) {
                     $content = $tdContents[$idx] ?? '';
+                    
+                    // --- VARIABLE INJECTION ---
+                    $content = preg_replace_callback('/\{\{(field_[0-9]+)\}\}/', function ($m) {
+                        return '<span contenteditable="false" class="ebmr-field-badge" data-field-id="'.$m[1].'" onclick="selectField(event, \''.$m[1].'\')"></span>';
+                    }, $content);
+
                     if (isset($field['data'][$r][$c]) && is_array($field['data'][$r][$c])) {
                         $field['data'][$r][$c]['content'] = $content;
                     } else {

@@ -32,10 +32,7 @@
 
         <!-- Document Canvas -->
         <div id="canvas-col" class="col-lg-9 transition-all">
-            <div class="doc-header mb-3">
-                <input type="text" id="templateName" class="form-control doc-title-input"
-                    placeholder="Tài liệu không có tiêu đề" {{ $isReadOnly ? 'readonly' : '' }}>
-            </div>
+
 
             @if (!$isReadOnly)
                 <!-- Editor Ruler -->
@@ -80,5 +77,7 @@
             @endif
 
         </div>
+    <div class="test-mode-badge">
+        <i class="fas fa-flask me-2"></i> Đang ở chế độ Chạy thử (Preview)
     </div>
 </div>

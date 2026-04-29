@@ -34,7 +34,6 @@ class EbmrDesignerController extends Controller
                     if ($type === 'MF') {
                         $title = 'Thiết kế biểu mẫu gốc';
                     }
-                    session(['title' => $title]);
 
                     // Get category extra info for header display
                     if ($type === 'GF') {
@@ -68,6 +67,9 @@ class EbmrDesignerController extends Controller
                         $template->type_name = $cat->type ?? 'Thuốc Kê Đơn'; // Default if empty
                         $template->batch_size = ($cat->batch_size ?? '').' '.($cat->unit_batch_size ?? '');
                     }
+
+                    session(['title' => $title . ' - ' . ($template->category_name ?? '')]);
+
                     // Determine read-only state
                     $currentUserId = session('user')['userId'] ?? null;
                     if ($template->owner_id != $currentUserId || $template->status !== 'draft') {
@@ -85,9 +87,28 @@ class EbmrDesignerController extends Controller
 
                     $fields = [];
                     $fieldsConfig = new \stdClass;
-                    if ($blocks->isNotEmpty()) {
-                        $fieldsConfig = json_decode($blocks->first()->fields_config);
 
+                    // Load fieldsConfig from the new dedicated table (One row per variable)
+                    $variants = DB::table('ebmr_variants')->where('template_id', $id)->get();
+                    if ($variants->isNotEmpty()) {
+                        foreach ($variants as $v) {
+                            $config = json_decode($v->config, true) ?? [];
+                            $fieldsConfig->{$v->field_key} = array_merge([
+                                'id' => $v->field_key,
+                                'name' => $v->name,
+                                'label' => $v->label,
+                                'type' => $v->type,
+                                'important_var_id' => $v->important_var_id,
+                                'section_id' => $v->section_id,
+                                'block_id' => $v->block_id,
+                            ], $config);
+                        }
+                    } elseif ($blocks->isNotEmpty()) {
+                        // Fallback: Check if it's still in the first block (for legacy data)
+                        $fieldsConfig = json_decode($blocks->first()->fields_config);
+                    }
+
+                    if ($blocks->isNotEmpty()) {
                         $allFields = [];
                         $categoryId = $template->caterogy_id ?? 0;
                         $currentSectionId = ($template->type === 'BMR' || $template->type === 'BPR') ? ($categoryId.'_0') : null;
@@ -118,8 +139,9 @@ class EbmrDesignerController extends Controller
                                 DB::table('ebmr_template_blocks')->where('id', $block->id)->update(['section_id' => $currentSectionId]);
                             }
 
-                            // If we are filtering by section, only add if it matches
-                            if (! $sectionId || $block->section_id == $sectionId) {
+                            // If we are filtering by section, only add if it matches OR if it's the header
+                            $isHeader = ($block->section_id == $template->caterogy_id);
+                            if (! $sectionId || $block->section_id == $sectionId || $isHeader) {
                                 $f['section_id'] = $block->section_id; // Ensure section_id is in property for sorting
                                 $f['block_order'] = $block->order;
                                 $fields[] = (object) $f;
@@ -128,17 +150,24 @@ class EbmrDesignerController extends Controller
 
                         // Sort fields globally: first by section code, then by original block order
                         usort($fields, function ($a, $b) {
-                            $partsA = explode('_', $a->section_id ?? '');
-                            $codeA = (int) end($partsA);
+                            $sidA = $a->section_id ?? '';
+                            $sidB = $b->section_id ?? '';
 
-                            $partsB = explode('_', $b->section_id ?? '');
-                            $codeB = (int) end($partsB);
+                            // Header (exact category ID) always comes first
+                            if ($sidA != $sidB) {
+                                $partsA = explode('_', $sidA);
+                                $partsB = explode('_', $sidB);
+                                
+                                // If it's the base category ID (no underscore), treat as code -1 to be first
+                                $codeA = (count($partsA) > 1) ? (int) end($partsA) : -1;
+                                $codeB = (count($partsB) > 1) ? (int) end($partsB) : -1;
 
-                            if ($codeA !== $codeB) {
-                                return $codeA <=> $codeB;
+                                if ($codeA !== $codeB) {
+                                    return $codeA <=> $codeB;
+                                }
                             }
 
-                            return $a->block_order <=> $b->block_order;
+                            return ($a->block_order ?? 0) <=> ($b->block_order ?? 0);
                         });
                     }
                     $template->schema = (object) ['fields' => $fields, 'fieldsConfig' => $fieldsConfig];
@@ -151,12 +180,16 @@ class EbmrDesignerController extends Controller
                         ->orderBy('created_at', 'asc')
                         ->get();
 
+                    $importantVars = DB::table('important_var')->get();
+
                     return view('pages.ebmr.designer', [
                         'template' => $template,
                         'isReadOnly' => ($lang === 'dual') ? true : $isReadOnly,
                         'comments' => $comments,
                         'activeSectionId' => $sectionId,
                         'lang' => $lang,
+                        'importantVars' => $importantVars,
+                        'isAdmin' => (session('user')['userGroup'] ?? '') === 'Admin',
                     ]);
                 }
             }
@@ -182,6 +215,9 @@ class EbmrDesignerController extends Controller
             $fields = $schemaData['fields'] ?? [];
             $fieldsConfig = $schemaData['fieldsConfig'] ?? null;
             $sectionId = $request->section_id;
+            $isIncremental = $schemaData['incremental'] ?? false;
+            $deletedIds = $schemaData['deleted_ids'] ?? [];
+            $blockOrder = $schemaData['block_order'] ?? [];
 
             $data = [
                 'updated_at' => now(),
@@ -198,15 +234,16 @@ class EbmrDesignerController extends Controller
                 if ($oldTemplateRecord) {
                     $oldTemplate = clone $oldTemplateRecord;
 
-                    // Reconstruct old schema for logging
-                    $oldBlocks = DB::table('ebmr_template_blocks')->where('template_id', $oldTemplateId)->get();
-                    $oldFields = [];
-                    foreach ($oldBlocks as $ob) {
-                        $oldFields[] = json_decode($ob->properties, true);
-                    }
-                    $oldTemplate->schema = json_encode(['fields' => $oldFields]);
-
-                    if (! empty($oldTemplate->log_history)) {
+                    // Reconstruct old schema for logging (Note: This might be slow if we do it every time for 1000 blocks)
+                    // For incremental, we might want to skip logRevision or make it smarter.
+                    // For now, let's only log if NOT incremental or if specifically needed.
+                    if (! $isIncremental && ! empty($oldTemplate->log_history)) {
+                        $oldBlocks = DB::table('ebmr_template_blocks')->where('template_id', $oldTemplateId)->get();
+                        $oldFields = [];
+                        foreach ($oldBlocks as $ob) {
+                            $oldFields[] = json_decode($ob->properties, true);
+                        }
+                        $oldTemplate->schema = json_encode(['fields' => $oldFields]);
                         $this->logRevision($oldTemplate, $schemaData);
                     }
 
@@ -218,10 +255,6 @@ class EbmrDesignerController extends Controller
 
                     DB::table('ebmr_templates')->where('id', $oldTemplateId)->update($data);
                     $id = $oldTemplateId;
-
-                    // Keep track of which blocks we touch so we can delete the orphans later
-                    $touchedBlockIds = [];
-                    $touchedContentIds = [];
                 } else {
                     return response()->json(['success' => false, 'message' => 'Không tìm thấy hồ sơ gốc'], 404);
                 }
@@ -229,28 +262,49 @@ class EbmrDesignerController extends Controller
                 $existingContent = collect();
                 $data['created_at'] = now();
                 $id = DB::table('ebmr_templates')->insertGetId($data);
-                $touchedBlockIds = [];
-                $touchedContentIds = [];
             }
 
-            // Insert/Update blocks
+            // --- 1. HANDLE DELETIONS ---
+            if ($isIncremental && ! empty($deletedIds)) {
+                DB::table('ebmr_template_blocks')->whereIn('id', $deletedIds)->delete();
+                DB::table('ebmr_content_blocks')->whereIn('ebmr_template_blocks_id', $deletedIds)->delete();
+            }
+
+            // --- 2. INSERT/UPDATE DIRTY BLOCKS ---
             $templateRecord = DB::table('ebmr_templates')->where('id', $id)->first();
             $categoryId = $templateRecord->caterogy_id ?? 0;
             $currentSectionId = ($templateRecord->type === 'BMR' || $templateRecord->type === 'BPR') ? ($categoryId.'_0') : null;
 
-            $order = 0;
+            $touchedBlockIds = [];
+            $touchedContentIds = [];
+            $frontendToDbMap = [];
+
             foreach ($fields as $field) {
                 $type = $field['type'] ?? 'unknown';
+                $frontendId = $field['id'] ?? null;
 
                 if ($type === 'section') {
-                    $stageCode = $field['stage_code'] ?? 'USER_DEFINED_'.$order;
+                    $stageCode = $field['stage_code'] ?? 'USER_DEFINED_'.rand(100, 999);
                     $currentSectionId = $categoryId.'_'.$stageCode;
                 }
 
-                $finalSectionId = $sectionId ?: $currentSectionId;
+                $blockDbId = $field['db_id'] ?? null;
+
+                // Determine the correct section_id
+                $finalSectionId = $field['section_id'];
+                if (! $finalSectionId) {
+                    if ($isIncremental && $blockDbId) {
+                        // For incremental updates, if section_id is missing from frontend, keep existing one from DB
+                        $existingBlock = DB::table('ebmr_template_blocks')->where('id', $blockDbId)->first();
+                        $finalSectionId = $existingBlock->section_id ?? ($sectionId ?: $currentSectionId);
+                    } else {
+                        $finalSectionId = $sectionId ?: $currentSectionId;
+                    }
+                }
+
                 $properties = $field;
 
-                // Process table data separately
+                // Process table data separately to avoid saving large text in 'properties' column
                 if ($type === 'table' && isset($properties['data'])) {
                     foreach ($properties['data'] as $r => $row) {
                         foreach ($row as $c => $cell) {
@@ -268,12 +322,15 @@ class EbmrDesignerController extends Controller
                     'template_id' => $id,
                     'section_id' => $finalSectionId,
                     'type' => $type,
-                    'label' => $field['id'] ?? null,
-                    'order' => $order++,
+                    'label' => $frontendId,
                     'properties' => json_encode($properties),
-                    'fields_config' => json_encode($fieldsConfig),
                     'updated_at' => now(),
                 ];
+
+                // If not incremental, we handle 'order' here. If incremental, we'll do it later in a batch.
+                if (! $isIncremental) {
+                    $blockData['order'] = array_search($frontendId, $blockOrder) ?: 0;
+                }
 
                 if ($blockDbId && DB::table('ebmr_template_blocks')->where('id', $blockDbId)->exists()) {
                     DB::table('ebmr_template_blocks')->where('id', $blockDbId)->update($blockData);
@@ -282,18 +339,18 @@ class EbmrDesignerController extends Controller
                     $blockData['created_at'] = now();
                     $blockId = DB::table('ebmr_template_blocks')->insertGetId($blockData);
                 }
+
+                if ($frontendId) {
+                    $frontendToDbMap[$frontendId] = ['db_id' => $blockId];
+                }
                 $touchedBlockIds[] = $blockId;
 
                 // 2. Save content blocks and build HTML structure
                 $htmlStructure = '';
                 if ($type === 'static-text') {
                     $rawHtml = $field['content'] ?? '';
-                    $preserved = null;
                     $contentDbId = $field['content_db_id'] ?? null;
-
-                    if ($contentDbId) {
-                        $preserved = $existingContent->get($contentDbId);
-                    }
+                    $preserved = $contentDbId ? $existingContent->get($contentDbId) : null;
 
                     $contentData = [
                         'ebmr_template_blocks_id' => $blockId,
@@ -322,14 +379,30 @@ class EbmrDesignerController extends Controller
                         DB::table('ebmr_content_blocks')->where('id', $contentId)->update([$updateCol => $cleanText]);
                     }
                     $htmlStructure = '<div class="static-text-display">'.$structure.'</div>';
+
+                    if ($frontendId) {
+                        $frontendToDbMap[$frontendId]['content_db_id'] = $contentId;
+                    }
                 } elseif ($type === 'table') {
                     $tableResult = $this->generateTableHtmlStructure($field, $blockId, $id, $finalSectionId, $lang, $existingContent);
                     $htmlStructure = $tableResult['html'];
                     $touchedContentIds = array_merge($touchedContentIds, $tableResult['touchedIds']);
 
-                    // CRITICAL: Update properties with the IDs we just generated/matched
+                    // Update properties with the IDs we just generated/matched
                     $properties = $tableResult['updatedField'];
                     DB::table('ebmr_template_blocks')->where('id', $blockId)->update(['properties' => json_encode($properties)]);
+
+                    if ($frontendId) {
+                        $frontendToDbMap[$frontendId]['data'] = $properties['data'];
+                        // Also sync the section_id if it was updated by backend (stage code generation)
+                        $frontendToDbMap[$frontendId]['section_id'] = $finalSectionId;
+                    }
+                } elseif ($type === 'section') {
+                    if ($frontendId) {
+                        $frontendToDbMap[$frontendId]['section_id'] = $finalSectionId;
+                        // For section blocks, the label might need to be synced if it was used for order
+                        $frontendToDbMap[$frontendId]['db_id'] = $blockId;
+                    }
                 } elseif ($type === 'signature') {
                     $htmlStructure = '<div class="block-signature-placeholder text-muted py-5 text-center border rounded bg-light">
                                         <i class="fas fa-pen-nib me-2"></i>'.($field['label'] ?? 'Ký xác nhận').'
@@ -343,8 +416,87 @@ class EbmrDesignerController extends Controller
                 DB::table('ebmr_template_blocks')->where('id', $blockId)->update(['content' => $htmlStructure]);
             }
 
-            // DELETE ORPHANS (Blocks and content that are no longer in this section/template)
-            if ($id) {
+            // --- 3. FINAL SYNC: Ensure fields_config is in the ebmr_variants table ---
+            if ($fieldsConfig) {
+                // Ensure we have a complete map of Frontend UUID -> DB ID for the whole template
+                // (including blocks that weren't updated in this incremental save)
+                $allExistingBlocks = DB::table('ebmr_template_blocks')
+                    ->where('template_id', $id)
+                    ->get();
+
+                foreach ($allExistingBlocks as $eb) {
+                    $props = json_decode($eb->properties, true);
+                    $fId = $props['id'] ?? null;
+                    if ($fId && ! isset($frontendToDbMap[$fId])) {
+                        $frontendToDbMap[$fId] = $eb->id;
+                    }
+                }
+
+                // Clear existing variables for this template to avoid orphans
+                DB::table('ebmr_variants')->where('template_id', $id)->delete();
+
+                $variantRows = [];
+                foreach ($fieldsConfig as $fieldKey => $config) {
+                    $configArr = (array) $config;
+
+                    // Extract core fields, keep the rest in 'config' JSON
+                    $name = $configArr['name'] ?? null;
+                    $label = $configArr['label'] ?? null;
+                    $type = $configArr['type'] ?? 'text';
+                    $vSectionId = $configArr['section_id'] ?? null;
+                    $vBlockUuid = $configArr['block_id'] ?? null;
+                    $importantVarId = $configArr['important_var_id'] ?? null;
+
+                    // Resolve Frontend UUID to DB ID
+                    $vBlockId = null;
+                    if ($vBlockUuid && isset($frontendToDbMap[$vBlockUuid])) {
+                        $vBlockId = $frontendToDbMap[$vBlockUuid];
+                    }
+
+                    // Remove core fields from the JSON to avoid redundancy
+                    unset($configArr['id'], $configArr['name'], $configArr['label'], $configArr['type'], $configArr['section_id'], $configArr['block_id'], $configArr['important_var_id']);
+
+                    $variantRows[] = [
+                        'template_id' => $id,
+                        'field_key' => (string) $fieldKey,
+                        'name' => (string) $name,
+                        'label' => (string) $label,
+                        'type' => (string) $type,
+                        'important_var_id' => $importantVarId ? (int) $importantVarId : null,
+                        'section_id' => $vSectionId ? (string) $vSectionId : null,
+                        'block_id' => $vBlockId,
+                        'config' => json_encode($configArr),
+                        'created_at' => now()->toDateTimeString(),
+                        'updated_at' => now()->toDateTimeString(),
+                    ];
+                }
+
+                if (! empty($variantRows)) {
+                    foreach ($variantRows as $row) {
+                        try {
+                            DB::table('ebmr_variants')->insert([
+                                'template_id' => (int) $row['template_id'],
+                                'field_key' => (string) $row['field_key'],
+                                'name' => (string) $row['name'],
+                                'label' => (string) $row['label'],
+                                'type' => (string) $row['type'],
+                                'important_var_id' => $row['important_var_id'],
+                                'section_id' => $row['section_id'] ? (string) $row['section_id'] : null,
+                                'block_id' => $row['block_id'] ? (int) $row['block_id'] : null,
+                                'config' => (string) $row['config'],
+                                'created_at' => (string) $row['created_at'],
+                                'updated_at' => (string) $row['updated_at'],
+                            ]);
+                        } catch (\Exception $e) {
+                            \Log::error('Error saving variant: '.$e->getMessage(), ['row' => $row]);
+                            throw $e;
+                        }
+                    }
+                }
+            }
+
+            // --- 4. HANDLE ORPHANS (Full save mode only) ---
+            if (! $isIncremental && $id) {
                 $deleteQueryBlocks = DB::table('ebmr_template_blocks')->where('template_id', $id);
                 $deleteQueryContent = DB::table('ebmr_content_blocks')->where('template_id', $id);
 
@@ -357,7 +509,41 @@ class EbmrDesignerController extends Controller
                 $deleteQueryContent->whereNotIn('id', $touchedContentIds)->delete();
             }
 
-            return response()->json(['success' => true, 'message' => 'Lưu hồ sơ thành công', 'id' => $id]);
+            // --- 5. BATCH UPDATE ORDER ---
+            if (! empty($blockOrder)) {
+                // Chunk to avoid database parameter limits (e.g., SQL Server limit is 2100)
+                $chunks = array_chunk($blockOrder, 500);
+                foreach ($chunks as $chunk) {
+                    $cases = [];
+                    $ids = [];
+                    $params = [];
+                    foreach ($chunk as $index => $fId) {
+                        // Calculate global index
+                        $globalIndex = array_search($fId, $blockOrder);
+                        $cases[] = 'WHEN label = ? THEN ?';
+                        $params[] = $fId;
+                        $params[] = $globalIndex;
+                        $ids[] = $fId;
+                    }
+
+                    if (! empty($cases)) {
+                        $caseString = implode(' ', $cases);
+                        $idString = implode(',', array_fill(0, count($ids), '?'));
+                        $allParams = array_merge($params, [$id], $ids);
+
+                        DB::update("UPDATE ebmr_template_blocks SET `order` = CASE $caseString END WHERE template_id = ? AND label IN ($idString)", $allParams);
+                    }
+                }
+            }
+
+            Log::info("Incremental save successful for Template #$id. Dirty blocks: ".count($fields).', Deleted: '.count($deletedIds));
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Lưu hồ sơ thành công',
+                'id' => $id,
+                'block_ids' => $frontendToDbMap,
+            ]);
         } catch (\Exception $e) {
             Log::error('EbmrDesignerController@save error: '.$e->getMessage());
 
@@ -505,11 +691,20 @@ class EbmrDesignerController extends Controller
         }
 
         if ($block->type === 'static-text') {
-            if (preg_match('/<div class="static-text-display"[^>]*>(.*?)<\/div>/is', $fullHtml, $matches)) {
-                $field['content'] = $matches[1];
+            // Flexible regex to match any wrapper tag and extract inner content
+            if (preg_match('/^<([a-z0-9]+)[^>]*>(.*)<\/\1>$/is', trim($fullHtml), $matches)) {
+                $content = $matches[2];
             } else {
-                $field['content'] = $block->content;
+                $content = $fullHtml;
             }
+
+            // --- VARIABLE INJECTION ---
+            // Convert placeholders {{field_id}} back to spans
+            $content = preg_replace_callback('/\{\{(field_[0-9]+)\}\}/', function ($m) {
+                return '<span contenteditable="false" class="ebmr-field-badge" data-field-id="'.$m[1].'" onclick="selectField(event, \''.$m[1].'\')"></span>';
+            }, $content);
+
+            $field['content'] = $content;
 
             $contentBlock = $contentBlocks->first();
             if ($contentBlock) {
@@ -543,6 +738,12 @@ class EbmrDesignerController extends Controller
                         } else {
                             $text = $cb->vi_contents ?? '';
                         }
+
+                        // --- VARIABLE INJECTION ---
+                        $text = preg_replace_callback('/\{\{(field_[0-9]+)\}\}/', function ($m) {
+                            return '<span contenteditable="false" class="ebmr-field-badge" data-field-id="'.$m[1].'" onclick="selectField(event, \''.$m[1].'\')"></span>';
+                        }, $text);
+
                         $cell['content'] = $text;
                     }
                 }
@@ -656,21 +857,21 @@ class EbmrDesignerController extends Controller
 
     private function splitHtmlAndText($html, $placeholder)
     {
-        // If it's empty or null
-        if (empty($html)) {
-            return ['', ''];
-        }
+        // 1. Identify all variable spans and convert them to protected placeholders {{field_id}}
+        // This ensures they are treated as text and NOT stripped by strip_tags
+        $htmlWithPlaceholders = preg_replace_callback('/<span[^>]*class="ebmr-field-badge"[^>]*data-field-id="([^"]+)"[^>]*>.*?<\/span>/i', function ($m) {
+            return ' {{'.$m[1].'}} '; // Add spaces to ensure it's treated as a separate node if needed
+        }, $html);
 
-        // Get clean text
-        $text = trim(strip_tags($html));
+        // 2. Get clean text (which now contains our placeholders)
+        $text = trim(strip_tags($htmlWithPlaceholders));
 
-        // If there's no text (only tags), just return as is
+        // 3. If there's no text
         if ($text === '') {
             return [$html, ''];
         }
 
-        // We want to replace the FIRST occurrence of text content with the placeholder,
-        // and remove all other text nodes to preserve HTML structure while fully isolating text.
+        // 4. Create the structure by replacing text nodes with [[CONTENT_ID]]
         $first = true;
         $structure = preg_replace_callback('/>([^<]+)</', function ($matches) use (&$first, $placeholder) {
             if (trim($matches[1]) !== '') {
@@ -679,12 +880,12 @@ class EbmrDesignerController extends Controller
 
                     return '>'.$placeholder.'<';
                 } else {
-                    return '><'; // Clear subsequent text nodes
+                    return '><';
                 }
             }
 
             return $matches[0];
-        }, '>'.$html.'<'); // wrap in >< to catch text at the very beginning/end
+        }, '>'.$htmlWithPlaceholders.'<');
 
         $structure = substr($structure, 1, -1);
 
@@ -919,11 +1120,50 @@ class EbmrDesignerController extends Controller
 
     public function logError(Request $request)
     {
-        Log::error('Client-side eBMR Error: ' . $request->message, [
+        Log::error('Client-side eBMR Error: '.$request->message, [
             'user' => session('user')['fullName'] ?? 'Guest',
             'url' => $request->url,
-            'details' => $request->details
+            'details' => $request->details,
         ]);
+
         return response()->json(['success' => true]);
+    }
+
+    public function getDynamicOptions(Request $request)
+    {
+        $table = $request->input('table');
+        $labelCol = $request->input('labelCol');
+        $valueCol = $request->input('valueCol');
+        $whereClause = $request->input('where');
+
+        if (! $table || ! $labelCol) {
+            return response()->json(['success' => false, 'message' => 'Thiếu thông tin bảng hoặc cột hiển thị.']);
+        }
+
+        try {
+            $query = DB::table($table)->select($labelCol);
+            if ($valueCol) {
+                $query->addSelect($valueCol);
+            }
+
+            if ($whereClause) {
+                $query->whereRaw($whereClause);
+            }
+
+            $results = $query->get();
+            $options = [];
+            foreach ($results as $row) {
+                $options[] = [
+                    'label' => $row->{$labelCol},
+                    'value' => $valueCol ? $row->{$valueCol} : $row->{$labelCol},
+                ];
+            }
+
+            return response()->json(['success' => true, 'options' => $options]);
+        } catch (\Exception $e) {
+            Log::error('Dynamic Options Fetch Error: '.$e->getMessage());
+
+            return response()->json(['success' => false, 'message' => 'Lỗi truy vấn: '.$e->getMessage()]);
+        }
     }
 }

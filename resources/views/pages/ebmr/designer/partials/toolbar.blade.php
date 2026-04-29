@@ -73,14 +73,33 @@
                     <button class="dropdown-item rounded mb-1" onclick="insertDynamicField('signature')">✍️ Nhập Chữ ký</button>
                     <button class="dropdown-item rounded mb-1" onclick="insertDynamicField('checkbox')">☑️ Nhập Tick</button>
                     <button class="dropdown-item rounded mb-1" onclick="insertDynamicField('select')">🔘 Nhập Lựa chọn</button>
+                    <button class="dropdown-item rounded mb-1" onclick="insertDynamicField('formula')">🧮 Thiết lập Công thức</button>
                 </div>
             </div>
             <button class="btn btn-toolbar-action text-muted ms-1" onmousedown="event.preventDefault();" onclick="openSymbolModal()" title="Ký hiệu đặc biệt">
                 <i class="fas fa-omega"></i>
             </button>
+
+            <button class="btn btn-toolbar-action text-primary ms-2 border-start ps-2" onmousedown="event.preventDefault();" onclick="openVariableSummaryModal()" title="Danh sách biến số đã cài đặt">
+                <i class="fas fa-tasks"></i>
+            </button>
         </div>
 
         <div class="ms-auto d-flex gap-2">
+            <!-- Designer / Execute Mode Toggle -->
+            <div class="btn-group me-2" role="group" aria-label="Mode toggle">
+                <button type="button" id="btn-mode-designer" 
+                    class="btn btn-sm px-3 {{ empty($isExecutionMode) ? 'btn-primary' : 'btn-outline-primary' }}" 
+                    onclick="setDesignerMode(false)" style="border-radius: 20px 0 0 20px;">
+                    <i class="fas fa-edit me-1"></i> Thiết kế
+                </button>
+                <button type="button" id="btn-mode-execute" 
+                    class="btn btn-sm px-3 {{ !empty($isExecutionMode) ? 'btn-success' : 'btn-outline-success' }}" 
+                    onclick="setDesignerMode(true)" style="border-radius: 0 20px 20px 0;">
+                    <i class="fas fa-play me-1"></i> Chạy thử
+                </button>
+            </div>
+
             <!-- Language Selector -->
             <div class="btn-group" role="group">
                 <button id="langModeBtn" type="button" class="btn btn-outline-secondary px-2 dropdown-toggle" data-toggle="dropdown" style="border-radius: 20px;" title="Ngôn ngữ">
