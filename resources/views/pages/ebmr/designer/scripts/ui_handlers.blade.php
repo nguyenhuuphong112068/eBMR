@@ -2016,7 +2016,7 @@
             content: '',
             columns: [],
             borderMode: 'visible',
-            locked: true, // Khóa mặc định để tránh điều chỉnh cấu trúc khi đã liên kết
+            locked: false, // Để người dùng có thể xóa hoặc di chuyển block sau khi chèn
             section_id: window.activeSectionId || null
         };
 

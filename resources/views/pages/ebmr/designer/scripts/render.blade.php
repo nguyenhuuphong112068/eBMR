@@ -346,11 +346,16 @@
 
         let deleteCell = '';
         if (window.isExecutionMode && item.canAddRows) {
-            deleteCell = `<td class="execution-delete-cell" style="width: 30px; border: none; background: transparent; vertical-align: middle;">
-                                                    <button class="btn btn-link text-danger p-0" title="Xóa dòng" onclick="executeDeleteTableRow('${item.id}', ${r})">
-                                                        <i class="fas fa-times-circle"></i>
-                                                    </button>
-                                                  </td>`;
+            const isDynamicRow = item.data[r] && item.data[r][0] && item.data[r][0].is_dynamic;
+            if (isDynamicRow) {
+                deleteCell = `<td class="execution-delete-cell" style="width: 30px; border: none; background: transparent; vertical-align: middle;">
+                                                        <button class="btn btn-link text-danger p-0" title="Xóa dòng" onclick="executeDeleteTableRow('${item.id}', ${r})">
+                                                            <i class="fas fa-times-circle"></i>
+                                                        </button>
+                                                      </td>`;
+            } else {
+                deleteCell = `<td style="width: 30px; border: none; background: transparent;"></td>`;
+            }
         }
         rowsHtml += `<tr>${cellsHtml}${deleteCell}</tr>`;
     }

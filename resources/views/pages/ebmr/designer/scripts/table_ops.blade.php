@@ -116,11 +116,13 @@
             const lastRowIndex = item.rows - 1;
             const lastRow = item.data[lastRowIndex];
             
-            // Create a deep copy of the last row's structure
+            // Create a deep copy of the last row's structure and content
+            // Tag with is_dynamic: true so we know this row was added during execution
             let newRow = lastRow.map(cell => {
                 return {
                     ...cell,
-                    content: cell.content // Keep the template content (including placeholders)
+                    content: cell.content, // Copy content/variables from the previous row as requested
+                    is_dynamic: true 
                 };
             });
 

@@ -19,10 +19,6 @@
                                     onclick="openBtpListModal()">
                                     <i class="fas fa-file-signature me-2"></i> Tạo mới
                                 </button>
-                                <button class="btn btn-navy rounded-pill px-4 shadow-sm fw-bold"
-                                    onclick="openCreateModal()">
-                                    <i class="fas fa-plus me-2"></i> Soạn mới hồ sơ (Manual)
-                                </button>
                             </div>
                         </div>
                         <div class="card-body p-4">
@@ -388,6 +384,10 @@
     </div>
 
     <style>
+        :root {
+            --primary-navy: #003A4F;
+        }
+
         .bg-navy {
             background-color: var(--primary-navy) !important;
         }
@@ -402,7 +402,9 @@
         }
 
         .btn-navy:hover {
-            opacity: 0.9;
+            background-color: #002a3a !important;
+            color: white !important;
+            opacity: 1;
         }
 
         .bg-soft-info {

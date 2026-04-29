@@ -58,6 +58,13 @@
         });
     }
 
+    // Auto-unlock existing linked templates that were locked by previous logic
+    items.forEach(item => {
+        if (item.type === 'linked-template' && item.locked === true) {
+            item.locked = false;
+        }
+    });
+
     if (items.length > 0 || pageOrientation !== 'portrait') {
         // Wait for DOM
         document.addEventListener('DOMContentLoaded', () => {
