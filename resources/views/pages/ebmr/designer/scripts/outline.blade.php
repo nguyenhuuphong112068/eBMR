@@ -21,6 +21,8 @@
         let html = '';
 
         items.forEach((item, idx) => {
+            if (item.type === 'section' && item.locked) return; // Skip Header section in TOC
+
             const sid = item.section_id || '';
             const parts = sid.split('_');
             const code = parts.length > 1 ? parts[parts.length - 1] : null;

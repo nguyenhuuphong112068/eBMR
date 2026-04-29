@@ -1930,10 +1930,13 @@
     // --- Linked Template (GF) Logic ---
     let allGfs = [];
 
+    let currentGfInsertIndex = null;
+
     /**
      * Mở modal để liên kết với một Biểu mẫu chung (General Form - GF).
      */
-    function openLinkGfModal() {
+    function openLinkGfModal(insertIndex = null) {
+        currentGfInsertIndex = insertIndex;
         if (window.bootstrap) {
             const modal = new bootstrap.Modal(document.getElementById('linkGfModal'));
             modal.show();
@@ -2013,15 +2016,36 @@
             content: '',
             columns: [],
             borderMode: 'visible',
-            locked: true // Khóa mặc định để tránh điều chỉnh cấu trúc khi đã liên kết
+            locked: true, // Khóa mặc định để tránh điều chỉnh cấu trúc khi đã liên kết
+            section_id: window.activeSectionId || null
         };
-        items.push(item);
+
+        if (currentGfInsertIndex !== null) {
+            // Determine section_id based on surrounding blocks if not already in activeSectionId mode
+            if (!item.section_id && currentGfInsertIndex > 0) {
+                item.section_id = items[currentGfInsertIndex - 1].section_id;
+            } else if (!item.section_id && items.length > 0) {
+                item.section_id = items[0].section_id;
+            }
+            items.splice(currentGfInsertIndex, 0, item);
+        } else {
+            items.push(item);
+        }
+
         renderBlocks();
 
         const modalEl = document.getElementById('linkGfModal');
-        if (modalEl && window.bootstrap) {
-            const modal = bootstrap.Modal.getInstance(modalEl);
-            if (modal) modal.hide();
+        if (modalEl) {
+            if (window.bootstrap && bootstrap.Modal && typeof bootstrap.Modal.getInstance === 'function') {
+                const modal = bootstrap.Modal.getInstance(modalEl);
+                if (modal) modal.hide();
+            } else if (window.jQuery) {
+                $(modalEl).modal('hide');
+            } else {
+                // Fallback for older BS5 or if jQuery missing
+                const closeBtn = modalEl.querySelector('[data-bs-dismiss="modal"]');
+                if (closeBtn) closeBtn.click();
+            }
         }
     }
 
@@ -2110,7 +2134,7 @@
                 const borderClass = `border-mode-${borderMode}`;
 
                 let thead = '';
-                if (!b.hideHeader) {
+                if (!b.hideHeader && b.columns) {
                     thead = `<thead><tr>${b.columns.map((c, cIdx) => {
                         const s = c.style || {};
                         const bg = s.backgroundColor || '';
@@ -2128,12 +2152,13 @@
                 const blockKey = b.uuid || b.id;
                 const runDataForBlock = window.executionValues && window.executionValues[blockKey] ? window.executionValues[blockKey] : {};
 
-                for (let r = 0; r < (b.rows || 1); r++) {
+                for (let r = 0; r < (b.rows || 0); r++) {
                     let cellsHtml = '';
+                    if (!b.data || !b.data[r]) continue;
                     const rowH = (b.rowHeights && b.rowHeights[r]) ? b.rowHeights[r] : 'auto';
-                    for (let c = 0; c < (b.cols || 1); c++) {
+                    for (let c = 0; c < (b.cols || 0); c++) {
                         if (!b.data[r][c] || typeof b.data[r][c] !== 'object') {
-                            b.data[r][c] = { content: b.data[r][c] || '', rs: 1, cs: 1, hidden: false };
+                            b.data[r][c] = { content: '', rs: 1, cs: 1, hidden: false };
                         }
                         const cell = b.data[r][c];
                         if (cell.hidden) continue;

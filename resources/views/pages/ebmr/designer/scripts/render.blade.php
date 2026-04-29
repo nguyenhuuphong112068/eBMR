@@ -388,8 +388,8 @@
         // Tự động mở xem trước nếu đang ở chế độ thực thi hoặc người dùng đã chọn mở
         const isPreviewing = window.isExecutionMode || item.showPreview || false;
 
-        // Ẩn các nút điều khiển nếu ở chế độ thực thi hoặc item bị khóa
-        const hideControls = window.isExecutionMode || item.locked;
+        // Ẩn các nút điều khiển nội bộ nếu ở chế độ thực thi
+        const hideControls = window.isExecutionMode;
 
         // Vùng chứa nội dung xem trước của biểu mẫu nhúng
         const previewContent = isPreviewing ? `<div id="preview-${item.id}" class="mt-3 p-4 border rounded bg-white w-100 shadow-sm" style="${window.isExecutionMode ? '' : 'pointer-events: none; opacity: 0.9;'}">
@@ -455,7 +455,7 @@
     // Tổng hợp HTML của khối
     div.innerHTML = `
                             ${actions}
-                            ${item.type !== 'static-text' && !window.isExecutionMode && item.label && item.label !== 'null' && !item.isGfHeader ? `<span class="block-label">${item.label} ${item.locked ? '<i class="fas fa-lock ms-1 small"></i>' : ''}</span>` : ''}
+                            ${item.type !== 'static-text' && item.type !== 'section' && !window.isExecutionMode && item.label && item.label !== 'null' && !item.isGfHeader && !item.isBmrHeader ? `<span class="block-label">${item.label} ${item.locked ? '<i class="fas fa-lock ms-1 small"></i>' : ''}</span>` : ''}
                             ${content}
                         `;
     currentGroup.appendChild(div);
@@ -566,6 +566,7 @@
                 <div class="small fw-bold text-muted px-2 mb-1">KHÁC</div>
                 <button onclick="addItem('static-text', ${idx})"><i class="fas fa-paragraph me-2" style="width: 15px;"></i> Văn bản</button>
                 <button onclick="showTableSelectorAt(${idx}, this)"><i class="fas fa-table me-2" style="width: 15px;"></i> Bảng</button>
+                <button onclick="openLinkGfModal(${idx})"><i class="fas fa-link me-2" style="width: 15px;"></i> BM Chung</button>
                 <hr class="my-1 mx-2">
                 <button onclick="pasteAt(${idx})"><i class="fas fa-paste me-2" style="width: 15px;"></i> Dán nội dung</button>
             </div>

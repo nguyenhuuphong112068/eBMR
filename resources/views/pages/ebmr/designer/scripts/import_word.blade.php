@@ -99,9 +99,6 @@
 
                         if (isReplace) {
                             items = []; // Xóa hết dữ liệu cũ nếu chọn ghi đè
-                            if (typeof window.initializeDefaultTemplate === 'function') {
-                                window.initializeDefaultTemplate();
-                            }
                         }
                         const oldLength = items.length;
 
@@ -229,7 +226,8 @@
 
                                 if (targetR < rowCount) {
                                     matrix[targetR][targetC] = {
-                                        content: (r === 0 && c === 0) ? cell.innerHTML.trim() : '',
+                                        content: (r === 0 && c === 0) ? cell.innerHTML
+                                        .trim() : '',
                                         rs: (r === 0 && c === 0) ? rowspan : 1,
                                         cs: (r === 0 && c === 0) ? colspan : 1,
                                         hidden: (r > 0 || c > 0)
