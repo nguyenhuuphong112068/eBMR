@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
 
 class EbmrTemplateController extends Controller
 {
@@ -12,6 +13,7 @@ class EbmrTemplateController extends Controller
      */
     public function index(Request $request)
     {
+        $this->syncStatuses();
         $type = $request->query('type', 'BMR');
         $title = 'Soạn Thảo Hồ Sơ BMR';
         if ($type === 'GF') {
@@ -240,6 +242,84 @@ class EbmrTemplateController extends Controller
             'message' => $message,
             'id' => $id,
         ]);
+    }
+
+    /**
+     * Update only effective date
+     */
+    public function updateEffectiveDate(Request $request)
+    {
+        $validated = $request->validate([
+            'id' => 'required|integer',
+            'effective_date' => 'required|date',
+        ]);
+
+        $template = DB::table('ebmr_templates')->where('id', $validated['id'])->first();
+        if (!$template) {
+            return response()->json(['success' => false, 'message' => 'Hồ sơ không tồn tại']);
+        }
+
+        if ($template->owner_id != (session('user')['userId'] ?? null)) {
+            return response()->json(['success' => false, 'message' => 'Bạn không có quyền thực hiện thao tác này']);
+        }
+
+        $effectiveDate = Carbon::parse($validated['effective_date']);
+        $newStatus = $effectiveDate->isFuture() ? 'issued' : 'active';
+
+        DB::table('ebmr_templates')->where('id', $validated['id'])->update([
+            'status' => $newStatus,
+            'effective_date' => $validated['effective_date'],
+            'updated_at' => now(),
+        ]);
+
+        if ($newStatus === 'active') {
+            $this->expirePreviousVersions($validated['id']);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Cập nhật ngày hiệu lực thành công',
+        ]);
+    }
+
+    /**
+     * Sync statuses: Activate reached dates and expire old versions
+     */
+    private function syncStatuses()
+    {
+        // 1. Activate templates where effective_date <= now
+        $toActivate = DB::table('ebmr_templates')
+            ->where('status', 'issued')
+            ->whereNotNull('effective_date')
+            ->where('effective_date', '<=', now()->toDateString())
+            ->get();
+
+        foreach ($toActivate as $t) {
+            DB::table('ebmr_templates')->where('id', $t->id)->update([
+                'status' => 'active',
+                'updated_at' => now()
+            ]);
+            $this->expirePreviousVersions($t->id);
+        }
+    }
+
+    /**
+     * Expire previous versions of the same category and type
+     */
+    private function expirePreviousVersions($templateId)
+    {
+        $current = DB::table('ebmr_templates')->where('id', $templateId)->first();
+        if (!$current) return;
+
+        DB::table('ebmr_templates')
+            ->where('caterogy_id', $current->caterogy_id)
+            ->where('type', $current->type)
+            ->where('version', '<', $current->version)
+            ->where('status', 'active')
+            ->update([
+                'status' => 'expired',
+                'updated_at' => now()
+            ]);
     }
 
     public function getNextVersion(Request $request)

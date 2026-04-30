@@ -90,7 +90,8 @@
             <div class="btn-group me-2" role="group" aria-label="Mode toggle">
                 <button type="button" id="btn-mode-designer" 
                     class="btn btn-sm px-3 {{ empty($isExecutionMode) ? 'btn-primary' : 'btn-outline-primary' }}" 
-                    onclick="setDesignerMode(false)" style="border-radius: 20px 0 0 20px;">
+                    onclick="setDesignerMode(false)" style="border-radius: 20px 0 0 20px;"
+                    {{ $template->status !== 'draft' ? 'disabled' : '' }}>
                     <i class="fas fa-edit me-1"></i> Thiết kế
                 </button>
                 <button type="button" id="btn-mode-execute" 

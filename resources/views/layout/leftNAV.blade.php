@@ -136,7 +136,7 @@
                 <!-- Droplist Menu Danh Muc  -->
                 <li class="nav-item has-treeview {{ str_contains(url()->current(), 'category') ? 'menu-open' : '' }}">
                     <a href="#" class="nav-link {{ str_contains(url()->current(), 'category') ? 'active' : '' }}">
-                        <i class="nav-icon fas fa-newspaper"></i>
+                        <i class="fas fa-newspaper"></i>
                         <p>
                             Danh Mục
                             <i class="right fas fa-angle-left"></i>
@@ -225,7 +225,7 @@
                         class="nav-link {{ str_contains(url()->current(), 'ebmr/approvals') ? 'active' : '' }}">
                         <i class="fas fa-clipboard-check"></i>
                         <p>
-                            Quy Trình Duyệt
+                            Phê Duyệt
                             <i class="right fas fa-angle-left"></i>
                         </p>
                     </a>
@@ -247,7 +247,7 @@
                         class="nav-link {{ str_contains(url()->current(), 'ebmr/issue-center') || str_contains(url()->current(), 'ebmr/records?mode=history') ? 'active' : '' }}">
                         <i class="fas fa-file-export"></i>
                         <p>
-                            Quy Trình Ban Hành
+                            Ban Hành
                             <i class="right fas fa-angle-left"></i>
                         </p>
                     </a>
@@ -256,7 +256,7 @@
                             <a href="{{ route('pages.ebmr.issueCenter') }}"
                                 class="nav-link {{ str_contains(url()->current(), 'ebmr/issue-center') ? 'active' : '' }}">
                                 <i class="fas fa-rocket"></i>
-                                <p>Ban Hành BMR</p>
+                                <p>Hồ Sơ Sản Xuất </p>
                             </a>
                         </li>
                         <li class="nav-item">

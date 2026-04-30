@@ -22,11 +22,36 @@ class EbmrExecutionController extends Controller
         $records = DB::table('ebmr_records')
             ->join('ebmr_templates', 'ebmr_records.template_id', '=', 'ebmr_templates.id')
             ->leftJoin('user_management', 'ebmr_records.created_by', '=', 'user_management.id')
-            ->select('ebmr_records.*', 'ebmr_templates.name as template_name', 'ebmr_templates.document_code', 'user_management.fullName as issuer_name')
+            ->select('ebmr_records.*', 'user_management.fullName as issuer_name', 'ebmr_templates.type', 'ebmr_templates.caterogy_id')
             ->orderBy('ebmr_records.created_at', 'desc')
             ->get();
 
         foreach($records as $r) {
+            if ($r->type === 'GF') {
+                $r->template_name = DB::table('gf_category')->where('id', $r->caterogy_id)->value('name') ?? 'N/A';
+                $r->document_code = DB::table('gf_category')->where('id', $r->caterogy_id)->value('code') ?? 'N/A';
+            } elseif ($r->type === 'MF') {
+                $r->template_name = DB::table('mf_category')->where('id', $r->caterogy_id)->value('name') ?? 'N/A';
+                $r->document_code = DB::table('mf_category')->where('id', $r->caterogy_id)->value('code') ?? 'N/A';
+            } elseif ($r->type === 'BPR') {
+                $cat = DB::table('finished_product_category')
+                    ->leftJoin('product_name', 'finished_product_category.product_name_id', '=', 'product_name.id')
+                    ->where('finished_product_category.id', $r->caterogy_id)
+                    ->select('finished_product_category.finished_product_code', 'product_name.name')
+                    ->first();
+                $r->template_name = $cat->name ?? 'N/A';
+                $r->document_code = $cat->finished_product_code ?? 'N/A';
+            } else {
+                $cat = DB::table('intermediate_category')
+                    ->leftJoin('product_name', 'intermediate_category.product_name_id', '=', 'product_name.id')
+                    ->where('intermediate_category.id', $r->caterogy_id)
+                    ->select('intermediate_category.intermediate_code', 'product_name.name')
+                    ->first();
+                $r->template_name = $cat->name ?? 'N/A';
+                $r->document_code = $cat->intermediate_code ?? 'N/A';
+            }
+
+            // --- Fetch Stages (Sections) ---
             $r->sections = DB::table('ebmr_template_blocks')
                 ->where('template_id', $r->template_id)
                 ->where('type', 'section')
@@ -35,7 +60,7 @@ class EbmrExecutionController extends Controller
                 ->map(function($b) {
                     $prop = json_decode($b->properties);
                     return [
-                        'id' => $b->section_id, // Use composite string ID
+                        'id' => $b->section_id,
                         'label' => $prop->label ?? 'N/A'
                     ];
                 });
@@ -60,6 +85,30 @@ class EbmrExecutionController extends Controller
 
         $template = DB::table('ebmr_templates')->where('id', $record->template_id)->first();
         if (!$template) return redirect()->back()->with('error', 'Mẫu hồ sơ không tồn tại.');
+
+        if ($template->type === 'GF') {
+            $template->name = DB::table('gf_category')->where('id', $template->caterogy_id)->value('name') ?? 'N/A';
+            $template->document_code = DB::table('gf_category')->where('id', $template->caterogy_id)->value('code') ?? 'N/A';
+        } elseif ($template->type === 'MF') {
+            $template->name = DB::table('mf_category')->where('id', $template->caterogy_id)->value('name') ?? 'N/A';
+            $template->document_code = DB::table('mf_category')->where('id', $template->caterogy_id)->value('code') ?? 'N/A';
+        } elseif ($template->type === 'BPR') {
+            $cat = DB::table('finished_product_category')
+                ->leftJoin('product_name', 'finished_product_category.product_name_id', '=', 'product_name.id')
+                ->where('finished_product_category.id', $template->caterogy_id)
+                ->select('finished_product_category.finished_product_code', 'product_name.name')
+                ->first();
+            $template->name = $cat->name ?? 'N/A';
+            $template->document_code = $cat->finished_product_code ?? 'N/A';
+        } else {
+            $cat = DB::table('intermediate_category')
+                ->leftJoin('product_name', 'intermediate_category.product_name_id', '=', 'product_name.id')
+                ->where('intermediate_category.id', $template->caterogy_id)
+                ->select('intermediate_category.intermediate_code', 'product_name.name')
+                ->first();
+            $template->name = $cat->name ?? 'N/A';
+            $template->document_code = $cat->intermediate_code ?? 'N/A';
+        }
 
         $fields = [];
         $fieldsConfig = new \stdClass();
@@ -139,6 +188,7 @@ class EbmrExecutionController extends Controller
         }
 
         // --- Section Filtering Logic ---
+        $activeSectionLabel = null;
         if ($sectionId) {
             $blocksQuery = DB::table('ebmr_template_blocks')
                 ->where('template_id', $template->id)

@@ -40,6 +40,34 @@ class EbmrApprovalController extends Controller
                 ->exists();
 
             if (!$hasEarlierPending) {
+                // Fetch document code and name from category tables
+                $type = $t->type ?? 'BMR';
+                if ($type === 'GF') {
+                    $cat = DB::table('gf_category')->where('id', $t->caterogy_id)->first();
+                    $t->document_code = $cat->code ?? '';
+                    $t->name = $cat->name ?? '';
+                } elseif ($type === 'MF') {
+                    $cat = DB::table('mf_category')->where('id', $t->caterogy_id)->first();
+                    $t->document_code = $cat->code ?? '';
+                    $t->name = $cat->name ?? '';
+                } elseif ($type === 'BPR') {
+                    $cat = DB::table('finished_product_category')
+                        ->leftJoin('product_name', 'finished_product_category.product_name_id', '=', 'product_name.id')
+                        ->where('finished_product_category.id', $t->caterogy_id)
+                        ->select('finished_product_category.*', 'product_name.name as product_name')
+                        ->first();
+                    $t->document_code = $cat->finished_product_code ?? '';
+                    $t->name = $cat->product_name ?? '';
+                } else {
+                    $cat = DB::table('intermediate_category')
+                        ->leftJoin('product_name', 'intermediate_category.product_name_id', '=', 'product_name.id')
+                        ->where('intermediate_category.id', $t->caterogy_id)
+                        ->select('intermediate_category.*', 'product_name.name as product_name')
+                        ->first();
+                    $t->document_code = $cat->intermediate_code ?? '';
+                    $t->name = $cat->product_name ?? '';
+                }
+
                 $t->my_role = $wfForMe->role;
                 $t->workflow_id = $wfForMe->id;
                 $actionableTemplates->push($t);
@@ -102,13 +130,19 @@ class EbmrApprovalController extends Controller
         DB::transaction(function () use ($workflow, $newWfStatus, $validated) {
             DB::table('ebmr_template_workflows')->where('id', $workflow->id)->update(['status' => $newWfStatus, 'comment' => $validated['comment'], 'updated_at' => now()]);
 
+            // Nếu người phê duyệt là Authorizer (Ban hành) và đồng ý, cập nhật ngày ban hành hồ sơ
+            if ($newWfStatus === 'approved' && $workflow->role === 'authorizer') {
+                DB::table('ebmr_templates')->where('id', $workflow->template_id)->update(['issued_date' => now()]);
+            }
+
             if ($newWfStatus === 'rejected') {
                 DB::table('ebmr_template_workflows')->where('template_id', $workflow->template_id)->where('status', 'pending')->update(['status' => 'cancelled', 'updated_at' => now()]);
                 DB::table('ebmr_templates')->where('id', $workflow->template_id)->update(['status' => 'draft']);
             } else {
                 $pendingCount = DB::table('ebmr_template_workflows')->where('template_id', $workflow->template_id)->where('status', 'pending')->count();
                 if ($pendingCount === 0) {
-                    DB::table('ebmr_templates')->where('id', $workflow->template_id)->update(['status' => 'published', 'updated_at' => now()]);
+                    // All approved! Issue the template
+                    DB::table('ebmr_templates')->where('id', $workflow->template_id)->update(['status' => 'issued', 'updated_at' => now()]);
                 }
             }
         });

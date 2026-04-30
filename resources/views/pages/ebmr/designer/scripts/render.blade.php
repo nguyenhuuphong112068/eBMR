@@ -71,41 +71,46 @@
     .border-mode-none,
     .border-mode-none th,
     .border-mode-none td {
-        border: 1px solid transparent !important;
+        border: 1px solid transparent;
     }
 
     .border-mode-none:hover {
-        border: 1px dashed #ccc !important;
+        border: 1px dashed #ccc;
+    }
+
+    .border-mode-all th,
+    .border-mode-all td {
+        border: var(--table-border-width, 1px) solid var(--table-border-color, #dee2e6);
     }
 
     .border-mode-outer {
-        border: 1px solid #000 !important;
+        border: var(--table-border-width, 1px) solid var(--table-border-color, #dee2e6);
     }
 
     .border-mode-outer th,
     .border-mode-outer td {
-        border: none !important;
+        border: none;
     }
 
     .border-mode-rows th,
     .border-mode-rows td {
-        border: none !important;
-        border-bottom: 1px solid #000 !important;
+        border: none;
+        border-bottom: var(--table-border-width, 1px) solid var(--table-border-color, #dee2e6);
     }
 
     .border-mode-rows tr:last-child td {
-        border-bottom: none !important;
+        border-bottom: none;
     }
 
     .border-mode-cols th,
     .border-mode-cols td {
-        border: none !important;
-        border-right: 1px solid #000 !important;
+        border: none;
+        border-right: var(--table-border-width, 1px) solid var(--table-border-color, #dee2e6);
     }
 
     .border-mode-cols tr td:last-child,
     .border-mode-cols tr th:last-child {
-        border-right: none !important;
+        border-right: none;
     }
 
     .mini-table.border-mode-none tr:hover td {
@@ -162,13 +167,17 @@
 
         // Duyệt qua từng phần tử trong mảng items để tạo HTML tương ứng
         items.forEach((item, idx) => {
-                // Xác định phân đoạn (section) mà item này thuộc về
+                // Xác định phân đoạn (section) cho item hiện tại nếu nó chưa có hoặc là khối section
                 if (item.type === 'section') {
-                    activeSectionIdTracker = item.section_id || item.id;
+                    activeSectionIdTracker = item.id;
                 }
-
-                const itemSectionId = activeSectionIdTracker || 'section_0';
-                item.section_id = itemSectionId; // Gán ID phân đoạn cho item để đồng bộ dữ liệu
+                
+                // Chỉ tự động gán section_id nếu item chưa có section_id
+                if (!item.section_id) {
+                    item.section_id = activeSectionIdTracker || 'section_0';
+                }
+                
+                const itemSectionId = item.section_id;
 
                 const isHeader = item.isGfHeader || item.isBmrHeader || (item.type === 'section' && item.locked);
 
@@ -202,13 +211,32 @@
                         currentGroup = document.createElement('div');
                         currentGroup.className = 'section-group-wrapper' + (window.activeSectionId ===
                             itemSectionId ? ' active' : '');
-                        currentGroup.setAttribute('data-section-id', itemSectionId);
                         currentGroup.onclick = (e) => {
-                            // Kích hoạt phân đoạn khi click vào vùng nền của nhóm
-                            if (e.target === currentGroup) {
+                            // Kích hoạt phân đoạn khi click vào vùng nền của nhóm (không click vào block con)
+                            if (!e.target.closest('.block-item')) {
                                 window.activeSectionId = itemSectionId;
-                                selectedId = null; // Bỏ chọn khối cụ thể
+                                selectedId = null; 
                                 renderBlocks();
+                            }
+                        };
+
+                        // D-CLICK: Nếu đang ở "Xem tất cả", d-click vào vùng trắng sẽ tự chuyển sang "Xem 1 section"
+                        currentGroup.ondblclick = (e) => {
+                            // Nếu click vào vùng trắng (không phải block)
+                            if (!e.target.closest('.block-item') && window.isViewAllMode) {
+                                window.activeSectionId = itemSectionId;
+                                window.isViewAllMode = false; // Chuyển sang chế độ xem 1 section
+                                selectedId = null;
+                                renderBlocks();
+                                
+                                // Cập nhật icon trên nút toggle view (nếu có)
+                                const toggleBtn = document.getElementById('viewModeToggle');
+                                if (toggleBtn) {
+                                    toggleBtn.innerHTML = '<i class="fas fa-expand-arrows-alt"></i>';
+                                    toggleBtn.classList.remove('btn-info');
+                                    toggleBtn.classList.add('btn-outline-info');
+                                    toggleBtn.title = "Chuyển sang xem tất cả";
+                                }
                             }
                         };
                         container.appendChild(currentGroup);
@@ -270,7 +298,7 @@
                         data-row="0"
                         data-col="${cIdx}"
                         class="table-header-cell"
-                        style="width: ${c.width || 'auto'}; background-color: ${bg}; text-align: ${align}; font-weight: ${fw}; font-style: ${fs}; text-decoration: ${td}; font-size: ${fsz}; color: ${tc};">
+                        style="width: ${c.width || 'auto'}; background-color: ${bg}; text-align: ${align}; font-weight: ${fw}; font-style: ${fs}; text-decoration: ${td}; font-size: ${fsz}; color: ${tc}; border-top: ${s.borderTop || ''}; border-bottom: ${s.borderBottom || ''}; border-left: ${s.borderLeft || ''}; border-right: ${s.borderRight || ''};">
                             <div class="header-content">${c.label}</div>
                             ${!window.isExecutionMode ? `
                             <div class="col-actions">
@@ -333,7 +361,7 @@
                         colspan="${cell.cs || 1}"
                         ${onclickAttr}
                         class="${cellClass} ${item.locked ? 'locked-cell' : ''}"
-                        style="width: ${cellWidth}; height: ${rowH}; background-color: ${cellBg}; text-align: ${cell.textAlign || ''}; font-weight: ${cell.fontWeight || ''}; font-style: ${cell.fontStyle || ''}; text-decoration: ${cell.textDecoration || ''}; font-size: ${cell.fontSize || ''}; color: ${cell.textColor || ''}; text-transform: ${cell.textTransform || ''};"
+                        style="width: ${cellWidth}; height: ${rowH}; background-color: ${cellBg}; text-align: ${cell.textAlign || ''}; font-weight: ${cell.fontWeight || ''}; font-style: ${cell.fontStyle || ''}; text-decoration: ${cell.textDecoration || ''}; font-size: ${cell.fontSize || ''}; color: ${cell.textColor || ''}; text-transform: ${cell.textTransform || ''}; border-top: ${cell.borderTop || ''}; border-bottom: ${cell.borderBottom || ''}; border-left: ${cell.borderLeft || ''}; border-right: ${cell.borderRight || ''};"
                         oninput="updateTableInline('${item.id}', 'cell', ${r}, ${c}, this.innerHTML)">
                             <div class="cell-wrapper">${displayContent}</div>
                             ${!window.isExecutionMode && c === 0 ? `
@@ -373,7 +401,7 @@
     }
 
     content =
-        `<div class="table-responsive-wrapper"><table class="mini-table ${borderClass}">${thead}<tbody>${rowsHtml}</tbody></table></div>${addRowBtn}`;
+        `<div class="table-responsive-wrapper"><table class="mini-table ${borderClass}" style="--table-border-width: ${item.borderWeight || '1px'}; --table-border-color: #dee2e6;">${thead}<tbody>${rowsHtml}</tbody></table></div>${addRowBtn}`;
     }
 
     // --- XỬ LÝ KHỐI VĂN BẢN TĨNH (STATIC TEXT) ---
@@ -466,9 +494,22 @@
     currentGroup.appendChild(div);
     });
 
-    if (items.length > 0) {
-        if (!window.isReadOnly && !window.isExecutionMode) {
+    if (!window.isReadOnly && !window.isExecutionMode) {
+        if (window.isViewAllMode || !window.activeSectionId) {
+            // Chế độ xem tất cả: Thêm dấu cộng ở cuối cùng hồ sơ
             addInsertionDivider(currentGroup, items.length);
+        } else {
+            // Chế độ xem 1 phân đoạn: Tìm index cuối cùng của phân đoạn này để chèn vào cuối phân đoạn
+            let lastIdxInSection = -1;
+            for (let i = items.length - 1; i >= 0; i--) {
+                if (items[i].section_id === window.activeSectionId || items[i].id === window.activeSectionId) {
+                    lastIdxInSection = i;
+                    break;
+                }
+            }
+            if (lastIdxInSection !== -1) {
+                addInsertionDivider(currentGroup, lastIdxInSection + 1);
+            }
         }
     }
 
@@ -601,10 +642,19 @@
      */
     window.quickAddText = function(e, idx) {
         e.stopPropagation();
-        const newItemId = 'item_' + Date.now();
+        // Calculate sectionId for quick add
+        let sectionId = null;
+        if (idx > 0 && items[idx - 1]) {
+            sectionId = items[idx - 1].section_id || items[idx - 1].id;
+        } else if (items.length > 0 && items[idx]) {
+            sectionId = items[idx].section_id || items[idx].id;
+        }
+        if (!sectionId) sectionId = window.activeSectionId;
+
         items.splice(idx, 0, {
             id: newItemId,
             type: 'static-text',
+            section_id: sectionId,
             label: 'Nội dung',
             content: '',
             borderMode: 'none'
@@ -704,7 +754,16 @@
                         return;
                     }
 
-                    const val = window.executionValues[fieldId] || '';
+                    let val = window.executionValues[fieldId] || '';
+                    // Handle nested structure from DB (cell_id = 'default')
+                    if (val && typeof val === 'object' && val.hasOwnProperty('default')) {
+                        val = val.default;
+                    } else if (val && typeof val === 'object' && !Array.isArray(val)) {
+                        // Fallback: if it's an object, try to get the first property value
+                        const keys = Object.keys(val);
+                        if (keys.length > 0) val = val[keys[0]];
+                    }
+
                     badge.setAttribute('data-field-id', fieldId);
 
                     if (field.type === 'signature') {
@@ -828,12 +887,18 @@
         Object.values(fieldsConfig).forEach(field => {
             if (field.label || field.name) {
                 let val = 0;
-                if (window.isExecutionMode && window.executionValues && window.executionValues[field.id] !==
-                    undefined) {
-                    val = window.executionValues[field.id];
+                if (window.isExecutionMode && window.executionValues && window.executionValues[field.id] !== undefined) {
+                    let raw = window.executionValues[field.id];
+                    if (raw && typeof raw === 'object' && raw.hasOwnProperty('default')) {
+                        val = raw.default;
+                    } else if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+                        const keys = Object.keys(raw);
+                        if (keys.length > 0) val = raw[keys[0]];
+                    } else {
+                        val = raw;
+                    }
                 } else {
-                    val = (field.defaultValue !== undefined && field.defaultValue !== '') ? field
-                        .defaultValue : 0;
+                    val = (field.defaultValue !== undefined && field.defaultValue !== '') ? field.defaultValue : 0;
                 }
                 if (field.label) valMap[field.label] = parseFloat(val) || 0;
                 if (field.name) valMap[field.name] = parseFloat(val) || 0;

@@ -62,7 +62,7 @@ class EbmrController extends Controller
     {
         session(['title' => 'Ban Hành Hồ Sơ Lô']);
         $templates = DB::table('ebmr_templates')
-            ->where('status', 'published')
+            ->where('status', 'active')
             ->orderBy('updated_at', 'desc')
             ->get();
 
@@ -386,10 +386,10 @@ class EbmrController extends Controller
                     ->count();
 
                 if ($pendingCount === 0) {
-                    // All approved! Publish the template
+                    // All approved! Issue the template
                     DB::table('ebmr_templates')
                         ->where('id', $workflow->template_id)
-                        ->update(['status' => 'published', 'updated_at' => now()]);
+                        ->update(['status' => 'issued', 'updated_at' => now()]);
                 }
             }
         });
@@ -502,14 +502,13 @@ class EbmrController extends Controller
 
         $template = DB::table('ebmr_templates')->where('id', $validated['template_id'])->first();
 
-        if (!$template || $template->status !== 'published') {
-            return response()->json(['success' => false, 'message' => 'Hồ sơ mẫu chưa được ban hành hoặc không tồn tại.']);
+        if (!$template || $template->status !== 'active') {
+            return response()->json(['success' => false, 'message' => 'Hồ sơ mẫu chưa có hiệu lực hoặc không tồn tại.']);
         }
 
         $id = DB::table('ebmr_records')->insertGetId([
             'template_id' => $validated['template_id'],
             'batch_number' => $validated['batch_number'],
-            'data' => json_encode([]), // Initial empty data
             'created_by' => session('user')['userId'] ?? null,
             'status' => 'active',
             'created_at' => now(),

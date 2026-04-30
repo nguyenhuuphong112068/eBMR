@@ -61,14 +61,24 @@
         }
 
         // Determine section_id for the new item
-        let sectionId = window.activeSectionId || null;
-        if (!sectionId && insertIndex !== null) {
-            if (insertIndex > 0) {
-                sectionId = items[insertIndex - 1].section_id;
-            } else if (items.length > 0) {
-                sectionId = items[0].section_id;
+        let sectionId = null;
+        
+        if (insertIndex !== null) {
+            // Priority 1: Use neighboring items if inserting via divider (+)
+            if (insertIndex > 0 && items[insertIndex - 1]) {
+                sectionId = items[insertIndex - 1].section_id || items[insertIndex - 1].id;
+            } else if (items.length > 0 && items[insertIndex]) {
+                sectionId = items[insertIndex].section_id || items[insertIndex].id;
             }
-        } else if (!sectionId && items.length > 0) {
+        }
+        
+        // Priority 2: Use currently active section
+        if (!sectionId) {
+            sectionId = window.activeSectionId;
+        }
+
+        // Priority 3: Fallback to last section
+        if (!sectionId && items.length > 0) {
             sectionId = items[items.length - 1].section_id;
         }
 

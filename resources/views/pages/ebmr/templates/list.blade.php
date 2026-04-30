@@ -32,8 +32,9 @@
                                             <th>Phiên bản</th>
                                             <th>Công đoạn</th>
                                             <th>Trạng thái</th>
-                                            <th>Người sở hữu</th>
+                                            <th>Dược sĩ phụ trách</th>
                                             <th>Ngày ban hành</th>
+                                            <th>Ngày hiệu lực</th>
                                             <th class="text-center">Thao tác</th>
                                         </tr>
                                     </thead>
@@ -61,31 +62,69 @@
                                                     @if ($t->status === 'draft')
                                                         <span class="badge bg-secondary"><i class="fas fa-edit me-1"></i>
                                                             Nháp</span>
-                                                    @else
+                                                    @elseif($t->status === 'submitted')
                                                         <span class="badge bg-warning text-dark"><i
-                                                                class="fas fa-paper-plane me-1"></i> Chờ duyệt</span>
+                                                                class="fas fa-clock me-1"></i> Chờ duyệt</span>
+                                                    @elseif($t->status === 'approved')
+                                                        <span class="badge bg-success"><i
+                                                                class="fas fa-check-circle me-1"></i> Đã duyệt</span>
+                                                    @elseif($t->status === 'issued')
+                                                        @if ($t->effective_date)
+                                                            <span class="badge bg-warning text-dark"><i
+                                                                    class="fas fa-hourglass-half me-1"></i> Chờ hiệu
+                                                                lực</span>
+                                                        @else
+                                                            <span class="badge bg-info"><i class="fas fa-rocket me-1"></i>
+                                                                Đã ban hành</span>
+                                                        @endif
+                                                    @elseif($t->status === 'active')
+                                                        <span class="badge bg-primary"><i
+                                                                class="fas fa-check-double me-1"></i>
+                                                            Hiệu lực</span>
+                                                    @elseif($t->status === 'expired')
+                                                        <span class="badge bg-danger"><i class="fas fa-history me-1"></i>
+                                                            Hết hiệu lực</span>
                                                     @endif
                                                 </td>
                                                 <td><i class="fas fa-user-circle me-1 text-muted"></i>
                                                     {{ $t->owner_name ?? 'N/A' }}</td>
                                                 <td>{{ $t->issued_date ? \Carbon\Carbon::parse($t->issued_date)->format('d/m/Y') : '-' }}
                                                 </td>
+                                                <td>{{ $t->effective_date ? \Carbon\Carbon::parse($t->effective_date)->format('d/m/Y') : '-' }}
+                                                </td>
                                                 <td class="text-center">
                                                     <div class="btn-group shadow-sm rounded-pill overflow-hidden">
-                                                        <a href="{{ route('pages.ebmr.designer', $t->id) }}"
-                                                            class="btn btn-sm btn-white text-navy"
-                                                            title="Thiết kế nội dung">
-                                                            <i class="fas fa-pencil-ruler"></i>
-                                                        </a>
+                                                        @if ($t->status === 'draft')
+                                                            <a href="{{ route('pages.ebmr.designer', $t->id) }}"
+                                                                class="btn btn-sm btn-white text-navy"
+                                                                title="Thiết kế nội dung">
+                                                                <i class="fas fa-pencil-ruler"></i> Thiết kế
+                                                            </a>
+                                                            <button class="btn btn-sm btn-white text-success"
+                                                                onclick="openWorkflowModal({{ $t->id }})"
+                                                                title="Trình ký">
+                                                                <i class="fas fa-paper-plane"></i> Gửi duyệt
+                                                            </button>
+                                                        @else
+                                                            <a href="{{ route('pages.ebmr.designer', $t->id) }}?mode=review"
+                                                                class="btn btn-sm btn-white text-primary"
+                                                                title="Xem nội dung">
+                                                                <i class="fas fa-eye"></i> Xem hồ sơ
+                                                            </a>
+                                                        @endif
+
+                                                        @if ($t->issued_date && !$t->effective_date && $t->owner_id == session('user')['userId'])
+                                                            <button class="btn btn-sm btn-white text-warning"
+                                                                onclick="openEffectiveDateModal({{ $t->id }})"
+                                                                title="Xác định ngày hiệu lực">
+                                                                <i class="fas fa-calendar-check"></i> Hiệu lực
+                                                            </button>
+                                                        @endif
+
                                                         <button class="btn btn-sm btn-white text-info"
                                                             onclick="openEditModal({{ $t->id }})"
                                                             title="Sửa thông tin gốc">
                                                             <i class="fas fa-cog"></i>
-                                                        </button>
-                                                        <button class="btn btn-sm btn-white text-success"
-                                                            onclick="openWorkflowModal({{ $t->id }})"
-                                                            title="Trình ký">
-                                                            <i class="fas fa-paper-plane"></i>
                                                         </button>
                                                     </div>
                                                 </td>
@@ -381,298 +420,352 @@
                 </div>
             </div>
         </div>
-    </div>
 
-    <style>
-        :root {
-            --primary-navy: #003A4F;
-        }
-
-        .bg-navy {
-            background-color: var(--primary-navy) !important;
-        }
-
-        .text-navy {
-            color: var(--primary-navy) !important;
-        }
-
-        .btn-navy {
-            background-color: var(--primary-navy) !important;
-            color: white !important;
-        }
-
-        .btn-navy:hover {
-            background-color: #002a3a !important;
-            color: white !important;
-            opacity: 1;
-        }
-
-        .bg-soft-info {
-            background-color: rgba(23, 162, 184, 0.1);
-            color: #17a2b8;
-        }
-
-        .form-control:focus {
-            border-color: var(--primary-navy);
-            box-shadow: 0 0 0 0.2rem rgba(0, 58, 79, 0.15);
-        }
-
-        .rounded-pill {
-            border-radius: 50px !important;
-        }
-
-        /* Tăng kích thước Modal */
-        @media (min-width: 1200px) {
-            .modal-xl {
-                max-width: 95% !important;
+        <style>
+            :root {
+                --primary-navy: #003A4F;
             }
-        }
-    </style>
 
-    <!-- Modal Ban Hành (Issue Record) -->
-    <div class="modal fade" id="issueModal" tabindex="-1" role="dialog" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered" role="document">
-            <div class="modal-content border-0 shadow-lg">
-                <form id="issueForm">
-                    @csrf
-                    <input type="hidden" id="issueTemplateId" name="template_id">
-                    <div class="modal-header bg-primary text-white">
-                        <h5 class="modal-title font-weight-bold"><i class="fas fa-file-export me-2"></i> Ban Hành Hồ Sơ Lô
-                        </h5>
-                        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
-                            <span aria-hidden="true">&times;</span>
-                        </button>
-                    </div>
-                    <div class="modal-body p-4">
-                        <div class="mb-3">
-                            <label class="form-label fw-bold small text-muted text-uppercase">Hồ sơ mẫu đang chọn</label>
-                            <div id="issueTemplateNameDisplay" class="p-3 mb-3 bg-light rounded text-navy fw-bold border"
-                                style="font-size: 1.1rem;"></div>
-                        </div>
+            .bg-navy {
+                background-color: var(--primary-navy) !important;
+            }
 
-                        <div class="mb-1">
-                            <label class="form-label fw-bold">Số Lô Sản Xuất (Batch No.) <span
-                                    class="text-danger">*</span></label>
-                            <input type="text" class="form-control rounded-pill px-4" name="batch_number"
-                                id="batchNumber" required placeholder="VD: BN2024-001"
-                                style="height: 50px; border: 2px solid #007bff; font-weight: bold; font-size: 1.2rem;">
+            .text-navy {
+                color: var(--primary-navy) !important;
+            }
+
+            .btn-navy {
+                background-color: var(--primary-navy) !important;
+                color: white !important;
+            }
+
+            .btn-navy:hover {
+                background-color: #002a3a !important;
+                color: white !important;
+                opacity: 1;
+            }
+
+            .bg-soft-info {
+                background-color: rgba(23, 162, 184, 0.1);
+                color: #17a2b8;
+            }
+
+            .form-control:focus {
+                border-color: var(--primary-navy);
+                box-shadow: 0 0 0 0.2rem rgba(0, 58, 79, 0.15);
+            }
+
+            .rounded-pill {
+                border-radius: 50px !important;
+            }
+
+            /* Tăng kích thước Modal */
+            @media (min-width: 1200px) {
+                .modal-xl {
+                    max-width: 95% !important;
+                }
+            }
+        </style>
+
+        <!-- Modal Ban Hành (Issue Record) -->
+        <div class="modal fade" id="issueModal" tabindex="-1" role="dialog" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered" role="document">
+                <div class="modal-content border-0 shadow-lg">
+                    <form id="issueForm">
+                        @csrf
+                        <input type="hidden" id="issueTemplateId" name="template_id">
+                        <div class="modal-header bg-primary text-white">
+                            <h5 class="modal-title font-weight-bold"><i class="fas fa-file-export me-2"></i> Ban Hành Hồ
+                                Sơ Lô
+                            </h5>
+                            <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                                <span aria-hidden="true">&times;</span>
+                            </button>
                         </div>
-                        <p class="text-muted small mt-2"><i class="fas fa-info-circle me-1"></i> Số lô này sẽ được dùng để
-                            định danh cho hồ sơ lô sản xuất thực tế trên hệ thống.</p>
-                    </div>
-                    <div class="modal-footer bg-light p-3">
-                        <button type="button" class="btn btn-light rounded-pill px-4" data-dismiss="modal">Hủy
-                            bỏ</button>
-                        <button type="submit" class="btn btn-primary rounded-pill px-4 shadow-sm">
-                            <i class="fas fa-rocket me-2"></i> Xác nhận Ban Hành
-                        </button>
-                    </div>
-                </form>
+                        <div class="modal-body p-4">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold small text-muted text-uppercase">Hồ sơ mẫu đang
+                                    chọn</label>
+                                <div id="issueTemplateNameDisplay"
+                                    class="p-3 mb-3 bg-light rounded text-navy fw-bold border" style="font-size: 1.1rem;">
+                                </div>
+                            </div>
+
+                            <div class="mb-1">
+                                <label class="form-label fw-bold">Số Lô Sản Xuất (Batch No.) <span
+                                        class="text-danger">*</span></label>
+                                <input type="text" class="form-control rounded-pill px-4" name="batch_number"
+                                    id="batchNumber" required placeholder="VD: 010126"
+                                    style="height: 50px; border: 2px solid #007bff; font-weight: bold; font-size: 1.2rem;">
+                            </div>
+                            <p class="text-muted small mt-2"><i class="fas fa-info-circle me-1"></i> Số lô này sẽ được
+                                dùng để
+                                định danh cho hồ sơ lô sản xuất thực tế trên hệ thống.</p>
+                        </div>
+                        <div class="modal-footer bg-light p-3">
+                            <button type="button" class="btn btn-light rounded-pill px-4" data-dismiss="modal">Hủy
+                                bỏ</button>
+                            <button type="submit" class="btn btn-primary rounded-pill px-4 shadow-sm">
+                                <i class="fas fa-rocket me-2"></i> Xác nhận Ban Hành
+                            </button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
-    </div>
-@endsection
+    @endsection
 
-@section('script')
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <script>
-        $(document).ready(function() {
-            // Initialize the main drafting table
-            $('.bmr-datatable').DataTable({
-                language: {
-                    url: '{{ asset('vendor/datatables/i18n/Vietnamese.json') }}'
-                },
-                order: [
-                    [0, 'asc']
-                ]
-            });
-
-            // Initialize the BTP selection table in modal
-            $('#btpSelectionTable').DataTable({
-                language: {
-                    url: '{{ asset('vendor/datatables/i18n/Vietnamese.json') }}'
-                },
-                pageLength: 10
-            });
-
-            $('#metadataForm').submit(function(e) {
-                e.preventDefault();
-                const data = $(this).serialize();
-
-                $.post('{{ route('pages.ebmr.storeTemplateMetadata') }}', data, function(res) {
-                    if (res.success) {
-                        Swal.fire('Thành công', res.message, 'success').then(() => {
-                            location.reload();
-                        });
-                    }
+    @section('script')
+        <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+        <script>
+            $(document).ready(function() {
+                // Initialize the main drafting table
+                $('.bmr-datatable').DataTable({
+                    language: {
+                        url: '{{ asset('vendor/datatables/i18n/Vietnamese.json') }}'
+                    },
+                    order: [
+                        [0, 'asc']
+                    ]
                 });
-            });
 
-            // Prefill logic from URL if needed
-            const urlParams = new URLSearchParams(window.location.search);
-            const prefillBtpId = urlParams.get('prefill_btp_id');
-            if (prefillBtpId) {
-                openBtpListModal();
-                window.history.replaceState({}, document.title, window.location.pathname);
-            }
-        });
+                // Initialize the BTP selection table in modal
+                $('#btpSelectionTable').DataTable({
+                    language: {
+                        url: '{{ asset('vendor/datatables/i18n/Vietnamese.json') }}'
+                    },
+                    pageLength: 10
+                });
 
-        function openBtpListModal() {
-            $('#modalBtpList').modal('show');
-        }
+                $('#metadataForm').submit(function(e) {
+                    e.preventDefault();
+                    const data = $(this).serialize();
 
-        function selectCategory(id, code, name, info, stages = {}) {
-            $('#modalBtpList').modal('hide');
-
-            openCreateModal();
-            $('#caterogyId').val(id);
-            $('#templateType').val(new URLSearchParams(window.location.search).get('type') || 'BMR');
-            $('#selectedBtpName').html(code + ' - ' + name);
-            $('#selectedBtpInfo').html(`<i class="fas fa-info-circle me-1"></i> ${info}`);
-
-            // Handle Sections Checklist
-            const type = $('#templateType').val();
-            if (type === 'BMR' || type === 'BPR') {
-                $('#sectionsChecklistContainer').show();
-                // Reset checks and visibility
-                $('.section-checkbox').prop('checked', false);
-                $('.section-item').show();
-
-                // Default checks (0 and 9)
-                $('#sec_0, #sec_9').prop('checked', true);
-
-                if (type === 'BMR') {
-                    // Hide 7 and 8 for BMR
-                    $('.section-item[data-code="7"], .section-item[data-code="8"]').hide();
-
-                    // Check based on passed stages (1-6)
-                    Object.keys(stages).forEach(code => {
-                        if (stages[code]) {
-                            $(`#sec_${code}`).prop('checked', true);
+                    $.post('{{ route('pages.ebmr.storeTemplateMetadata') }}', data, function(res) {
+                        if (res.success) {
+                            Swal.fire('Thành công', res.message, 'success').then(() => {
+                                location.reload();
+                            });
                         }
                     });
-                } else if (type === 'BPR') {
-                    // Hide 1-6 for BPR
-                    $('.section-item[data-code="1"], .section-item[data-code="2"], .section-item[data-code="3"], .section-item[data-code="4"], .section-item[data-code="5"], .section-item[data-code="6"]')
-                        .hide();
-                    // Check 7 and 8 for BPR
-                    $('#sec_7, #sec_8').prop('checked', true);
+                });
+
+                // Prefill logic from URL if needed
+                const urlParams = new URLSearchParams(window.location.search);
+                const prefillBtpId = urlParams.get('prefill_btp_id');
+                if (prefillBtpId) {
+                    openBtpListModal();
+                    window.history.replaceState({}, document.title, window.location.pathname);
                 }
-            } else {
-                $('#sectionsChecklistContainer').hide();
+            });
+
+            function openBtpListModal() {
+                $('#modalBtpList').modal('show');
             }
 
-            // Fetch next version
-            $('#version').val('...').prop('disabled', true);
-            $.get('{{ route('pages.ebmr.getNextVersion') }}', {
-                category_id: id,
-                type: $('#templateType').val()
-            }, function(res) {
-                $('#version').val(res.next_version).prop('disabled', false);
-            });
-        }
+            function selectCategory(id, code, name, info, stages = {}) {
+                $('#modalBtpList').modal('hide');
 
-        function openIssueModal(id, name) {
-            $('#issueTemplateId').val(id);
-            $('#issueTemplateNameDisplay').text(name);
-            $('#batchNumber').val('');
-            $('#issueModal').modal('show');
-        }
+                openCreateModal();
+                $('#caterogyId').val(id);
+                $('#templateType').val(new URLSearchParams(window.location.search).get('type') || 'BMR');
+                $('#selectedBtpName').html(code + ' - ' + name);
+                $('#selectedBtpInfo').html(`<i class="fas fa-info-circle me-1"></i> ${info}`);
 
-        $('#issueForm').on('submit', function(e) {
-            e.preventDefault();
-            const btn = $(this).find('button[type="submit"]');
-            const originalHtml = btn.html();
+                // Handle Sections Checklist
+                const type = $('#templateType').val();
+                if (type === 'BMR' || type === 'BPR') {
+                    $('#sectionsChecklistContainer').show();
+                    // Reset checks and visibility
+                    $('.section-checkbox').prop('checked', false);
+                    $('.section-item').show();
 
-            btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-2"></i> Đang xử lý...');
+                    // Default checks (0 and 9)
+                    $('#sec_0, #sec_9').prop('checked', true);
 
-            $.ajax({
-                url: '{{ route('pages.ebmr.issueTemplate') }}',
-                method: 'POST',
-                data: $(this).serialize(),
-                success: function(res) {
-                    if (res.success) {
-                        Swal.fire({
-                            title: 'Thành công!',
-                            text: res.message,
-                            icon: 'success',
-                            confirmButtonColor: '#003A4F'
-                        }).then(() => {
-                            location.reload();
+                    if (type === 'BMR') {
+                        // Hide 7 and 8 for BMR
+                        $('.section-item[data-code="7"], .section-item[data-code="8"]').hide();
+
+                        // Check based on passed stages (1-6)
+                        Object.keys(stages).forEach(code => {
+                            if (stages[code]) {
+                                $(`#sec_${code}`).prop('checked', true);
+                            }
                         });
-                    } else {
-                        Swal.fire('Lỗi', res.message, 'error');
+                    } else if (type === 'BPR') {
+                        // Hide 1-6 for BPR
+                        $('.section-item[data-code="1"], .section-item[data-code="2"], .section-item[data-code="3"], .section-item[data-code="4"], .section-item[data-code="5"], .section-item[data-code="6"]')
+                            .hide();
+                        // Check 7 and 8 for BPR
+                        $('#sec_7, #sec_8').prop('checked', true);
+                    }
+                } else {
+                    $('#sectionsChecklistContainer').hide();
+                }
+
+                // Fetch next version
+                $('#version').val('...').prop('disabled', true);
+                $.get('{{ route('pages.ebmr.getNextVersion') }}', {
+                    category_id: id,
+                    type: $('#templateType').val()
+                }, function(res) {
+                    $('#version').val(res.next_version).prop('disabled', false);
+                });
+            }
+
+            function openIssueModal(id, name) {
+                $('#issueTemplateId').val(id);
+                $('#issueTemplateNameDisplay').text(name);
+                $('#batchNumber').val('');
+                $('#issueModal').modal('show');
+            }
+
+            $('#issueForm').on('submit', function(e) {
+                e.preventDefault();
+                const btn = $(this).find('button[type="submit"]');
+                const originalHtml = btn.html();
+
+                btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-2"></i> Đang xử lý...');
+
+                $.ajax({
+                    url: '{{ route('pages.ebmr.issueTemplate') }}',
+                    method: 'POST',
+                    data: $(this).serialize(),
+                    success: function(res) {
+                        if (res.success) {
+                            Swal.fire({
+                                title: 'Thành công!',
+                                text: res.message,
+                                icon: 'success',
+                                confirmButtonColor: '#003A4F'
+                            }).then(() => {
+                                location.reload();
+                            });
+                        } else {
+                            Swal.fire('Lỗi', res.message, 'error');
+                            btn.prop('disabled', false).html(originalHtml);
+                        }
+                    },
+                    error: function(err) {
+                        let msg = 'Đã có lỗi xảy ra';
+                        if (err.responseJSON && err.responseJSON.message) msg = err.responseJSON.message;
+                        Swal.fire('Lỗi', msg, 'error');
                         btn.prop('disabled', false).html(originalHtml);
                     }
-                },
-                error: function(err) {
-                    let msg = 'Đã có lỗi xảy ra';
-                    if (err.responseJSON && err.responseJSON.message) msg = err.responseJSON.message;
-                    Swal.fire('Lỗi', msg, 'error');
-                    btn.prop('disabled', false).html(originalHtml);
-                }
-            });
-        });
-
-        function openCreateModal() {
-            $('#metadataForm')[0].reset();
-            $('#templateId').val('');
-            $('#modalTitle').html('<i class="fas fa-file-medical me-2"></i> Soạn Mới Hồ Sơ Gốc');
-            $('#templateMetadataModal').modal('show');
-        }
-
-        function openEditModal(id) {
-            $('#metadataForm')[0].reset();
-            $('#modalTitle').html('<i class="fas fa-cog me-2"></i> Cập Nhật Thông Tin Hồ Sơ Gốc');
-
-            $.get(`/ebmr/templates/${id}/data`, function(data) {
-                $('#templateId').val(data.id);
-                $('#docCode').val(data.document_code);
-                $('#edition').val(data.edition);
-                $('#templateName').val(data.name);
-                $('#dosageForm').val(data.dosage_form);
-                $('#batchSize').val(data.batch_size);
-                $('#effectiveDate').val(data.effective_date);
-                $('#sectionsChecklistContainer').hide(); // Hide when editing existing
-                $('#templateMetadataModal').modal('show');
-            });
-        }
-
-        function openWorkflowModal(id) {
-            $('#workflowForm')[0].reset();
-            $('#workflowTemplateId').val(id);
-
-            // Reset selections
-            $('#wfReviewers').val([]).trigger('change');
-            $('#wfApprover').val('').trigger('change');
-            $('#wfAuthorizer').val('').trigger('change');
-
-            // Load existing workflows if any
-            $.get(`/ebmr/templates/${id}/workflow`, function(data) {
-                let reviewers = [];
-                data.forEach(item => {
-                    if (item.role === 'reviewer') reviewers.push(item.user_id);
-                    if (item.role === 'approver') $('#wfApprover').val(item.user_id).trigger('change');
-                    if (item.role === 'authorizer') $('#wfAuthorizer').val(item.user_id).trigger('change');
                 });
-                $('#wfReviewers').val(reviewers).trigger('change');
-                $('#workflowModal').modal('show');
             });
-        }
 
-        $('#workflowForm').submit(function(e) {
-            e.preventDefault();
-            const id = $('#workflowTemplateId').val();
-            const data = $(this).serialize();
+            function openCreateModal() {
+                $('#metadataForm')[0].reset();
+                $('#templateId').val('');
+                $('#modalTitle').html('<i class="fas fa-file-medical me-2"></i> Soạn Mới Hồ Sơ Gốc');
+                $('#templateMetadataModal').modal('show');
+            }
 
-            $.post(`/ebmr/templates/${id}/workflow`, data, function(res) {
-                if (res.success) {
-                    Swal.fire('Thành công', res.message, 'success').then(() => {
-                        $('#workflowModal').modal('hide');
-                        location.reload();
+            function openEditModal(id) {
+                $('#metadataForm')[0].reset();
+                $('#modalTitle').html('<i class="fas fa-cog me-2"></i> Cập Nhật Thông Tin Hồ Sơ Gốc');
+
+                $.get(`/ebmr/templates/${id}/data`, function(data) {
+                    $('#templateId').val(data.id);
+                    $('#docCode').val(data.document_code);
+                    $('#edition').val(data.edition);
+                    $('#templateName').val(data.name);
+                    $('#dosageForm').val(data.dosage_form);
+                    $('#batchSize').val(data.batch_size);
+                    $('#effectiveDate').val(data.effective_date);
+                    $('#sectionsChecklistContainer').hide(); // Hide when editing existing
+                    $('#templateMetadataModal').modal('show');
+                });
+            }
+
+            function openWorkflowModal(id) {
+                $('#workflowForm')[0].reset();
+                $('#workflowTemplateId').val(id);
+
+                // Reset selections
+                $('#wfReviewers').val([]).trigger('change');
+                $('#wfApprover').val('').trigger('change');
+                $('#wfAuthorizer').val('').trigger('change');
+
+                // Load existing workflows if any
+                $.get(`/ebmr/templates/${id}/workflow`, function(data) {
+                    let reviewers = [];
+                    data.forEach(item => {
+                        if (item.role === 'reviewer') reviewers.push(item.user_id);
+                        if (item.role === 'approver') $('#wfApprover').val(item.user_id).trigger('change');
+                        if (item.role === 'authorizer') $('#wfAuthorizer').val(item.user_id).trigger('change');
                     });
-                }
+                    $('#wfReviewers').val(reviewers).trigger('change');
+                    $('#workflowModal').modal('show');
+                });
+            }
+
+            $('#workflowForm').submit(function(e) {
+                e.preventDefault();
+                const id = $('#workflowTemplateId').val();
+                const data = $(this).serialize();
+
+                $.post(`/ebmr/templates/${id}/workflow`, data, function(res) {
+                    if (res.success) {
+                        Swal.fire('Thành công', res.message, 'success').then(() => {
+                            $('#workflowModal').modal('hide');
+                            location.reload();
+                        });
+                    }
+                });
             });
-        });
-    </script>
-@endsection
+
+            function openEffectiveDateModal(id) {
+                Swal.fire({
+                    title: 'Xác định ngày hiệu lực',
+                    html: `
+                    <div class="text-left mt-3">
+                        <label class="form-label fw-bold text-navy">Chọn ngày hiệu lực:</label>
+                        <input type="date" id="swalEffDate" class="form-control rounded-pill" value="${new Date().toISOString().split('T')[0]}">
+                        <small class="text-muted mt-2 d-block"><i class="fas fa-info-circle me-1"></i> Hồ sơ sẽ chính thức có hiệu lực từ ngày này.</small>
+                    </div>
+                `,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: '<i class="fas fa-check me-1"></i> Xác nhận',
+                    cancelButtonText: 'Hủy bỏ',
+                    confirmButtonColor: '#f0ad4e',
+                    reverseButtons: true,
+                    preConfirm: () => {
+                        const date = document.getElementById('swalEffDate').value;
+                        if (!date) {
+                            Swal.showValidationMessage('Vui lòng chọn ngày hiệu lực');
+                        }
+                        return date;
+                    }
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        Swal.fire({
+                            title: 'Đang xử lý...',
+                            didOpen: () => {
+                                Swal.showLoading();
+                            }
+                        });
+
+                        $.post('{{ route('pages.ebmr.updateEffectiveDate') }}', {
+                            _token: '{{ csrf_token() }}',
+                            id: id,
+                            effective_date: result.value
+                        }, function(res) {
+                            if (res.success) {
+                                Swal.fire('Thành công', res.message, 'success').then(() => {
+                                    location.reload();
+                                });
+                            } else {
+                                Swal.fire('Lỗi', res.message, 'error');
+                            }
+                        }).fail(function() {
+                            Swal.fire('Lỗi', 'Không thể kết nối đến máy chủ', 'error');
+                        });
+                    }
+                });
+            }
+        </script>
+    @endsection

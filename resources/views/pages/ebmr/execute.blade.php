@@ -13,7 +13,8 @@
 @section('mainContent')
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     
-    <div class="content-wrapper" id="mainContent" style="background-color: #f1f3f4; min-height: 100vh;">
+    <div class="content-wrapper execution-mode-active" id="mainContent" style="background-color: #f1f3f4; min-height: 100vh;">
+
         <!-- Top Action Bar for Execution -->
         <div class="bg-white border-bottom px-4 py-3 d-flex justify-content-between align-items-center sticky-top shadow-sm" style="z-index: 1020;">
             <div>
@@ -291,12 +292,8 @@
         }
         
         /* Hide UI components not needed in execution */
-        .editor-ruler, .outline-sidebar, #sidebar-col, #floating-comment-btn, .insert-divider {
+        .editor-ruler, #floating-comment-btn, .insert-divider, .test-mode-badge {
             display: none !important;
-        }
-        #canvas-col {
-            flex: 0 0 100% !important;
-            max-width: 100% !important;
         }
         #document-page {
             margin: 0 auto !important;

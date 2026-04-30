@@ -1,4 +1,19 @@
 <script>
+    // Auto-detect Review Mode from URL
+    document.addEventListener('DOMContentLoaded', () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('mode') === 'review') {
+            // Set to full view mode
+            window.isViewAllMode = true;
+            window.activeSectionId = null;
+            
+            // Switch to Trial Mode
+            setDesignerMode(true);
+            
+            // Toast notification already handled in setDesignerMode
+        }
+    });
+
     /**
      * Chuyển đổi giữa chế độ Thiết kế và Chế độ Chạy thử.
      * @param {boolean} isExecute - true nếu chuyển sang chế độ chạy thử, false nếu về thiết kế.
@@ -38,6 +53,7 @@
 
         // Render lại hồ sơ để áp dụng các thay đổi logic (ví dụ: ẩn nút thêm khối)
         renderBlocks();
+        updateCanvasWidth();
 
         // Hiển thị thông báo nhanh
         if (typeof Swal !== 'undefined') {
@@ -180,6 +196,16 @@
                             <i class="fas fa-grip-lines"></i>
                         </button>
                     </div>
+                </div>
+                <div class="mb-3">
+                    <label class="small fw-bold mb-2">Độ dày viền</label>
+                    <select class="form-select form-select-sm" onchange="updateItemProp('borderWeight', this.value)">
+                        <option value="1px" ${item.borderWeight === '1px' ? 'selected' : ''}>1px</option>
+                        <option value="1.5px" ${item.borderWeight === '1.5px' ? 'selected' : ''}>1.5px</option>
+                        <option value="2px" ${item.borderWeight === '2px' ? 'selected' : ''}>2px</option>
+                        <option value="3px" ${item.borderWeight === '3px' ? 'selected' : ''}>3px</option>
+                        <option value="4px" ${item.borderWeight === '4px' ? 'selected' : ''}>4px</option>
+                    </select>
                 </div>
             `;
         }
@@ -377,16 +403,24 @@
         }
 
         // Determine section_id for the new item
-        let sectionId = window.activeSectionId || null;
-        if (!sectionId && insertIndex !== null) {
-            if (insertIndex > 0) {
-                // Add to end of previous item's section
-                sectionId = items[insertIndex - 1].section_id;
-            } else if (items.length > 0) {
-                // Add to start of first item's section
-                sectionId = items[0].section_id;
+        let sectionId = null;
+        
+        if (insertIndex !== null) {
+            // Priority 1: Use neighboring items if inserting via divider (+)
+            if (insertIndex > 0 && items[insertIndex - 1]) {
+                sectionId = items[insertIndex - 1].section_id || items[insertIndex - 1].id;
+            } else if (items.length > 0 && items[insertIndex]) {
+                sectionId = items[insertIndex].section_id || items[insertIndex].id;
             }
-        } else if (!sectionId && items.length > 0) {
+        }
+        
+        // Priority 2: Use currently active section
+        if (!sectionId) {
+            sectionId = window.activeSectionId;
+        }
+
+        // Priority 3: Fallback to last section
+        if (!sectionId && items.length > 0) {
             sectionId = items[items.length - 1].section_id;
         }
 
@@ -534,8 +568,102 @@
     function setTableBorderMode(mode) {
         const item = items.find(i => i.id === selectedId);
         if (!item || item.type !== 'table') return;
+
+        const selectedCells = document.querySelectorAll('.selected-cell');
+        
+        // Determine range
+        let minR = 999, maxR = -1, minC = 999, maxC = -1;
+        selectedCells.forEach(cell => {
+            const r = parseInt(cell.dataset.row);
+            const c = parseInt(cell.dataset.col);
+            minR = Math.min(minR, r);
+            maxR = Math.max(maxR, r);
+            minC = Math.min(minC, c);
+            maxC = Math.max(maxC, c);
+        });
+
+        // Check if selection covers the entire table (header + all data rows)
+        const isFullSelection = selectedCells.length > 0 && 
+                               minR === 0 && 
+                               maxR === item.rows && 
+                               minC === 0 && 
+                               maxC === item.cols - 1;
+
+        if (selectedCells.length > 0 && !isFullSelection) {
+            saveStateDebounced();
+            
+            const weight = item.borderWeight || '1px';
+            const borderStyle = `${weight} solid #dee2e6`;
+
+            selectedCells.forEach(cell => {
+                const r = parseInt(cell.dataset.row);
+                const c = parseInt(cell.dataset.col);
+                
+                let target;
+                if (r === 0) {
+                    if (!item.columns[c].style) item.columns[c].style = {};
+                    target = item.columns[c].style;
+                } else {
+                    const rIdx = r - 1;
+                    if (!item.data[rIdx][c] || typeof item.data[rIdx][c] !== 'object') {
+                        item.data[rIdx][c] = { content: item.data[rIdx][c] || '', rs: 1, cs: 1, hidden: false };
+                    }
+                    target = item.data[rIdx][c];
+                }
+
+                if (mode === 'all') {
+                    target.borderTop = target.borderBottom = target.borderLeft = target.borderRight = borderStyle;
+                } else if (mode === 'none') {
+                    target.borderTop = target.borderBottom = target.borderLeft = target.borderRight = 'none';
+                } else if (mode === 'outer') {
+                    if (r === minR) target.borderTop = borderStyle;
+                    if (r === maxR) target.borderBottom = borderStyle;
+                    if (c === minC) target.borderLeft = borderStyle;
+                    if (c === maxC) target.borderRight = borderStyle;
+                } else if (mode === 'rows') {
+                    target.borderTop = target.borderBottom = borderStyle;
+                    target.borderLeft = target.borderRight = 'none';
+                } else if (mode === 'cols') {
+                    target.borderTop = target.borderBottom = 'none';
+                    target.borderLeft = target.borderRight = borderStyle;
+                } else if (mode === 'dashed') {
+                    target.borderTop = target.borderBottom = target.borderLeft = target.borderRight = '1px dashed #ccc';
+                }
+            });
+            
+            item.dirty = true;
+            renderBlocks();
+            return;
+        }
+
+        // Full selection or no selection: apply to entire table
         saveStateDebounced();
         item.borderMode = mode;
+        
+        // Clear all cell-level border overrides to keep data clean
+        if (item.columns) {
+            item.columns.forEach(col => {
+                if (col.style) {
+                    delete col.style.borderTop;
+                    delete col.style.borderBottom;
+                    delete col.style.borderLeft;
+                    delete col.style.borderRight;
+                }
+            });
+        }
+        if (item.data) {
+            item.data.forEach(row => {
+                row.forEach(cell => {
+                    if (cell && typeof cell === 'object') {
+                        delete cell.borderTop;
+                        delete cell.borderBottom;
+                        delete cell.borderLeft;
+                        delete cell.borderRight;
+                    }
+                });
+            });
+        }
+
         item.dirty = true;
         renderBlocks();
     }
@@ -1534,6 +1662,16 @@
      */
     function updateCanvasWidth() {
         const canvas = document.getElementById('canvas-col');
+        if (!canvas) return;
+
+        if (window.isExecutionMode) {
+            if (isOutlineMinimized) {
+                canvas.className = 'col-lg-12 transition-all';
+            } else {
+                canvas.className = 'col-lg-10 transition-all';
+            }
+            return;
+        }
 
         if (isOutlineMinimized && isSidebarMinimized) {
             canvas.className = 'col-lg-10 transition-all';
@@ -2214,31 +2352,58 @@
      * Chuyển đổi giữa chế độ Xem theo Phân đoạn và Xem toàn bộ hồ sơ.
      */
     function toggleViewMode() {
-        const currentSection = '{{ $activeSectionId ?? '' }}';
         const templateId = '{{ $template->id }}';
-
-        if (currentSection) {
-            // Currently in a section, toggle to VIEW ALL
-            // Store current section so we can come back
-            localStorage.setItem('ebmr_last_section_' + templateId, currentSection);
-            window.location.href = '{{ route('pages.ebmr.designer', $template->id) }}';
-        } else {
-            // Currently in VIEW ALL, toggle back to LAST section or first one
-            let lastSection = localStorage.getItem('ebmr_last_section_' + templateId);
-
-            // If no last section, try to find the first section ID from the items
-            if (!lastSection && typeof items !== 'undefined' && items.length > 0) {
-                const firstBlock = items.find(i => i.section_id);
-                if (firstBlock) lastSection = firstBlock.section_id;
-            }
-
-            if (lastSection) {
-                window.location.href = '{{ route('pages.ebmr.designer', $template->id) }}?section=' + lastSection;
-            } else {
-                // Fallback: just reload or show alert
-                Swal.fire('Thông báo', 'Không xác định được phân đoạn cuối cùng để quay lại.', 'info');
+        
+        // Chuyển đổi trạng thái Xem tất cả / Xem 1 phân đoạn
+        window.isViewAllMode = !window.isViewAllMode;
+        
+        if (!window.isViewAllMode) {
+            // Nếu chuyển sang xem 1 phân đoạn, đảm bảo có phân đoạn active
+            if (!window.activeSectionId) {
+                let lastSection = localStorage.getItem('ebmr_last_section_' + templateId);
+                if (!lastSection && typeof items !== 'undefined' && items.length > 0) {
+                    const firstBlock = items.find(i => i.section_id);
+                    if (firstBlock) lastSection = firstBlock.section_id;
+                }
+                if (lastSection) window.activeSectionId = lastSection;
             }
         }
+
+        // Lưu trạng thái cuối cùng nếu có
+        if (window.activeSectionId) {
+            localStorage.setItem('ebmr_last_section_' + templateId, window.activeSectionId);
+        }
+
+        renderBlocks();
+
+        // Cập nhật giao diện nút bấm
+        const toggleBtn = document.getElementById('viewModeToggle');
+        if (toggleBtn) {
+            if (window.isViewAllMode) {
+                toggleBtn.innerHTML = '<i class="fas fa-compress-arrows-alt"></i>';
+                toggleBtn.classList.remove('btn-outline-info');
+                toggleBtn.classList.add('btn-info');
+                toggleBtn.title = "Chuyển sang xem 1 phân đoạn";
+            } else {
+                toggleBtn.innerHTML = '<i class="fas fa-expand-arrows-alt"></i>';
+                toggleBtn.classList.remove('btn-info');
+                toggleBtn.classList.add('btn-outline-info');
+                toggleBtn.title = "Chuyển sang xem tất cả";
+            }
+        }
+
+        // Thông báo nhanh
+        const Toast = Swal.mixin({
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 2000,
+            timerProgressBar: true
+        });
+        Toast.fire({
+            icon: 'info',
+            title: window.isViewAllMode ? 'Chế độ xem tất cả' : 'Chế độ xem 1 phân đoạn'
+        });
     }
     // --- Format Painter Logic ---
     let isFormatPainterActive = false;
@@ -2530,7 +2695,12 @@
             }
         }).then((result) => {
             if (result.isConfirmed) {
-                window.executionValues[fieldId] = result.value;
+                // Đảm bảo cấu trúc đồng nhất với Server (cell_id = 'default' cho các biến đơn)
+                if (typeof window.executionValues[fieldId] !== 'object' || window.executionValues[fieldId] === null) {
+                    window.executionValues[fieldId] = {};
+                }
+                window.executionValues[fieldId]['default'] = result.value;
+                
                 if (typeof window.recalculateAllFormulas === 'function') window.recalculateAllFormulas();
                 renderBlocks();
             }

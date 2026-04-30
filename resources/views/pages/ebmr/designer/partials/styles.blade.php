@@ -1190,4 +1190,30 @@
         border: 1px solid #eee;
     }
 
+    .section-group-wrapper {
+        padding: 20px;
+        margin-bottom: 30px;
+        border: 2px solid transparent;
+        border-radius: 12px;
+        transition: all 0.3s ease;
+        position: relative;
+        background-color: transparent;
+    }
+
+    .section-group-wrapper:hover {
+        background-color: rgba(248, 250, 252, 0.5);
+        border-color: #e2e8f0;
+    }
+
+    .section-group-wrapper.active {
+        border-color: #3b82f6;
+        background-color: #f8fafc;
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.08);
+    }
+
+    /* Đảm bảo divider giữa các section cũng đẹp */
+    .page-break-divider {
+        position: relative;
+        z-index: 5;
+    }
 </style>

@@ -11,6 +11,7 @@ Route::group(['prefix' => 'ebmr', 'as' => 'pages.ebmr.'], function () {
     // 1. Template Management
     Route::get('/templates', [EbmrTemplateController::class, 'index'])->name('templates');
     Route::post('/templates/metadata', [EbmrTemplateController::class, 'storeMetadata'])->name('storeTemplateMetadata');
+    Route::post('/templates/effective-date', [EbmrTemplateController::class, 'updateEffectiveDate'])->name('updateEffectiveDate');
     Route::get('/templates/{id}/data', [EbmrTemplateController::class, 'getMetadata'])->name('getTemplateMetadata');
     Route::get('/get-templates', [EbmrTemplateController::class, 'getTemplates'])->name('getTemplates');
     Route::get('/templates/{id}/blocks', [EbmrTemplateController::class, 'getTemplateBlocks'])->name('getTemplateBlocks');

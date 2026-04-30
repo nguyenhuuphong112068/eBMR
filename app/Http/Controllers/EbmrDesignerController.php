@@ -140,7 +140,12 @@ class EbmrDesignerController extends Controller
                             }
 
                             // If we are filtering by section, only add if it matches OR if it's the header
-                            $isHeader = ($block->section_id == $template->caterogy_id);
+                            // Determine if this block is a "Header" (should be visible in all sections)
+                            $isHeader = ($block->section_id == $template->caterogy_id) || 
+                                        ($f['isBmrHeader'] ?? false) || 
+                                        ($f['isGfHeader'] ?? false) || 
+                                        (($f['type'] ?? '') === 'section' && ($f['locked'] ?? false));
+
                             if (! $sectionId || $block->section_id == $sectionId || $isHeader) {
                                 $f['section_id'] = $block->section_id; // Ensure section_id is in property for sorting
                                 $f['block_order'] = $block->order;
