@@ -47,7 +47,8 @@
                         max: null,
                         decimal_places: null
                     },
-                    options: []
+                    options: [],
+                    instruction: ''
                 };
 
                 // Create the badge HTML
@@ -136,7 +137,8 @@
             },
             options: [],
             section_id: detectedSectionId,
-            block_id: detectedBlockId
+            block_id: detectedBlockId,
+            instruction: ''
         };
 
         if (savedTextSelection) {

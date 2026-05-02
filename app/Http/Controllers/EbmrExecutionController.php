@@ -15,16 +15,29 @@ class EbmrExecutionController extends Controller
     public function index(Request $request)
     {
         $mode = $request->query('mode', 'working');
-        $title = ($mode == 'history') ? 'Lịch Sử Ban Hành BMR' : 'Hồ Sơ Đã Nhận Ban Hành';
+        if ($mode == 'completed') {
+            $title = 'Hồ Sơ Hoàn Thành';
+        } elseif ($mode == 'history') {
+            $title = 'Lịch Sử Ban Hành BMR';
+        } else {
+            $title = 'Hồ Sơ Đã Nhận Ban Hành';
+        }
 
         session(['title' => $title]);
 
-        $records = DB::table('ebmr_records')
+        $query = DB::table('ebmr_records')
             ->join('ebmr_templates', 'ebmr_records.template_id', '=', 'ebmr_templates.id')
             ->leftJoin('user_management', 'ebmr_records.created_by', '=', 'user_management.id')
-            ->select('ebmr_records.*', 'user_management.fullName as issuer_name', 'ebmr_templates.type', 'ebmr_templates.caterogy_id')
-            ->orderBy('ebmr_records.created_at', 'desc')
-            ->get();
+            ->select('ebmr_records.*', 'user_management.fullName as issuer_name', 'ebmr_templates.type', 'ebmr_templates.caterogy_id');
+
+        if ($mode == 'completed') {
+            $query->whereIn('ebmr_records.status', ['completed', 'reviewed']);
+        } elseif ($mode != 'history') {
+            // Working mode
+            $query->whereNotIn('ebmr_records.status', ['completed', 'reviewed']);
+        }
+
+        $records = $query->orderBy('ebmr_records.created_at', 'desc')->get();
 
         foreach($records as $r) {
             if ($r->type === 'GF') {
@@ -87,27 +100,42 @@ class EbmrExecutionController extends Controller
         if (!$template) return redirect()->back()->with('error', 'Mẫu hồ sơ không tồn tại.');
 
         if ($template->type === 'GF') {
-            $template->name = DB::table('gf_category')->where('id', $template->caterogy_id)->value('name') ?? 'N/A';
-            $template->document_code = DB::table('gf_category')->where('id', $template->caterogy_id)->value('code') ?? 'N/A';
+            $cat = DB::table('gf_category')->where('id', $template->caterogy_id)->first();
+            $template->category_code = $cat->code ?? '';
+            $template->category_name = $cat->name ?? '';
+            $template->relatived_sop_no = $cat->relatived_sop_no ?? '';
+            $template->name = $template->category_name;
+            $template->document_code = $template->category_code;
         } elseif ($template->type === 'MF') {
-            $template->name = DB::table('mf_category')->where('id', $template->caterogy_id)->value('name') ?? 'N/A';
-            $template->document_code = DB::table('mf_category')->where('id', $template->caterogy_id)->value('code') ?? 'N/A';
+            $cat = DB::table('mf_category')->where('id', $template->caterogy_id)->first();
+            $template->category_code = $cat->code ?? '';
+            $template->category_name = $cat->name ?? '';
+            $template->name = $template->category_name;
+            $template->document_code = $template->category_code;
         } elseif ($template->type === 'BPR') {
             $cat = DB::table('finished_product_category')
                 ->leftJoin('product_name', 'finished_product_category.product_name_id', '=', 'product_name.id')
                 ->where('finished_product_category.id', $template->caterogy_id)
-                ->select('finished_product_category.finished_product_code', 'product_name.name')
+                ->select('finished_product_category.*', 'product_name.name as product_name')
                 ->first();
-            $template->name = $cat->name ?? 'N/A';
-            $template->document_code = $cat->finished_product_code ?? 'N/A';
+            $template->category_code = $cat->finished_product_code ?? '';
+            $template->category_name = $cat->product_name ?? '';
+            $template->name = $template->category_name;
+            $template->document_code = $template->category_code;
         } else {
             $cat = DB::table('intermediate_category')
                 ->leftJoin('product_name', 'intermediate_category.product_name_id', '=', 'product_name.id')
+                ->leftJoin('dosage', 'intermediate_category.dosage_id', '=', 'dosage.id')
                 ->where('intermediate_category.id', $template->caterogy_id)
-                ->select('intermediate_category.intermediate_code', 'product_name.name')
+                ->select('intermediate_category.*', 'product_name.name as product_name', 'dosage.name as dosage_name')
                 ->first();
-            $template->name = $cat->name ?? 'N/A';
-            $template->document_code = $cat->intermediate_code ?? 'N/A';
+            $template->category_code = $cat->intermediate_code ?? '';
+            $template->category_name = $cat->product_name ?? '';
+            $template->dosage_name = $cat->dosage_name ?? '';
+            $template->type_name = $cat->type ?? 'Thuốc Kê Đơn';
+            $template->batch_size = ($cat->batch_size ?? '').' '.($cat->unit_batch_size ?? '');
+            $template->name = $template->category_name;
+            $template->document_code = $template->category_code;
         }
 
         $fields = [];
@@ -192,7 +220,10 @@ class EbmrExecutionController extends Controller
         if ($sectionId) {
             $blocksQuery = DB::table('ebmr_template_blocks')
                 ->where('template_id', $template->id)
-                ->where('section_id', $sectionId)
+                ->where(function($q) use ($sectionId, $template) {
+                    $q->where('section_id', $sectionId)
+                      ->orWhere('section_id', $template->caterogy_id);
+                })
                 ->orderBy('order')
                 ->get();
             
@@ -203,7 +234,7 @@ class EbmrExecutionController extends Controller
             foreach ($blocksQuery as $block) {
                 $f = json_decode($block->properties, true);
                 $this->injectContent($f, $block, $bqContentBlocks->get($block->id));
-                if (isset($f['type']) && $f['type'] === 'section') {
+                if (isset($f['type']) && $f['type'] === 'section' && $block->section_id == $sectionId) {
                     $activeSectionLabel = $f['label'] ?? 'Phân đoạn';
                 }
                 
@@ -253,18 +284,28 @@ class EbmrExecutionController extends Controller
 
         $fieldsConfig = (object)$fieldsConfig;
 
-        // Lấy dữ liệu và gộp lại theo block_uuid
+        // Lấy dữ liệu và gộp lại theo block_uuid (Khởi tạo là object để tránh lỗi JSON array trong JS)
         $runDataRaw = DB::table('ebmr_run_data')->where('record_id', $id)->get();
-        $executionValues = [];
+        $executionValues = (object)[];
         foreach ($runDataRaw as $rd) {
-            if ($rd->cell_id && $rd->cell_id !== 'default') {
-                if (!isset($executionValues[$rd->block_uuid])) {
-                    $executionValues[$rd->block_uuid] = [];
-                }
-                $executionValues[$rd->block_uuid][$rd->cell_id] = $rd->raw_value;
-            } else {
-                $executionValues[$rd->block_uuid] = $rd->raw_value;
+            $blockUuid = $rd->block_uuid;
+            if (!isset($executionValues->$blockUuid)) {
+                $executionValues->$blockUuid = (object)[];
             }
+            
+            // Khởi tạo đối tượng meta nếu chưa có
+            if (!isset($executionValues->$blockUuid->_meta)) {
+                $executionValues->$blockUuid->_meta = (object)[];
+            }
+
+            $cellId = ($rd->cell_id && $rd->cell_id !== 'default') ? $rd->cell_id : 'default';
+            $executionValues->$blockUuid->$cellId = $rd->raw_value;
+            
+            // Lưu metadata
+            $executionValues->$blockUuid->_meta->$cellId = (object)[
+                'by' => $rd->updated_by,
+                'at' => $rd->updated_at ? \Carbon\Carbon::parse($rd->updated_at)->format('d/m/Y H:i') : null
+            ];
         }
 
         $template->schema = (object)['fields' => $fields, 'fieldsConfig' => $fieldsConfig];
@@ -274,7 +315,7 @@ class EbmrExecutionController extends Controller
             'template' => $template,
             'executionValues' => $executionValues,
             'isExecutionMode' => true,
-            'isReadOnly' => false,
+            'isReadOnly' => in_array($record->status, ['completed', 'reviewed']),
             'activeSectionId' => $sectionId,
             'activeSectionLabel' => $activeSectionLabel
         ]);
@@ -315,6 +356,8 @@ class EbmrExecutionController extends Controller
                 // Nếu value là mảng hoặc đối tượng (dành cho bảng/ô có tọa độ)
                 if (is_array($value) || is_object($value)) {
                     foreach ($value as $cellId => $rawValue) {
+                        if ($cellId === '_meta') continue;
+                        
                         Log::info("Saving cell: " . $cellId . " = " . $rawValue);
                         DB::table('ebmr_run_data')->updateOrInsert(
                             [
@@ -354,7 +397,12 @@ class EbmrExecutionController extends Controller
             }
 
             DB::commit();
-            return response()->json(['success' => true, 'message' => 'Lưu dữ liệu phân rã thành công']);
+            return response()->json([
+                'success' => true, 
+                'message' => 'Lưu dữ liệu phân rã thành công',
+                'updated_by' => $userName,
+                'updated_at' => $now->format('d/m/Y H:i')
+            ]);
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['success' => false, 'message' => 'Lỗi Database: ' . $e->getMessage()]);

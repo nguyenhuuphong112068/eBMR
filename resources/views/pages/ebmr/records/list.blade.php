@@ -20,9 +20,10 @@
                             <table id="recordsTable" class="table table-hover align-middle" style="width:100%">
                                 <thead class="bg-light text-navy">
                                     <tr>
-                                        <th>Số Lô (Batch No.)</th>
+                                        <th class="text-center" style="width: 50px;">STT</th>
                                         <th>Mã Hồ Sơ</th>
-                                        <th>Tên Hồ Sơ Mẫu</th>
+                                        <th>Tên Sản Phẩm</th>
+                                        <th>Số Lô (Batch No.)</th>
                                         <th>Công đoạn</th>
                                         <th>Trạng Thái</th>
                                         @if($mode != 'history')
@@ -31,11 +32,12 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    @foreach($records as $r)
+                                    @foreach($records as $index => $r)
                                     <tr>
-                                        <td class="fw-bold text-primary" style="font-size: 1.1rem;">{{ $r->batch_number }}</td>
+                                        <td class="text-center fw-bold text-muted">{{ $index + 1 }}</td>
                                         <td>{{ $r->document_code }}</td>
                                         <td>{{ $r->template_name }}</td>
+                                        <td class="fw-bold text-primary" style="font-size: 1.1rem;">{{ $r->batch_number }}</td>
                                         <td>
                                             <div class="d-flex flex-wrap gap-1">
                                                 @forelse($r->sections as $s)
@@ -61,8 +63,12 @@
                                         @if($mode != 'history')
                                         <td class="text-center">
                                             <div class="btn-group shadow-sm rounded-pill overflow-hidden">
-                                                <button class="btn btn-navy btn-sm px-3" title="Mở hồ sơ ghi chép" onclick="window.location.href='{{ route('pages.ebmr.execute', $r->id) }}'">
-                                                    <i class="fas fa-edit me-1"></i> Ghi chép
+                                                <button class="btn btn-navy btn-sm px-3" title="Mở hồ sơ" onclick="window.location.href='{{ route('pages.ebmr.execute', $r->id) }}'">
+                                                    @if(in_array($r->status, ['completed', 'reviewed']))
+                                                        <i class="fas fa-eye me-1"></i> Xem hồ sơ
+                                                    @else
+                                                        <i class="fas fa-edit me-1"></i> Ghi chép
+                                                    @endif
                                                 </button>
                                             </div>
                                         </td>
@@ -94,7 +100,7 @@
             language: {
                 url: '//cdn.datatables.net/plug-ins/1.10.24/i18n/Vietnamese.json'
             },
-            order: [[3, 'desc']] // Sort by created_at desc
+            order: [] // Keep backend sorting
         });
     });
 </script>

@@ -7,7 +7,7 @@
 
     let items = @json($template->schema->fields ?? []);
 
-    let fieldsConfigInit = @json($template->schema->fieldsConfig ?? (object) []);
+    let fieldsConfigInit = @json($fieldsConfig ?? $template->schema->fieldsConfig ?? (object) []);
     let pageOrientation = @json($template->schema->pageOrientation ?? 'portrait');
 
     // Ensure fieldsConfig is strictly an Object so JSON.stringify doesn't drop assigned properties

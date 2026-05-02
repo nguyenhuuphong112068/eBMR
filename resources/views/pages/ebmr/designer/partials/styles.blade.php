@@ -1216,4 +1216,27 @@
         position: relative;
         z-index: 5;
     }
+    .section-group-wrapper:hover {
+        border-color: rgba(13, 110, 253, 0.2);
+        background-color: rgba(13, 110, 253, 0.01);
+    }
+
+    .section-group-wrapper.active {
+        border-color: #0d6efd;
+        background-color: rgba(13, 110, 253, 0.03);
+        box-shadow: 0 4px 20px rgba(13, 110, 253, 0.1);
+    }
+
+    .execution-meta {
+        font-size: 8px;
+        color: #999;
+        display: block;
+        line-height: 1.2;
+        margin-top: 2px;
+        font-weight: normal;
+        font-style: italic;
+        text-align: right;
+        pointer-events: none;
+        white-space: nowrap;
+    }
 </style>

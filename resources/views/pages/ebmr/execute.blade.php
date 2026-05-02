@@ -34,12 +34,23 @@
                     <i class="fas fa-eye me-1"></i> Xem tất cả công đoạn
                 </button>
                 @endif
-                <button class="btn btn-outline-secondary me-2" onclick="saveRecordData('draft')">
-                    <i class="fas fa-save me-1"></i> Lưu bản nháp
-                </button>
-                <button class="btn btn-success" onclick="saveRecordData('completed')">
-                    <i class="fas fa-check-circle me-1"></i> Hoàn Thành Nhập Liệu
-                </button>
+                
+                @if($isReadOnly)
+                    @if($record->status === 'completed')
+                    <button class="btn btn-primary" onclick="confirmReadRecord()">
+                        <i class="fas fa-check-double me-1"></i> Xác nhận đã Đọc hồ sơ
+                    </button>
+                    @elseif($record->status === 'reviewed')
+                    <span class="badge bg-success p-2 fs-6"><i class="fas fa-check me-1"></i> Hồ sơ đã được duyệt</span>
+                    @endif
+                @else
+                    <button class="btn btn-outline-secondary me-2" onclick="saveRecordData('draft')">
+                        <i class="fas fa-save me-1"></i> Lưu bản nháp
+                    </button>
+                    <button class="btn btn-success" onclick="saveRecordData('completed')">
+                        <i class="fas fa-check-circle me-1"></i> Hoàn Thành Nhập Liệu
+                    </button>
+                @endif
             </div>
         </div>
 
@@ -108,6 +119,7 @@
         }
 
         function openExecutionInputModal(blockId, row, col, type) {
+            if (window.isReadOnly) return;
             currentExecContext = { blockId, row, col, type };
             
             const title = type === 'signature' ? 'Xác nhận chữ ký điện tử' : 'Nhập dữ liệu';
@@ -186,17 +198,34 @@
             $('#executionInputModal').modal('hide');
         }
 
-        window.isReadOnly = false;
+        window.isReadOnly = @json($isReadOnly ?? false);
         window.isExecutionMode = true;
         window.templateComments = [];
         window.currentRecordId = {{ $record->id }};
 
+        function confirmReadRecord() {
+            Swal.fire({
+                title: 'Xác nhận Đọc hồ sơ',
+                text: 'Bạn có chắc chắn đã xem xét kỹ các số liệu trong hồ sơ này?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Xác nhận',
+                cancelButtonText: 'Hủy'
+            }).then((result) => {
+                const isConfirmed = result.isConfirmed || (result.value !== undefined && !result.dismiss);
+                if (isConfirmed) {
+                    saveRecordData('reviewed');
+                }
+            });
+        }
 
         function saveRecordData(status) {
             // Đảm bảo dữ liệu gửi đi luôn là Object dể tránh lỗi JSON.stringify bỏ qua string keys trong Array
-            let dataToSend = window.executionValues;
-            if (Array.isArray(dataToSend)) {
-                dataToSend = Object.assign({}, dataToSend);
+            let dataToSend = {};
+            if (window.executionValues) {
+                Object.keys(window.executionValues).forEach(key => {
+                    dataToSend[key] = window.executionValues[key];
+                });
             }
 
             console.log("Dữ liệu thực tế gửi đi:", {
@@ -209,6 +238,9 @@
                 title: 'Đang lưu dữ liệu...',
                 allowOutsideClick: false,
                 didOpen: () => {
+                    Swal.showLoading()
+                },
+                onOpen: () => { // Hỗ trợ phiên bản cũ
                     Swal.showLoading()
                 }
             });
@@ -226,6 +258,22 @@
             .then(res => res.json())
             .then(res => {
                 if (res.success) {
+                    // Cập nhật metadata cục bộ để hiển thị ngay
+                    if (window.executionValues && res.updated_by) {
+                        Object.keys(window.executionValues).forEach(blockId => {
+                            const blockData = window.executionValues[blockId];
+                            if (blockData && typeof blockData === 'object') {
+                                blockData._meta = blockData._meta || {};
+                                Object.keys(blockData).forEach(cellId => {
+                                    if (cellId !== '_meta') {
+                                        blockData._meta[cellId] = { by: res.updated_by, at: res.updated_at };
+                                    }
+                                });
+                            }
+                        });
+                        renderBlocks();
+                    }
+
                     Swal.fire({ title: 'Thành công', text: 'Đã lưu dữ liệu hồ sơ lô!', icon: 'success', showConfirmButton: false, timer: 1500 }).then(() => {
                         if (status === 'completed') {
                             window.location.href = "{{ route('pages.ebmr.indexRecords') }}";

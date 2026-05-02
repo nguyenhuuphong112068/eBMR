@@ -298,6 +298,9 @@
             } else if (e.ctrlKey && e.key.toLowerCase() === 's') {
                 e.preventDefault();
                 if (typeof saveTemplate === 'function') saveTemplate();
+            } else if (e.ctrlKey && e.key.toLowerCase() === 'e') {
+                e.preventDefault();
+                if (typeof setDesignerMode === 'function') setDesignerMode(!window.isExecutionMode);
             }
             handleTableNavigation(e);
         });

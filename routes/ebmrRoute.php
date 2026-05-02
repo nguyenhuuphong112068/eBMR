@@ -35,6 +35,8 @@ Route::group(['prefix' => 'ebmr', 'as' => 'pages.ebmr.'], function () {
     // 4. Issuance
     Route::get('/issue-center', [EbmrIssuanceController::class, 'index'])->name('issueCenter');
     Route::post('/templates/issue', [EbmrIssuanceController::class, 'publish'])->name('issueTemplate');
+    Route::post('/templates/check-batch', [EbmrIssuanceController::class, 'checkBatchNumber'])->name('checkBatchNumber');
+    Route::get('/templates/{id}/next-batch', [EbmrIssuanceController::class, 'getSuggestion'])->name('getBatchSuggestion');
 
     // 5. Execution & Records
     Route::get('/records', [EbmrExecutionController::class, 'index'])->name('indexRecords');

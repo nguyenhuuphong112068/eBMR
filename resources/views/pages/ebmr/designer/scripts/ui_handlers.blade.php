@@ -6,10 +6,10 @@
             // Set to full view mode
             window.isViewAllMode = true;
             window.activeSectionId = null;
-            
+
             // Switch to Trial Mode
             setDesignerMode(true);
-            
+
             // Toast notification already handled in setDesignerMode
         }
     });
@@ -21,34 +21,32 @@
     function setDesignerMode(isExecute) {
         window.isExecutionMode = isExecute;
 
-        // Cập nhật trạng thái nút bấm trên toolbar
-        const btnDesigner = document.getElementById('btn-mode-designer');
-        const btnExecute = document.getElementById('btn-mode-execute');
+        // Cập nhật trạng thái nút bấm trên toolbar (nút Toggle duy nhất)
+        const toggleBtn = document.getElementById('btn-mode-toggle');
         const mainContent = document.getElementById('mainContent');
 
-        if (isExecute) {
-            if (btnDesigner) {
-                btnDesigner.classList.remove('btn-primary');
-                btnDesigner.classList.add('btn-outline-primary');
+        if (toggleBtn) {
+            if (isExecute) {
+                toggleBtn.classList.remove('btn-primary');
+                toggleBtn.classList.add('btn-success');
+                toggleBtn.innerHTML = '<i class="fas fa-play me-1"></i> <span id="mode-text">Chạy thử</span>';
+                toggleBtn.title = "Chuyển sang Thiết kế (Ctrl + E)";
+            } else {
+                toggleBtn.classList.remove('btn-success');
+                toggleBtn.classList.add('btn-primary');
+                toggleBtn.innerHTML = '<i class="fas fa-edit me-1"></i> <span id="mode-text">Thiết kế</span>';
+                toggleBtn.title = "Chuyển sang Chạy thử (Ctrl + E)";
             }
-            if (btnExecute) {
-                btnExecute.classList.remove('btn-outline-success');
-                btnExecute.classList.add('btn-success');
-            }
-            if (mainContent) mainContent.classList.add('execution-mode-active');
+        }
 
+        if (mainContent) {
+            if (isExecute) mainContent.classList.add('execution-mode-active');
+            else mainContent.classList.remove('execution-mode-active');
+        }
+
+        if (isExecute) {
             // Bỏ chọn khối hiện tại khi chạy thử
             selectedId = null;
-        } else {
-            if (btnDesigner) {
-                btnDesigner.classList.remove('btn-outline-primary');
-                btnDesigner.classList.add('btn-primary');
-            }
-            if (btnExecute) {
-                btnExecute.classList.remove('btn-success');
-                btnExecute.classList.add('btn-outline-success');
-            }
-            if (mainContent) mainContent.classList.remove('execution-mode-active');
         }
 
         // Render lại hồ sơ để áp dụng các thay đổi logic (ví dụ: ẩn nút thêm khối)
@@ -404,7 +402,7 @@
 
         // Determine section_id for the new item
         let sectionId = null;
-        
+
         if (insertIndex !== null) {
             // Priority 1: Use neighboring items if inserting via divider (+)
             if (insertIndex > 0 && items[insertIndex - 1]) {
@@ -413,7 +411,7 @@
                 sectionId = items[insertIndex].section_id || items[insertIndex].id;
             }
         }
-        
+
         // Priority 2: Use currently active section
         if (!sectionId) {
             sectionId = window.activeSectionId;
@@ -570,9 +568,12 @@
         if (!item || item.type !== 'table') return;
 
         const selectedCells = document.querySelectorAll('.selected-cell');
-        
+
         // Determine range
-        let minR = 999, maxR = -1, minC = 999, maxC = -1;
+        let minR = 999,
+            maxR = -1,
+            minC = 999,
+            maxC = -1;
         selectedCells.forEach(cell => {
             const r = parseInt(cell.dataset.row);
             const c = parseInt(cell.dataset.col);
@@ -583,22 +584,22 @@
         });
 
         // Check if selection covers the entire table (header + all data rows)
-        const isFullSelection = selectedCells.length > 0 && 
-                               minR === 0 && 
-                               maxR === item.rows && 
-                               minC === 0 && 
-                               maxC === item.cols - 1;
+        const isFullSelection = selectedCells.length > 0 &&
+            minR === 0 &&
+            maxR === item.rows &&
+            minC === 0 &&
+            maxC === item.cols - 1;
 
         if (selectedCells.length > 0 && !isFullSelection) {
             saveStateDebounced();
-            
+
             const weight = item.borderWeight || '1px';
             const borderStyle = `${weight} solid #dee2e6`;
 
             selectedCells.forEach(cell => {
                 const r = parseInt(cell.dataset.row);
                 const c = parseInt(cell.dataset.col);
-                
+
                 let target;
                 if (r === 0) {
                     if (!item.columns[c].style) item.columns[c].style = {};
@@ -606,13 +607,19 @@
                 } else {
                     const rIdx = r - 1;
                     if (!item.data[rIdx][c] || typeof item.data[rIdx][c] !== 'object') {
-                        item.data[rIdx][c] = { content: item.data[rIdx][c] || '', rs: 1, cs: 1, hidden: false };
+                        item.data[rIdx][c] = {
+                            content: item.data[rIdx][c] || '',
+                            rs: 1,
+                            cs: 1,
+                            hidden: false
+                        };
                     }
                     target = item.data[rIdx][c];
                 }
 
                 if (mode === 'all') {
-                    target.borderTop = target.borderBottom = target.borderLeft = target.borderRight = borderStyle;
+                    target.borderTop = target.borderBottom = target.borderLeft = target.borderRight =
+                        borderStyle;
                 } else if (mode === 'none') {
                     target.borderTop = target.borderBottom = target.borderLeft = target.borderRight = 'none';
                 } else if (mode === 'outer') {
@@ -627,10 +634,11 @@
                     target.borderTop = target.borderBottom = 'none';
                     target.borderLeft = target.borderRight = borderStyle;
                 } else if (mode === 'dashed') {
-                    target.borderTop = target.borderBottom = target.borderLeft = target.borderRight = '1px dashed #ccc';
+                    target.borderTop = target.borderBottom = target.borderLeft = target.borderRight =
+                        '1px dashed #ccc';
                 }
             });
-            
+
             item.dirty = true;
             renderBlocks();
             return;
@@ -639,7 +647,7 @@
         // Full selection or no selection: apply to entire table
         saveStateDebounced();
         item.borderMode = mode;
-        
+
         // Clear all cell-level border overrides to keep data clean
         if (item.columns) {
             item.columns.forEach(col => {
@@ -1776,6 +1784,7 @@
      */
     function selectField(event, fieldId) {
         if (event) event.stopPropagation();
+        if (window.isExecutionMode) return;
 
         selectedFieldId = fieldId;
         selectedId = null;
@@ -1901,6 +1910,12 @@
                 <label class="small fw-bold text-muted text-uppercase mb-2">Giá trị mặc định (Dùng chạy thử)</label>
                 <input type="text" class="form-control form-control-sm" value="${field.defaultValue || ''}" placeholder="VD: 4.6" oninput="syncFieldConfig('${fieldId}', 'defaultValue', this.value); recalculateAllFormulas();">
                 <div class="form-text small" style="font-size: 0.7rem;">Dùng để tính toán thử ngay trong trình thiết kế.</div>
+            </div>
+
+            <div class="mb-3">
+                <label class="small fw-bold text-primary text-uppercase mb-2"><i class="fas fa-info-circle me-1"></i> Hướng dẫn ghi chép</label>
+                <textarea class="form-control form-control-sm border-primary" rows="2" placeholder="VD: Kiểm tra nhiệt độ trước khi ghi..." oninput="syncFieldConfig('${fieldId}', 'instruction', this.value)">${field.instruction || ''}</textarea>
+                <div class="form-text small" style="font-size: 0.7rem;">Hiện nội dung này trong modal khi người thực hiện nhập liệu.</div>
             </div>
 
             <hr class="my-3">
@@ -2282,13 +2297,24 @@
                         const td = s.textDecoration || '';
                         const fsz = s.fontSize || '';
                         const tc = s.textColor || '';
-                        return `<th contenteditable="false" spellcheck="false" data-row="0" data-col="${cIdx}" class="table-header-cell" style="width: ${c.width || 'auto'}; background-color: ${bg}; text-align: ${align}; font-weight: ${fw}; font-style: ${fs}; text-decoration: ${td}; font-size: ${fsz}; color: ${tc};"><div class="header-content">${c.label || ''}</div></th>`;
+                        return ` < th contenteditable = "false"
+                    spellcheck = "false"
+                    data - row = "0"
+                    data - col = "${cIdx}"
+                    class = "table-header-cell"
+                    style =
+                        "width: ${c.width || 'auto'}; background-color: ${bg}; text-align: ${align}; font-weight: ${fw}; font-style: ${fs}; text-decoration: ${td}; font-size: ${fsz}; color: ${tc};" >
+                        <
+                        div class = "header-content" > $ {
+                            c.label || ''
+                        } < /div></th > `;
                     }).join('')}</tr></thead>`;
                 }
 
                 let rowsHtml = '';
                 const blockKey = b.uuid || b.id;
-                const runDataForBlock = window.executionValues && window.executionValues[blockKey] ? window.executionValues[blockKey] : {};
+                const runDataForBlock = window.executionValues && window.executionValues[blockKey] ? window
+                    .executionValues[blockKey] : {};
 
                 for (let r = 0; r < (b.rows || 0); r++) {
                     let cellsHtml = '';
@@ -2296,16 +2322,24 @@
                     const rowH = (b.rowHeights && b.rowHeights[r]) ? b.rowHeights[r] : 'auto';
                     for (let c = 0; c < (b.cols || 0); c++) {
                         if (!b.data[r][c] || typeof b.data[r][c] !== 'object') {
-                            b.data[r][c] = { content: '', rs: 1, cs: 1, hidden: false };
+                            b.data[r][c] = {
+                                content: '',
+                                rs: 1,
+                                cs: 1,
+                                hidden: false
+                            };
                         }
                         const cell = b.data[r][c];
                         if (cell.hidden) continue;
 
-                        const cellWidth = (b.columns && b.columns[c] && b.columns[c].width) ? b.columns[c].width : 'auto';
+                        const cellWidth = (b.columns && b.columns[c] && b.columns[c].width) ? b.columns[c]
+                            .width : 'auto';
                         const cellBg = (cell.backgroundColor) ? cell.backgroundColor : '';
 
-                        let displayContent = typeof decorateContent === 'function' ? decorateContent(cell.content, fields) : cell.content;
-                        if (displayContent === null || displayContent === 'null' || displayContent === undefined) {
+                        let displayContent = typeof decorateContent === 'function' ? decorateContent(cell
+                            .content, fields) : cell.content;
+                        if (displayContent === null || displayContent === 'null' || displayContent ===
+                            undefined) {
                             displayContent = '';
                         }
 
@@ -2316,21 +2350,28 @@
                             const runVal = runDataForBlock[`${r}_${c}`];
                             if (displayContent.includes('[Nhập dữ liệu]')) {
                                 cellClass = "execution-input-cell";
-                                onclickAttr = `onclick="openExecutionInputModal('${blockKey}', ${r}, ${c}, 'text')"`;
-                                displayContent = runVal ? runVal : `<span class="execution-badge input"><i class="fas fa-edit"></i> [Nhập dữ liệu]</span>`;
+                                onclickAttr =
+                                    `onclick="openExecutionInputModal('${blockKey}', ${r}, ${c}, 'text')"`;
+                                displayContent = runVal ? runVal :
+                                    `<span class="execution-badge input"><i class="fas fa-edit"></i> [Nhập dữ liệu]</span>`;
                             } else if (displayContent.includes('[Ký tên]')) {
                                 cellClass = "execution-input-cell";
-                                onclickAttr = `onclick="openExecutionInputModal('${blockKey}', ${r}, ${c}, 'signature')"`;
-                                displayContent = runVal ? `<div class="e-signature-done"><i class="fas fa-check-circle text-success me-1"></i>${runVal}</div>` : `<span class="execution-badge signature"><i class="fas fa-pen"></i> [Ký tên]</span>`;
+                                onclickAttr =
+                                    `onclick="openExecutionInputModal('${blockKey}', ${r}, ${c}, 'signature')"`;
+                                displayContent = runVal ?
+                                    `<div class="e-signature-done"><i class="fas fa-check-circle text-success me-1"></i>${runVal}</div>` :
+                                    `<span class="execution-badge signature"><i class="fas fa-pen"></i> [Ký tên]</span>`;
                             }
                         }
 
-                        cellsHtml += `<td contenteditable="false" spellcheck="false" data-row="${r+1}" data-col="${c}" rowspan="${cell.rs || 1}" colspan="${cell.cs || 1}" ${onclickAttr} class="${cellClass}" style="width: ${cellWidth}; height: ${rowH}; background-color: ${cellBg}; text-align: ${cell.textAlign || ''}; font-weight: ${cell.fontWeight || ''}; font-style: ${cell.fontStyle || ''}; text-decoration: ${cell.textDecoration || ''}; font-size: ${cell.fontSize || ''}; color: ${cell.textColor || ''}; text-transform: ${cell.textTransform || ''};"><div class="cell-wrapper">${displayContent}</div></td>`;
+                        cellsHtml +=
+                            `<td contenteditable="false" spellcheck="false" data-row="${r+1}" data-col="${c}" rowspan="${cell.rs || 1}" colspan="${cell.cs || 1}" ${onclickAttr} class="${cellClass}" style="width: ${cellWidth}; height: ${rowH}; background-color: ${cellBg}; text-align: ${cell.textAlign || ''}; font-weight: ${cell.fontWeight || ''}; font-style: ${cell.fontStyle || ''}; text-decoration: ${cell.textDecoration || ''}; font-size: ${cell.fontSize || ''}; color: ${cell.textColor || ''}; text-transform: ${cell.textTransform || ''};"><div class="cell-wrapper">${displayContent}</div></td>`;
                     }
                     rowsHtml += `<tr>${cellsHtml}</tr>`;
                 }
 
-                html += `<div class="table-responsive-wrapper"><table class="mini-table ${borderClass}">${thead}<tbody>${rowsHtml}</tbody></table></div>`;
+                html +=
+                    `<div class="table-responsive-wrapper"><table class="mini-table ${borderClass}">${thead}<tbody>${rowsHtml}</tbody></table></div>`;
             } else if (b.type === 'signature') {
                 html += `<div class="mb-3 p-2 border rounded bg-light small d-flex align-items-center">
                             <div class="bg-white rounded-circle d-flex align-items-center justify-content-center me-2 shadow-sm" style="width: 30px; height: 30px;">
@@ -2353,10 +2394,10 @@
      */
     function toggleViewMode() {
         const templateId = '{{ $template->id }}';
-        
+
         // Chuyển đổi trạng thái Xem tất cả / Xem 1 phân đoạn
         window.isViewAllMode = !window.isViewAllMode;
-        
+
         if (!window.isViewAllMode) {
             // Nếu chuyển sang xem 1 phân đoạn, đảm bảo có phân đoạn active
             if (!window.activeSectionId) {
@@ -2641,15 +2682,25 @@
      */
     window.openVariableInputModal = function(fieldId) {
         if (!window.isExecutionMode) return;
+        if (window.isReadOnly) return;
 
         const field = fieldsConfig[fieldId];
         if (!field) return;
 
-        const currentVal = window.executionValues[fieldId] || '';
+        let currentVal = window.executionValues[fieldId] || '';
+        if (currentVal && typeof currentVal === 'object' && currentVal.hasOwnProperty('default')) {
+            currentVal = currentVal.default;
+        } else if (currentVal && typeof currentVal === 'object' && !Array.isArray(currentVal)) {
+            const keys = Object.keys(currentVal);
+            if (keys.length > 0) currentVal = currentVal[keys[0]];
+        }
         let inputType = 'text';
         let inputAttributes = {};
 
         // Cấu hình loại input và validation
+        const importantVar = (window.importantVars || []).find(v => v.id == field.important_var_id);
+        const isCritical = !!importantVar;
+
         if (field.type === 'number') {
             inputType = 'number';
             if (field.validation) {
@@ -2664,17 +2715,73 @@
                 }
             }
         } else if (field.type === 'date') {
-            inputType = 'date';
+            inputType = 'text'; // Fallback for SweetAlert2 older versions
+            inputAttributes.type = 'date';
+        } else if (field.type === 'text') {
+            inputType = 'textarea';
+            inputAttributes.rows = 4;
+            inputAttributes.placeholder = 'Nhập nội dung văn bản tại đây...';
         }
 
+        // Build HTML for instruction and hints
+        let instructionHtml = '';
+        if (field.instruction) {
+            instructionHtml += `<div class="alert alert-info text-start small mb-3" style="font-size: 0.85rem; line-height: 1.4; border-left: 4px solid #0dcaf0;">
+                                    <i class="fas fa-info-circle me-2"></i><b>Hướng dẫn:</b> ${field.instruction}
+                                </div>`;
+        }
+
+        let hints = [];
+        if (field.type === 'number' && field.validation) {
+            if (field.validation.min !== null && field.validation.min !== undefined && field.validation.min !== '')
+                hints.push(`Tối thiểu: <b>${field.validation.min}</b>`);
+            if (field.validation.max !== null && field.validation.max !== undefined && field.validation.max !== '')
+                hints.push(`Tối đa: <b>${field.validation.max}</b>`);
+        }
+        if (field.defaultValue !== null && field.defaultValue !== undefined && field.defaultValue !== '') {
+            hints.push(`Mặc định: <b>${field.defaultValue}</b>`);
+        }
+
+        if (hints.length > 0) {
+            instructionHtml += `<div class="text-start mb-2 small text-muted">
+                                    <i class="fas fa-lightbulb me-1 text-warning"></i> Gợi ý: ${hints.join(' | ')}
+                                </div>`;
+        }
+
+        // Title with logo (Rebalanced layout - More Compact & Informative)
+        const titleHtml = `
+            <div class="d-flex align-items-center w-100 px-1 py-0" style="border-bottom: 1px solid #eef2f7; margin-bottom: 8px; padding-bottom: 8px;">
+                <img src="{{ asset('img/logo/Stella-Pharm-logo.png') }}" style="height: 35px; width: auto; object-fit: contain; margin-right: 12px;" onerror="this.style.display='none'">
+                <div class="text-start flex-grow-1">
+                    <div class="fw-bold" style="font-size: 1.35rem; color: #0f172a; line-height: 1.1; letter-spacing: -0.01em;">${field.label || 'Nhập dữ liệu'}</div>
+                </div>
+                ${isCritical ? `
+                    <div class="ms-2 text-end">
+                        <span class="badge bg-danger rounded-pill px-2 py-1 shadow-sm animate__animated animate__pulse animate__infinite" style="font-size: 0.65rem; border: 1.5px solid rgba(255,255,255,0.2); white-space: nowrap;">
+                            <i class="fas fa-exclamation-triangle me-1"></i> ${importantVar.name} ${importantVar.description ? ` - ${importantVar.description}` : ''}
+                        </span>
+                    </div>` : ''}
+            </div>
+        `;
+
         Swal.fire({
-            title: field.label || 'Nhập dữ liệu',
+            title: titleHtml,
+            html: instructionHtml,
             input: inputType,
             inputValue: currentVal,
             inputAttributes: inputAttributes,
             showCancelButton: true,
             confirmButtonText: 'Xác nhận',
             cancelButtonText: 'Hủy',
+            width: field.type === 'text' ? '600px' : '450px',
+            background: isCritical ? '#fff5f5' : '#ffffff',
+            padding: '0 1rem 1.25rem', // Reduced top padding
+            customClass: {
+                popup: (isCritical ? 'border-danger border-2 shadow-lg' : 'border-0 shadow-lg') +
+                    ' rounded-4',
+                title: 'p-0 w-100 mt-2', // Add slight top margin to title for balance
+                input: 'form-control shadow-sm'
+            },
             inputValidator: (value) => {
                 if (field.validation && field.validation.required && !value) {
                     return 'Vui lòng không để trống ô này!';
@@ -2692,18 +2799,42 @@
                         }
                     }
                 }
+            },
+            didOpen: () => {
+                if (field.type === 'date') {
+                    const input = Swal.getInput();
+                    if (input) input.type = 'date';
+                }
+            },
+            onOpen: () => { // Hỗ trợ phiên bản SweetAlert2 cũ
+                if (field.type === 'date') {
+                    const input = Swal.getInput();
+                    if (input) input.type = 'date';
+                }
             }
         }).then((result) => {
-            if (result.isConfirmed) {
+            // Hỗ trợ cả SweetAlert2 bản mới (isConfirmed) và bản cũ (value)
+            const isConfirmed = result.isConfirmed || (result.value !== undefined && !result.dismiss);
+            
+            if (isConfirmed) {
+                const finalValue = result.value;
+                
+                console.log("Modal confirmed with value:", finalValue);
+                console.log("fieldId:", fieldId);
+
                 // Đảm bảo cấu trúc đồng nhất với Server (cell_id = 'default' cho các biến đơn)
                 if (typeof window.executionValues[fieldId] !== 'object' || window.executionValues[fieldId] === null) {
                     window.executionValues[fieldId] = {};
                 }
-                window.executionValues[fieldId]['default'] = result.value;
-                
+                window.executionValues[fieldId]['default'] = finalValue;
+
+                console.log("window.executionValues after update:", window.executionValues);
+
                 if (typeof window.recalculateAllFormulas === 'function') window.recalculateAllFormulas();
                 renderBlocks();
             }
+        }).catch(err => {
+            console.error("Error in modal promise:", err);
         });
     };
 </script>

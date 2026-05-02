@@ -1,5 +1,6 @@
 <div class="container-fluid py-4">
     <div class="row justify-content-center">
+        @if (!($isExecutionMode ?? false))
         <!-- Outline Sidebar -->
         <div id="outline-col" class="col-lg-2 transition-all">
             <div class="p-3 bg-white rounded shadow-sm outline-sidebar h-100">
@@ -29,9 +30,10 @@
                 <i class="fas fa-chevron-right text-muted mb-1 mt-3"></i>
             </div>
         </div>
+        @endif
 
         <!-- Document Canvas -->
-        <div id="canvas-col" class="col-lg-9 transition-all">
+        <div id="canvas-col" class="{{ ($isExecutionMode ?? false) ? 'col-lg-12' : 'col-lg-9' }} transition-all">
 
 
             @if (!$isReadOnly)
@@ -70,6 +72,7 @@
             </div>
         </div>
 
+        @if (!($isExecutionMode ?? false))
         <!-- Property Panel Slot -->
         <div id="sidebar-col" class="col-lg-1 transition-all p-0">
             @if (!$isReadOnly)
@@ -77,6 +80,7 @@
             @endif
 
         </div>
+        @endif
     <div class="test-mode-badge">
         <i class="fas fa-flask me-2"></i> Đang ở chế độ Chạy thử (Preview)
     </div>

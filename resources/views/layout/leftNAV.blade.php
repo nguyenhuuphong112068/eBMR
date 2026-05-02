@@ -283,9 +283,16 @@
                     <ul class="nav nav-treeview pl-3">
                         <li class="nav-item">
                             <a href="{{ route('pages.ebmr.indexRecords') }}"
-                                class="nav-link {{ str_contains(url()->current(), 'ebmr/records') && request('mode') != 'history' ? 'active' : '' }}">
+                                class="nav-link {{ str_contains(url()->current(), 'ebmr/records') && !request('mode') ? 'active' : '' }}">
                                 <i class="fas fa-clipboard-list"></i>
                                 <p>Hồ Sơ Đã Nhận Ban Hành</p>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="{{ route('pages.ebmr.indexRecords') }}?mode=completed"
+                                class="nav-link {{ request('mode') == 'completed' ? 'active' : '' }}">
+                                <i class="fas fa-check-double"></i>
+                                <p>Hồ Sơ Hoàn Thành</p>
                             </a>
                         </li>
                     </ul>

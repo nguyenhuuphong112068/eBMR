@@ -79,7 +79,7 @@
                                                 <td>{{ \Carbon\Carbon::parse($t->effective_date)->format('d/m/Y') }}</td>
                                                 <td class="text-center">
                                                     <button class="btn btn-primary rounded-pill px-3 shadow-sm btn-sm"
-                                                        onclick="openIssueModal({{ $t->id }}, '{{ $t->name }}')">
+                                                        onclick="openIssueModal({{ $t->id }}, '{{ $t->name }}', '{{ $t->document_code }}')">
                                                         <i class="fas fa-rocket me-1"></i> Ban hành
                                                     </button>
                                                 </td>
@@ -109,27 +109,105 @@
                             </button>
                         </div>
                         <div class="modal-body p-4">
-                            <div class="mb-3">
-                                <label class="form-label fw-bold small text-muted text-uppercase">Hồ sơ mẫu đang
-                                    chọn</label>
-                                <div id="issueTemplateNameDisplay"
-                                    class="p-3 mb-3 bg-light rounded text-navy fw-bold border" style="font-size: 1.1rem;">
+                            <div class="row">
+                                <div class="col-md-7">
+                                    <div class="mb-3">
+                                        <label class="form-label fw-bold small text-muted text-uppercase">Hồ sơ: <span id="issueTemplateCodeDisplay" class="text-primary"></span></label>
+                                        <div id="issueTemplateNameDisplay" class="p-2 bg-light rounded text-navy fw-bold border" style="font-size: 1rem;"></div>
+                                    </div>
+                                </div>
+                                <div class="col-md-5">
+                                    <div class="mb-3">
+                                        <label class="form-label fw-bold small text-muted text-uppercase mb-2">Định dạng số lô</label>
+                                        <div class="format-switch">
+                                            <input type="radio" name="format" id="format1" value="AAMMYY" checked onchange="suggestBatchNumber()">
+                                            <label for="format1">AAMMYY</label>
+
+                                            <input type="radio" name="format" id="format2" value="YWWAA" onchange="suggestBatchNumber()">
+                                            <label for="format2">YWWAA</label>
+                                            
+                                            <span class="format-switch-slider"></span>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div class="mb-1">
-                                <label class="form-label fw-bold">Số Lô Sản Xuất (Batch No.) <span
-                                        class="text-danger">*</span></label>
-                                <input type="text" class="form-control rounded-pill px-4" name="batch_number"
-                                    id="batchNumber" required placeholder="VD: 010126"
-                                    style="height: 50px; border: 2px solid #007bff; font-weight: bold; font-size: 1.2rem;">
+                            <style>
+                                .format-switch {
+                                    background: #e9ecef;
+                                    border-radius: 50px;
+                                    padding: 2px;
+                                    position: relative;
+                                    display: flex;
+                                    width: 100%;
+                                    border: 1px solid #dee2e6;
+                                }
+                                .format-switch input {
+                                    display: none;
+                                }
+                                .format-switch label {
+                                    flex: 1;
+                                    text-align: center;
+                                    padding: 8px 0;
+                                    margin: 0;
+                                    cursor: pointer;
+                                    font-weight: bold;
+                                    font-size: 0.85rem;
+                                    z-index: 2;
+                                    color: #495057;
+                                    transition: color 0.3s;
+                                }
+                                .format-switch-slider {
+                                    position: absolute;
+                                    width: 50%;
+                                    height: calc(100% - 4px);
+                                    background: #007bff;
+                                    border-radius: 50px;
+                                    top: 2px;
+                                    left: 2px;
+                                    transition: all 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+                                    z-index: 1;
+                                    box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+                                }
+                                #format2:checked ~ .format-switch-slider {
+                                    left: calc(50% - 2px);
+                                }
+                                #format1:checked ~ label[for="format1"],
+                                #format2:checked ~ label[for="format2"] {
+                                    color: white;
+                                }
+                            </style>
+
+                            <hr class="my-3">
+
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <div class="mb-1">
+                                        <label class="form-label fw-bold">Số Lô <span id="batchLabelSuffix">Sản Xuất</span> (Batch No.) <span class="text-danger">*</span></label>
+                                        <div class="input-group">
+                                            <input type="text" class="form-control px-3" name="batch_number" id="batchNumber" required placeholder="VD: 010126"
+                                                style="height: 45px; border: 2px solid #007bff; font-weight: bold; font-size: 1.1rem;">
+                                            <div class="input-group-append">
+                                                <button class="btn btn-outline-primary" type="button" onclick="suggestBatchNumber()" title="Gợi ý số lô tiếp theo">
+                                                    <i class="fas fa-magic"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div id="batchNumberWarning" class="small mt-1 d-none fw-bold"></div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-1">
+                                        <label class="form-label fw-bold">Số lượng lô</label>
+                                        <input type="number" class="form-control" name="quantity" id="issueQuantity" value="1" min="1" max="50" style="height: 45px;">
+                                    </div>
+                                </div>
                             </div>
-                            <p class="text-muted small mt-2"><i class="fas fa-info-circle me-1"></i> Số lô này sẽ được dùng
-                                để định danh cho hồ sơ lô sản xuất thực tế trên hệ thống.</p>
+                            
+                            <p class="text-muted small mt-2"><i class="fas fa-info-circle me-1"></i> Hệ thống sẽ tự động tăng số lô nếu bạn chọn ban hành nhiều lô cùng lúc.</p>
                         </div>
                         <div class="modal-footer bg-light p-3">
-                            <button type="button" class="btn btn-light rounded-pill px-4" data-dismiss="modal">Hủy
-                                bỏ</button>
+                            <button type="button" class="btn btn-light rounded-pill px-4" data-dismiss="modal">Hủy bỏ</button>
                             <button type="submit" class="btn btn-primary rounded-pill px-4 shadow-sm">
                                 <i class="fas fa-rocket me-2"></i> Xác nhận Ban Hành
                             </button>
@@ -170,12 +248,66 @@
             });
         });
 
-        function openIssueModal(id, name) {
+        function openIssueModal(id, name, code) {
             $('#issueTemplateId').val(id);
             $('#issueTemplateNameDisplay').text(name);
-            $('#batchNumber').val('');
+            $('#issueTemplateCodeDisplay').text(code);
+            $('#batchNumber').val('').css('border-color', '#007bff');
+            $('#batchNumberWarning').addClass('d-none');
+            $('#format1').prop('checked', true); // Reset về AAMMYY mặc định
+            $('#issueQuantity').val(1);
             $('#issueModal').modal('show');
+            
+            // Tự động gợi ý khi mở
+            suggestBatchNumber();
         }
+
+        function suggestBatchNumber() {
+            const templateId = $('#issueTemplateId').val();
+            const format = $('input[name="format"]:checked').val();
+            
+            if (format === 'MANUAL') {
+                return;
+            }
+
+            $.get('{{ url("ebmr/templates") }}/' + templateId + '/next-batch?format=' + format, function(res) {
+                if (res.suggestion) {
+                    $('#batchNumber').val(res.suggestion).trigger('keyup');
+                }
+            });
+        }
+
+        let checkTimeout = null;
+        $('#batchNumber').on('keyup', function() {
+            const batchNumber = $(this).val().trim();
+            const templateId = $('#issueTemplateId').val();
+            const warningEl = $('#batchNumberWarning');
+            const input = $(this);
+
+            if (checkTimeout) clearTimeout(checkTimeout);
+
+            if (batchNumber.length === 0) {
+                warningEl.addClass('d-none');
+                input.css('border-color', '#007bff');
+                return;
+            }
+
+            checkTimeout = setTimeout(() => {
+                $.post('{{ route('pages.ebmr.checkBatchNumber') }}', {
+                    _token: '{{ csrf_token() }}',
+                    template_id: templateId,
+                    batch_number: batchNumber
+                }, function(res) {
+                    if (res.exists) {
+                        warningEl.removeClass('d-none').addClass('text-danger').html('<i class="fas fa-exclamation-triangle me-1"></i> Số lô này đã tồn tại cho mẫu hồ sơ này!');
+                        input.css('border-color', '#dc3545');
+                    } else {
+                        warningEl.removeClass('d-none').removeClass('text-danger').addClass('text-success').html('<i class="fas fa-check-circle me-1"></i> Số lô hợp lệ');
+                        input.css('border-color', '#28a745');
+                    }
+                });
+            }, 300);
+        });
 
         $('#issueForm').on('submit', function(e) {
             e.preventDefault();

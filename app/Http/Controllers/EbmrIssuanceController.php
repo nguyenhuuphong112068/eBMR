@@ -82,28 +82,147 @@ class EbmrIssuanceController extends Controller
     {
         $validated = $request->validate([
             'template_id' => 'required|integer',
-            'batch_number' => 'required|string|unique:ebmr_records,batch_number'
+            'batch_number' => 'required|string',
+            'quantity' => 'nullable|integer|min:1|max:50',
+            'format' => 'nullable|string'
         ]);
 
-        $template = DB::table('ebmr_templates')->where('id', $validated['template_id'])->first();
+        $templateId = $validated['template_id'];
+        $qty = $request->input('quantity', 1);
+        $format = $request->input('format', 'MANUAL');
+        $startBatch = $validated['batch_number'];
 
+        $template = DB::table('ebmr_templates')->where('id', $templateId)->first();
         if (!$template || $template->status !== 'active') {
             return response()->json(['success' => false, 'message' => 'Hồ sơ mẫu chưa có hiệu lực hoặc không tồn tại.']);
         }
 
-        $id = DB::table('ebmr_records')->insertGetId([
-            'template_id' => $validated['template_id'],
-            'batch_number' => $validated['batch_number'],
-            'created_by' => session('user')['userId'] ?? null,
-            'status' => 'active',
-            'created_at' => now(),
-            'updated_at' => now()
-        ]);
+        DB::beginTransaction();
+        try {
+            $createdBatches = [];
+            $lastId = null;
+            for ($i = 0; $i < $qty; $i++) {
+                $currentBatch = ($i === 0) ? $startBatch : $this->incrementBatchNumber($startBatch, $i, $format);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Ban hành hồ sơ thành công. Số lô: ' . $validated['batch_number'],
-            'record_id' => $id
-        ]);
+                // Kiểm tra trùng số lô theo template_id
+                $exists = DB::table('ebmr_records')
+                    ->where('template_id', $templateId)
+                    ->where('batch_number', $currentBatch)
+                    ->exists();
+
+                if ($exists) {
+                    throw new \Exception('Số lô "' . $currentBatch . '" đã tồn tại cho mẫu hồ sơ này. Vui lòng kiểm tra lại.');
+                }
+
+                $lastId = DB::table('ebmr_records')->insertGetId([
+                    'template_id' => $templateId,
+                    'batch_number' => $currentBatch,
+                    'sequence_in_year' => $this->extractSequence($currentBatch, $format, $templateId),
+                    'created_by' => session('user')['userId'] ?? null,
+                    'status' => 'active',
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+                $createdBatches[] = $currentBatch;
+            }
+
+            DB::commit();
+
+            $msg = count($createdBatches) > 1 
+                ? "Đã ban hành " . count($createdBatches) . " lô thành công: " . implode(', ', $createdBatches)
+                : "Ban hành hồ sơ thành công. Số lô: " . $createdBatches[0];
+
+            return response()->json([
+                'success' => true,
+                'message' => $msg,
+                'record_id' => $lastId
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['success' => false, 'message' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Gợi ý số lô tiếp theo
+     */
+    public function getSuggestion(Request $request, $id)
+    {
+        $format = $request->query('format', 'AAMMYY');
+        $suggestion = $this->generateBatchNumber($id, $format);
+        return response()->json(['suggestion' => $suggestion]);
+    }
+
+    private function generateBatchNumber($templateId, $format)
+    {
+        if ($format === 'MANUAL') return '';
+
+        $now = now();
+        $year = $now->format('Y');
+        $yy = $now->format('y');
+        $mm = $now->format('m');
+        $yLast = substr($yy, -1);
+        $ww = $now->weekOfYear;
+
+        // Lấy STT lớn nhất trong năm cho template này
+        $maxSeq = DB::table('ebmr_records')
+            ->where('template_id', $templateId)
+            ->whereYear('created_at', $year)
+            ->max('sequence_in_year') ?? 0;
+
+        $nextSeq = $maxSeq + 1;
+        $aa = str_pad($nextSeq, 2, '0', STR_PAD_LEFT);
+
+        if ($format === 'AAMMYY') {
+            return $aa . $mm . $yy;
+        } elseif ($format === 'YWWAA') {
+            return $yLast . str_pad($ww, 2, '0', STR_PAD_LEFT) . $aa;
+        }
+
+        return '';
+    }
+
+    private function incrementBatchNumber($startBatch, $index, $format)
+    {
+        if ($format === 'AAMMYY') {
+            $aaLen = strlen($startBatch) - 4;
+            if ($aaLen <= 0) return $startBatch . $index;
+            $aa = substr($startBatch, 0, $aaLen);
+            $suffix = substr($startBatch, $aaLen);
+            $nextAa = str_pad(intval($aa) + $index, $aaLen, '0', STR_PAD_LEFT);
+            return $nextAa . $suffix;
+        } elseif ($format === 'YWWAA') {
+            $aa = substr($startBatch, -2);
+            $prefix = substr($startBatch, 0, -2);
+            $nextAa = str_pad(intval($aa) + $index, 2, '0', STR_PAD_LEFT);
+            return $prefix . $nextAa;
+        }
+
+        return preg_replace_callback('/(\d+)$/', function($m) use ($index) {
+            return str_pad(intval($m[1]) + $index, strlen($m[1]), '0', STR_PAD_LEFT);
+        }, $startBatch);
+    }
+
+    private function extractSequence($batch, $format, $templateId)
+    {
+        if ($format === 'AAMMYY') {
+            return intval(substr($batch, 0, strlen($batch) - 4));
+        } elseif ($format === 'YWWAA') {
+            return intval(substr($batch, -2));
+        }
+        return (DB::table('ebmr_records')
+            ->where('template_id', $templateId)
+            ->whereYear('created_at', date('Y'))
+            ->max('sequence_in_year') ?? 0) + 1;
+    }
+
+    public function checkBatchNumber(Request $request)
+    {
+        $exists = DB::table('ebmr_records')
+            ->where('template_id', $request->template_id)
+            ->where('batch_number', $request->batch_number)
+            ->exists();
+
+        return response()->json(['exists' => $exists]);
     }
 }

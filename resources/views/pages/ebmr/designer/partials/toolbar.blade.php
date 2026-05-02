@@ -87,19 +87,15 @@
 
         <div class="ms-auto d-flex gap-2">
             <!-- Designer / Execute Mode Toggle -->
-            <div class="btn-group me-2" role="group" aria-label="Mode toggle">
-                <button type="button" id="btn-mode-designer" 
-                    class="btn btn-sm px-3 {{ empty($isExecutionMode) ? 'btn-primary' : 'btn-outline-primary' }}" 
-                    onclick="setDesignerMode(false)" style="border-radius: 20px 0 0 20px;"
-                    {{ $template->status !== 'draft' ? 'disabled' : '' }}>
-                    <i class="fas fa-edit me-1"></i> Thiết kế
-                </button>
-                <button type="button" id="btn-mode-execute" 
-                    class="btn btn-sm px-3 {{ !empty($isExecutionMode) ? 'btn-success' : 'btn-outline-success' }}" 
-                    onclick="setDesignerMode(true)" style="border-radius: 0 20px 20px 0;">
-                    <i class="fas fa-play me-1"></i> Chạy thử
-                </button>
-            </div>
+            <!-- Designer / Execute Mode Toggle (Unified) -->
+            <button type="button" id="btn-mode-toggle" 
+                class="btn btn-sm px-3 {{ empty($isExecutionMode) ? 'btn-primary' : 'btn-success' }}" 
+                onclick="setDesignerMode(!window.isExecutionMode)" 
+                style="border-radius: 20px;"
+                title="Chuyển chế độ (Ctrl + E)">
+                <i class="fas {{ empty($isExecutionMode) ? 'fa-edit' : 'fa-play' }} me-1"></i>
+                <span id="mode-text">{{ empty($isExecutionMode) ? 'Thiết kế' : 'Chạy thử' }}</span>
+            </button>
 
             <!-- Language Selector -->
             <div class="btn-group" role="group">
