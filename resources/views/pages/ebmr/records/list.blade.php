@@ -8,12 +8,12 @@
         <div class="row">
             <div class="col-12">
                 <div class="card border-0 shadow-sm overflow-hidden">
-                    <div class="card-header {{ $mode == 'history' ? 'bg-secondary' : 'bg-navy' }} py-3 d-flex justify-content-between align-items-center">
+                    <div class="card-header {{ $mode == 'history' ? 'bg-primary shadow-sm' : 'bg-navy' }} py-3 d-flex justify-content-between align-items-center">
                         <h5 class="mb-0 text-white fw-bold">
                             <i class="fas {{ $mode == 'history' ? 'fa-history' : 'fa-clipboard-list' }} me-2"></i> 
                             {{ $mode == 'history' ? 'Lịch Sử BMR Đã Ban Hành (Số Lô)' : 'Hồ Sơ Đã Nhận Ban Hành & Thực Hiện' }}
                         </h5>
-                        <div class="badge bg-white {{ $mode == 'history' ? 'text-secondary' : 'text-navy' }} rounded-pill px-3">{{ $records->count() }} Hồ sơ</div>
+                        <div class="badge bg-white {{ $mode == 'history' ? 'text-primary' : 'text-navy' }} rounded-pill px-3 shadow-sm">{{ $records->count() }} Hồ sơ</div>
                     </div>
                     <div class="card-body p-4">
                         <div class="table-responsive">
@@ -25,6 +25,8 @@
                                         <th>Tên Sản Phẩm</th>
                                         <th>Số Lô (Batch No.)</th>
                                         <th>Công đoạn</th>
+                                        <th>Ngày Ban Hành</th>
+                                        <th>Người Ban Hành</th>
                                         <th>Trạng Thái</th>
                                         @if($mode != 'history')
                                         <th class="text-center">Thao tác</th>
@@ -41,15 +43,21 @@
                                         <td>
                                             <div class="d-flex flex-wrap gap-1">
                                                 @forelse($r->sections as $s)
-                                                    <button class="btn btn-xs btn-outline-info rounded-pill py-0 px-2" 
-                                                            style="font-size: 0.7rem;"
-                                                            onclick="window.location.href='{{ route('pages.ebmr.execute', ['id' => $r->id, 'section' => $s['id']]) }}'">
+                                                    <span class="badge bg-soft-info text-info border border-info rounded-pill py-1 px-2" 
+                                                          style="font-size: 0.7rem; cursor: default;">
                                                         {{ $s['label'] }}
-                                                    </button>
+                                                    </span>
                                                 @empty
                                                     <span class="text-muted small">N/A</span>
                                                 @endforelse
                                             </div>
+                                        </td>
+                                        <td class="small text-muted">
+                                            {{ \Carbon\Carbon::parse($r->created_at)->format('d/m/Y H:i') }}
+                                        </td>
+                                        <td class="small fw-bold">
+                                            <i class="fas fa-user-circle me-1 text-muted"></i>
+                                            {{ $r->issuer_name ?? 'N/A' }}
                                         </td>
                                         <td>
                                             @if($r->status === 'active')
