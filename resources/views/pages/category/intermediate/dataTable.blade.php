@@ -1,4 +1,3 @@
-@section('css')
     <style>
         .highlight-row {
             background-color: #ecfeff !important;
@@ -41,8 +40,40 @@
         .dataTables_scrollBody {
             border-bottom: 1px solid #e2e8f0;
         }
+
+        .auto-resize {
+            overflow: hidden;
+            resize: none;
+            min-height: 31px;
+            line-height: 1.5;
+            padding-top: 5px;
+            padding-bottom: 5px;
+        }
+
+        /* Make modal inputs slightly taller */
+        .modal-body .form-control:not(textarea) {
+            min-height: 42px;
+            padding: 0.5rem 0.75rem;
+        }
+        
+        /* Fix summernote dialog in modal */
+        .note-modal {
+            z-index: 1060 !important;
+        }
+        
+        /* Fix to hide note-codable in case CSS fails to load */
+        .note-codable {
+            display: none !important;
+        }
+
+        /* Remove border-radius from Summernote */
+        .note-editor, .note-editor .note-toolbar, .note-editor .note-editing-area {
+            border-radius: 0 !important;
+        }
     </style>
-@append
+    <!-- Summernote -->
+    <link rel="stylesheet" href="{{ asset('dataTable/plugins/summernote/summernote-bs4.min.css') }}">
+
 <div class="content-wrapper">
     <div class="card border-0 shadow-sm">
         <div class="card-body">
@@ -72,11 +103,10 @@
             <div class="card-header border-0 bg-transparent pt-4 pb-0 px-4 mb-4">
                 <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
                     <div class="d-flex gap-2">
-                        @if (user_has_permission(session('user')['userId'], 'category_product_create', 'boolean'))
+                        @if ($category_intermediate_create)
                             <button
                                 class="btn btn-primary d-flex align-items-center px-4 fw-bold shadow-sm rounded-pill"
-                                data-toggle="modal" data-target="#intermediate_category"
-                                data-modal_type="#create_modal">
+                                data-toggle="modal" data-target="#create_modal">
                                 <i class="fas fa-plus-circle me-2"></i> Thêm Sản Phẩm
                             </button>
                         @endif
@@ -84,8 +114,7 @@
                         @if ($create_i_Hypothesis_category)
                             <button
                                 class="btn btn-outline-info d-flex align-items-center px-4 fw-bold shadow-sm rounded-pill"
-                                data-toggle="modal" data-target="#intermediate_category"
-                                data-modal_type="#create_hypothesis_modal">
+                                data-toggle="modal" data-target="#create_hypothesis_modal">
                                 <i class="fas fa-vial me-2"></i> Thêm Giả Định
                             </button>
                         @endif
@@ -289,6 +318,12 @@
                                             data-quarantine_forming="{{ $data->quarantine_forming }}"
                                             data-quarantine_coating="{{ $data->quarantine_coating }}"
                                             data-quarantine_time_unit="{{ $data->quarantine_time_unit }}"
+                                            data-API_name="{{ $data->API_name }}"
+                                            data-content="{{ $data->content }}"
+                                            data-description="{{ $data->description }}"
+                                            data-storage_conditions="{{ $data->storage_conditions }}"
+                                            data-avg_core="{{ $data->avg_core }}"
+                                            data-average_unit_weight="{{ $data->average_unit_weight }}"
                                             data-toggle="modal" data-target="#update_modal" title="Sửa">
                                             <i class="fas fa-pen"></i>
                                         </button>
@@ -381,8 +416,28 @@
         </script>
     @endif
 
+    <!-- Summernote JS -->
+    <script src="{{ asset('dataTable/plugins/summernote/summernote-bs4.min.js') }}"></script>
+
     <script>
         $(document).ready(function() {
+            // Master Data for BOM
+            const materialRoles = @json($materialRoles);
+            const materialSpecs = @json($materialSpecs);
+
+            // Initialize Summernote
+            $('.summernote').summernote({
+                minHeight: 100,
+                placeholder: 'Nhập nội dung...',
+                toolbar: [
+                    ['style', ['bold', 'italic', 'underline', 'clear']],
+                    ['font', ['strikethrough', 'superscript', 'subscript']],
+                    ['insert', ['picture']],
+                    ['view', ['fullscreen', 'codeview']]
+                ],
+                dialogsInBody: true
+            });
+
             if ($.fn.DataTable.isDataTable('#data_table_intermediate_category')) {
                 $('#data_table_intermediate_category').DataTable().destroy();
             }
@@ -498,6 +553,14 @@
                 modal.find('select[name="unit_batch_qty"]').val(button.data('unit_batch_qty'));
                 modal.find('select[name="dosage_id"]').val(button.data('dosage_id'));
 
+                // New fields
+                modal.find('input[name="API_name"]').val(button.data('api_name'));
+                modal.find('input[name="content"]').val(button.data('content'));
+                $('#update_description_editor').summernote('code', button.data('description') || '');
+                $('#update_storage_conditions_editor').summernote('code', button.data('storage_conditions') || '');
+                modal.find('input[name="avg_core"]').val(button.data('avg_core'));
+                modal.find('input[name="average_unit_weight"]').val(button.data('average_unit_weight'));
+
                 // Trạng thái các bước
                 modal.find('input[name="weight_1"]').prop('checked', button.data('weight_1') == 1);
                 modal.find('input[name="prepering"]').prop('checked', button.data('prepering') == 1);
@@ -556,6 +619,119 @@
                     if (result.isConfirmed) form.submit();
                 });
             });
+
+            // Sync Summernote div content to hidden inputs on form submit
+            $('#create_modal form').on('submit', function() {
+                $('#create_description_input').val($('#create_description_editor').summernote('code'));
+                $('#create_storage_conditions_input').val($('#create_storage_conditions_editor').summernote('code'));
+            });
+
+            $('#update_modal form').on('submit', function() {
+                $('#update_description_input').val($('#update_description_editor').summernote('code'));
+                $('#update_storage_conditions_input').val($('#update_storage_conditions_editor').summernote('code'));
+            });
+
+            // Add BOM row logic
+            let bomRowIndex = 0;
+            
+            function addBOMRow(type, targetTableId) {
+                let roleOptions = '<option value="">-Chọn-</option>';
+                materialRoles.forEach(role => {
+                    roleOptions += `<option value="${role.name}">${role.name}</option>`;
+                });
+
+                let specOptions = '<option value="">-Chọn-</option>';
+                materialSpecs.forEach(spec => {
+                    specOptions += `<option value="${spec.name}">${spec.name}</option>`;
+                });
+
+                const tr = `
+                    <tr class="bom-row" data-index="${bomRowIndex}">
+                        <td class="text-center align-middle stt-col" style="font-weight:bold;"></td>
+                        <input type="hidden" name="bom[${bomRowIndex}][type]" value="${type}">
+                        <td><textarea class="form-control form-control-sm auto-resize" name="bom[${bomRowIndex}][code]" placeholder="Mã NL" rows="1"></textarea></td>
+                        <td><textarea class="form-control form-control-sm auto-resize" name="bom[${bomRowIndex}][name]" placeholder="Thành phần" rows="1"></textarea></td>
+                        <td>
+                            <select class="form-control form-control-sm" name="bom[${bomRowIndex}][role]">
+                                ${roleOptions}
+                            </select>
+                        </td>
+                        <td><textarea class="form-control form-control-sm auto-resize" name="bom[${bomRowIndex}][manufacturer]" placeholder="Nhà SX" rows="1"></textarea></td>
+                        <td>
+                            <select class="form-control form-control-sm" name="bom[${bomRowIndex}][Spec]">
+                                ${specOptions}
+                            </select>
+                        </td>
+                        <td class="align-middle">
+                            <div class="d-flex align-items-center mb-1">
+                                <input type="number" step="any" class="form-control form-control-sm" name="bom[${bomRowIndex}][total_amount_per_unit]" placeholder="Tổng">
+                                <button type="button" class="btn btn-xs btn-outline-info ms-1 btn_add_sub_amount" title="Chia phần"><i class="fa fa-plus"></i></button>
+                            </div>
+                            <div class="sub-amounts-container"></div>
+                        </td>
+                        <td><input type="number" step="any" class="form-control form-control-sm" name="bom[${bomRowIndex}][total_amount_per_batch]" placeholder="1 lô"></td>
+                        <td class="text-center align-middle">
+                            <button type="button" class="btn btn-xs btn-danger btn_remove_bom_row"><i class="fa fa-trash"></i></button>
+                        </td>
+                    </tr>
+                `;
+                $(`#${targetTableId}`).append(tr);
+                bomRowIndex++;
+                updateBOMSTT();
+            }
+
+            // Handle adding sub-amounts
+            $(document).on('click', '.btn_add_sub_amount', function() {
+                const row = $(this).closest('.bom-row');
+                const rowIndex = row.data('index');
+                const container = row.find('.sub-amounts-container');
+                const subIndex = container.find('.sub-amount-item').length;
+
+                const subHtml = `
+                    <div class="sub-amount-item d-flex align-items-center mt-1">
+                        <input type="number" step="any" class="form-control form-control-sm py-0" 
+                            name="bom[${rowIndex}][sub_amounts][${subIndex}][amount_per_unit]" 
+                            placeholder="Lượng" style="height: 22px; font-size: 0.7rem; width: 80px;">
+                        <textarea class="form-control form-control-sm py-0 ms-1 auto-resize" 
+                            name="bom[${rowIndex}][sub_amounts][${subIndex}][note]" 
+                            placeholder="Ghi chú" rows="1" style="min-height: 22px; font-size: 0.7rem;"></textarea>
+                        <button type="button" class="btn btn-xs btn-link text-danger p-0 ms-1 btn_remove_sub_amount"><i class="fa fa-times"></i></button>
+                    </div>
+                `;
+                container.append(subHtml);
+            });
+
+            // Auto-resize logic
+            $(document).on('input', '.auto-resize', function() {
+                this.style.height = 'auto';
+                this.style.height = (this.scrollHeight) + 'px';
+            });
+
+            $(document).on('click', '.btn_remove_sub_amount', function() {
+                $(this).closest('.sub-amount-item').remove();
+            });
+
+            $('#btn_add_bom_row_type_0').click(function() {
+                addBOMRow(0, 'bom_table_body_type_0');
+            });
+
+            $('#btn_add_bom_row_type_1').click(function() {
+                addBOMRow(1, 'bom_table_body_type_1');
+            });
+
+            $(document).on('click', '.btn_remove_bom_row', function() {
+                $(this).closest('tr').remove();
+                updateBOMSTT();
+            });
+
+            function updateBOMSTT() {
+                $('#bom_table_body_type_0 tr').each(function(index) {
+                    $(this).find('.stt-col').text(index + 1);
+                });
+                $('#bom_table_body_type_1 tr').each(function(index) {
+                    $(this).find('.stt-col').text(index + 1);
+                });
+            }
         });
 
         $(document).on('click', '.btn-recipe', function() {

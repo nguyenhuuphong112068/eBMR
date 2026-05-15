@@ -1,31 +1,12 @@
 @section('css')
     <style>
-        .highlight-row {
-            background-color: #ecfeff !important;
-        }
-
-        /* DataTable Personalization */
+        .highlight-row { background-color: #ecfeff !important; }
         .dataTables_wrapper .dataTables_paginate .paginate_button.current {
             background: var(--primary) !important;
             border-color: var(--primary) !important;
             color: white !important;
             border-radius: 8px !important;
         }
-
-        .dataTables_wrapper .dataTables_filter input {
-            border: 2px solid #e2e8f0 !important;
-            border-radius: 10px !important;
-            padding: 6px 12px !important;
-            transition: all var(--transition);
-            background: white !important;
-        }
-
-        .dataTables_wrapper .dataTables_filter input:focus {
-            border-color: var(--primary) !important;
-            outline: none;
-            box-shadow: 0 0 0 4px rgba(8, 145, 178, 0.1);
-        }
-
         .table thead th {
             background-color: #f1f5f9;
             color: var(--bg-dark);
@@ -36,10 +17,6 @@
             border-bottom: 2px solid #e2e8f0 !important;
             vertical-align: middle !important;
         }
-
-        .dataTables_scrollBody {
-            border-bottom: 1px solid #e2e8f0;
-        }
     </style>
 @append
 
@@ -47,7 +24,7 @@
     <div class="card border-0 shadow-sm">
         <div class="card-header border-0 bg-transparent pt-4 pb-0 px-4">
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
-                <h3 class="card-title fw-bold text-dark">Danh sách Loại Tài Liệu</h3>
+                <h3 class="card-title fw-bold text-dark">Danh sách Tiêu Chuẩn Nguyên Liệu</h3>
                 <button class="btn btn-primary d-flex align-items-center px-4 fw-bold shadow-sm rounded-pill" 
                     data-toggle="modal" data-target="#createModal">
                     <i class="fas fa-plus-circle me-2"></i> Thêm mới
@@ -55,53 +32,39 @@
             </div>
         </div>
         <div class="card-body">
-            <table id="data_table_document_type" class="table table-hover w-100">
+            <table id="data_table_material_spec" class="table table-hover w-100">
                 <thead>
                     <tr>
-                        <th>STT</th>
-                        <th>Mã Loại Tài Liệu</th>
-                        <th>Tên Loại Tài Liệu</th>
-                        <th class="text-center">Trạng Thái</th>
+                        <th style="width: 50px;">STT</th>
+                        <th>Tên Tiêu Chuẩn</th>
                         <th>Người Tạo</th>
                         <th>Ngày Tạo</th>
-                        <th class="text-center">Thao Tác</th>
+                        <th class="text-center" style="width: 150px;">Thao Tác</th>
                     </tr>
                 </thead>
                 <tbody>
                     @foreach ($datas as $data)
                         <tr>
-                            <td>{{ $loop->iteration }} </td>
-                            <td class="fw-bold text-primary">{{ $data->shortName }}</td>
-                            <td class="fw-medium">{{ $data->name }}</td>
-                            <td class="text-center">
-                                @if($data->active)
-                                    <span class="badge bg-light-success text-success border border-success px-3 rounded-pill">Hoạt động</span>
-                                @else
-                                    <span class="badge bg-light-danger text-danger border border-danger px-3 rounded-pill">Tạm ngưng</span>
-                                @endif
-                            </td>
-                            <td><span class="small fw-bold">{{ $data->prepareBy ?? '-' }}</span></td>
+                            <td>{{ $loop->iteration }}</td>
+                            <td class="fw-bold text-primary">{{ $data->name }}</td>
+                            <td><span class="small fw-bold">{{ $data->created_by ?? '-' }}</span></td>
                             <td><span class="text-muted small">{{ \Carbon\Carbon::parse($data->created_at)->format('d/m/Y') }}</span></td>
                             <td class="text-center align-middle">
                                 <div class="d-flex gap-1 justify-content-center">
                                     <button type="button" class="btn btn-sm btn-icon btn-light-warning border shadow-sm btn-edit" 
                                         data-id="{{ $data->id }}" 
-                                        data-shortname="{{ $data->shortName }}" 
                                         data-name="{{ $data->name }}"
                                         data-toggle="modal" 
                                         data-target="#updateModal" title="Sửa">
                                         <i class="fas fa-pen"></i>
                                     </button>
 
-                                    <form class="form-deActive d-inline" action="{{ route('pages.materData.documentType.deActive') }}" method="POST">
+                                    <form class="form-delete d-inline" action="{{ route('pages.materData.materialSpec.delete') }}" method="POST">
                                         @csrf
                                         <input type="hidden" name="id" value="{{ $data->id }}">
-                                        <input type="hidden" name="active" value="{{ $data->active }}">
-                                        <button type="submit" class="btn btn-sm btn-icon {{ $data->active ? 'btn-light-danger' : 'btn-light-success' }} border shadow-sm btn-deactive-confirm" 
-                                            data-name="{{ $data->name }}" 
-                                            data-active="{{ $data->active }}"
-                                            title="{{ $data->active ? 'Vô hiệu hóa' : 'Kích hoạt' }}">
-                                            <i class="fas fa-{{ $data->active ? 'lock' : 'unlock' }}"></i>
+                                        <button type="submit" class="btn btn-sm btn-icon btn-light-danger border shadow-sm btn-delete-confirm" 
+                                            data-name="{{ $data->name }}" title="Xóa">
+                                            <i class="fas fa-trash"></i>
                                         </button>
                                     </form>
                                 </div>
@@ -129,11 +92,11 @@
 
     <script>
         $(document).ready(function() {
-            if ($.fn.DataTable.isDataTable('#data_table_document_type')) {
-                $('#data_table_document_type').DataTable().destroy();
+            if ($.fn.DataTable.isDataTable('#data_table_material_spec')) {
+                $('#data_table_material_spec').DataTable().destroy();
             }
 
-            const table = $('#data_table_document_type').DataTable({
+            $('#data_table_material_spec').DataTable({
                 paging: true,
                 lengthChange: true,
                 searching: true,
@@ -141,10 +104,6 @@
                 info: true,
                 autoWidth: false,
                 pageLength: 25,
-                scrollY: "55vh",
-                scrollX: true,
-                scrollCollapse: true,
-                lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "Tất cả"]],
                 language: {
                     search: "Tìm nhanh:",
                     lengthMenu: "Xem _MENU_ dòng",
@@ -160,25 +119,22 @@
                 const button = $(this);
                 const modal = $('#updateModal');
                 modal.find('#update_id').val(button.data('id'));
-                modal.find('#update_shortName').val(button.data('shortname'));
                 modal.find('#update_name').val(button.data('name'));
             });
 
-            $('.form-deActive').on('submit', function(e) {
+            $('.form-delete').on('submit', function(e) {
                 e.preventDefault();
                 const form = this;
                 const name = $(form).find('button').data('name');
-                const active = $(form).find('button').data('active');
-                const actionText = active ? 'vô hiệu hóa' : 'kích hoạt';
 
                 Swal.fire({
-                    title: `Xác nhận ${actionText}?`,
-                    text: `Bạn có chắc chắn muốn ${actionText} loại tài liệu: ${name}?`,
+                    title: `Xác nhận xóa?`,
+                    text: `Bạn có chắc chắn muốn xóa tiêu chuẩn: ${name}?`,
                     icon: 'warning',
                     showCancelButton: true,
-                    confirmButtonColor: '#0891b2',
-                    cancelButtonColor: '#ef4444',
-                    confirmButtonText: 'Xác nhận',
+                    confirmButtonColor: '#ef4444',
+                    cancelButtonColor: '#64748b',
+                    confirmButtonText: 'Xóa ngay',
                     cancelButtonText: 'Hủy'
                 }).then((result) => {
                     if (result.isConfirmed) {

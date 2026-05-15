@@ -122,13 +122,25 @@
                                 class="nav-link"><i class="far fa-circle nav-icon text-info"></i>
                                 <p>Phòng Ban</p>
                             </a></li>
-                        <li class="nav-item"><a href="{{ route('pages.materData.status.list') }}" class="nav-link"><i
-                                    class="far fa-circle nav-icon text-warning"></i>
-                                <p>Trạng Thái</p>
+                        <li class="nav-item"><a href="{{ route('pages.materData.unit.list') }}"
+                                class="nav-link"><i class="far fa-circle nav-icon text-primary"></i>
+                                <p>Đơn Vị</p>
                             </a></li>
-                        <li class="nav-item"><a href="{{ route('pages.materData.documentType.list') }}"
+                        <li class="nav-item"><a href="{{ route('pages.materData.productName.list') }}"
+                                class="nav-link"><i class="far fa-circle nav-icon text-secondary"></i>
+                                <p>Tên Sản Phẩm</p>
+                            </a></li>
+                        <li class="nav-item"><a href="{{ route('pages.materData.specification.list') }}"
+                                class="nav-link"><i class="far fa-circle nav-icon text-danger"></i>
+                                <p>Qui Cách Đóng Gói</p>
+                            </a></li>
+                        <li class="nav-item"><a href="{{ route('pages.materData.materialRole.list') }}"
+                                class="nav-link"><i class="far fa-circle nav-icon text-warning"></i>
+                                <p>Chức năng NL</p>
+                            </a></li>
+                        <li class="nav-item"><a href="{{ route('pages.materData.materialSpec.list') }}"
                                 class="nav-link"><i class="far fa-circle nav-icon text-success"></i>
-                                <p>Loại Tài Liệu</p>
+                                <p>Tiêu chuẩn NL</p>
                             </a></li>
                     </ul>
                 </li>
@@ -325,7 +337,12 @@
                     </ul>
                 </li> --}}
 
-
+                <li class="nav-item has-treeview {{ str_contains(url()->current(), 'ai-training') ? 'menu-open' : '' }}">
+                    <a href="{{ route('ai_training.index') }}" class="nav-link {{ str_contains(url()->current(), 'ai-training') ? 'active' : '' }}">
+                        <i class="fas fa-brain"></i>
+                        <p>Huấn Luyện AI</p>
+                    </a>
+                </li>
 
                 <li class="nav-item has-treeview">
                     <a href="#" class="nav-link">

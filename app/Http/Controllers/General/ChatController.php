@@ -172,7 +172,7 @@ class ChatController extends Controller
             ->exists();
 
         if ($targetUser && $userId != 9999) {
-            $aiResponse = \App\Services\AIService::getResponse($message);
+            $aiResponse = \App\Services\AIService::getResponse($message, $groupId);
 
             DB::table('chat_messages')->insert([
                 'group_id' => $groupId,

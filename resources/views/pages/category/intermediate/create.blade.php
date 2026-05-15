@@ -1,16 +1,17 @@
 <!-- Modal -->
 <div class="modal fade" id="create_modal" tabindex="-1" role="dialog" aria-labelledby="productNameModalLabel"
     aria-hidden="true">
-    <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-dialog" style="max-width: 95%;" role="document">
 
         <form action="{{ route('pages.category.intermediate.store') }}" method="POST">
             @csrf
 
             <div class="modal-content border-0 shadow-lg" style="border-radius: 20px; overflow: hidden;">
-                <div class="modal-header border-0 bg-light py-3 px-4">
+                <div class="modal-header border-0 bg-light py-2 px-4">
                     <div class="d-flex align-items-center">
-                        <img src="{{ asset('img/iconstella.svg') }}" style="max-height: 40px; margin-right: 15px;">
-                        <h5 class="modal-title fw-bold" id="productNameModalLabel" style="color: var(--primary);">
+                        <img src="{{ asset('img/iconstella.svg') }}" style="max-height: 35px; margin-right: 15px;">
+                        <h5 class="modal-title fw-bold" id="productNameModalLabel"
+                            style="color: var(--primary); font-size: 1.1rem;">
                             Tạo Mới Danh Mục Bán Thành Phẩm
                         </h5>
                     </div>
@@ -19,232 +20,348 @@
                     </button>
                 </div>
 
-                <div class="modal-body p-4">
+                <div class="modal-body p-4 pt-3">
                     <input type="hidden" name="is_Hypothesis" value="0">
 
-                    {{-- NAME --}}
-                    <div class="form-group mb-4">
-                        <label class="fw-bold small text-uppercase text-muted mb-2">Tên Sản Phẩm</label>
-                        <select class="form-control" name="product_name_id">
-                            <option> --- Chọn Sản Phẩm --- </option>
-                            @foreach ($productNames as $productName)
-                                <option value="{{ $productName->id }}"
-                                    {{ old('product_name_id') == $productName->id ? 'selected' : '' }}>
-                                    {{ $productName->name }}
-                                </option>
-                            @endforeach
-                        </select>
-                        @error(' product_name_id', 'createErrors')
-                            <div class="alert alert-danger mt-1 py-1 small">{{ $message }}</div>
-                        @enderror
-                    </div>
+                    <div class="row">
+                        <!-- Left Column: Product Info -->
+                        <div class="col-lg-4 border-right pr-4">
 
-                    {{-- Mã TBP và Dạng Bào Chế --}}
-                    <div class="row mb-4">
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label class="fw-bold small text-uppercase text-muted mb-2">Mã Bán Thành Phẩm</label>
-                                <input type="text" class="form-control" name="intermediate_code"
-                                    value="{{ old('intermediate_code') }}" placeholder="Mã định danh">
-                                @error('intermediate_code', 'createErrors')
-                                    <div class="alert alert-danger py-1 small">{{ $message }}</div>
-                                @enderror
-                            </div>
-                        </div>
-
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label class="fw-bold small text-uppercase text-muted mb-2">Dạng Bào Chế</label>
-                                <select class="form-control" name="dosage_id">
-                                    <option> --- Chọn Dạng Bào Chế --- </option>
-                                    @foreach ($dosages as $dosage)
-                                        <option value="{{ $dosage->id }}"
-                                            {{ old('dosage_id') == $dosage->id ? 'selected' : '' }}>
-                                            {{ $dosage->name }}
-                                        </option>
-                                    @endforeach
-                                </select>
-                                @error('dosage_id', 'createErrors')
-                                    <div class="alert alert-danger mt-1 py-1 small">{{ $message }}</div>
-                                @enderror
-                            </div>
-                        </div>
-                    </div>
-
-
-                    {{-- Cở lô --}}
-                    <div class="row mb-4">
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <div class="row">
-                                    <div class="col-md-8">
-                                        <label class="fw-bold small text-uppercase text-muted mb-2">Cỡ Lô (Khối Lượng)</label>
-                                        <input type="number" min="0" step="0.001" class="form-control"
-                                            name="batch_size" value="{{ old('batch_size') }}">
-                                        @error('batch_size', 'createErrors')
-                                            <div class="alert alert-danger py-1 small">{{ $message }}</div>
-                                        @enderror
-                                    </div>
-
-                                    <div class="col-md-4">
-                                        <label class="fw-bold small text-uppercase text-muted mb-2">Đơn Vị</label>
-                                        <select class="form-control" name="unit_batch_size">
-                                            <option value="Kg"
-                                                {{ old('unit_batch_size') == 'Kg' ? 'selected' : '' }}>Kg</option>
-                                            <option value="Lít"
-                                                {{ old('unit_batch_size') == 'Lít' ? 'selected' : '' }}>Lít</option>
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <div class="row">
-                                    <div class="col-md-8">
-                                        <label class="fw-bold small text-uppercase text-muted mb-2">Cỡ Lô (ĐV Liều)</label>
-                                        <input type="number" min="0" class="form-control" name="batch_qty"
-                                            value="{{ old('batch_qty') }}">
-                                        @error('batch_qty', 'createErrors')
-                                            <div class="alert alert-danger py-1 small">{{ $message }}</div>
-                                        @enderror
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="fw-bold small text-uppercase text-muted mb-2">Đơn Vị</label>
-                                        <select class="form-control" name="unit_batch_qty">
-                                            <option> - Chọn ĐV - </option>
-                                            @foreach ($units as $unit)
-                                                <option value="{{ $unit->code }}"
-                                                    {{ old('unit_batch_qty') == $unit->code ? 'selected' : '' }}>
-                                                    {{ $unit->code }}
+                            {{-- Row 1: Tên & Mã --}}
+                            <div class="row mb-3">
+                                <div class="col-md-8">
+                                    <div class="form-group mb-2">
+                                        <label class="fw-bold small text-uppercase text-muted mb-1">Tên Sản Phẩm</label>
+                                        <select class="form-control" name="product_name_id">
+                                            <option> --- Chọn Sản Phẩm --- </option>
+                                            @foreach ($productNames as $productName)
+                                                <option value="{{ $productName->id }}"
+                                                    {{ old('product_name_id') == $productName->id ? 'selected' : '' }}>
+                                                    {{ $productName->name }}
                                                 </option>
                                             @endforeach
                                         </select>
-                                        @error('unit_batch_qty', 'createErrors')
-                                            <div class="alert alert-danger py-1 small">{{ $message }}</div>
+                                        @error('product_name_id', 'createErrors')
+                                            <div class="alert alert-danger mt-1 py-0 small px-2">{{ $message }}</div>
+                                        @enderror
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-group mb-2">
+                                        <label class="fw-bold small text-uppercase text-muted mb-1">Mã Bán Thành
+                                            Phẩm</label>
+                                        <input type="text" class="form-control" name="intermediate_code"
+                                            value="{{ old('intermediate_code') }}" placeholder="Mã định danh">
+                                        @error('intermediate_code', 'createErrors')
+                                            <div class="alert alert-danger mt-1 py-0 small px-2">{{ $message }}</div>
                                         @enderror
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    </div>
 
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label class="fw-bold small text-uppercase text-primary">Công Đoạn Bao Gồm</label>
-                        </div>
-                        <div class="col-md-6 text-end">
-                            <div class="d-inline-flex align-items-center bg-light rounded-pill px-3 py-1">
-                                <span class="small fw-bold me-2">Thời Gian Biệt Trữ</span>
-                                <input type="checkbox" name="quarantine_time_unit" checked data-bootstrap-switch>
+                            {{-- Row 2: Dạng bào chế & Hàm lượng --}}
+                            <div class="row mb-3">
+                                <div class="col-md-4">
+                                    <div class="form-group mb-2">
+                                        <label class="fw-bold small text-uppercase text-muted mb-1">Dạng Bào Chế</label>
+                                        <select class="form-control" name="dosage_id">
+                                            <option> --- Chọn --- </option>
+                                            @foreach ($dosages as $dosage)
+                                                <option value="{{ $dosage->id }}"
+                                                    {{ old('dosage_id') == $dosage->id ? 'selected' : '' }}>
+                                                    {{ $dosage->name }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                        @error('dosage_id', 'createErrors')
+                                            <div class="alert alert-danger mt-1 py-0 small px-2">{{ $message }}</div>
+                                        @enderror
+                                    </div>
+                                </div>
+                                <div class="col-md-5">
+                                    <div class="form-group mb-2">
+                                        <label class="fw-bold small text-uppercase text-muted mb-1">Hàm lượng nhãn (Tên
+                                            Hoạt Chất)</label>
+                                        <input type="text" class="form-control" name="API_name"
+                                            value="{{ old('API_name') }}" placeholder="Abiraterone acetate">
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="form-group mb-2">
+                                        <label class="fw-bold small text-uppercase text-muted mb-1">Hàm lượng</label>
+                                        <input type="text" class="form-control" name="content"
+                                            value="{{ old('content') }}" placeholder="250 mg">
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                    </div>
 
-                    <div class="row">
-                        <div class="col-md-12">
+                            <div class="form-group mb-2">
+                                <label class="fw-bold small text-uppercase text-muted mb-1">Mô tả sản phẩm</label>
+                                <div class="summernote" id="create_description_editor">{!! old('description') !!}</div>
+                                <input type="hidden" name="description" id="create_description_input"
+                                    value="{{ old('description') }}">
+                            </div>
+
+                            <div class="form-group mb-3">
+                                <label class="fw-bold small text-uppercase text-muted mb-1">Điều kiện bảo quản</label>
+                                <div class="summernote" id="create_storage_conditions_editor">{!! old('storage_conditions') !!}
+                                </div>
+                                <input type="hidden" name="storage_conditions" id="create_storage_conditions_input"
+                                    value="{{ old('storage_conditions') }}">
+                            </div>
+
+                            {{-- Row 4: Cỡ lô --}}
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <div class="form-group mb-2">
+                                        <div class="row no-gutters">
+                                            <div class="col-8 pe-1">
+                                                <label class="fw-bold small text-uppercase text-muted mb-1">Cỡ Lô (Khối
+                                                    Lượng)</label>
+                                                <input type="number" min="0" step="0.001" class="form-control"
+                                                    name="batch_size" value="{{ old('batch_size') }}">
+                                            </div>
+                                            <div class="col-4 ps-1">
+                                                <label class="fw-bold small text-uppercase text-muted mb-1">Đơn
+                                                    Vị</label>
+                                                <select class="form-control" name="unit_batch_size">
+                                                    <option value="Kg"
+                                                        {{ old('unit_batch_size') == 'Kg' ? 'selected' : '' }}>Kg
+                                                    </option>
+                                                    <option value="Lít"
+                                                        {{ old('unit_batch_size') == 'Lít' ? 'selected' : '' }}>Lít
+                                                    </option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        @error('batch_size', 'createErrors')
+                                            <div class="alert alert-danger mt-1 py-0 small px-2">{{ $message }}</div>
+                                        @enderror
+                                    </div>
+                                </div>
+
+                                <div class="col-md-6">
+                                    <div class="form-group mb-2">
+                                        <div class="row no-gutters">
+                                            <div class="col-8 pe-1">
+                                                <label class="fw-bold small text-uppercase text-muted mb-1">Cỡ Lô (ĐV
+                                                    Liều)</label>
+                                                <input type="number" min="0" class="form-control"
+                                                    name="batch_qty" value="{{ old('batch_qty') }}">
+                                            </div>
+                                            <div class="col-4 ps-1">
+                                                <label class="fw-bold small text-uppercase text-muted mb-1">Đơn
+                                                    Vị</label>
+                                                <select class="form-control" name="unit_batch_qty">
+                                                    <option value="">-Chọn-</option>
+                                                    @foreach ($units as $unit)
+                                                        <option value="{{ $unit->code }}"
+                                                            {{ old('unit_batch_qty') == $unit->code ? 'selected' : '' }}>
+                                                            {{ $unit->code }}
+                                                        </option>
+                                                    @endforeach
+                                                </select>
+                                            </div>
+                                        </div>
+                                        @error('batch_qty', 'createErrors')
+                                            <div class="alert alert-danger mt-1 py-0 small px-2">{{ $message }}</div>
+                                        @enderror
+                                    </div>
+                                </div>
+                            </div>
+
+                            {{-- Section Công đoạn --}}
+                            <div class="row align-items-center mb-2">
+                                <div class="col-md-6">
+                                    <label class="fw-bold small text-uppercase text-primary mb-0">Công Đoạn Bao
+                                        Gồm</label>
+                                </div>
+                                <div class="col-md-6 text-right">
+                                    <div
+                                        class="d-inline-flex align-items-center bg-light rounded-pill px-2 py-0 border">
+                                        <span class="small fw-bold me-2" style="font-size: 0.75rem;">Đơn vị:</span>
+                                        <input type="checkbox" name="quarantine_time_unit" checked
+                                            data-bootstrap-switch>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div class="bg-light p-3 rounded" style="border: 1px dashed rgba(8, 145, 178, 0.3);">
+                                <div class="row">
+                                    <!-- Column 1 -->
+                                    <div class="col-md-6 border-right">
+                                        <!-- Cân Nguyên Liệu -->
+                                        <div class="form-group mb-2">
+                                            <div class="d-flex align-items-center justify-content-between">
+                                                <div class="icheck-primary d-inline">
+                                                    <input type="checkbox" class="step-checkbox" id="checkbox1"
+                                                        checked name="weight_1">
+                                                    <label for="checkbox1" class="small fw-bold mb-0">Cân Nguyên
+                                                        Liệu</label>
+                                                </div>
+                                                <input type="number" min="0"
+                                                    class="form-control form-control-sm step-input shadow-sm ms-2"
+                                                    style="width: 80px;" placeholder="BT" name="quarantine_weight">
+                                            </div>
+                                        </div>
 
-                                <!-- Cân Nguyên Liệu -->
-                                <div class="form-group row align-items-center mb-3">
-                                    <div class="col-md-6">
-                                        <div class="icheck-primary">
-                                            <input type="checkbox" class="step-checkbox" id="checkbox1" checked
-                                                name = "weight_1">
-                                            <label for="checkbox1" class="fw-bold">Cân Nguyên Liệu</label>
+                                        <!-- Pha Chế -->
+                                        <div class="form-group mb-2">
+                                            <div class="d-flex align-items-center justify-content-between">
+                                                <div class="icheck-primary d-inline">
+                                                    <input type="checkbox" class="step-checkbox" id="checkbox2"
+                                                        checked name="prepering">
+                                                    <label for="checkbox2" class="small fw-bold mb-0">Pha Chế</label>
+                                                </div>
+                                                <input type="number" min="0"
+                                                    class="form-control form-control-sm step-input shadow-sm ms-2"
+                                                    style="width: 80px;" placeholder="BT"
+                                                    name="quarantine_preparing">
+                                            </div>
+                                        </div>
+
+                                        <!-- Trộn Hoàn Tất -->
+                                        <div class="form-group mb-0">
+                                            <div class="d-flex align-items-center justify-content-between">
+                                                <div class="icheck-primary d-inline">
+                                                    <input type="checkbox" class="step-checkbox" id="checkbox3"
+                                                        checked name="blending">
+                                                    <label for="checkbox3" class="small fw-bold mb-0">Trộn Hoàn
+                                                        Tất</label>
+                                                </div>
+                                                <input type="number" min="0"
+                                                    class="form-control form-control-sm step-input shadow-sm ms-2"
+                                                    style="width: 80px;" placeholder="BT" name="quarantine_blending">
+                                            </div>
                                         </div>
                                     </div>
-                                    <div class="col-md-6">
-                                        <input type="number" min="0" class="form-control step-input shadow-sm"
-                                            placeholder="Thời gian biệt trữ" name ="quarantine_weight">
-                                    </div>
-                                </div>
 
-                                <!-- Pha Chế -->
-                                <div class="form-group row align-items-center mb-3">
+                                    <!-- Column 2 -->
                                     <div class="col-md-6">
-                                        <div class="icheck-primary">
-                                            <input type="checkbox" class="step-checkbox" id="checkbox2" checked
-                                                name = "prepering">
-                                            <label for="checkbox2" class="fw-bold">Pha Chế</label>
+                                        <!-- Định Hình -->
+                                        <div class="form-group mb-2">
+                                            <div class="d-flex align-items-center justify-content-between">
+                                                <div class="icheck-primary d-inline">
+                                                    <input type="checkbox" class="step-checkbox" id="checkbox4"
+                                                        checked name="forming">
+                                                    <label for="checkbox4" class="small fw-bold mb-0">Định
+                                                        Hình</label>
+                                                </div>
+                                                <input type="number" min="0"
+                                                    class="form-control form-control-sm step-input shadow-sm ms-2"
+                                                    style="width: 80px;" placeholder="BT" name="quarantine_forming">
+                                            </div>
+                                        </div>
+
+                                        <!-- Bao Phim -->
+                                        <div class="form-group mb-2">
+                                            <div class="d-flex align-items-center justify-content-between">
+                                                <div class="icheck-primary d-inline">
+                                                    <input type="checkbox" class="step-checkbox" id="checkbox5"
+                                                        checked name="coating">
+                                                    <label for="checkbox5" class="small fw-bold mb-0">Bao Phim</label>
+                                                </div>
+                                                <input type="number" min="0"
+                                                    class="form-control form-control-sm step-input shadow-sm ms-2"
+                                                    style="width: 80px;" placeholder="BT" name="quarantine_coating">
+                                            </div>
+                                        </div>
+
+                                        <!-- Tổng -->
+                                        <div class="form-group mb-0">
+                                            <div class="d-flex align-items-center justify-content-between">
+                                                <div class="icheck-info d-inline">
+                                                    <input type="checkbox" class="step-checkbox" id="checkbox6"
+                                                        name="quarantine_total_checked">
+                                                    <label for="checkbox6" class="small fw-bold text-info mb-0">Tổng
+                                                        Biệt Trữ</label>
+                                                </div>
+                                                <input type="number" min="0"
+                                                    class="form-control form-control-sm step-input shadow-sm border-info ms-2"
+                                                    style="width: 80px;" placeholder="Tổng" name="quarantine_total">
+                                            </div>
                                         </div>
                                     </div>
-                                    <div class="col-md-6">
-                                        <input type="number" min="0" class="form-control step-input shadow-sm"
-                                            placeholder="Thời gian biệt trữ" name ="quarantine_preparing">
-                                    </div>
                                 </div>
+                            </div>
 
-                                <!-- Trộn Hoàn Tất -->
-                                <div class="form-group row align-items-center mb-3">
-                                    <div class="col-md-6">
-                                        <div class="icheck-primary">
-                                            <input type="checkbox" class="step-checkbox" id="checkbox3" checked
-                                                name = "blending">
-                                            <label for="checkbox3" class="fw-bold">Trộn Hoàn Tất</label>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <input type="number" min="0" class="form-control step-input shadow-sm"
-                                            placeholder="Thời gian biệt trữ" name ="quarantine_blending">
-                                    </div>
-                                </div>
+                        </div>
+                        <!-- End Left Column -->
 
-                                <!-- Định Hình -->
-                                <div class="form-group row align-items-center mb-3">
-                                    <div class="col-md-6">
-                                        <div class="icheck-primary">
-                                            <input type="checkbox" class="step-checkbox" id="checkbox4" checked
-                                                name = "forming">
-                                            <label for="checkbox4" class="fw-bold">Định Hình</label>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <input type="number" min="0" class="form-control step-input shadow-sm"
-                                            placeholder="Thời gian biệt trữ" name ="quarantine_forming">
-                                    </div>
-                                </div>
+                        <!-- Right Column: BOM -->
+                        <div class="col-lg-8 pl-4">
+                            <label class="fw-bold small text-uppercase text-primary mb-1">1. NGUYÊN LIỆU PHA CHẾ
+                            </label>
+                            <div class="table-responsive bg-white border rounded mb-4">
+                                <table class="table table-sm table-bordered mb-0">
+                                    <thead class="bg-light text-center align-middle" style="font-size: 0.8rem;">
+                                        <tr>
+                                            <th style="width: 40px;">STT</th>
+                                            <th>Mã nguyên liệu</th>
+                                            <th>Thành phần</th>
+                                            <th>Chức năng</th>
+                                            <th>Nhà sản xuất</th>
+                                            <th>Tiêu chuẩn</th>
+                                            <th style="width: 150px;">
+                                                1 viên (mg)
+                                                <input type="number" step="any" class="form-control form-control-sm mt-1 text-center border-primary" 
+                                                       name="avg_core" id="update_avg_core" value="{{ old('avg_core') }}" placeholder="Nhân TB" title="Khối lượng nhân trung bình">
+                                            </th>
+                                            <th style="width: 80px;">Lô tiêu chuẩn</th>
+                                            <th style="width: 40px;">
+                                                <button type="button" class="btn btn-xs btn-success"
+                                                    id="btn_add_bom_row_type_0" title="Thêm dòng loại 0">
+                                                    <i class="fa fa-plus"></i>
+                                                </button>
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="bom_table_body_type_0">
+                                        <!-- BOM rows for type 0 will be appended here -->
+                                    </tbody>
+                                </table>
+                            </div>
 
-                                <!-- Bao Phim -->
-                                <div class="form-group row align-items-center mb-3">
-                                    <div class="col-md-6">
-                                        <div class="icheck-primary">
-                                            <input type="checkbox" class="step-checkbox" id="checkbox5" checked
-                                                name = "coating">
-                                            <label for="checkbox5" class="fw-bold">Bao Phim</label>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <input type="number" min="0" class="form-control step-input shadow-sm"
-                                            placeholder="Thời gian biệt trữ" name ="quarantine_coating">
-                                    </div>
-                                </div>
-
-                                <!-- Tổng -->
-                                <div class="form-group row align-items-center mb-0 border-top pt-3 mt-2">
-                                    <div class="col-md-6">
-                                        <div class="icheck-info">
-                                            <input type="checkbox" class="step-checkbox" id="checkbox6"
-                                                name ="quarantine_total_checked">
-                                            <label for="checkbox6" class="fw-bold text-info small">Tổng biệt trữ từ PC đến trước ĐGSC</label>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <input type="number" min="0" class="form-control step-input shadow-sm border-info"
-                                            placeholder="Tổng cộng" name ="quarantine_total">
-                                    </div>
-                                </div>
-
+                            <label class="fw-bold small text-uppercase text-primary mb-1">2. NGUYÊN LIỆU KHÁC (BAO
+                                PHIM/NANG)
+                            </label>
+                            <div class="table-responsive bg-white border rounded">
+                                <table class="table table-sm table-bordered mb-0">
+                                    <thead class="bg-light text-center align-middle" style="font-size: 0.8rem;">
+                                        <tr>
+                                            <th style="width: 40px;">STT</th>
+                                            <th>Mã nguyên liệu</th>
+                                            <th>Thành phần</th>
+                                            <th>Chức năng</th>
+                                            <th>Nhà sản xuất</th>
+                                            <th>Tiêu chuẩn</th>
+                                            <th style="width: 150px;">
+                                                1 viên (mg)
+                                                <input type="number" step="any" class="form-control form-control-sm mt-1 text-center border-primary" 
+                                                       name="average_unit_weight" id="update_average_unit_weight" value="{{ old('average_unit_weight') }}" placeholder="Viên TB" title="Khối lượng viên trung bình">
+                                            </th>
+                                            <th style="width: 80px;">Lô tiêu chuẩn</th>
+                                            <th style="width: 40px;">
+                                                <button type="button" class="btn btn-xs btn-success"
+                                                    id="btn_add_bom_row_type_1" title="Thêm dòng loại 1">
+                                                    <i class="fa fa-plus"></i>
+                                                </button>
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="bom_table_body_type_1">
+                                        <!-- BOM rows for type 1 will be appended here -->
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
+                        <!-- End Right Column -->
                     </div>
-
                 </div>
 
-                <div class="modal-footer bg-light border-0 py-3 px-4">
-                    <button type="button" class="btn btn-light" data-dismiss="modal">Hủy bỏ</button>
-                    <button type="submit" class="btn btn-primary px-4 shadow-sm">
+                <div class="modal-footer bg-light border-0 py-2 px-4 mt-2">
+                    <button type="button" class="btn btn-light btn-sm px-3" data-dismiss="modal">Hủy bỏ</button>
+                    <button type="submit" class="btn btn-primary btn-sm px-4 shadow-sm fw-bold">
                         Lưu Danh Mục
                     </button>
                 </div>
@@ -264,7 +381,6 @@
         </script>
     @endif
 
-    {{-- Gán mã chỉ tiêu tương ứng với chọn lựa --}}
     <script>
         $(document).ready(function() {
             if (typeof $.fn.bootstrapSwitch === 'function') {
@@ -272,15 +388,14 @@
                     onText: 'Ngày',
                     offText: 'Giờ',
                     onColor: 'success',
-                    offColor: 'danger'
+                    offColor: 'danger',
+                    size: 'mini'
                 });
-                // Khi trang load
                 $("input[data-bootstrap-switch]").each(function() {
                     $(this).bootstrapSwitch('state', $(this).prop('checked'));
                 });
             }
 
-            // Nếu muốn khi modal mở mới khởi tạo
             $('#create_modal').on('shown.bs.modal', function() {
                 if (typeof $.fn.bootstrapSwitch === 'function') {
                     $("input[data-bootstrap-switch]").each(function() {
@@ -289,40 +404,32 @@
                 }
             });
 
-
-            // Xử lý check
             function updateInputs() {
                 if ($("#checkbox6").is(":checked")) {
-                    // Chỉ tác động input 1-5, không đổi trạng thái checkbox
                     for (let i = 1; i <= 5; i++) {
                         const cb = $("#checkbox" + i);
-                        const input = cb.closest(".form-group.row").find(".step-input");
+                        const input = cb.closest(".form-group").find(".step-input");
                         input.val(0).prop("readonly", true);
                     }
-                    $("#checkbox6").closest(".form-group.row").find(".step-input").prop("readonly", false);
+                    $("#checkbox6").closest(".form-group").find(".step-input").prop("readonly", false);
                 } else {
-                    // Quay lại logic cũ
-
                     for (let i = 1; i <= 5; i++) {
                         const cb = $("#checkbox" + i);
-                        const input = cb.closest(".form-group.row").find(".step-input");
-
+                        const input = cb.closest(".form-group").find(".step-input");
                         if (cb.is(":checked")) {
                             input.prop("readonly", false);
                         } else {
                             input.val(0).prop("readonly", true);
                         }
                     }
-                    $("#checkbox6").closest(".form-group.row").find(".step-input").val(0).prop("readonly", true);
+                    $("#checkbox6").closest(".form-group").find(".step-input").val(0).prop("readonly", true);
                 }
             }
 
-            // Lắng nghe thay đổi của tất cả checkbox
             $(".step-checkbox, #checkbox6").on("change", function() {
                 updateInputs();
             });
 
-            // Chạy khi load trang
             updateInputs();
         });
     </script>

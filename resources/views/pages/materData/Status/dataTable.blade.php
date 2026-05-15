@@ -1,58 +1,110 @@
-<link href="{{ asset('css/bootstrap.min.css') }}" rel="stylesheet">
+@section('css')
+    <style>
+        .highlight-row {
+            background-color: #ecfeff !important;
+        }
+
+        /* DataTable Personalization */
+        .dataTables_wrapper .dataTables_paginate .paginate_button.current {
+            background: var(--primary) !important;
+            border-color: var(--primary) !important;
+            color: white !important;
+            border-radius: 8px !important;
+        }
+
+        .dataTables_wrapper .dataTables_filter input {
+            border: 2px solid #e2e8f0 !important;
+            border-radius: 10px !important;
+            padding: 6px 12px !important;
+            transition: all var(--transition);
+            background: white !important;
+        }
+
+        .dataTables_wrapper .dataTables_filter input:focus {
+            border-color: var(--primary) !important;
+            outline: none;
+            box-shadow: 0 0 0 4px rgba(8, 145, 178, 0.1);
+        }
+
+        .table thead th {
+            background-color: #f1f5f9;
+            color: var(--bg-dark);
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+            border-bottom: 2px solid #e2e8f0 !important;
+            vertical-align: middle !important;
+        }
+
+        .dataTables_scrollBody {
+            border-bottom: 1px solid #e2e8f0;
+        }
+    </style>
+@append
+
 <div class="content-wrapper">
-    <div class="card">
-        <div class="card-header mt-4">
-            <h3 class="card-title">Danh sách Trạng Thái</h3>
+    <div class="card border-0 shadow-sm">
+        <div class="card-header border-0 bg-transparent pt-4 pb-0 px-4">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                <h3 class="card-title fw-bold text-dark">Danh sách Trạng Thái</h3>
+                <button class="btn btn-primary d-flex align-items-center px-4 fw-bold shadow-sm rounded-pill" 
+                    data-toggle="modal" data-target="#createModal">
+                    <i class="fas fa-plus-circle me-2"></i> Thêm mới
+                </button>
+            </div>
         </div>
         <div class="card-body">
-            <button class="btn btn-success btn-create mb-2" data-toggle="modal" data-target="#createModal" style="width: 155px">
-                <i class="fas fa-plus"></i> Thêm mới
-            </button>
-
-            <table id="data_table_status" class="table table-bordered table-striped">
-                <thead style="position: sticky; top: 60px; background-color: white; z-index: 1020">
+            <table id="data_table_status" class="table table-hover w-100">
+                <thead>
                     <tr>
                         <th>STT</th>
+                        <th>Mã Trạng Thái</th>
                         <th>Tên Trạng Thái</th>
-                        <th>Trạng Thái</th>
+                        <th class="text-center">Trạng Thái</th>
                         <th>Người Tạo</th>
                         <th>Ngày Tạo</th>
-                        <th>Thao Tác</th>
+                        <th class="text-center">Thao Tác</th>
                     </tr>
                 </thead>
                 <tbody>
                     @foreach ($datas as $data)
                         <tr>
                             <td>{{ $loop->iteration }} </td>
-                            <td>{{ $data->name }}</td>
+                            <td class="fw-bold text-primary">{{ $data->code }}</td>
+                            <td class="fw-medium">{{ $data->name }}</td>
                             <td class="text-center">
                                 @if($data->active)
-                                    <span class="badge badge-success">Hoạt động</span>
+                                    <span class="badge bg-light-success text-success border border-success px-3 rounded-pill">Hoạt động</span>
                                 @else
-                                    <span class="badge badge-danger">Tạm ngưng</span>
+                                    <span class="badge bg-light-danger text-danger border border-danger px-3 rounded-pill">Tạm ngưng</span>
                                 @endif
                             </td>
-                            <td>{{ $data->prepareBy ?? '-' }}</td>
-                            <td>{{ \Carbon\Carbon::parse($data->created_at)->format('d/m/Y') }}</td>
+                            <td><span class="small fw-bold">{{ $data->prepareBy ?? '-' }}</span></td>
+                            <td><span class="text-muted small">{{ \Carbon\Carbon::parse($data->created_at)->format('d/m/Y') }}</span></td>
                             <td class="text-center align-middle">
-                                <button type="button" class="btn btn-warning btn-edit mb-1" 
-                                    data-id="{{ $data->id }}" 
-                                    data-name="{{ $data->name }}"
-                                    data-toggle="modal" 
-                                    data-target="#updateModal">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-
-                                <form class="form-deActive d-inline" action="{{ route('pages.materData.status.deActive') }}" method="POST">
-                                    @csrf
-                                    <input type="hidden" name="id" value="{{ $data->id }}">
-                                    <input type="hidden" name="active" value="{{ $data->active }}">
-                                    <button type="submit" class="btn btn-{{ $data->active ? 'danger' : 'success' }} btn-deactive-confirm" 
-                                        data-name="{{ $data->name }}" 
-                                        data-active="{{ $data->active }}">
-                                        <i class="fas fa-{{ $data->active ? 'lock' : 'unlock' }}"></i>
+                                <div class="d-flex gap-1 justify-content-center">
+                                    <button type="button" class="btn btn-sm btn-icon btn-light-warning border shadow-sm btn-edit" 
+                                        data-id="{{ $data->id }}" 
+                                        data-code="{{ $data->code }}" 
+                                        data-name="{{ $data->name }}"
+                                        data-toggle="modal" 
+                                        data-target="#updateModal" title="Sửa">
+                                        <i class="fas fa-pen"></i>
                                     </button>
-                                </form>
+
+                                    <form class="form-deActive d-inline" action="{{ route('pages.materData.status.deActive') }}" method="POST">
+                                        @csrf
+                                        <input type="hidden" name="id" value="{{ $data->id }}">
+                                        <input type="hidden" name="active" value="{{ $data->active }}">
+                                        <button type="submit" class="btn btn-sm btn-icon {{ $data->active ? 'btn-light-danger' : 'btn-light-success' }} border shadow-sm btn-deactive-confirm" 
+                                            data-name="{{ $data->name }}" 
+                                            data-active="{{ $data->active }}"
+                                            title="{{ $data->active ? 'Vô hiệu hóa' : 'Kích hoạt' }}">
+                                            <i class="fas fa-{{ $data->active ? 'lock' : 'unlock' }}"></i>
+                                        </button>
+                                    </form>
+                                </div>
                             </td>
                         </tr>
                     @endforeach
@@ -62,75 +114,78 @@
     </div>
 </div>
 
-<script src="{{ asset('js/vendor/jquery-1.12.4.min.js') }}"></script>
-<script src="{{ asset('js/popper.min.js') }}"></script>
-<script src="{{ asset('js/bootstrap.min.js') }}"></script>
-<script src="{{ asset('js/sweetalert2.all.min.js') }}"></script>
-
-@if (session('success'))
-    <script>
-        Swal.fire({
-            title: 'Thành công!',
-            text: '{{ session('success') }}',
-            icon: 'success',
-            timer: 1500,
-            showConfirmButton: false
-        });
-    </script>
-@endif
-
-<script>
-    $(document).ready(function() {
-        document.body.style.overflowY = "auto";
-        $('.btn-edit').click(function() {
-            const button = $(this);
-            const modal = $('#updateModal');
-
-            modal.find('#update_id').val(button.data('id'));
-            modal.find('#update_name').val(button.data('name'));
-        });
-
-        $('.form-deActive').on('submit', function(e) {
-            e.preventDefault();
-            const form = this;
-            const name = $(form).find('button').data('name');
-            const active = $(form).find('button').data('active');
-            const actionText = active ? 'vô hiệu hóa' : 'kích hoạt';
-
+@section('script')
+    @if (session('success'))
+        <script>
             Swal.fire({
-                title: `Xác nhận ${actionText}?`,
-                text: `Bạn có chắc chắn muốn ${actionText} trạng thái: ${name}?`,
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#28a745',
-                cancelButtonColor: '#d33',
-                confirmButtonText: 'Đồng ý',
-                cancelButtonText: 'Hủy'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    form.submit();
+                title: 'Thành công!',
+                text: '{{ session('success') }}',
+                icon: 'success',
+                timer: 2000,
+                showConfirmButton: false
+            });
+        </script>
+    @endif
+
+    <script>
+        $(document).ready(function() {
+            if ($.fn.DataTable.isDataTable('#data_table_status')) {
+                $('#data_table_status').DataTable().destroy();
+            }
+
+            const table = $('#data_table_status').DataTable({
+                paging: true,
+                lengthChange: true,
+                searching: true,
+                ordering: true,
+                info: true,
+                autoWidth: false,
+                pageLength: 25,
+                scrollY: "55vh",
+                scrollX: true,
+                scrollCollapse: true,
+                lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "Tất cả"]],
+                language: {
+                    search: "Tìm nhanh:",
+                    lengthMenu: "Xem _MENU_ dòng",
+                    info: "Dòng _START_ - _END_ / Tổng _TOTAL_",
+                    paginate: {
+                        previous: "<i class='fas fa-chevron-left'></i>",
+                        next: "<i class='fas fa-chevron-right'></i>"
+                    }
                 }
             });
-        });
 
-        $('#data_table_status').DataTable({
-            paging: true,
-            lengthChange: true,
-            searching: true,
-            ordering: true,
-            info: true,
-            autoWidth: false,
-            pageLength: 25,
-            lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "Tất cả"]],
-            language: {
-                search: "Tìm kiếm:",
-                lengthMenu: "Hiển thị _MENU_ dòng",
-                info: "Hiển thị _START_ đến _END_ của _TOTAL_ dòng",
-                paginate: {
-                    previous: "Trước",
-                    next: "Sau"
-                }
-            }
+            $('.btn-edit').click(function() {
+                const button = $(this);
+                const modal = $('#updateModal');
+                modal.find('#update_id').val(button.data('id'));
+                modal.find('#update_code').val(button.data('code'));
+                modal.find('#update_name').val(button.data('name'));
+            });
+
+            $('.form-deActive').on('submit', function(e) {
+                e.preventDefault();
+                const form = this;
+                const name = $(form).find('button').data('name');
+                const active = $(form).find('button').data('active');
+                const actionText = active ? 'vô hiệu hóa' : 'kích hoạt';
+
+                Swal.fire({
+                    title: `Xác nhận ${actionText}?`,
+                    text: `Bạn có chắc chắn muốn ${actionText} trạng thái: ${name}?`,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#0891b2',
+                    cancelButtonColor: '#ef4444',
+                    confirmButtonText: 'Xác nhận',
+                    cancelButtonText: 'Hủy'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        form.submit();
+                    }
+                });
+            });
         });
-    });
-</script>
+    </script>
+@append

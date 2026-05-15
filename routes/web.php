@@ -17,7 +17,14 @@ require_once(__DIR__ . '/categoryRoute.php');
 
 // require_once(__DIR__ . '/HistoryRoute.php');
 // require_once(__DIR__ . '/statisticsRoute.php');
-// require_once(__DIR__ . '/planRoute.php');
+// AI Training Routes
+use App\Http\Controllers\General\AiTrainingController;
+Route::middleware(['web'])->group(function () {
+    Route::get('/ai-training', [AiTrainingController::class, 'index'])->name('ai_training.index');
+    Route::post('/ai-training/store', [AiTrainingController::class, 'storeKnowledge'])->name('ai_training.store');
+    Route::delete('/ai-training/delete/{id}', [AiTrainingController::class, 'deleteKnowledge'])->name('ai_training.delete');
+    Route::post('/ai-training/resolve/{id}', [AiTrainingController::class, 'resolveQuery'])->name('ai_training.resolve');
+});
 // require_once(__DIR__ . '/quotaRoute.php');
 // require_once(__DIR__ . '/statusRoute.php');
 // require_once(__DIR__ . '/quarantineRoute.php');

@@ -1,7 +1,8 @@
 <?php
 use App\Http\Controllers\Pages\MaterData\DepartmentController;
-use App\Http\Controllers\Pages\MaterData\StatusController;
-use App\Http\Controllers\Pages\MaterData\DocumentTypeController;
+use App\Http\Controllers\Pages\MaterData\UnitController;
+use App\Http\Controllers\Pages\MaterData\ProductNameController;
+use App\Http\Controllers\Pages\MaterData\SpecificationController;
 use App\Http\Controllers\UploadDataController;
 use App\Http\Middleware\CheckLogin;
 use Illuminate\Support\Facades\Route;
@@ -21,16 +22,34 @@ Route::prefix('/materData')
             Route::post('update', 'update')->name('update');
             Route::post('deActive', 'deActive')->name('deActive');
         });
-        Route::prefix('/status')->name('status.')->controller(StatusController::class)->group(function () {
+        Route::prefix('/unit')->name('unit.')->controller(UnitController::class)->group(function () {
             Route::get('', 'index')->name('list');
             Route::post('store', 'store')->name('store');
             Route::post('update', 'update')->name('update');
             Route::post('deActive', 'deActive')->name('deActive');
         });
-        Route::prefix('/documentType')->name('documentType.')->controller(DocumentTypeController::class)->group(function () {
+        Route::prefix('/productName')->name('productName.')->controller(ProductNameController::class)->group(function () {
             Route::get('', 'index')->name('list');
             Route::post('store', 'store')->name('store');
             Route::post('update', 'update')->name('update');
             Route::post('deActive', 'deActive')->name('deActive');
+        });
+        Route::prefix('/specification')->name('specification.')->controller(SpecificationController::class)->group(function () {
+            Route::get('', 'index')->name('list');
+            Route::post('store', 'store')->name('store');
+            Route::post('update', 'update')->name('update');
+            Route::post('destroy', 'destroy')->name('destroy');
+        });
+        Route::prefix('/materialRole')->name('materialRole.')->controller(\App\Http\Controllers\Pages\MaterData\MaterialRoleController::class)->group(function () {
+            Route::get('', 'index')->name('list');
+            Route::post('store', 'store')->name('store');
+            Route::post('update', 'update')->name('update');
+            Route::post('delete', 'delete')->name('delete');
+        });
+        Route::prefix('/materialSpec')->name('materialSpec.')->controller(\App\Http\Controllers\Pages\MaterData\MaterialSpecController::class)->group(function () {
+            Route::get('', 'index')->name('list');
+            Route::post('store', 'store')->name('store');
+            Route::post('update', 'update')->name('update');
+            Route::post('delete', 'delete')->name('delete');
         });
     });

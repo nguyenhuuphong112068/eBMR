@@ -114,20 +114,6 @@ return [
 
         // ################################################################
 
-        // 'mms' => [
-        //     'driver' => 'sqlsrv',
-        //     'host' => env('DB_MMS_HOST', 'localhost'),
-        //     'port' => env('DB_MMS_PORT', '1433'),
-        //     'database' => env('DB_MMS_DATABASE', 'MMS'),
-        //     'username' => env('DB_MMS_USERNAME', ''),
-        //     'password' => env('DB_MMS_PASSWORD', ''),
-        //     'charset' => 'utf8',
-        //     'prefix' => '',
-        //     'prefix_indexes' => true,
-        //     // 'encrypt' => 0,
-        //     // 'trust_server_certificate' => true,
-
-        // ],
 
         'mms' => [
             'driver' => env('DB_MMS_DRIVER', 'sqlsrv'),
@@ -142,31 +128,31 @@ return [
             'trust_server_certificate' => env('DB_MMS_TRUST_SERVER_CERTIFICATE', true),
         ],
 
-        'cal1' => [
-            'driver' => env('DB_CAL1_DRIVER', 'sqlsrv'),
-            'host' => env('DB_CAL1_HOST'),
-            'port' => env('DB_CAL1_PORT', 1433),
-            'database' => env('DB_CAL1_DATABASE'),
-            'username' => env('DB_CAL1_USERNAME'),
-            'password' => env('DB_CAL1_PASSWORD'),
-            'charset' => 'utf8',
-            'prefix' => '',
-            'encrypt' => env('DB_CAL1_ENCRYPT', false),
-            'trust_server_certificate' => env('DB_CAL1_TRUST_SERVER_CERTIFICATE', true),
-        ],
+        // 'cal1' => [
+        //     'driver' => env('DB_CAL1_DRIVER', 'sqlsrv'),
+        //     'host' => env('DB_CAL1_HOST'),
+        //     'port' => env('DB_CAL1_PORT', 1433),
+        //     'database' => env('DB_CAL1_DATABASE'),
+        //     'username' => env('DB_CAL1_USERNAME'),
+        //     'password' => env('DB_CAL1_PASSWORD'),
+        //     'charset' => 'utf8',
+        //     'prefix' => '',
+        //     'encrypt' => env('DB_CAL1_ENCRYPT', false),
+        //     'trust_server_certificate' => env('DB_CAL1_TRUST_SERVER_CERTIFICATE', true),
+        // ],
 
-        'cal2' => [
-            'driver' => env('DB_CAL2_DRIVER', 'sqlsrv'),
-            'host' => env('DB_CAL2_HOST'),
-            'port' => env('DB_CAL2_PORT', 1433),
-            'database' => env('DB_CAL2_DATABASE'),
-            'username' => env('DB_CAL2_USERNAME'),
-            'password' => env('DB_CAL2_PASSWORD'),
-            'charset' => 'utf8',
-            'prefix' => '',
-            'encrypt' => env('DB_CAL2_ENCRYPT', false),
-            'trust_server_certificate' => env('DB_CAL2_TRUST_SERVER_CERTIFICATE', true),
-        ],
+        // 'cal2' => [
+        //     'driver' => env('DB_CAL2_DRIVER', 'sqlsrv'),
+        //     'host' => env('DB_CAL2_HOST'),
+        //     'port' => env('DB_CAL2_PORT', 1433),
+        //     'database' => env('DB_CAL2_DATABASE'),
+        //     'username' => env('DB_CAL2_USERNAME'),
+        //     'password' => env('DB_CAL2_PASSWORD'),
+        //     'charset' => 'utf8',
+        //     'prefix' => '',
+        //     'encrypt' => env('DB_CAL2_ENCRYPT', false),
+        //     'trust_server_certificate' => env('DB_CAL2_TRUST_SERVER_CERTIFICATE', true),
+        // ],
 
     ],
 
@@ -203,7 +189,7 @@ return [
 
         'options' => [
             'cluster' => env('REDIS_CLUSTER', 'redis'),
-            'prefix' => env('REDIS_PREFIX', Str::slug(env('APP_NAME', 'laravel'), '_').'_database_'),
+            'prefix' => env('REDIS_PREFIX', Str::slug(env('APP_NAME', 'laravel'), '_') . '_database_'),
             'persistent' => env('REDIS_PERSISTENT', false),
         ],
 

@@ -1733,15 +1733,41 @@
                 input.value = '';
                 cancelReply(groupId);
 
+                // Thêm hiệu ứng AI đang tìm kiếm nếu nhóm chat liên quan đến AI
+                let container = $(`#chat-content-${groupId}`);
+                let groupName = $(`#chat-window-${groupId} .chat-window-header span.font-weight-bold`).text().toLowerCase();
+                let isAiChat = groupName.includes('ai') || groupName.includes('trợ lý') || groupName.includes('agent');
+                let aiIndicatorId = `ai-indicator-${groupId}`;
+
+                if (isAiChat) {
+                    container.append(`
+                        <div id="${aiIndicatorId}" class="msg-item other mt-2 mb-3" style="display: flex; align-items: flex-end;">
+                            <div class="msg-avatar">
+                                <div style="width:30px; height:30px; border-radius:50%; background:#e0e0e0; display:flex; align-items:center; justify-content:center; font-size:16px;">
+                                    🤖
+                                </div>
+                            </div>
+                            <div class="msg-body" style="margin-left: 10px;">
+                                <div class="msg-text" style="background:#f1f0f0; border-radius:15px; padding:8px 12px; font-style:italic; color:#666; font-size: 0.9em; animation: chat-blink 1.5s infinite;">
+                                    <i class="fas fa-spinner fa-spin"></i> eBMR Agent đang phân tích dữ liệu...
+                                </div>
+                            </div>
+                        </div>
+                    `);
+                    container.scrollTop(container[0].scrollHeight);
+                }
+
                 $.post("{{ route('chat.send', [], false) }}", {
                     _token: "{{ csrf_token() }}",
                     group_id: groupId,
                     message: msg,
                     reply_to_id: replyId
                 }).done(function() {
+                    if (isAiChat) $(`#${aiIndicatorId}`).remove();
                     loadChatMessages(groupId, true);
                     loadChatGroups(); // Cập nhật danh sách trái
                 }).fail(function() {
+                    if (isAiChat) $(`#${aiIndicatorId}`).remove();
                     input.value = msg;
                     alert('Gửi tin nhắn thất bại, vui lòng thử lại.');
                 });
@@ -1830,7 +1856,7 @@
                     loadChatMessages(groupId);
                 });
                 loadChatGroups(); // Luôn gọi để cập nhật Badge chưa đọc và hiệu ứng nhấp nháy
-            }, 10000);
+            }, 3000);
 
             // --- CÁC HÀM XỬ LÝ NHÓM & EMOJI ---
             let allUsersForGroup = [];

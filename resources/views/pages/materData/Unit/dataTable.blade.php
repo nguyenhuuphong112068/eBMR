@@ -47,7 +47,7 @@
     <div class="card border-0 shadow-sm">
         <div class="card-header border-0 bg-transparent pt-4 pb-0 px-4">
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
-                <h3 class="card-title fw-bold text-dark">Danh sách Loại Tài Liệu</h3>
+                <h3 class="card-title fw-bold text-dark">Danh sách Đơn Vị</h3>
                 <button class="btn btn-primary d-flex align-items-center px-4 fw-bold shadow-sm rounded-pill" 
                     data-toggle="modal" data-target="#createModal">
                     <i class="fas fa-plus-circle me-2"></i> Thêm mới
@@ -55,12 +55,12 @@
             </div>
         </div>
         <div class="card-body">
-            <table id="data_table_document_type" class="table table-hover w-100">
+            <table id="data_table_unit" class="table table-hover w-100">
                 <thead>
                     <tr>
                         <th>STT</th>
-                        <th>Mã Loại Tài Liệu</th>
-                        <th>Tên Loại Tài Liệu</th>
+                        <th>Mã Đơn Vị</th>
+                        <th>Tên Đơn Vị</th>
                         <th class="text-center">Trạng Thái</th>
                         <th>Người Tạo</th>
                         <th>Ngày Tạo</th>
@@ -71,7 +71,7 @@
                     @foreach ($datas as $data)
                         <tr>
                             <td>{{ $loop->iteration }} </td>
-                            <td class="fw-bold text-primary">{{ $data->shortName }}</td>
+                            <td class="fw-bold text-primary">{{ $data->code }}</td>
                             <td class="fw-medium">{{ $data->name }}</td>
                             <td class="text-center">
                                 @if($data->active)
@@ -80,20 +80,20 @@
                                     <span class="badge bg-light-danger text-danger border border-danger px-3 rounded-pill">Tạm ngưng</span>
                                 @endif
                             </td>
-                            <td><span class="small fw-bold">{{ $data->prepareBy ?? '-' }}</span></td>
+                            <td><span class="small fw-bold">{{ $data->created_by ?? '-' }}</span></td>
                             <td><span class="text-muted small">{{ \Carbon\Carbon::parse($data->created_at)->format('d/m/Y') }}</span></td>
                             <td class="text-center align-middle">
                                 <div class="d-flex gap-1 justify-content-center">
                                     <button type="button" class="btn btn-sm btn-icon btn-light-warning border shadow-sm btn-edit" 
                                         data-id="{{ $data->id }}" 
-                                        data-shortname="{{ $data->shortName }}" 
+                                        data-code="{{ $data->code }}" 
                                         data-name="{{ $data->name }}"
                                         data-toggle="modal" 
                                         data-target="#updateModal" title="Sửa">
                                         <i class="fas fa-pen"></i>
                                     </button>
 
-                                    <form class="form-deActive d-inline" action="{{ route('pages.materData.documentType.deActive') }}" method="POST">
+                                    <form class="form-deActive d-inline" action="{{ route('pages.materData.unit.deActive') }}" method="POST">
                                         @csrf
                                         <input type="hidden" name="id" value="{{ $data->id }}">
                                         <input type="hidden" name="active" value="{{ $data->active }}">
@@ -129,11 +129,11 @@
 
     <script>
         $(document).ready(function() {
-            if ($.fn.DataTable.isDataTable('#data_table_document_type')) {
-                $('#data_table_document_type').DataTable().destroy();
+            if ($.fn.DataTable.isDataTable('#data_table_unit')) {
+                $('#data_table_unit').DataTable().destroy();
             }
 
-            const table = $('#data_table_document_type').DataTable({
+            const table = $('#data_table_unit').DataTable({
                 paging: true,
                 lengthChange: true,
                 searching: true,
@@ -160,7 +160,7 @@
                 const button = $(this);
                 const modal = $('#updateModal');
                 modal.find('#update_id').val(button.data('id'));
-                modal.find('#update_shortName').val(button.data('shortname'));
+                modal.find('#update_code').val(button.data('code'));
                 modal.find('#update_name').val(button.data('name'));
             });
 
@@ -173,7 +173,7 @@
 
                 Swal.fire({
                     title: `Xác nhận ${actionText}?`,
-                    text: `Bạn có chắc chắn muốn ${actionText} loại tài liệu: ${name}?`,
+                    text: `Bạn có chắc chắn muốn ${actionText} đơn vị: ${name}?`,
                     icon: 'warning',
                     showCancelButton: true,
                     confirmButtonColor: '#0891b2',

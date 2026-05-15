@@ -18,6 +18,8 @@ class IntermediateCategoryController extends Controller
                 $productNames = DB::table('product_name')->where('active', true)->orderBy('name', 'asc')->get();
                 $dosages = DB::table('dosage')->where('active', true)->get();
                 $units = DB::table('unit')->where('active', true)->get();
+                $materialRoles = DB::table('material_role')->orderBy('name', 'asc')->get();
+                $materialSpecs = DB::table('material_spec')->orderBy('name', 'asc')->get();
 
                 $datas = DB::table('intermediate_category')->select('intermediate_category.*', 'dosage.name as dosage_name', 'product_name.name as product_name')
                         ->leftJoin('product_name', 'intermediate_category.product_name_id', 'product_name.id')
@@ -40,6 +42,8 @@ class IntermediateCategoryController extends Controller
                         'productNames' => $productNames,
                         'dosages' => $dosages,
                         'units' => $units,
+                        'materialRoles' => $materialRoles,
+                        'materialSpecs' => $materialSpecs,
 
                 ]);
         }
@@ -78,7 +82,7 @@ class IntermediateCategoryController extends Controller
                         $weight_2 = false;
                 };
 
-                DB::table('intermediate_category')->insert([
+                $categoryId = DB::table('intermediate_category')->insertGetId([
                         'intermediate_code' => $request->intermediate_code,
                         'product_name_id' => $request->product_name_id,
                         'batch_size' => $request->batch_size,
@@ -102,10 +106,52 @@ class IntermediateCategoryController extends Controller
                         'quarantine_coating' => $request->quarantine_coating ?? 0,
                         'quarantine_time_unit' => $request->quarantine_time_unit === "on" ? true : false,
                         'IsHypothesis' => $request->is_Hypothesis ?? 0,
+                        'API_name' => $request->API_name,
+                        'content' => $request->content,
+                        'description' => $request->description,
+                        'storage_conditions' => $request->storage_conditions,
+                        'avg_core' => $request->avg_core,
+                        'average_unit_weight' => $request->average_unit_weight,
                         'deparment_code' => session('user')['production_code'],
                         'prepared_by' => session('user')['fullName'],
                         'created_at' => now(),
                 ]);
+
+                if ($request->has('bom') && is_array($request->bom)) {
+                        foreach ($request->bom as $bomItem) {
+                                if (!empty($bomItem['code']) || !empty($bomItem['name'])) {
+                                        $formulaId = DB::table('preparation_formula')->insertGetId([
+                                                 'intermediate_category_id' => $categoryId,
+                                                 'type' => $bomItem['type'] ?? 0,
+                                                 'code' => $bomItem['code'] ?? null,
+                                                 'name' => $bomItem['name'] ?? null,
+                                                 'role' => $bomItem['role'] ?? null,
+                                                 'manufacturer' => $bomItem['manufacturer'] ?? null,
+                                                 'Spec' => $bomItem['Spec'] ?? null,
+                                                 'total_amount_per_unit' => $bomItem['total_amount_per_unit'] ?: null,
+                                                 'total_amount_per_batch' => $bomItem['total_amount_per_batch'] ?: null,
+                                                 'created_by' => session('user')['fullName'] ?? null,
+                                                 'created_at' => now(),
+                                         ]);
+
+                                         // Lưu các phần chia nhỏ (nếu có)
+                                         if (isset($bomItem['sub_amounts']) && is_array($bomItem['sub_amounts'])) {
+                                                 foreach ($bomItem['sub_amounts'] as $sub) {
+                                                         if (!empty($sub['amount_per_unit'])) {
+                                                                 DB::table('ingredient_amount')->insert([
+                                                                         'preparation_formula_id' => $formulaId,
+                                                                         'amount_per_unit' => $sub['amount_per_unit'],
+                                                                         'note' => $sub['note'] ?? null,
+                                                                         'created_by' => session('user')['fullName'] ?? null,
+                                                                         'created_at' => now(),
+                                                                 ]);
+                                                         }
+                                                 }
+                                         }
+                                }
+                        }
+                }
+
                 return redirect()->back()->with('success', 'Đã thêm thành công!');
         }
 
@@ -155,6 +201,8 @@ class IntermediateCategoryController extends Controller
                         'blending' => $request->blending === "on" ? true : false,
                         'forming' => $request->forming === "on" ? true : false,
                         'coating' => $request->coating === "on" ? true : false,
+                        'avg_core' => $request->avg_core,
+                        'average_unit_weight' => $request->average_unit_weight,
 
                         'quarantine_total' => $request->quarantine_total ?? 0,
                         'quarantine_weight' => $request->quarantine_weight ?? 0,
@@ -163,6 +211,11 @@ class IntermediateCategoryController extends Controller
                         'quarantine_forming' => $request->quarantine_forming ?? 0,
                         'quarantine_coating' => $request->quarantine_coating ?? 0,
                         'quarantine_time_unit' => $request->quarantine_time_unit === "on" ? true : false,
+
+                        'API_name' => $request->API_name,
+                        'content' => $request->content,
+                        'description' => $request->description,
+                        'storage_conditions' => $request->storage_conditions,
 
                         'deparment_code' => session('user')['production_code'],
                         'prepared_by' => session('user')['fullName'],
