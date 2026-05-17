@@ -123,8 +123,8 @@
 
                                                         <button class="btn btn-sm btn-white text-info"
                                                             onclick="openEditModal({{ $t->id }})"
-                                                            title="Sửa thông tin gốc">
-                                                            <i class="fas fa-cog"></i>
+                                                            title="Cập nhật thông tin gốc">
+                                                            <i class="fas fa-edit"></i> Sửa
                                                         </button>
                                                     </div>
                                                 </td>
@@ -143,12 +143,12 @@
         <div class="modal fade" id="modalBtpList" tabindex="-1" role="dialog" aria-hidden="true">
             <div class="modal-dialog modal-xl modal-dialog-centered" role="document">
                 <div class="modal-content border-0 shadow-lg">
-                    <div class="modal-header bg-primary text-white">
-                        <h5 class="modal-title font-weight-bold">
+                    <div class="modal-header">
+                        <h5 class="modal-title font-weight-bold text-info">
                             <i class="fas fa-list me-2"></i>
                             {{ $current_type == 'GF' ? 'Danh Mục Biểu Mẫu Dùng Chung' : ($current_type == 'MF' ? 'Danh Mục Biểu Mẫu Gốc' : ($current_type == 'BPR' ? 'Danh Mục Thành Phẩm (BPR)' : 'Danh Mục Bán Thành Phẩm (BMR)')) }}
                         </h5>
-                        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                             <span aria-hidden="true">&times;</span>
                         </button>
                     </div>
@@ -243,7 +243,7 @@
                                                             4: 1,
                                                             5: 1,
                                                             6: 1
-                                                        }, {{ $item->IsHypothesis ?? 0 }})">
+                                                        }, {{ $item->IsHypothesis ?? 0 }}, {{ $item->batch_qty ?? 0 }}, {{ $item->batch_size ?? 0 }})">
                                                         <i class="fas fa-check me-1"></i> Chọn
                                                     </button>
                                                 </td>
@@ -267,19 +267,19 @@
                         <input type="hidden" id="templateId" name="id">
                         <input type="hidden" id="caterogyId" name="caterogy_id">
                         <input type="hidden" id="templateType" name="type" value="{{ request('type', 'BMR') }}">
-                        <div class="modal-header bg-navy text-white">
-                            <h5 class="modal-title" id="modalTitle">
+                        <div class="modal-header">
+                            <h5 class="modal-title font-weight-bold text-info" id="modalTitle">
                                 <i class="fas fa-file-medical me-2"></i>
                                 {{ request('type') == 'GF' ? 'Tạo Biểu Mẫu Dùng Chung' : (request('type') == 'BPR' ? 'Tạo Hồ Sơ Đóng Gói' : (request('type') == 'MF' ? 'Tạo Biểu Mẫu Gốc' : 'Tạo Hồ Sơ Lô Sản Xuất')) }}
                             </h5>
-                            <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                                 <span aria-hidden="true">&times;</span>
                             </button>
                         </div>
                         <div class="modal-body p-4">
                             <div class="row">
                                 <!-- Left Column (30% / col-lg-4) -->
-                                <div class="{{ request('type') == 'BMR' ? 'col-lg-4 border-right pr-4' : 'col-lg-12' }}">
+                                <div class="{{ request('type') == 'BMR' ? 'col-lg-3 border-right pr-4' : 'col-lg-12' }}">
                                     <div class="row align-items-center mb-3">
                                         <div class="col-md-8">
                                             <div class="alert alert-cyan border-0 shadow-none mb-0 p-3">
@@ -287,17 +287,25 @@
                                                     <i class="fas fa-info-circle fa-2x me-3 text-primary"></i>
                                                     <div class="w-100" style="min-width: 0;">
                                                         <h6 class="mb-1 fw-bold text-navy small">Sản phẩm đang chọn:</h6>
-                                                        <div id="selectedBtpName" class="fs-6 text-primary fw-bold text-truncate">Chưa chọn sản phẩm</div>
-                                                        <div id="selectedBtpInfo" class="small text-muted mt-1" style="font-size: 0.75rem;">Cỡ lô: - | Dạng bào chế: -</div>
+                                                        <div id="selectedBtpName"
+                                                            class="fs-6 text-primary fw-bold text-truncate">Chưa chọn sản
+                                                            phẩm</div>
+                                                        <div id="selectedBtpInfo" class="small text-muted mt-1"
+                                                            style="font-size: 0.75rem;">Cỡ lô: - | Dạng bào chế: -</div>
                                                     </div>
                                                 </div>
                                             </div>
                                         </div>
                                         <div class="col-md-4">
                                             <div class="form-group mb-0">
-                                                <label class="form-label fw-bold small">Phiên Bản <span class="text-danger">*</span></label>
-                                                <input type="number" class="form-control rounded-pill text-center fw-bold" name="version" id="version" required value="1" min="1">
-                                                <small class="text-muted d-block mt-1 text-center" style="font-size: 0.7rem;"><i class="fas fa-magic me-1"></i> Tự động</small>
+                                                <label class="form-label fw-bold small">Phiên Bản <span
+                                                        class="text-danger">*</span></label>
+                                                <input type="number"
+                                                    class="form-control rounded-pill text-center fw-bold" name="version"
+                                                    id="version" required value="1" min="1">
+                                                <small class="text-muted d-block mt-1 text-center"
+                                                    style="font-size: 0.7rem;"><i class="fas fa-magic me-1"></i> Tự
+                                                    động</small>
                                             </div>
                                         </div>
                                     </div>
@@ -308,7 +316,8 @@
                                 <!-- End Left Column -->
 
                                 <!-- Right Column (70% / col-lg-8): BOM Tables -->
-                                <div class="col-lg-8 pl-4" id="bmr_bom_tables_container" style="display: {{ request('type') == 'BMR' ? 'block' : 'none' }};">
+                                <div class="col-lg-9 pl-4" id="bmr_bom_tables_container"
+                                    style="display: {{ request('type') == 'BMR' ? 'block' : 'none' }};">
                                     @include('pages.ebmr.templates.partials.bmr_bom_tables')
                                 </div>
                                 <!-- End Right Column -->
@@ -333,9 +342,10 @@
                     <form id="workflowForm">
                         @csrf
                         <input type="hidden" id="workflowTemplateId" name="template_id">
-                        <div class="modal-header bg-success text-white">
-                            <h5 class="modal-title"><i class="fas fa-paper-plane me-2"></i> Thiết lập luồng Trình Ký</h5>
-                            <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                        <div class="modal-header">
+                            <h5 class="modal-title font-weight-bold text-info"><i class="fas fa-paper-plane me-2"></i>
+                                Thiết lập luồng Trình Ký</h5>
+                            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                                 <span aria-hidden="true">&times;</span>
                             </button>
                         </div>
@@ -440,6 +450,7 @@
                 box-shadow: none !important;
                 border: 1px solid #ced4da !important;
             }
+
             .note-editor .note-toolbar {
                 border-radius: 0 !important;
                 border-bottom: 1px solid #ced4da !important;
@@ -461,11 +472,12 @@
                     <form id="issueForm">
                         @csrf
                         <input type="hidden" id="issueTemplateId" name="template_id">
-                        <div class="modal-header bg-primary text-white">
-                            <h5 class="modal-title font-weight-bold"><i class="fas fa-file-export me-2"></i> Ban Hành Hồ
+                        <div class="modal-header">
+                            <h5 class="modal-title font-weight-bold text-info"><i class="fas fa-file-export me-2"></i> Ban
+                                Hành Hồ
                                 Sơ Lô
                             </h5>
-                            <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                                 <span aria-hidden="true">&times;</span>
                             </button>
                         </div>
@@ -497,6 +509,33 @@
                             </button>
                         </div>
                     </form>
+                </div>
+            </div>
+        </div>
+        <!-- Modal Ghi chú chia phần -->
+        <div class="modal fade" id="subNoteModal" tabindex="-1" role="dialog" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered" role="document">
+                <div class="modal-content border-0 shadow-lg">
+                    <div class="modal-header">
+                        <h5 class="modal-title font-weight-bold text-info"><i class="fas fa-edit me-2"></i> Ghi chú chia
+                            phần</h5>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <div class="modal-body p-4">
+                        <div class="form-group mb-0">
+                            <label class="form-label fw-bold">Nội dung ghi chú</label>
+                            <textarea class="form-control" id="subNoteTextarea" rows="4" placeholder="Nhập ghi chú tại đây..."></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light p-3">
+                        <button type="button" class="btn btn-light rounded-pill px-4" data-dismiss="modal">Hủy
+                            bỏ</button>
+                        <button type="button" class="btn btn-navy rounded-pill px-4 shadow-sm" id="btnSaveSubNote">
+                            <i class="fas fa-save me-2"></i> Lưu Ghi Chú
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -550,7 +589,7 @@
                 $('#modalBtpList').modal('show');
             }
 
-            function selectCategory(id, code, name, info, stages = {}, isHypothesis = 0) {
+            function selectCategory(id, code, name, info, stages = {}, isHypothesis = 0, batchQty = 0, batchSize = 0) {
                 $('#modalBtpList').modal('hide');
 
                 openCreateModal();
@@ -558,6 +597,8 @@
                 $('#templateType').val(new URLSearchParams(window.location.search).get('type') || 'BMR');
                 $('#selectedBtpName').html(code + ' - ' + name);
                 $('#selectedBtpInfo').html(`<i class="fas fa-info-circle me-1"></i> ${info}`);
+                window.currentBatchQty = batchQty;
+                window.currentBatchSize = batchSize;
 
                 const type = $('#templateType').val();
 
@@ -645,8 +686,9 @@
                 $('#metadataForm')[0].reset();
                 $('#templateId').val('');
                 if ($.fn.summernote) {
-                    if($('#create_description_editor').length) $('#create_description_editor').summernote('code', '');
-                    if($('#create_storage_conditions_editor').length) $('#create_storage_conditions_editor').summernote('code', '');
+                    if ($('#create_description_editor').length) $('#create_description_editor').summernote('code', '');
+                    if ($('#create_storage_conditions_editor').length) $('#create_storage_conditions_editor').summernote('code',
+                        '');
                 }
                 $('#modalTitle').html('<i class="fas fa-file-medical me-2"></i> Soạn Mới Hồ Sơ Gốc');
                 $('#templateMetadataModal').modal('show');
@@ -661,23 +703,25 @@
                     $('#caterogyId').val(data.caterogy_id);
                     $('#version').val(data.version);
                     $('#statusDisplay').val(data.status);
-                    
+
                     if (data.type === 'BMR') {
+                        window.currentBatchQty = data.batch_qty || 0;
+                        window.currentBatchSize = data.batch_size || 0;
                         $('#bmr_specific_fields').show();
                         $('select[name="dosage_id"]').val(data.dosage_id);
                         $('input[name="avg_core"]').val(data.avg_core);
                         $('input[name="average_unit_weight"]').val(data.average_unit_weight);
                         $('input[name="API_name"]').val(data.API_name);
                         $('input[name="content"]').val(data.content);
-                        if($('#create_description_editor').length) {
+                        if ($('#create_description_editor').length) {
                             $('#create_description_editor').summernote('code', data.description || '');
                             $('#create_description_input').val(data.description || '');
                         }
-                        if($('#create_storage_conditions_editor').length) {
+                        if ($('#create_storage_conditions_editor').length) {
                             $('#create_storage_conditions_editor').summernote('code', data.storage_conditions || '');
                             $('#create_storage_conditions_input').val(data.storage_conditions || '');
                         }
-                        
+
                         if (data.bom && window.renderBOMRows) {
                             window.renderBOMRows(data.bom);
                         }

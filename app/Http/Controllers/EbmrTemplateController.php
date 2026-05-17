@@ -250,9 +250,19 @@ class EbmrTemplateController extends Controller
             }
 
             foreach ($request->bom as $bomItem) {
-                // If the bom item contains materials
-                if (!empty($bomItem['materials']) && is_array($bomItem['materials'])) {
-                    $firstMat = $bomItem['materials'][0] ?? [];
+                $materials = !empty($bomItem['materials']) && is_array($bomItem['materials']) ? $bomItem['materials'] : [];
+                // Fallback for old structure or single material
+                if (empty($materials) && (!empty($bomItem['code']) || !empty($bomItem['name']))) {
+                    $materials[] = [
+                        'code' => $bomItem['code'] ?? null,
+                        'name' => $bomItem['name'] ?? null,
+                        'manufacturer' => $bomItem['manufacturer'] ?? null,
+                        'Spec' => $bomItem['Spec'] ?? null,
+                    ];
+                }
+
+                if (!empty($materials)) {
+                    $firstMat = $materials[0] ?? [];
                     if (!empty($firstMat['code']) || !empty($firstMat['name'])) {
                         $formulaId = DB::table('preparation_formula')->insertGetId([
                             'ebmr_templates_id' => $id,
@@ -264,7 +274,7 @@ class EbmrTemplateController extends Controller
                             'created_at' => now(),
                         ]);
 
-                        foreach ($bomItem['materials'] as $mat) {
+                        foreach ($materials as $mat) {
                             if (!empty($mat['code']) || !empty($mat['name'])) {
                                 DB::table('formula_materials')->insert([
                                     'preparation_formula_id' => $formulaId,
@@ -401,6 +411,12 @@ class EbmrTemplateController extends Controller
         $template = DB::table('ebmr_templates')->where('id', $id)->first();
 
         if ($template) {
+            if ($template->type === 'BMR') {
+                $cat = DB::table('intermediate_category')->where('id', $template->caterogy_id)->first();
+                $template->batch_qty = $cat->batch_qty ?? 0;
+                $template->batch_size = $cat->batch_size ?? 0;
+            }
+
             $formulas = DB::table('preparation_formula')
                 ->where('ebmr_templates_id', $id)
                 ->orderBy('id')
