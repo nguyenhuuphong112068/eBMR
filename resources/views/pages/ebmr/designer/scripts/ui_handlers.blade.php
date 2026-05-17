@@ -2394,24 +2394,28 @@
      */
     function toggleViewMode() {
         const templateId = '{{ $template->id }}';
+        const catId = "{{ $template->caterogy_id ?? 0 }}";
 
         // Chuyển đổi trạng thái Xem tất cả / Xem 1 phân đoạn
         window.isViewAllMode = !window.isViewAllMode;
 
         if (!window.isViewAllMode) {
-            // Nếu chuyển sang xem 1 phân đoạn, đảm bảo có phân đoạn active
-            if (!window.activeSectionId) {
+            // Nếu chuyển sang xem 1 phân đoạn, đảm bảo activeSectionId trỏ vào 1 công đoạn thực tế (không phải virtual header)
+            if (!window.activeSectionId || window.activeSectionId === catId || window.activeSectionId === catId + '_0') {
                 let lastSection = localStorage.getItem('ebmr_last_section_' + templateId);
+                // Kiểm tra nếu lastSection cũng trỏ vào header thì bỏ qua để tìm công đoạn thực
+                if (lastSection === catId || lastSection === catId + '_0') lastSection = null;
+
                 if (!lastSection && typeof items !== 'undefined' && items.length > 0) {
-                    const firstBlock = items.find(i => i.section_id);
-                    if (firstBlock) lastSection = firstBlock.section_id;
+                    const firstStageBlock = items.find(i => i.section_id && !i.isVirtual && i.type === 'section' && i.stage_code !== undefined);
+                    if (firstStageBlock) lastSection = firstStageBlock.section_id;
                 }
                 if (lastSection) window.activeSectionId = lastSection;
             }
         }
 
-        // Lưu trạng thái cuối cùng nếu có
-        if (window.activeSectionId) {
+        // Lưu trạng thái cuối cùng nếu có (chỉ lưu nếu là công đoạn thực)
+        if (window.activeSectionId && window.activeSectionId !== catId && window.activeSectionId !== catId + '_0') {
             localStorage.setItem('ebmr_last_section_' + templateId, window.activeSectionId);
         }
 
@@ -2837,4 +2841,119 @@
             console.error("Error in modal promise:", err);
         });
     };
+
+    /**
+     * ABBREVIATION (DANH MỤC CHỮ VIẾT TẮT)
+     */
+    function addAbbreviation() {
+        const selection = window.getSelection().toString().trim();
+        if (!selection) {
+            Swal.fire('Lỗi', 'Vui lòng bôi đen (chọn) một từ viết tắt trong tài liệu trước khi bấm nút này.', 'warning');
+            return;
+        }
+
+        const wordInput = document.getElementById('abbrWord');
+        const meaningInput = document.getElementById('abbrMeaning');
+        if (wordInput) wordInput.value = selection;
+        if (meaningInput) meaningInput.value = '';
+
+        if (window.jQuery) {
+            $('#abbreviationModal').modal('show');
+        }
+    }
+
+    function saveAbbreviation() {
+        const word = document.getElementById('abbrWord').value.trim();
+        const meaning = document.getElementById('abbrMeaning').value.trim();
+
+        if (!word || !meaning) {
+            Swal.fire('Lỗi', 'Vui lòng nhập đầy đủ ý nghĩa của từ viết tắt.', 'warning');
+            return;
+        }
+
+        // Tìm block Danh mục chữ viết tắt đã có chưa
+        let abbrevTable = items.find(item => item.isAbbreviationTable === true);
+
+        if (!abbrevTable) {
+            // Nếu chưa có, tạo bảng mới
+            abbrevTable = {
+                id: 'blk_abbrev_' + Date.now(),
+                type: 'table',
+                label: 'DANH MỤC CHỮ VIẾT TẮT',
+                isAbbreviationTable: true,
+                rows: 1,
+                cols: 3,
+                borderMode: 'visible',
+                hideHeader: false,
+                section_id: window.activeSectionId || (items.length > 0 ? items[items.length - 1].section_id : null),
+                columns: [
+                    { label: 'STT', type: 'text', width: '10%' },
+                    { label: 'Chữ viết tắt', type: 'text', width: '30%' },
+                    { label: 'Ý nghĩa', type: 'text', width: '60%' }
+                ],
+                data: [
+                    [
+                        { content: '1', rs: 1, cs: 1, textAlign: 'center' },
+                        { content: word, rs: 1, cs: 1, textAlign: 'center', fontWeight: 'bold' },
+                        { content: meaning, rs: 1, cs: 1, textAlign: 'left' }
+                    ]
+                ],
+                dirty: true
+            };
+            
+            // Tìm section active để add vào cuối section đó
+            let insertIdx = items.length;
+            if (window.activeSectionId) {
+                for (let i = items.length - 1; i >= 0; i--) {
+                    if (items[i].section_id === window.activeSectionId || items[i].id === window.activeSectionId) {
+                        insertIdx = i + 1;
+                        break;
+                    }
+                }
+            }
+            items.splice(insertIdx, 0, abbrevTable);
+            saveStateDebounced();
+        } else {
+            // Nếu có rồi, thêm dòng mới
+            const stt = abbrevTable.data.length + 1;
+            
+            // Kiểm tra xem từ viết tắt đã tồn tại chưa
+            const exists = abbrevTable.data.some(row => {
+                if (row[1] && row[1].content) {
+                    const textContent = row[1].content.replace(/<[^>]*>?/gm, '').trim();
+                    return textContent.toLowerCase() === word.toLowerCase();
+                }
+                return false;
+            });
+
+            if (exists) {
+                Swal.fire('Lỗi', 'Từ viết tắt này đã tồn tại trong danh mục!', 'warning');
+                return;
+            }
+
+            abbrevTable.data.push([
+                { content: stt.toString(), rs: 1, cs: 1, textAlign: 'center' },
+                { content: word, rs: 1, cs: 1, textAlign: 'center', fontWeight: 'bold' },
+                { content: meaning, rs: 1, cs: 1, textAlign: 'left' }
+            ]);
+            abbrevTable.rows = abbrevTable.data.length;
+            abbrevTable.dirty = true;
+            saveStateDebounced();
+        }
+
+        if (window.jQuery) {
+            $('#abbreviationModal').modal('hide');
+        }
+        
+        renderBlocks();
+        Swal.fire({
+            title: 'Thành công',
+            text: 'Đã thêm vào Danh mục chữ viết tắt',
+            icon: 'success',
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 2000
+        });
+    }
 </script>

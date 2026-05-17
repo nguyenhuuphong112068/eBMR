@@ -275,6 +275,10 @@
             </div>
         </div>
 
+        <div class="border-end mx-1" style="height: 18px;"></div>
+        <button class="btn btn-toolbar" onmousedown="event.preventDefault();" onclick="addAbbreviation()" title="Thêm danh mục chữ viết tắt">
+            <i class="fas fa-spell-check text-primary"></i>
+        </button>
         <button class="btn btn-toolbar" onclick="document.getElementById('imageUploader').click()"
             title="Chèn hình ảnh"><i class="fas fa-image"></i></button>
         <input type="file" id="imageUploader" class="d-none" accept="image/*"

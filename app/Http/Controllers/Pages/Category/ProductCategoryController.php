@@ -252,36 +252,38 @@ class ProductCategoryController extends Controller
                 $requestCodes = collect($items)->pluck('code')->toArray();
 
                 // 2️⃣ Soft delete những code không có trong request
-                DB::table('bom_item')
-                        ->where('product_caterogy_id', $productCategoryId)
-                        ->whereNotIn('code', $requestCodes)
-                        ->update([
-                                'active' => 0,
-                                'updated_at' => now()
-                        ]);
+                if (\Illuminate\Support\Facades\Schema::hasTable('bom_item')) {
+                        DB::table('bom_item')
+                                ->where('product_caterogy_id', $productCategoryId)
+                                ->whereNotIn('code', $requestCodes)
+                                ->update([
+                                        'active' => 0,
+                                        'updated_at' => now()
+                                ]);
 
-                // 3️⃣ Insert hoặc update + bật active lại
-                foreach ($items as $item) {
-                        if (!isset($item['code']) || empty($item['code'])) {
-                                continue; // bỏ qua dòng không hợp lệ
+                        // 3️⃣ Insert hoặc update + bật active lại
+                        foreach ($items as $item) {
+                                if (!isset($item['code']) || empty($item['code'])) {
+                                        continue; // bỏ qua dòng không hợp lệ
+                                }
+
+                                DB::table('bom_item')->updateOrInsert(
+                                        [
+                                                'product_caterogy_id' => $item['product_caterogy_id'],
+                                                'code' => $item['code'],
+                                        ],
+                                        [
+                                                'name' => $item['name'],
+                                                'qty' => $item['qty'],
+                                                'uom' => $item['uom'],
+                                                'mat_par_type' => $item['mat_par_type'],
+                                                'Revno' => 0,
+                                                'active' => 1, // đảm bảo nếu thêm lại thì active lại
+                                                'updated_at' => now(),
+                                                'created_by' => session('user')['fullName'],
+                                        ]
+                                );
                         }
-
-                        DB::table('bom_item')->updateOrInsert(
-                                [
-                                        'product_caterogy_id' => $item['product_caterogy_id'],
-                                        'code' => $item['code'],
-                                ],
-                                [
-                                        'name' => $item['name'],
-                                        'qty' => $item['qty'],
-                                        'uom' => $item['uom'],
-                                        'mat_par_type' => $item['mat_par_type'],
-                                        'Revno' => 0,
-                                        'active' => 1, // đảm bảo nếu thêm lại thì active lại
-                                        'updated_at' => now(),
-                                        'created_by' => session('user')['fullName'],
-                                ]
-                        );
                 }
 
                 return response()->json(['success' => true]);

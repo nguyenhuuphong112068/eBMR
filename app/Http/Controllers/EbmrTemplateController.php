@@ -121,12 +121,21 @@ class EbmrTemplateController extends Controller
             $t->sections = $sections;
         }
 
+        $dosages = DB::table('dosage')->where('active', true)->get();
+        $units = DB::table('unit')->where('active', true)->get();
+        $materialRoles = DB::table('material_role')->orderBy('name', 'asc')->get();
+        $materialSpecs = DB::table('material_spec')->orderBy('name', 'asc')->get();
+
         return view('pages.ebmr.templates.list', [
             'templates' => $templates,
             'users' => $users,
             'category_items' => $category_items,
             'all_sections' => $sectionsMaster->values(),
             'current_type' => $type,
+            'dosages' => $dosages,
+            'units' => $units,
+            'materialRoles' => $materialRoles,
+            'materialSpecs' => $materialSpecs,
         ]);
     }
 
@@ -152,6 +161,20 @@ class EbmrTemplateController extends Controller
             'type' => $validated['type'] ?? 'BMR',
             'updated_at' => now(),
         ];
+
+        if ($data['type'] === 'BMR') {
+            $dosage_id = DB::table('intermediate_category')->where('id', $validated['caterogy_id'])->value('dosage_id');
+            $dosage_name = DB::table('dosage')->where('id', $dosage_id)->value('name');
+            $weight_2 = \Illuminate\Support\Str::contains(\Illuminate\Support\Str::lower($dosage_name), ['phim', 'nang']);
+
+            $data = array_merge($data, [
+                'dosage_id' => $dosage_id,
+                'avg_core' => $request->input('avg_core'),
+                'average_unit_weight' => $request->input('average_unit_weight'),
+                'description' => $request->input('description'),
+                'storage_conditions' => $request->input('storage_conditions'),
+            ]);
+        }
         if (empty($validated['id'])) {
             $data['owner_id'] = session('user')['userId'] ?? null;
             $data['status'] = 'draft';
@@ -159,45 +182,23 @@ class EbmrTemplateController extends Controller
 
             $id = DB::table('ebmr_templates')->insertGetId($data);
 
-            // --- 1. ALWAYS Create the Persistent Header Section (category_id) ---
-            $headerOrder = 0;
-            DB::table('ebmr_template_blocks')->insert([
-                'template_id' => $id,
-                'section_id' => $data['caterogy_id'],
-                'type' => 'section',
-                'label' => 'BMR HEADER',
-                'order' => $headerOrder++,
-                'properties' => json_encode([
-                    'id' => 'blk_sec_sys_header_' . time(),
-                    'type' => 'section',
-                    'label' => 'BMR HEADER',
-                    'locked' => true,
-                    'section_id' => $data['caterogy_id']
-                ]),
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-
-            DB::table('ebmr_template_blocks')->insert([
-                'template_id' => $id,
-                'section_id' => $data['caterogy_id'],
-                'type' => 'table',
-                'label' => 'blk_header_'.time(),
-                'order' => $headerOrder++,
-                'properties' => json_encode([
-                    'id' => 'blk_header_'.time(),
-                    'type' => 'table',
-                    'label' => ($data['type'] === 'GF' ? 'GF Header' : 'BMR Header'),
-                    'is'.($data['type'] === 'GF' ? 'GfHeader' : 'BmrHeader') => true,
-                    'locked' => true,
-                    'section_id' => $data['caterogy_id']
-                ]),
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-
             // --- 2. Auto-generate Stages based on User Selection ---
-            $selectedSections = $request->input('selected_sections', []);
+            $selectedSections = [];
+            if ($data['type'] === 'BMR') {
+                $cat = DB::table('intermediate_category')->where('id', $data['caterogy_id'])->first();
+                if ($cat) {
+                    if (!empty($cat->weight_1)) $selectedSections[] = 1;
+                    if (!empty($cat->weight_2)) $selectedSections[] = 2;
+                    if (!empty($cat->prepering)) $selectedSections[] = 3;
+                    if (!empty($cat->blending)) $selectedSections[] = 4;
+                    if (!empty($cat->forming)) $selectedSections[] = 5;
+                    if (!empty($cat->coating)) $selectedSections[] = 6;
+                }
+                $selectedSections[] = 9;
+            } elseif ($data['type'] === 'BPR') {
+                $selectedSections = [7, 8, 9];
+            }
+
             if (! empty($selectedSections) && ($data['type'] === 'BMR' || $data['type'] === 'BPR')) {
                 // Sort sections numerically (0, 1, 2... 9)
                 usort($selectedSections, function ($a, $b) {
@@ -206,8 +207,10 @@ class EbmrTemplateController extends Controller
 
                 $sectionMeta = DB::table('sections')->whereIn('code', $selectedSections)->get()->keyBy('code');
 
-                $order = $headerOrder;
+                $order = 0;
                 foreach ($selectedSections as $code) {
+                    if ((int)$code === 0) continue; // Bỏ qua vì "Thông tin chung sản phẩm" đã được tạo tự động bằng virtual blocks
+
                     $sName = $sectionMeta[$code]->name ?? ('Phân đoạn '.$code);
                     $sectionIdStr = $data['caterogy_id'].'_'.$code;
                     
@@ -235,6 +238,62 @@ class EbmrTemplateController extends Controller
             DB::table('ebmr_templates')->where('id', $validated['id'])->update($data);
             $id = $validated['id'];
             $message = 'Cập nhật thông tin hồ sơ thành công';
+        }
+
+        if ($data['type'] === 'BMR' && $request->has('bom') && is_array($request->bom)) {
+            // Clear existing formulas for this template if updating
+            $existingFormulaIds = DB::table('preparation_formula')->where('ebmr_templates_id', $id)->pluck('id');
+            if ($existingFormulaIds->isNotEmpty()) {
+                DB::table('formula_materials')->whereIn('preparation_formula_id', $existingFormulaIds)->delete();
+                DB::table('ingredient_amount')->whereIn('preparation_formula_id', $existingFormulaIds)->delete();
+                DB::table('preparation_formula')->where('ebmr_templates_id', $id)->delete();
+            }
+
+            foreach ($request->bom as $bomItem) {
+                // If the bom item contains materials
+                if (!empty($bomItem['materials']) && is_array($bomItem['materials'])) {
+                    $firstMat = $bomItem['materials'][0] ?? [];
+                    if (!empty($firstMat['code']) || !empty($firstMat['name'])) {
+                        $formulaId = DB::table('preparation_formula')->insertGetId([
+                            'ebmr_templates_id' => $id,
+                            'type' => $bomItem['type'] ?? 0,
+                            'role' => $bomItem['role'] ?? null,
+                            'total_amount_per_unit' => $bomItem['total_amount_per_unit'] ?: null,
+                            'total_amount_per_batch' => $bomItem['total_amount_per_batch'] ?: null,
+                            'created_by' => session('user')['fullName'] ?? null,
+                            'created_at' => now(),
+                        ]);
+
+                        foreach ($bomItem['materials'] as $mat) {
+                            if (!empty($mat['code']) || !empty($mat['name'])) {
+                                DB::table('formula_materials')->insert([
+                                    'preparation_formula_id' => $formulaId,
+                                    'code' => $mat['code'] ?? null,
+                                    'name' => $mat['name'] ?? null,
+                                    'manufacturer' => $mat['manufacturer'] ?? null,
+                                    'Spec' => $mat['Spec'] ?? null,
+                                    'created_at' => now(),
+                                ]);
+                            }
+                        }
+
+                        if (isset($bomItem['sub_amounts']) && is_array($bomItem['sub_amounts'])) {
+                            foreach ($bomItem['sub_amounts'] as $sub) {
+                                if (!empty($sub['amount_per_unit'])) {
+                                    DB::table('ingredient_amount')->insert([
+                                        'preparation_formula_id' => $formulaId,
+                                        'amount_per_unit' => $sub['amount_per_unit'],
+                                        'amount_per_batch' => $sub['amount_per_batch'] ?? null,
+                                        'note' => $sub['note'] ?? null,
+                                        'created_by' => session('user')['fullName'] ?? null,
+                                        'created_at' => now(),
+                                    ]);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         return response()->json([
@@ -340,6 +399,26 @@ class EbmrTemplateController extends Controller
     public function getMetadata($id)
     {
         $template = DB::table('ebmr_templates')->where('id', $id)->first();
+
+        if ($template) {
+            $formulas = DB::table('preparation_formula')
+                ->where('ebmr_templates_id', $id)
+                ->orderBy('id')
+                ->get();
+
+            foreach ($formulas as $formula) {
+                $formula->materials = DB::table('formula_materials')
+                    ->where('preparation_formula_id', $formula->id)
+                    ->orderBy('id')
+                    ->get();
+                    
+                $formula->sub_amounts = DB::table('ingredient_amount')
+                    ->where('preparation_formula_id', $formula->id)
+                    ->orderBy('id')
+                    ->get();
+            }
+            $template->bom = $formulas;
+        }
 
         return response()->json($template);
     }

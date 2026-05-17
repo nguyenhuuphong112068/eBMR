@@ -25,6 +25,7 @@ Route::prefix('/category')
                                 Route::post('update', 'update')->name('update');
                                 Route::post('deActive', 'deActive')->name('deActive');
                                 Route::post('recipe', 'recipe')->name('recipe');
+                                Route::post('formulas', 'formulas')->name('formulas');
                                 Route::post('save_bom', 'save_bom')->name('resave_bomcipe');
                         });
 

@@ -22,8 +22,8 @@
             }
         });
 
-        // INCREMENTAL SAVE LOGIC: Only send dirty or new blocks
-        const dirtyFields = items.filter(i => i.dirty || !i.db_id).map(i => ({
+        // INCREMENTAL SAVE LOGIC: Only send dirty or new non-virtual blocks
+        const dirtyFields = items.filter(i => !i.isVirtual && (i.dirty || !i.db_id)).map(i => ({
             db_id: i.db_id || null,
             content_db_id: i.content_db_id || null,
             id: i.id,
@@ -44,7 +44,10 @@
             stage_code: i.stage_code || null,
             chartConfig: i.chartConfig || null,
             backgroundColor: i.backgroundColor || null,
-            section_id: i.section_id || null
+            section_id: i.section_id || null,
+            isBmrHeader: i.isBmrHeader || false,
+            isGfHeader: i.isGfHeader || false,
+            isAbbreviationTable: i.isAbbreviationTable || false
         }));
 
         // --- PRUNING & LOCATION SYNC: Only send fieldsConfig for variables that actually exist in the document ---
@@ -84,7 +87,7 @@
             pageOrientation: pageOrientation,
             fieldsConfig: prunedFieldsConfig,
             fields: dirtyFields, // Only dirty fields
-            block_order: items.map(i => i.id), // Send current order of all blocks
+            block_order: items.filter(i => !i.isVirtual).map(i => i.id), // Send current order of all non-virtual blocks
             deleted_ids: window.deletedBlockIds || [],
             incremental: true
         };

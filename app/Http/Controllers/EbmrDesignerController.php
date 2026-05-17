@@ -66,6 +66,32 @@ class EbmrDesignerController extends Controller
                         $template->dosage_name = $cat->dosage_name ?? '';
                         $template->type_name = $cat->type ?? 'Thuốc Kê Đơn'; // Default if empty
                         $template->batch_size = ($cat->batch_size ?? '').' '.($cat->unit_batch_size ?? '');
+                        
+                        // Bổ sung các trường phục vụ tạo tự động bảng MÔ TẢ SẢN PHẨM và CÔNG THỨC PHA CHẾ
+                        $template->content = $cat->content ?? '';
+                        $template->description = $cat->description ?? '';
+                        $template->storage_conditions = $cat->storage_conditions ?? '';
+                        $template->batch_qty = ($cat->batch_qty ?? '').' '.($cat->unit_batch_qty ?? '');
+                        $template->raw_batch_size = (float)($cat->batch_size ?? 0);
+                        $template->unit_batch_size = $cat->unit_batch_size ?? '';
+
+                        $formulas = DB::table('preparation_formula')
+                            ->where('intermediate_category_id', $template->caterogy_id)
+                            ->orderBy('id')
+                            ->get();
+
+                        foreach ($formulas as $formula) {
+                            $formula->materials = DB::table('formula_materials')
+                                ->where('preparation_formula_id', $formula->id)
+                                ->orderBy('id')
+                                ->get();
+                                
+                            $formula->sub_amounts = DB::table('ingredient_amount')
+                                ->where('preparation_formula_id', $formula->id)
+                                ->orderBy('id')
+                                ->get();
+                        }
+                        $template->formulas = $formulas;
                     }
 
                     session(['title' => $title . ' - ' . ($template->category_name ?? '')]);

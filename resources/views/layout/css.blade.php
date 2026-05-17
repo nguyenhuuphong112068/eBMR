@@ -28,6 +28,8 @@
       <link rel="stylesheet" href="{{asset ('dataTable/plugins/toastr/toastr.min.css')}}">
       <!-- SweetAlert2 -->
       <link rel="stylesheet" href="{{asset ('dataTable/plugins/sweetalert2-theme-bootstrap-4/bootstrap-4.min.css')}}">
+      <!-- Summernote -->
+      <link rel="stylesheet" href="{{asset ('dataTable/plugins/summernote/summernote-bs4.min.css')}}">
 
       <link href="{{ asset('css/bootstrap.min.css') }}" rel="stylesheet">
       

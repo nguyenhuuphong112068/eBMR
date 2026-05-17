@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
@@ -18,8 +19,6 @@ class IntermediateCategoryController extends Controller
                 $productNames = DB::table('product_name')->where('active', true)->orderBy('name', 'asc')->get();
                 $dosages = DB::table('dosage')->where('active', true)->get();
                 $units = DB::table('unit')->where('active', true)->get();
-                $materialRoles = DB::table('material_role')->orderBy('name', 'asc')->get();
-                $materialSpecs = DB::table('material_spec')->orderBy('name', 'asc')->get();
 
                 $datas = DB::table('intermediate_category')->select('intermediate_category.*', 'dosage.name as dosage_name', 'product_name.name as product_name')
                         ->leftJoin('product_name', 'intermediate_category.product_name_id', 'product_name.id')
@@ -42,9 +41,6 @@ class IntermediateCategoryController extends Controller
                         'productNames' => $productNames,
                         'dosages' => $dosages,
                         'units' => $units,
-                        'materialRoles' => $materialRoles,
-                        'materialSpecs' => $materialSpecs,
-
                 ]);
         }
 
@@ -56,7 +52,6 @@ class IntermediateCategoryController extends Controller
                 $validator = Validator::make($request->all(), [
                         'intermediate_code' => 'required|unique:intermediate_category,intermediate_code',
                         'product_name_id' => 'required',
-                        'dosage_id' => 'required',
                         'batch_size' => 'required',
                         'batch_qty' => 'required',
                         'unit_batch_qty' => 'required',
@@ -64,7 +59,6 @@ class IntermediateCategoryController extends Controller
                         'intermediate_code.required' => 'Vui lòng nhập mã bán thành phẩm.',
                         'intermediate_code.unique' => 'Mã bán thành phẩm đã tồn tại.',
                         'product_name_id.required' => 'Vui lòng chọn tên sản phẩm',
-                        'dosage_id.required' => 'Vui lòng chọn dạng bào chế',
                         'batch_size.required' => 'Vui lòng nhập cỡ lô',
                         'batch_qty.required' => 'Vui lòng nhập cỡ lô',
                         'unit_batch_qty.required' => 'Vui lòng chọn đơn vị '
@@ -73,84 +67,36 @@ class IntermediateCategoryController extends Controller
                 if ($validator->fails()) {
                         return redirect()->back()->withErrors($validator, 'createErrors')->withInput();
                 }
-                $dosage_name = DB::table('dosage')->where('id', $request->dosage_id)->value('name');
-
-
-                if (Str::contains(Str::lower($dosage_name), ['phim', 'nang'])) {
-                        $weight_2 = true;
-                } else {
-                        $weight_2 = false;
-                };
 
                 $categoryId = DB::table('intermediate_category')->insertGetId([
                         'intermediate_code' => $request->intermediate_code,
                         'product_name_id' => $request->product_name_id,
+                        'dosage_id' => $request->dosage_id,
                         'batch_size' => $request->batch_size,
                         'unit_batch_size' => $request->unit_batch_size,
                         'batch_qty' => $request->batch_qty,
                         'unit_batch_qty' => $request->unit_batch_qty,
+                        
+                        'weight_1' => $request->input('weight_1') === "on" ? 1 : 0,
+                        'weight_2' => $request->input('weight_2') === "on" ? 1 : 0,
+                        'prepering' => $request->input('prepering') === "on" ? 1 : 0,
+                        'blending' => $request->input('blending') === "on" ? 1 : 0,
+                        'forming' => $request->input('forming') === "on" ? 1 : 0,
+                        'coating' => $request->input('coating') === "on" ? 1 : 0,
+                        
+                        'quarantine_total' => $request->input('quarantine_total') ?? 0,
+                        'quarantine_weight' => $request->input('quarantine_weight') ?? 0,
+                        'quarantine_preparing' => $request->input('quarantine_preparing') ?? 0,
+                        'quarantine_blending' => $request->input('quarantine_blending') ?? 0,
+                        'quarantine_forming' => $request->input('quarantine_forming') ?? 0,
+                        'quarantine_coating' => $request->input('quarantine_coating') ?? 0,
+                        'quarantine_time_unit' => $request->input('quarantine_time_unit') === "on" ? 1 : 0,
 
-                        'dosage_id' => $request->dosage_id,
-                        'weight_1' => $request->weight_1 === "on" ? true : false,
-                        'weight_2' => $weight_2,
-                        'prepering' => $request->prepering === "on" ? true : false,
-                        'blending' => $request->blending === "on" ? true : false,
-                        'forming' => $request->forming === "on" ? true : false,
-                        'coating' => $request->coating === "on" ? true : false,
-
-                        'quarantine_total' => $request->quarantine_total ?? 0,
-                        'quarantine_weight' => $request->quarantine_weight ?? 0,
-                        'quarantine_preparing' => $request->quarantine_preparing ?? 0,
-                        'quarantine_blending' => $request->quarantine_blending ?? 0,
-                        'quarantine_forming' => $request->quarantine_forming ?? 0,
-                        'quarantine_coating' => $request->quarantine_coating ?? 0,
-                        'quarantine_time_unit' => $request->quarantine_time_unit === "on" ? true : false,
                         'IsHypothesis' => $request->is_Hypothesis ?? 0,
-                        'API_name' => $request->API_name,
-                        'content' => $request->content,
-                        'description' => $request->description,
-                        'storage_conditions' => $request->storage_conditions,
-                        'avg_core' => $request->avg_core,
-                        'average_unit_weight' => $request->average_unit_weight,
-                        'deparment_code' => session('user')['production_code'],
-                        'prepared_by' => session('user')['fullName'],
+                        'deparment_code' => $request->deparment_code ?? (session('user')['production_code'] ?? 'PXV1'),
+                        'prepared_by' => session('user')['fullName'] ?? 'System',
                         'created_at' => now(),
                 ]);
-
-                if ($request->has('bom') && is_array($request->bom)) {
-                        foreach ($request->bom as $bomItem) {
-                                if (!empty($bomItem['code']) || !empty($bomItem['name'])) {
-                                        $formulaId = DB::table('preparation_formula')->insertGetId([
-                                                 'intermediate_category_id' => $categoryId,
-                                                 'type' => $bomItem['type'] ?? 0,
-                                                 'code' => $bomItem['code'] ?? null,
-                                                 'name' => $bomItem['name'] ?? null,
-                                                 'role' => $bomItem['role'] ?? null,
-                                                 'manufacturer' => $bomItem['manufacturer'] ?? null,
-                                                 'Spec' => $bomItem['Spec'] ?? null,
-                                                 'total_amount_per_unit' => $bomItem['total_amount_per_unit'] ?: null,
-                                                 'total_amount_per_batch' => $bomItem['total_amount_per_batch'] ?: null,
-                                                 'created_by' => session('user')['fullName'] ?? null,
-                                                 'created_at' => now(),
-                                         ]);
-
-                                         // Lưu các phần chia nhỏ (nếu có)
-                                         if (isset($bomItem['sub_amounts']) && is_array($bomItem['sub_amounts'])) {
-                                                 foreach ($bomItem['sub_amounts'] as $sub) {
-                                                         if (!empty($sub['amount_per_unit'])) {
-                                                                 DB::table('ingredient_amount')->insert([
-                                                                         'preparation_formula_id' => $formulaId,
-                                                                         'amount_per_unit' => $sub['amount_per_unit'],
-                                                                         'note' => $sub['note'] ?? null,
-                                                                         'created_by' => session('user')['fullName'] ?? null,
-                                                                         'created_at' => now(),
-                                                                 ]);
-                                                         }
-                                                 }
-                                         }
-                                }
-                        }
-                }
 
                 return redirect()->back()->with('success', 'Đã thêm thành công!');
         }
@@ -161,7 +107,6 @@ class IntermediateCategoryController extends Controller
                 $validator = Validator::make($request->all(), [
                         //'intermediate_code' => 'required|unique:intermediate_category,intermediate_code',
                         'product_name_id' => 'required',
-                        'dosage_id' => 'required',
                         'batch_size' => 'required',
                         'batch_qty' => 'required',
                         'unit_batch_qty' => 'required',
@@ -169,7 +114,6 @@ class IntermediateCategoryController extends Controller
                         //'intermediate_code.required' => 'Vui lòng nhập mã bán thành phẩm.',
                         'intermediate_code.unique' => 'Mã bán thành phẩm đã tồn tại.',
                         'product_name_id.required' => 'Vui lòng chọn tên sản phẩm',
-                        'dosage_id.required' => 'Vui lòng chọn dạng bào chế',
                         'batch_size.required' => 'Vui lòng nhập cỡ lô',
                         'batch_qty.required' => 'Vui lòng nhập cỡ lô',
                         'unit_batch_qty.required' => 'Vui lòng chọn đơn vị '
@@ -178,50 +122,40 @@ class IntermediateCategoryController extends Controller
                 if ($validator->fails()) {
                         return redirect()->back()->withErrors($validator, 'updateErrors')->withInput();
                 }
-                $dosage_name = DB::table('dosage')->where('id', $request->dosage_id)->value('name');
-                if (Str::contains(Str::lower($dosage_name), ['phim', 'nang'])) {
-                        $weight_2 = true;
-                } else {
-                        $weight_2 = false;
-                }
 
                 DB::table('intermediate_category')->where('id', $request->id)->update([
 
                         'intermediate_code' => $request->intermediate_code,
                         'product_name_id' => $request->product_name_id,
+                        'dosage_id' => $request->dosage_id,
                         'batch_size' => $request->batch_size,
                         'unit_batch_size' => $request->unit_batch_size,
                         'batch_qty' => $request->batch_qty,
                         'unit_batch_qty' => $request->unit_batch_qty,
 
-                        'dosage_id' => $request->dosage_id,
-                        'weight_1' => $request->weight_1 === "on" ? true : false,
-                        'weight_2' => $weight_2,
-                        'prepering' => $request->prepering === "on" ? true : false,
-                        'blending' => $request->blending === "on" ? true : false,
-                        'forming' => $request->forming === "on" ? true : false,
-                        'coating' => $request->coating === "on" ? true : false,
-                        'avg_core' => $request->avg_core,
-                        'average_unit_weight' => $request->average_unit_weight,
+                        'weight_1' => $request->input('weight_1') === "on" ? 1 : 0,
+                        'weight_2' => $request->input('weight_2') === "on" ? 1 : 0,
+                        'prepering' => $request->input('prepering') === "on" ? 1 : 0,
+                        'blending' => $request->input('blending') === "on" ? 1 : 0,
+                        'forming' => $request->input('forming') === "on" ? 1 : 0,
+                        'coating' => $request->input('coating') === "on" ? 1 : 0,
+                        
+                        'quarantine_total' => $request->input('quarantine_total') ?? 0,
+                        'quarantine_weight' => $request->input('quarantine_weight') ?? 0,
+                        'quarantine_preparing' => $request->input('quarantine_preparing') ?? 0,
+                        'quarantine_blending' => $request->input('quarantine_blending') ?? 0,
+                        'quarantine_forming' => $request->input('quarantine_forming') ?? 0,
+                        'quarantine_coating' => $request->input('quarantine_coating') ?? 0,
+                        'quarantine_time_unit' => $request->input('quarantine_time_unit') === "on" ? 1 : 0,
 
-                        'quarantine_total' => $request->quarantine_total ?? 0,
-                        'quarantine_weight' => $request->quarantine_weight ?? 0,
-                        'quarantine_preparing' => $request->quarantine_preparing ?? 0,
-                        'quarantine_blending' => $request->quarantine_blending ?? 0,
-                        'quarantine_forming' => $request->quarantine_forming ?? 0,
-                        'quarantine_coating' => $request->quarantine_coating ?? 0,
-                        'quarantine_time_unit' => $request->quarantine_time_unit === "on" ? true : false,
-
-                        'API_name' => $request->API_name,
-                        'content' => $request->content,
-                        'description' => $request->description,
-                        'storage_conditions' => $request->storage_conditions,
-
-                        'deparment_code' => session('user')['production_code'],
-                        'prepared_by' => session('user')['fullName'],
+                        'deparment_code' => $request->deparment_code ?? (session('user')['production_code'] ?? 'PXV1'),
+                        'prepared_by' => session('user')['fullName'] ?? 'System',
                         'updated_at' => now(),
                 ]);
-                return redirect()->back()->with('success', 'Đã thêm thành công!');
+
+
+
+                return redirect()->back()->with('success', 'Đã cập nhật thành công!');
         }
 
         public function deActive(Request $request)
@@ -249,32 +183,63 @@ class IntermediateCategoryController extends Controller
         {
 
                 if ($request->IsHypothesis == 1) {
-                        $datas = DB::table('bom_item')
-                                ->select([
-                                        'code as MatID',
-                                        'name as MaterialName',
-                                        'qty as MatQty',
-                                        'uom',
-                                        'Revno'
-                                ])
-                                ->where('active', 1)
-                                ->where('product_caterogy_id', $request->product_caterogy_id)
-                                ->get();
+                        if (Schema::hasTable('bom_item')) {
+                                $datas = DB::table('bom_item')
+                                        ->select([
+                                                'code as MatID',
+                                                'name as MaterialName',
+                                                'qty as MatQty',
+                                                'uom',
+                                                'Revno'
+                                        ])
+                                        ->where('active', 1)
+                                        ->where('product_caterogy_id', $request->product_caterogy_id)
+                                        ->get();
+                        } else {
+                                $datas = collect([]);
+                        }
                 } else {
-                        $datas = DB::connection('mms')
-                                ->table('yfBOM_BOMItemHP')
-                                ->where('PrdID', $request->intermediate_code)
-                                ->where('Revno', function ($q) use ($request) {
-                                        $q->selectRaw('MAX(Revno)')
-                                                ->from('yfBOM_BOMItemHP')
-                                                ->where('PrdID', $request->intermediate_code);
-                                })
-                                ->distinct()
-                                ->orderBy('PrdStage')
-                                ->orderBy('MatID')
-                                ->get();
+                        try {
+                                $datas = DB::connection('mms')
+                                        ->table('yfBOM_BOMItemHP')
+                                        ->where('PrdID', $request->intermediate_code)
+                                        ->where('Revno', function ($q) use ($request) {
+                                                $q->selectRaw('MAX(Revno)')
+                                                        ->from('yfBOM_BOMItemHP')
+                                                        ->where('PrdID', $request->intermediate_code);
+                                        })
+                                        ->distinct()
+                                        ->orderBy('PrdStage')
+                                        ->orderBy('MatID')
+                                        ->get();
+                        } catch (\Exception $e) {
+                                Log::error('ERP mms connection failed: ' . $e->getMessage());
+                                $datas = collect([]);
+                        }
                 }
 
                 return response()->json($datas);
+        }
+
+        public function formulas(Request $request)
+        {
+                $formulas = DB::table('preparation_formula')
+                        ->where('intermediate_category_id', $request->id)
+                        ->orderBy('id')
+                        ->get();
+
+                foreach ($formulas as $formula) {
+                        $formula->materials = DB::table('formula_materials')
+                                ->where('preparation_formula_id', $formula->id)
+                                ->orderBy('id')
+                                ->get();
+                                
+                        $formula->sub_amounts = DB::table('ingredient_amount')
+                                ->where('preparation_formula_id', $formula->id)
+                                ->orderBy('id')
+                                ->get();
+                }
+
+                return response()->json($formulas);
         }
 }

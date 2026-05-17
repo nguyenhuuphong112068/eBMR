@@ -237,13 +237,13 @@
                                                 <td class="text-center">
                                                     <button class="btn btn-sm btn-primary rounded-pill px-3"
                                                         onclick="selectCategory({{ $item->id }}, '{{ $item->intermediate_code }}', '{{ addslashes($item->product_name) }}', 'Cỡ lô: {{ $item->batch_size }} {{ $item->unit_batch_size }} | Dạng: {{ $item->dosage_name ?? 'N/A' }}', {
-                                                            1: {{ $item->weight_1 ? 1 : 0 }},
-                                                            2: {{ $item->weight_2 ? 1 : 0 }},
-                                                            3: {{ $item->prepering ? 1 : 0 }},
-                                                            4: {{ $item->blending ? 1 : 0 }},
-                                                            5: {{ $item->forming ? 1 : 0 }},
-                                                            6: {{ $item->coating ? 1 : 0 }}
-                                                        })">
+                                                            1: 1,
+                                                            2: 1,
+                                                            3: 1,
+                                                            4: 1,
+                                                            5: 1,
+                                                            6: 1
+                                                        }, {{ $item->IsHypothesis ?? 0 }})">
                                                         <i class="fas fa-check me-1"></i> Chọn
                                                     </button>
                                                 </td>
@@ -260,7 +260,7 @@
 
         <!-- Modal 2: Soạn mới / Cập nhật Hồ Sơ -->
         <div class="modal fade" id="templateMetadataModal" tabindex="-1" role="dialog" aria-hidden="true">
-            <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+            <div class="modal-dialog modal-xl modal-dialog-centered" role="document" style="max-width: 95%;">
                 <div class="modal-content border-0 shadow-lg">
                     <form id="metadataForm">
                         @csrf
@@ -277,66 +277,41 @@
                             </button>
                         </div>
                         <div class="modal-body p-4">
-                            <div class="alert alert-cyan border-0 shadow-none mb-4">
-                                <div class="d-flex align-items-center">
-                                    <i class="fas fa-info-circle fa-2x me-3 text-primary"></i>
-                                    <div class="w-100">
-                                        <h6 class="mb-1 fw-bold text-navy">Sản phẩm đang chọn:</h6>
-                                        <div class="d-flex justify-content-between align-items-end">
-                                            <div>
-                                                <div id="selectedBtpName" class="fs-5 text-primary fw-bold">Chưa chọn sản
-                                                    phẩm</div>
-                                                <div id="selectedBtpInfo" class="small text-muted mt-1">Cỡ lô: - | Dạng
-                                                    bào chế: -</div>
-                                            </div>
-                                            <button type="button" class="btn btn-sm btn-outline-info rounded-pill"
-                                                onclick="openBtpListModal()">
-                                                <i class="fas fa-sync-alt me-1"></i> Đổi sản phẩm
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
                             <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label fw-bold">Phiên Bản (Version) <span
-                                            class="text-danger">*</span></label>
-                                    <input type="number" class="form-control rounded-pill" name="version"
-                                        id="version" required value="1" min="1">
-                                    <small class="text-muted"><i class="fas fa-magic me-1"></i> Hệ thống tự động gợi ý
-                                        phiên bản tiếp theo.</small>
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label fw-bold">Trạng Thái hồ sơ</label>
-                                    <input type="text" class="form-control rounded-pill bg-light fw-bold text-primary"
-                                        id="statusDisplay" readonly value="Nháp (Draft)">
-                                </div>
-                            </div>
-
-                            <div id="sectionsChecklistContainer" class="mt-2" style="display: none;">
-                                <label class="form-label fw-bold text-navy mb-2"><i
-                                        class="fas fa-list-check me-2"></i>Chọn các công đoạn (Sections) muốn tạo:</label>
-                                <div class="p-3 bg-light rounded border border-info-subtle">
-                                    <div class="row" id="sectionsChecklist">
-                                        @foreach ($all_sections as $sec)
-                                            <div class="col-md-6 mb-2 section-item" data-code="{{ $sec->code }}">
-                                                <div class="form-check custom-checkbox">
-                                                    <input class="form-check-input section-checkbox" type="checkbox"
-                                                        name="selected_sections[]" value="{{ $sec->code }}"
-                                                        id="sec_{{ $sec->code }}"
-                                                        {{ $sec->code == 0 || $sec->code == 9 ? 'checked' : '' }}>
-                                                    <label class="form-check-label small fw-bold"
-                                                        for="sec_{{ $sec->code }}">
-                                                        {{ $sec->code }}. {{ $sec->name }}
-                                                    </label>
+                                <!-- Left Column (30% / col-lg-4) -->
+                                <div class="{{ request('type') == 'BMR' ? 'col-lg-4 border-right pr-4' : 'col-lg-12' }}">
+                                    <div class="row align-items-center mb-3">
+                                        <div class="col-md-8">
+                                            <div class="alert alert-cyan border-0 shadow-none mb-0 p-3">
+                                                <div class="d-flex align-items-center">
+                                                    <i class="fas fa-info-circle fa-2x me-3 text-primary"></i>
+                                                    <div class="w-100" style="min-width: 0;">
+                                                        <h6 class="mb-1 fw-bold text-navy small">Sản phẩm đang chọn:</h6>
+                                                        <div id="selectedBtpName" class="fs-6 text-primary fw-bold text-truncate">Chưa chọn sản phẩm</div>
+                                                        <div id="selectedBtpInfo" class="small text-muted mt-1" style="font-size: 0.75rem;">Cỡ lô: - | Dạng bào chế: -</div>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        @endforeach
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="form-group mb-0">
+                                                <label class="form-label fw-bold small">Phiên Bản <span class="text-danger">*</span></label>
+                                                <input type="number" class="form-control rounded-pill text-center fw-bold" name="version" id="version" required value="1" min="1">
+                                                <small class="text-muted d-block mt-1 text-center" style="font-size: 0.7rem;"><i class="fas fa-magic me-1"></i> Tự động</small>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <small class="text-info"><i class="fas fa-info-circle me-1"></i> Các mục (0) và (9) là
-                                        mặc định. Các mục khác được gợi ý dựa trên quy trình sản xuất của sản phẩm.</small>
+
+                                    @include('pages.ebmr.templates.partials.bmr_metadata')
+
                                 </div>
+                                <!-- End Left Column -->
+
+                                <!-- Right Column (70% / col-lg-8): BOM Tables -->
+                                <div class="col-lg-8 pl-4" id="bmr_bom_tables_container" style="display: {{ request('type') == 'BMR' ? 'block' : 'none' }};">
+                                    @include('pages.ebmr.templates.partials.bmr_bom_tables')
+                                </div>
+                                <!-- End Right Column -->
                             </div>
                         </div>
                         <div class="modal-footer bg-light p-3">
@@ -459,6 +434,18 @@
                 border-radius: 50px !important;
             }
 
+            /* Bỏ bo góc khối bao Summernote editor */
+            .note-editor.note-frame.card {
+                border-radius: 0 !important;
+                box-shadow: none !important;
+                border: 1px solid #ced4da !important;
+            }
+            .note-editor .note-toolbar {
+                border-radius: 0 !important;
+                border-bottom: 1px solid #ced4da !important;
+                background: #f8f9fa !important;
+            }
+
             /* Tăng kích thước Modal */
             @media (min-width: 1200px) {
                 .modal-xl {
@@ -563,7 +550,7 @@
                 $('#modalBtpList').modal('show');
             }
 
-            function selectCategory(id, code, name, info, stages = {}) {
+            function selectCategory(id, code, name, info, stages = {}, isHypothesis = 0) {
                 $('#modalBtpList').modal('hide');
 
                 openCreateModal();
@@ -572,37 +559,7 @@
                 $('#selectedBtpName').html(code + ' - ' + name);
                 $('#selectedBtpInfo').html(`<i class="fas fa-info-circle me-1"></i> ${info}`);
 
-                // Handle Sections Checklist
                 const type = $('#templateType').val();
-                if (type === 'BMR' || type === 'BPR') {
-                    $('#sectionsChecklistContainer').show();
-                    // Reset checks and visibility
-                    $('.section-checkbox').prop('checked', false);
-                    $('.section-item').show();
-
-                    // Default checks (0 and 9)
-                    $('#sec_0, #sec_9').prop('checked', true);
-
-                    if (type === 'BMR') {
-                        // Hide 7 and 8 for BMR
-                        $('.section-item[data-code="7"], .section-item[data-code="8"]').hide();
-
-                        // Check based on passed stages (1-6)
-                        Object.keys(stages).forEach(code => {
-                            if (stages[code]) {
-                                $(`#sec_${code}`).prop('checked', true);
-                            }
-                        });
-                    } else if (type === 'BPR') {
-                        // Hide 1-6 for BPR
-                        $('.section-item[data-code="1"], .section-item[data-code="2"], .section-item[data-code="3"], .section-item[data-code="4"], .section-item[data-code="5"], .section-item[data-code="6"]')
-                            .hide();
-                        // Check 7 and 8 for BPR
-                        $('#sec_7, #sec_8').prop('checked', true);
-                    }
-                } else {
-                    $('#sectionsChecklistContainer').hide();
-                }
 
                 // Fetch next version
                 $('#version').val('...').prop('disabled', true);
@@ -612,6 +569,34 @@
                 }, function(res) {
                     $('#version').val(res.next_version).prop('disabled', false);
                 });
+
+                // Fetch ERP Recipe and auto-populate BOM table type 0
+                $('#bom_table_body_type_0').empty();
+                $('#bom_table_body_type_1').empty();
+                bomRowIndex = 0; // Reset index
+
+                if (type === 'BMR') {
+                    $.ajax({
+                        url: "{{ route('pages.category.intermediate.recipe') }}",
+                        type: 'post',
+                        data: {
+                            IsHypothesis: isHypothesis,
+                            product_caterogy_id: id,
+                            intermediate_code: code,
+                            _token: "{{ csrf_token() }}"
+                        },
+                        success: function(res) {
+                            if (res && res.length > 0) {
+                                res.forEach((item) => {
+                                    addBOMRow(0, 'bom_table_body_type_0', item);
+                                });
+                            } else {
+                                // If no formula, just add 1 empty row to start
+                                addBOMRow(0, 'bom_table_body_type_0');
+                            }
+                        }
+                    });
+                }
             }
 
             function openIssueModal(id, name) {
@@ -659,6 +644,10 @@
             function openCreateModal() {
                 $('#metadataForm')[0].reset();
                 $('#templateId').val('');
+                if ($.fn.summernote) {
+                    if($('#create_description_editor').length) $('#create_description_editor').summernote('code', '');
+                    if($('#create_storage_conditions_editor').length) $('#create_storage_conditions_editor').summernote('code', '');
+                }
                 $('#modalTitle').html('<i class="fas fa-file-medical me-2"></i> Soạn Mới Hồ Sơ Gốc');
                 $('#templateMetadataModal').modal('show');
             }
@@ -669,13 +658,33 @@
 
                 $.get(`/ebmr/templates/${id}/data`, function(data) {
                     $('#templateId').val(data.id);
-                    $('#docCode').val(data.document_code);
-                    $('#edition').val(data.edition);
-                    $('#templateName').val(data.name);
-                    $('#dosageForm').val(data.dosage_form);
-                    $('#batchSize').val(data.batch_size);
-                    $('#effectiveDate').val(data.effective_date);
-                    $('#sectionsChecklistContainer').hide(); // Hide when editing existing
+                    $('#caterogyId').val(data.caterogy_id);
+                    $('#version').val(data.version);
+                    $('#statusDisplay').val(data.status);
+                    
+                    if (data.type === 'BMR') {
+                        $('#bmr_specific_fields').show();
+                        $('select[name="dosage_id"]').val(data.dosage_id);
+                        $('input[name="avg_core"]').val(data.avg_core);
+                        $('input[name="average_unit_weight"]').val(data.average_unit_weight);
+                        $('input[name="API_name"]').val(data.API_name);
+                        $('input[name="content"]').val(data.content);
+                        if($('#create_description_editor').length) {
+                            $('#create_description_editor').summernote('code', data.description || '');
+                            $('#create_description_input').val(data.description || '');
+                        }
+                        if($('#create_storage_conditions_editor').length) {
+                            $('#create_storage_conditions_editor').summernote('code', data.storage_conditions || '');
+                            $('#create_storage_conditions_input').val(data.storage_conditions || '');
+                        }
+                        
+                        if (data.bom && window.renderBOMRows) {
+                            window.renderBOMRows(data.bom);
+                        }
+                    } else {
+                        $('#bmr_specific_fields').hide();
+                    }
+
                     $('#templateMetadataModal').modal('show');
                 });
             }
@@ -768,4 +777,5 @@
                 });
             }
         </script>
+        @include('pages.ebmr.templates.partials.bmr_scripts')
     @endsection

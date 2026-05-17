@@ -390,3 +390,31 @@
         </div>
     </div>
 </div>
+
+<!-- Abbreviation Modal -->
+<div class="modal fade" id="abbreviationModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0" style="border-radius: 12px;">
+            <div class="modal-header bg-primary text-white border-0 py-2 px-3">
+                <h5 class="modal-title fw-bold small"><i class="fas fa-spell-check me-2"></i> THÊM TỪ VIẾT TẮT</h5>
+                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="small fw-bold mb-1">Từ viết tắt đã chọn</label>
+                    <input type="text" id="abbrWord" class="form-control" readonly style="background-color: #f8f9fa;">
+                </div>
+                <div class="mb-3">
+                    <label class="small fw-bold mb-1">Ý nghĩa (Giải nghĩa)</label>
+                    <input type="text" id="abbrMeaning" class="form-control" placeholder="Nhập ý nghĩa của từ viết tắt...">
+                </div>
+            </div>
+            <div class="modal-footer bg-light border-0 py-2">
+                <button type="button" class="btn btn-secondary btn-sm px-4" data-dismiss="modal">Hủy</button>
+                <button type="button" class="btn btn-primary btn-sm px-4 fw-bold" onclick="saveAbbreviation()">Lưu</button>
+            </div>
+        </div>
+    </div>
+</div>

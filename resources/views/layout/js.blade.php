@@ -34,6 +34,8 @@
         <script src="{{ asset('dataTable/plugins/toastr/toastr.min.js') }}"></script>
         <!-- SweetAlert2 -->
         <script src="{{ asset('dataTable/plugins/sweetalert2/sweetalert2.min.js') }}"></script>
+        <!-- Summernote -->
+        <script src="{{ asset('dataTable/plugins/summernote/summernote-bs4.min.js') }}"></script>
 
         <!-- DataTables JS (Local) -->
         <script src="{{ asset('dataTable/plugins/datatables/jquery.dataTables.min.js') }}"></script>  
