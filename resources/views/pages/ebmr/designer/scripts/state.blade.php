@@ -58,6 +58,21 @@
             bmrHeader.isVirtual = true;
             virtualBlocks.push(bmrHeader);
             
+            // QUY TRÌNH PHÊ DUYỆT
+            virtualBlocks.push({
+                id: 'sys_bmr_sec_approval',
+                type: 'section',
+                label: 'QUY TRÌNH PHÊ DUYỆT',
+                section_id: catId,
+                locked: true,
+                isVirtual: true
+            });
+            
+            let sigTable = generateSignatureTable();
+            sigTable.id = 'sys_bmr_tbl_signatures';
+            virtualBlocks.push(sigTable);
+            
+            
             if (type !== 'MF' && type !== 'BPR') {
                 // 3. THÔNG TIN CHUNG SẢN PHẨM (Section)
                 virtualBlocks.push({
@@ -96,7 +111,7 @@
         }
         
         // Remove any old static blocks from items (just in case they still exist in DB)
-        const sysLabels = ['BMR HEADER', 'BMR Header', 'GF Header', 'THÔNG TIN CHUNG SẢN PHẨM', 'MÔ TẢ SẢN PHẨM', 'CÔNG THỨC PHA CHẾ', '1. NGUYÊN LIỆU PHA CHẾ', '2. NGUYÊN LIỆU KHÁC (BAO PHIM/NANG)', 'Ghi chú nguyên liệu pha chế', 'Ghi chú nguyên liệu khác', 'THÔNG TIN CHUNG'];
+        const sysLabels = ['BMR HEADER', 'BMR Header', 'GF Header', 'QUY TRÌNH PHÊ DUYỆT', 'THÔNG TIN CHUNG SẢN PHẨM', 'MÔ TẢ SẢN PHẨM', 'CÔNG THỨC PHA CHẾ', '1. NGUYÊN LIỆU PHA CHẾ', '2. NGUYÊN LIỆU KHÁC (BAO PHIM/NANG)', 'Ghi chú nguyên liệu pha chế', 'Ghi chú nguyên liệu khác', 'THÔNG TIN CHUNG', 'Trình Ký'];
         items = items.filter(i => !sysLabels.includes(i.label));
         
         // Prepend virtual blocks
@@ -382,10 +397,31 @@
 
     function generateProductDescriptionTable() {
         const id = 'blk_desc_' + Date.now();
+        const formulas = @json($template->formulas ?? []);
+        let labelClaimsHtml = '';
+        
+        let activeIngredients = formulas.filter(f => f.role === 'Hoạt Chất');
+        if (activeIngredients.length > 0) {
+            let dosageUnit = "{{ mb_strtolower($template->dosage_name ?? 'viên') }}";
+            let lines = [`Mỗi ${dosageUnit} chứa:`];
+            activeIngredients.forEach(f => {
+                let matName = (f.materials && f.materials.length > 0) ? f.materials[0].name : '';
+                let amount = Number(f.total_amount_per_unit).toLocaleString('vi-VN', {minimumFractionDigits: 0, maximumFractionDigits: 2});
+                lines.push(`<div style="display: flex; width: 100%; max-width: 450px;">
+                                <span>${matName}</span>
+                                <span style="flex-grow: 1; border-bottom: 2px dotted #000; margin: 0 5px; position: relative; top: -5px;"></span>
+                                <span>${amount} mg</span>
+                            </div>`);
+            });
+            labelClaimsHtml = lines.join('');
+        } else {
+            labelClaimsHtml = {!! json_encode($template->content ?? '') !!};
+        }
+
         const t = {
             name: "{{ $template->category_name ?? '' }}",
             code: "{{ $template->category_code ?? '' }}",
-            content: {!! json_encode($template->content ?? '') !!},
+            content: labelClaimsHtml,
             description: {!! json_encode($template->description ?? '') !!},
             storage_conditions: {!! json_encode($template->storage_conditions ?? '') !!}
         };
@@ -908,6 +944,122 @@
         });
 
         return resultBlocks;
+    }
+
+    function generateSignatureTable() {
+        const id = 'sys_bmr_tbl_signatures';
+        const workflows = @json($template->workflows ?? []);
+        const createdByName = "{{ $template->owner_name ?? '' }}"; 
+        const createdAtStr = "{{ $template->created_at ?? '' }}"; 
+        
+        let columns = [{
+                label: '-',
+                type: 'text',
+                width: '20%'
+            },
+            {
+                label: 'HỌ VÀ TÊN',
+                type: 'text',
+                width: '40%'
+            },
+            {
+                label: 'CHỮ KÝ',
+                type: 'text',
+                width: '20%'
+            },
+            {
+                label: 'NGÀY',
+                type: 'text',
+                width: '20%'
+            }
+        ];
+        
+        let data = [
+            [{ content: '-', rs: 1, cs: 1, textAlign: 'center', fontWeight: 'bold' },
+             { content: 'HỌ VÀ TÊN', rs: 1, cs: 1, textAlign: 'center', fontWeight: 'bold' },
+             { content: 'CHỮ KÝ', rs: 1, cs: 1, textAlign: 'center', fontWeight: 'bold' },
+             { content: 'NGÀY', rs: 1, cs: 1, textAlign: 'center', fontWeight: 'bold' }
+            ]
+        ];
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '';
+            try {
+                // Handle YYYY-MM-DD HH:MM:SS format
+                const parts = dateStr.split(' ');
+                const dateParts = parts[0].split('-');
+                if (dateParts.length === 3) {
+                    return `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
+                }
+                const d = new Date(dateStr);
+                if (isNaN(d.getTime())) return dateStr;
+                const day = String(d.getDate()).padStart(2, '0');
+                const month = String(d.getMonth() + 1).padStart(2, '0');
+                const year = d.getFullYear();
+                return `${day}/${month}/${year}`;
+            } catch (e) {
+                return dateStr;
+            }
+        }
+
+        // 1. Soạn thảo
+        data.push([
+            { content: 'Người soạn thảo', rs: 1, cs: 1, textAlign: 'left' },
+            { content: `<div>Người lập</div><div class="mt-2">${createdByName}</div>`, rs: 1, cs: 1, textAlign: 'left' },
+            { content: `<span class="text-success"><i class="fas fa-check-circle me-1"></i> Đã ký</span>`, rs: 1, cs: 1, textAlign: 'center' },
+            { content: formatDate(createdAtStr), rs: 1, cs: 1, textAlign: 'center' }
+        ]);
+
+        if (workflows && workflows.length > 0) {
+             workflows.forEach(wf => {
+                 let roleText = 'Người kiểm tra';
+                 if (wf.role === 'approver') roleText = 'Người phê duyệt';
+                 if (wf.role === 'authorizer') roleText = 'Người duyệt ban hành';
+                 if (wf.role === 'reviewer') roleText = 'Người kiểm tra';
+
+                 let nameText = `<div>${wf.title || wf.department_name || ''}</div><div class="mt-2">${wf.fullName || ''}</div>`;
+                 
+                 let dateText = '';
+                 let sigText = '';
+                 if (wf.status === 'approved') {
+                     dateText = formatDate(wf.created_at);
+                     sigText = `<span class="text-success" style="font-weight: bold;"><i class="fas fa-check-circle me-1"></i> Đã ký</span>`;
+                 } else if (wf.status === 'rejected') {
+                     sigText = `<span class="text-danger" style="font-weight: bold;"><i class="fas fa-times-circle me-1"></i> Từ chối</span>`;
+                 }
+
+                 data.push([
+                    { content: roleText, rs: 1, cs: 1, textAlign: 'left' },
+                    { content: nameText, rs: 1, cs: 1, textAlign: 'left' },
+                    { content: sigText, rs: 1, cs: 1, textAlign: 'center' },
+                    { content: dateText, rs: 1, cs: 1, textAlign: 'center' }
+                 ]);
+             });
+        } else {
+             // Fallback empty rows
+             data.push([
+                { content: 'Người kiểm tra', rs: 1, cs: 1, textAlign: 'left' },
+                { content: '', rs: 1, cs: 1, textAlign: 'left' },
+                { content: '', rs: 1, cs: 1, textAlign: 'center' },
+                { content: '', rs: 1, cs: 1, textAlign: 'center' }
+             ]);
+        }
+
+        return {
+            id: id,
+            type: 'table',
+            label: 'Trình Ký',
+            rows: data.length,
+            cols: 4,
+            columns: columns,
+            data: data,
+            rowHeights: new Array(data.length).fill('auto'),
+            borderMode: 'visible',
+            hideHeader: true,
+            locked: true,
+            isVirtual: true,
+            section_id: "{{ $template->caterogy_id ?? 0 }}"
+        };
     }
 
     // Undo/Redo History

@@ -17,6 +17,7 @@ Route::group(['prefix' => 'ebmr', 'as' => 'pages.ebmr.'], function () {
     Route::get('/templates/{id}/blocks', [EbmrTemplateController::class, 'getTemplateBlocks'])->name('getTemplateBlocks');
     Route::get('/get-history/{id}', [EbmrTemplateController::class, 'getHistory'])->name('getHistory');
     Route::get('/templates/next-version', [EbmrTemplateController::class, 'getNextVersion'])->name('getNextVersion');
+    Route::get('/material-info', [EbmrTemplateController::class, 'getMaterialInfo'])->name('getMaterialInfo');
 
     // 2. Designer & Content
     Route::get('/designer/{id?}', [EbmrDesignerController::class, 'designer'])->name('designer');

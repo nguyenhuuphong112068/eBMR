@@ -1,9 +1,9 @@
-<div class="bmr-specific-fields mt-3 pt-3 border-top" id="bmr_specific_fields" style="display: {{ request('type') == 'BMR' ? 'block' : 'none' }};">
+<div class="bmr-specific-fields mt-3 pt-3 border-top" id="bmr_specific_fields"
+    style="display: {{ request('type') == 'BMR' ? 'block' : 'none' }};">
     <div class="form-group mb-2">
         <label class="fw-bold small text-uppercase text-muted mb-1">Mô tả sản phẩm</label>
         <div class="summernote" id="create_description_editor">{!! old('description') !!}</div>
-        <input type="hidden" name="description" id="create_description_input"
-            value="{{ old('description') }}">
+        <input type="hidden" name="description" id="create_description_input" value="{{ old('description') }}">
     </div>
 
     <div class="form-group mb-3">

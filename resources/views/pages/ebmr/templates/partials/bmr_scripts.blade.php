@@ -60,7 +60,7 @@
                         <td class="align-middle p-1">
                             <div class="materials-col-name">
                                 <div class="material-group mt-1" data-mat-index="0">
-                                    <textarea class="form-control auto-resize" name="bom[${bomRowIndex}][materials][0][name]" placeholder="Thành phần" rows="1">${name}</textarea>
+                                    <textarea class="form-control auto-resize" name="bom[${bomRowIndex}][materials][0][name]" placeholder="Thành phần" rows="2">${name}</textarea>
                                 </div>
                             </div>
                         </td>
@@ -188,7 +188,7 @@
                 
                 row.find('.materials-col-name').append(`
                     <div class="material-group mt-1" data-mat-index="${nextMatIndex}">
-                        <textarea class="form-control auto-resize border-top border-info pt-2" name="bom[${rowIndex}][materials][${nextMatIndex}][name]" placeholder="Thành phần" rows="1"></textarea>
+                        <textarea class="form-control auto-resize border-top border-info pt-2" name="bom[${rowIndex}][materials][${nextMatIndex}][name]" placeholder="Thành phần" rows="2"></textarea>
                     </div>
                 `);
                 
@@ -214,6 +214,31 @@
                 const row = $(this).closest('tr.bom-row');
                 
                 row.find(`.material-group[data-mat-index="${matIndex}"]`).remove();
+            });
+
+            // Handle Mã Nguyên Liệu auto-fill
+            $(document).on('change', 'textarea[name$="[code]"]', function() {
+                const codeInput = $(this);
+                const code = codeInput.val().trim();
+                if (!code) return;
+
+                const row = codeInput.closest('tr.bom-row');
+                const group = codeInput.closest('.material-group');
+                const matIndex = group.data('mat-index');
+
+                $.get('{{ route("pages.ebmr.getMaterialInfo") }}', { code: code }, function(res) {
+                    if (res.success) {
+                        const nameInput = row.find(`.materials-col-name .material-group[data-mat-index="${matIndex}"] textarea`);
+                        const manufInput = row.find(`.materials-col-manufacturer .material-group[data-mat-index="${matIndex}"] textarea`);
+                        
+                        if (res.name) {
+                            nameInput.val(res.name).trigger('input');
+                        }
+                        if (res.manufacturer) {
+                            manufInput.val(res.manufacturer).trigger('input');
+                        }
+                    }
+                });
             });
 
             $('#btn_add_bom_row_type_0').click(function() {
@@ -273,7 +298,7 @@
                         `;
                         materialsNameHtml += `
                             <div class="material-group mt-1" data-mat-index="${mIdx}">
-                                <textarea class="form-control auto-resize" name="bom[${bomRowIndex}][materials][${mIdx}][name]" placeholder="Thành phần" rows="1">${mat.name || ''}</textarea>
+                                <textarea class="form-control auto-resize" name="bom[${bomRowIndex}][materials][${mIdx}][name]" placeholder="Thành phần" rows="2">${mat.name || ''}</textarea>
                             </div>
                         `;
                         materialsManufHtml += `
@@ -362,6 +387,15 @@
                 updateBOMNotes();
                 checkTableSum('type_0');
                 checkTableSum('type_1');
+                
+                setTimeout(function() {
+                    $('.auto-resize').each(function() {
+                        this.style.height = 'auto';
+                        if (this.scrollHeight > 0) {
+                            this.style.height = (this.scrollHeight) + 'px';
+                        }
+                    });
+                }, 100);
             };
 
             // --- AUTO-CALCULATION & NOTES LOGIC ---

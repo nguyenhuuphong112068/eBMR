@@ -580,4 +580,47 @@ class EbmrTemplateController extends Controller
             }
         }
     }
+
+    public function getMaterialInfo(Request $request)
+    {
+        $code = trim($request->input('code'));
+        if (!$code) {
+            return response()->json(['success' => false, 'message' => 'Missing code']);
+        }
+
+        try {
+            // Find material
+            $material = DB::connection('mms')
+                ->table('mstmaterial')
+                ->where('MatID', $code)
+                ->first();
+
+            $matName = $material ? $material->MatNM : '';
+
+            // Find supplier
+            $supplierName = '';
+            $supMat = DB::connection('mms')
+                ->table('MSTSUPMAT')
+                ->where('MatID', $code)
+                ->first();
+
+            if ($supMat && isset($supMat->mfgid)) {
+                $sup = DB::connection('mms')
+                    ->table('MSTSUP')
+                    ->where('SupID', $supMat->mfgid)
+                    ->first();
+                if ($sup) {
+                    $supplierName = $sup->SupNM;
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'name' => $matName,
+                'manufacturer' => $supplierName
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()]);
+        }
+    }
 }

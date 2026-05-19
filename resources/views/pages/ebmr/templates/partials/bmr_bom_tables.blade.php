@@ -4,13 +4,13 @@
         <table class="table table-sm table-bordered mb-0">
             <thead class="bg-light text-center align-middle" style="font-size: 0.8rem;">
                 <tr>
-                    <th style="width: 40px;">STT</th>
-                    <th>Mã nguyên liệu</th>
-                    <th>Thành phần</th>
-                    <th>Chức năng</th>
-                    <th>Nhà sản xuất</th>
-                    <th>Tiêu chuẩn</th>
-                    <th style="width: 250px;">
+                    <th style="width: 40px; min-width: 40px;">STT</th>
+                    <th style="min-width: 120px; width: 120px;">Mã nguyên liệu</th>
+                    <th style="min-width: 350px;">Thành phần</th>
+                    <th style="min-width: 150px;">Chức năng</th>
+                    <th style="min-width: 150px;">Nhà sản xuất</th>
+                    <th style="min-width: 150px;">Tiêu chuẩn</th>
+                    <th style="width: 250px; min-width: 250px;">
                         1 viên (mg)
                         <input type="number" step="any" class="form-control form-control-sm mt-1 text-center border-primary" 
                                name="avg_core" id="update_avg_core" value="{{ old('avg_core') }}" placeholder="Nhân TB" title="Khối lượng nhân trung bình">
@@ -37,13 +37,13 @@
         <table class="table table-sm table-bordered mb-0">
             <thead class="bg-light text-center align-middle" style="font-size: 0.8rem;">
                 <tr>
-                    <th style="width: 40px;">STT</th>
-                    <th>Mã nguyên liệu</th>
-                    <th>Thành phần</th>
-                    <th>Chức năng</th>
-                    <th>Nhà sản xuất</th>
-                    <th>Tiêu chuẩn</th>
-                    <th style="width: 250px;">
+                    <th style="width: 40px; min-width: 40px;">STT</th>
+                    <th style="min-width: 120px; width: 120px;">Mã nguyên liệu</th>
+                    <th style="min-width: 350px;">Thành phần</th>
+                    <th style="min-width: 150px;">Chức năng</th>
+                    <th style="min-width: 150px;">Nhà sản xuất</th>
+                    <th style="min-width: 150px;">Tiêu chuẩn</th>
+                    <th style="width: 250px; min-width: 250px;">
                         1 viên (mg)
                         <input type="number" step="any" class="form-control form-control-sm mt-1 text-center border-primary" 
                                name="average_unit_weight" id="update_average_unit_weight" value="{{ old('average_unit_weight') }}" placeholder="Viên TB" title="Khối lượng viên trung bình">

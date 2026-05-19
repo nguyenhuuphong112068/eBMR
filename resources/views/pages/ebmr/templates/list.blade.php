@@ -260,9 +260,8 @@
 
         <!-- Modal 2: Soạn mới / Cập nhật Hồ Sơ -->
         <div class="modal fade" id="templateMetadataModal" tabindex="-1" role="dialog" aria-hidden="true">
-            <div class="modal-dialog modal-xl modal-dialog-centered" role="document" style="max-width: 95%;">
-                <div class="modal-content border-0 shadow-lg">
-                    <form id="metadataForm">
+            <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" role="document" style="max-width: 95%;">
+                <form id="metadataForm" class="modal-content border-0 shadow-lg">
                         @csrf
                         <input type="hidden" id="templateId" name="id">
                         <input type="hidden" id="caterogyId" name="caterogy_id">
@@ -331,7 +330,6 @@
                             </button>
                         </div>
                     </form>
-                </div>
             </div>
         </div>
 
@@ -617,26 +615,8 @@
                 bomRowIndex = 0; // Reset index
 
                 if (type === 'BMR') {
-                    $.ajax({
-                        url: "{{ route('pages.category.intermediate.recipe') }}",
-                        type: 'post',
-                        data: {
-                            IsHypothesis: isHypothesis,
-                            product_caterogy_id: id,
-                            intermediate_code: code,
-                            _token: "{{ csrf_token() }}"
-                        },
-                        success: function(res) {
-                            if (res && res.length > 0) {
-                                res.forEach((item) => {
-                                    addBOMRow(0, 'bom_table_body_type_0', item);
-                                });
-                            } else {
-                                // If no formula, just add 1 empty row to start
-                                addBOMRow(0, 'bom_table_body_type_0');
-                            }
-                        }
-                    });
+                    addBOMRow(0, 'bom_table_body_type_0');
+                    addBOMRow(1, 'bom_table_body_type_1');
                 }
             }
 
