@@ -20,27 +20,17 @@
     let selectedFieldIds = [];
     let cellClipboard = null;
     window.deletedBlockIds = [];
+    window.catId = "{{ $template->caterogy_id ?? 0 }}";
 
     // Inject all dynamic virtual blocks at runtime
     function injectVirtualBlocks() {
         const type = "{{ $template->type ?? 'BMR' }}";
-        const catId = "{{ $template->caterogy_id ?? 0 }}";
+        const catId = window.catId;
         
         let virtualBlocks = [];
         
         if (type === 'GF') {
-            virtualBlocks.push({
-                id: 'sys_gf_sec_header',
-                type: 'section',
-                label: 'THÔNG TIN CHUNG',
-                section_id: catId,
-                locked: true,
-                isVirtual: true
-            });
-            let gfHeader = generateDefaultGfHeader();
-            gfHeader.id = 'sys_gf_tbl_header';
-            gfHeader.isVirtual = true;
-            virtualBlocks.push(gfHeader);
+            // Biểu mẫu dùng chung (GF) không tự động khởi tạo block thông tin chung và header
         } else {
             // 1. BMR HEADER (Section)
             virtualBlocks.push({
@@ -110,12 +100,43 @@
             }
         }
         
-        // Remove any old static blocks from items (just in case they still exist in DB)
-        const sysLabels = ['BMR HEADER', 'BMR Header', 'GF Header', 'QUY TRÌNH PHÊ DUYỆT', 'THÔNG TIN CHUNG SẢN PHẨM', 'MÔ TẢ SẢN PHẨM', 'CÔNG THỨC PHA CHẾ', '1. NGUYÊN LIỆU PHA CHẾ', '2. NGUYÊN LIỆU KHÁC (BAO PHIM/NANG)', 'Ghi chú nguyên liệu pha chế', 'Ghi chú nguyên liệu khác', 'THÔNG TIN CHUNG', 'Trình Ký'];
+        // Load abbreviation table from ebmr_templates.abbreviations_List
+        let abbrevListStr = `{!! addslashes($template->abbreviations_List ?? '') !!}`;
+        let abbrevTable = null;
+        if (abbrevListStr) {
+            try {
+                abbrevTable = JSON.parse(abbrevListStr);
+            } catch(e) {
+                console.error("Error parsing abbreviations_List", e);
+            }
+        }
+        
+        // Find if there is an old abbreviation table in items
+        const abbrevIdx = items.findIndex(i => i.isAbbreviationTable === true && !i.isVirtual);
+        if (abbrevIdx !== -1) {
+            let extracted = items.splice(abbrevIdx, 1)[0];
+            if (!abbrevTable) {
+                abbrevTable = extracted;
+            }
+        }
+
+        // Biểu mẫu dùng chung (GF) không dùng các nhãn hệ thống để lọc, tránh xóa nhãn tự thiết kế
+        let sysLabels = ['BMR HEADER', 'BMR Header', 'GF Header', 'QUY TRÌNH PHÊ DUYỆT', 'THÔNG TIN CHUNG SẢN PHẨM', 'MÔ TẢ SẢN PHẨM', 'CÔNG THỨC PHA CHẾ', '1. NGUYÊN LIỆU PHA CHẾ', '2. NGUYÊN LIỆU KHÁC (BAO PHIM/NANG)', 'Ghi chú nguyên liệu pha chế', 'Ghi chú nguyên liệu khác', 'THÔNG TIN CHUNG', 'Trình Ký'];
+        if (type === 'GF') {
+            sysLabels = [];
+        }
         items = items.filter(i => !sysLabels.includes(i.label));
         
         // Prepend virtual blocks
         items.unshift(...virtualBlocks);
+
+        let insertIdx = virtualBlocks.length;
+        // If abbreviation table was found, insert it right after the virtual blocks
+        if (abbrevTable) {
+            abbrevTable.section_id = window.catId || 'section_0'; // Ensure it belongs to header section
+            items.splice(insertIdx, 0, abbrevTable);
+            insertIdx++;
+        }
     }
     
     injectVirtualBlocks();
@@ -236,7 +257,7 @@
         const id = 'blk_header_' + Date.now();
         const t = {
             id: "{{ $template->id ?? '' }}",
-            code: "{{ $template->category_code ?? '' }}",
+            code: "{{ $template->doc_code ?? $template->category_code ?? '' }}",
             edition: "{{ $template->version ?? '1' }}",
             name: "{{ $template->category_name ?? '' }}",
             dosage: "{{ $template->dosage_name ?? '' }}",
@@ -400,16 +421,19 @@
         const formulas = @json($template->formulas ?? []);
         let labelClaimsHtml = '';
         
-        let activeIngredients = formulas.filter(f => f.role === 'Hoạt Chất');
+        let activeIngredients = formulas.filter(f => f.role && f.role.trim().toLowerCase() === 'hoạt chất');
         if (activeIngredients.length > 0) {
             let dosageUnit = "{{ mb_strtolower($template->dosage_name ?? 'viên') }}";
-            let lines = [`Mỗi ${dosageUnit} chứa:`];
+            let lines = [`Mỗi ${dosageUnit} chứa:<br>`];
             activeIngredients.forEach(f => {
                 let matName = (f.materials && f.materials.length > 0) ? f.materials[0].name : '';
+                if (matName.includes('(')) {
+                    matName = matName.split('(')[0].trim();
+                }
                 let amount = Number(f.total_amount_per_unit).toLocaleString('vi-VN', {minimumFractionDigits: 0, maximumFractionDigits: 2});
-                lines.push(`<div style="display: flex; width: 100%; max-width: 450px;">
+                lines.push(`<div style="display: flex; width: 100%; max-width: 450px; margin-left: 20px;">
                                 <span>${matName}</span>
-                                <span style="flex-grow: 1; border-bottom: 2px dotted #000; margin: 0 5px; position: relative; top: -5px;"></span>
+                                <span style="flex-grow: 1; border-bottom: 1px dotted #000; margin: 0 5px; position: relative; top: -5px;"></span>
                                 <span>${amount} mg</span>
                             </div>`);
             });

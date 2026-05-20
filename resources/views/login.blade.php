@@ -7,10 +7,8 @@
     <link rel="icon" type="image/png" href="{{ asset('img/iconstella.svg') }}">
     <title>eBMR | Electronic Batch Manufacturing Record</title>
 
-    <!-- Google Fonts: Inter -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Local Arimo Font -->
+    <link rel="stylesheet" href="{{ asset('fonts/Arimo/arimo.css') }}">
     
     <!-- Bootstrap & Icons -->
     <link href="{{ asset('css/bootstrap.min.css') }}" rel="stylesheet">
@@ -30,7 +28,7 @@
         body {
             background: url('{{ asset('img/ebmr_bg.png') }}') no-repeat center center fixed;
             background-size: cover;
-            font-family: 'Inter', sans-serif;
+            font-family: 'Arimo', sans-serif;
             height: 100vh;
             margin: 0;
             display: flex;

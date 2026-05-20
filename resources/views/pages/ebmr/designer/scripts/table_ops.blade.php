@@ -129,9 +129,59 @@
             // Create a deep copy of the last row's structure and content
             // Tag with is_dynamic: true so we know this row was added during execution
             let newRow = lastRow.map(cell => {
+                let cellContent = cell.content;
+                if (cellContent && typeof cellContent === 'string' && cellContent.includes('ebmr-field-badge')) {
+                    // Resolve the active fieldsConfig object
+                    let configObj = null;
+                    if (typeof fieldsConfig !== 'undefined') {
+                        configObj = fieldsConfig;
+                    } else if (window.fieldsConfig) {
+                        configObj = window.fieldsConfig;
+                    }
+                    
+                    if (configObj) {
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = cellContent;
+                        const badges = tempDiv.querySelectorAll('.ebmr-field-badge');
+                        badges.forEach(badge => {
+                            const oldId = badge.getAttribute('data-field-id');
+                            if (oldId && configObj[oldId]) {
+                                const newId = 'field_' + Math.floor(Math.random() * 1000000);
+                                const oldConfig = configObj[oldId];
+                                
+                                // Tạo config mới, đổi tên tránh trùng
+                                let newName = oldConfig.name || `Var_${newId}`;
+                                let baseName = newName;
+                                let num = 1;
+                                const match = newName.match(/^(.*?)(\d+)$/);
+                                if (match) {
+                                    baseName = match[1];
+                                    num = parseInt(match[2]) + 1;
+                                }
+                                
+                                newName = baseName + num;
+                                while (Object.values(configObj).some(f => f && f.name === newName)) {
+                                    num++;
+                                    newName = baseName + num;
+                                }
+                                
+                                configObj[newId] = {
+                                    ...oldConfig,
+                                    id: newId,
+                                    name: newName
+                                };
+                                
+                                badge.setAttribute('data-field-id', newId);
+                                badge.setAttribute('onclick', `selectField(event, '${newId}')`);
+                            }
+                        });
+                        cellContent = tempDiv.innerHTML;
+                    }
+                }
+                
                 return {
                     ...cell,
-                    content: cell.content, // Copy content/variables from the previous row as requested
+                    content: cellContent, // Copy content/variables from the previous row as requested
                     is_dynamic: true 
                 };
             });

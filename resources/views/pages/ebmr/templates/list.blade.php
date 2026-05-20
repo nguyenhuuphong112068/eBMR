@@ -28,6 +28,7 @@
                                     <thead class="bg-light">
                                         <tr>
                                             <th>Mã danh mục</th>
+                                            <th>{{ request('type') == 'BMR' ? 'Số BMR' : (request('type') == 'BPR' ? 'Số BPR' : 'Số BM gốc') }}</th>
                                             <th>Tên nội dung</th>
                                             <th>Phiên bản</th>
                                             <th>Công đoạn</th>
@@ -42,6 +43,7 @@
                                         @foreach ($templates as $t)
                                             <tr>
                                                 <td class="fw-bold text-navy">{{ $t->category_code }}</td>
+                                                <td class="fw-bold text-primary">{{ $t->doc_code ?? '-' }}</td>
                                                 <td>{{ $t->category_name }}</td>
                                                 <td><span class="badge bg-soft-info">V.{{ $t->version }}</span></td>
                                                 <td>
@@ -280,7 +282,7 @@
                                 <!-- Left Column (30% / col-lg-4) -->
                                 <div class="{{ request('type') == 'BMR' ? 'col-lg-3 border-right pr-4' : 'col-lg-12' }}">
                                     <div class="row align-items-center mb-3">
-                                        <div class="col-md-8">
+                                        <div class="col-md-6">
                                             <div class="alert alert-cyan border-0 shadow-none mb-0 p-3">
                                                 <div class="d-flex align-items-center">
                                                     <i class="fas fa-info-circle fa-2x me-3 text-primary"></i>
@@ -295,7 +297,15 @@
                                                 </div>
                                             </div>
                                         </div>
-                                        <div class="col-md-4">
+                                        <div class="col-md-3">
+                                            <div class="form-group mb-0">
+                                                <label class="form-label fw-bold small">{{ request('type') == 'BMR' ? 'Số BMR' : (request('type') == 'BPR' ? 'Số BPR' : 'Số BM gốc') }}</label>
+                                                <input type="text"
+                                                    class="form-control rounded-pill text-center fw-bold" name="doc_code"
+                                                    id="docCode" placeholder="Nhập số...">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
                                             <div class="form-group mb-0">
                                                 <label class="form-label fw-bold small">Phiên Bản <span
                                                         class="text-danger">*</span></label>
@@ -563,6 +573,7 @@
 
                 $('#metadataForm').submit(function(e) {
                     e.preventDefault();
+                    
                     const data = $(this).serialize();
 
                     $.post('{{ route('pages.ebmr.storeTemplateMetadata') }}', data, function(res) {
@@ -573,6 +584,7 @@
                         }
                     });
                 });
+
 
                 // Prefill logic from URL if needed
                 const urlParams = new URLSearchParams(window.location.search);
@@ -667,9 +679,9 @@
                 $('#templateId').val('');
                 if ($.fn.summernote) {
                     if ($('#create_description_editor').length) $('#create_description_editor').summernote('code', '');
-                    if ($('#create_storage_conditions_editor').length) $('#create_storage_conditions_editor').summernote('code',
-                        '');
+                    if ($('#create_storage_conditions_editor').length) $('#create_storage_conditions_editor').summernote('code', '');
                 }
+                $('#enable_recalculation').prop('checked', false);
                 $('#modalTitle').html('<i class="fas fa-file-medical me-2"></i> Soạn Mới Hồ Sơ Gốc');
                 $('#templateMetadataModal').modal('show');
             }
@@ -682,6 +694,7 @@
                     $('#templateId').val(data.id);
                     $('#caterogyId').val(data.caterogy_id);
                     $('#version').val(data.version);
+                    $('#docCode').val(data.doc_code || '');
                     $('#statusDisplay').val(data.status);
 
                     if (data.type === 'BMR') {
@@ -705,6 +718,9 @@
                         if (data.bom && window.renderBOMRows) {
                             window.renderBOMRows(data.bom);
                         }
+                        
+                        // Handle recalculation loading
+                        $('#enable_recalculation').prop('checked', data.is_recalculation == 1);
                     } else {
                         $('#bmr_specific_fields').hide();
                     }

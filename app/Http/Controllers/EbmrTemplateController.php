@@ -151,11 +151,13 @@ class EbmrTemplateController extends Controller
             'issued_date' => 'nullable|date',
             'effective_date' => 'nullable|date',
             'type' => 'nullable|string|max:10',
+            'doc_code' => 'nullable|string|max:50',
         ]);
 
         $data = [
             'caterogy_id' => $validated['caterogy_id'],
             'version' => $validated['version'],
+            'doc_code' => $validated['doc_code'] ?? null,
             'issued_date' => $request->input('issued_date'),
             'effective_date' => $request->input('effective_date'),
             'type' => $validated['type'] ?? 'BMR',
@@ -173,6 +175,7 @@ class EbmrTemplateController extends Controller
                 'average_unit_weight' => $request->input('average_unit_weight'),
                 'description' => $request->input('description'),
                 'storage_conditions' => $request->input('storage_conditions'),
+                'is_recalculation' => (int) $request->input('is_recalculation', 0),
             ]);
         }
         if (empty($validated['id'])) {
@@ -304,6 +307,11 @@ class EbmrTemplateController extends Controller
                     }
                 }
             }
+        }
+
+        $templateObj = DB::table('ebmr_templates')->where('id', $id)->first();
+        if ($templateObj && $templateObj->type === 'BMR') {
+            $this->ensureRecalculationBlocks($templateObj);
         }
 
         return response()->json([
@@ -549,12 +557,8 @@ class EbmrTemplateController extends Controller
         } elseif ($block->type === 'table') {
             $rows = $field['rows'] ?? 0;
             $cols = $field['cols'] ?? 0;
-            $data = [];
+            $cbMap = $contentBlocks ? $contentBlocks->keyBy('id') : collect();
 
-            preg_match_all('/<td[^>]*>(.*?)<\/td>/is', $fullHtml, $matches);
-            $tdContents = $matches[1] ?? [];
-
-            $idx = 0;
             if (! isset($field['data'])) {
                 $field['data'] = [];
             }
@@ -563,19 +567,23 @@ class EbmrTemplateController extends Controller
                     $field['data'][$r] = [];
                 }
                 for ($c = 0; $c < $cols; $c++) {
-                    $content = $tdContents[$idx] ?? '';
-                    
-                    // --- VARIABLE INJECTION ---
-                    $content = preg_replace_callback('/\{\{(field_[0-9]+)\}\}/', function ($m) {
-                        return '<span contenteditable="false" class="ebmr-field-badge" data-field-id="'.$m[1].'" onclick="selectField(event, \''.$m[1].'\')"></span>';
-                    }, $content);
-
                     if (isset($field['data'][$r][$c]) && is_array($field['data'][$r][$c])) {
-                        $field['data'][$r][$c]['content'] = $content;
+                        $cell = &$field['data'][$r][$c];
+                        $dbId = $cell['db_id'] ?? null;
+                        if ($dbId && $cbMap->has($dbId)) {
+                            $cb = $cbMap->get($dbId);
+                            $content = $cb->vi_contents ?? '';
+                            
+                            // --- VARIABLE INJECTION ---
+                            $content = preg_replace_callback('/\{\{(field_[0-9]+)\}\}/', function ($m) {
+                                return '<span contenteditable="false" class="ebmr-field-badge" data-field-id="'.$m[1].'" onclick="selectField(event, \''.$m[1].'\')"></span>';
+                            }, $content);
+                            
+                            $cell['content'] = $content;
+                        }
                     } else {
-                        $field['data'][$r][$c] = ['content' => $content, 'rs' => 1, 'cs' => 1, 'hidden' => false];
+                        $field['data'][$r][$c] = ['content' => '', 'rs' => 1, 'cs' => 1, 'hidden' => false];
                     }
-                    $idx++;
                 }
             }
         }
@@ -621,6 +629,89 @@ class EbmrTemplateController extends Controller
             ]);
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()]);
+        }
+    }
+
+    protected function ensureRecalculationBlocks($template)
+    {
+        $id = $template->id;
+        $recalcSectionId = $template->caterogy_id . '_recalc';
+        
+        if ($template->is_recalculation == 1) {
+            $hasRecalc = DB::table('ebmr_template_blocks')
+                ->where('template_id', $id)
+                ->where('section_id', $recalcSectionId)
+                ->exists();
+
+            if (!$hasRecalc) {
+                // Shift all existing blocks order by 2 to make space at the beginning (order 0 and 1)
+                DB::table('ebmr_template_blocks')
+                    ->where('template_id', $id)
+                    ->increment('order', 2);
+
+                $sectionBlockId = DB::table('ebmr_template_blocks')->insertGetId([
+                    'template_id' => $id,
+                    'section_id' => $recalcSectionId,
+                    'type' => 'section',
+                    'label' => 'section_recalc',
+                    'order' => 0,
+                    'properties' => json_encode([
+                        'id' => 'blk_sec_recalc_' . uniqid(),
+                        'type' => 'section',
+                        'label' => 'TÍNH TOÁN CÔNG THỨC',
+                        'stage_code' => 'recalc',
+                        'section_id' => $recalcSectionId
+                    ]),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+                $recalcBlockId = DB::table('ebmr_template_blocks')->insertGetId([
+                    'template_id' => $id,
+                    'section_id' => $recalcSectionId,
+                    'type' => 'static-text',
+                    'label' => 'TÍNH TOÁN CÔNG THỨC BLOCK',
+                    'order' => 1,
+                    'properties' => json_encode([
+                        'id' => 'blk_recalc_' . uniqid(),
+                        'type' => 'static-text',
+                        'label' => 'TÍNH TOÁN CÔNG THỨC BLOCK',
+                        'isCalculationBlock' => true,
+                        'section_id' => $recalcSectionId
+                    ]),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+                $defaultContent = '<p>Nguyên liệu trong công thức được tính trên dạng nguyên trạng, lượng nguyên liệu thực tế sử dụng cho mỗi mẻ được tính dựa trên hàm lượng nguyên trạng từng lô nguyên liệu.</p>';
+                
+                $contentId = DB::table('ebmr_content_blocks')->insertGetId([
+                    'ebmr_template_blocks_id' => $recalcBlockId,
+                    'template_id' => $id,
+                    'section_id' => $recalcSectionId,
+                    'type' => 'static-text',
+                    'vi_contents' => $defaultContent,
+                    'en_contents' => $defaultContent,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+                $placeholder = "[[CONTENT_$contentId]]";
+                DB::table('ebmr_template_blocks')->where('id', $recalcBlockId)->update([
+                    'content' => '<div class="static-text-display">' . $placeholder . '</div>'
+                ]);
+            }
+        } else {
+            // Delete recalc blocks if unchecked
+            $recalcBlocks = DB::table('ebmr_template_blocks')
+                ->where('template_id', $id)
+                ->where('section_id', $recalcSectionId)
+                ->get();
+            if ($recalcBlocks->isNotEmpty()) {
+                $recalcBlockIds = $recalcBlocks->pluck('id')->toArray();
+                DB::table('ebmr_template_blocks')->whereIn('id', $recalcBlockIds)->delete();
+                DB::table('ebmr_content_blocks')->whereIn('ebmr_template_blocks_id', $recalcBlockIds)->delete();
+            }
         }
     }
 }

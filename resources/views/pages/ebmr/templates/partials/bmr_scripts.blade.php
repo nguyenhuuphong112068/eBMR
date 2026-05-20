@@ -95,7 +95,12 @@
                             <div class="sub-amounts-container"></div>
                         </td>
                         <td class="align-middle"><input type="number" step="any" class="form-control ratio-display text-center text-success fw-bold" placeholder="%" readonly style="background-color: transparent;"></td>
-                        <td class="align-middle"><input type="number" step="any" class="form-control" name="bom[${bomRowIndex}][total_amount_per_batch]" placeholder="1 lô" readonly style="background-color: transparent;"></td>
+                        <td class="align-middle">
+                            <div class="d-flex align-items-center mb-1">
+                                <input type="number" step="any" class="form-control" name="bom[${bomRowIndex}][total_amount_per_batch]" placeholder="1 lô" readonly style="background-color: transparent;">
+                            </div>
+                            <div class="sub-amounts-batch-container"></div>
+                        </td>
                         <td class="text-center align-middle">
                             <button type="button" class="btn btn-xs btn-danger btn_remove_bom_row"><i class="fa fa-trash"></i></button>
                         </td>
@@ -111,6 +116,7 @@
                 const row = $(this).closest('.bom-row');
                 const rowIndex = row.data('index');
                 const container = row.find('.sub-amounts-container');
+                const batchContainer = row.find('.sub-amounts-batch-container');
                 const subIndex = container.find('.sub-amount-item').length;
 
                 const subHtml = `
@@ -128,6 +134,17 @@
                     </div>
                 `;
                 container.append(subHtml);
+
+                const subBatchHtml = `
+                    <div class="sub-amount-batch-item d-flex align-items-center mt-1" style="height: 28px;">
+                        <input type="number" step="any" class="form-control py-0 text-center" 
+                            name="bom[${rowIndex}][sub_amounts][${subIndex}][amount_per_batch]" 
+                            placeholder="Lô" readonly style="height: 28px; font-size: 0.8rem; background-color: transparent;">
+                    </div>
+                `;
+                batchContainer.append(subBatchHtml);
+                
+                calculateRowValues(row);
             });
 
             // Handle editing sub-amount note
@@ -163,7 +180,13 @@
             });
 
             $(document).on('click', '.btn_remove_sub_amount', function() {
-                $(this).closest('.sub-amount-item').remove();
+                const item = $(this).closest('.sub-amount-item');
+                const row = item.closest('.bom-row');
+                const index = item.index();
+                row.find('.sub-amounts-batch-container .sub-amount-batch-item').eq(index).remove();
+                item.remove();
+                reindexSubAmounts(row);
+                calculateRowValues(row);
             });
 
             // Handle adding/removing materials within a BOM row
@@ -348,7 +371,12 @@
                                 <div class="sub-amounts-container"></div>
                             </td>
                             <td class="align-middle"><input type="number" step="any" class="form-control ratio-display text-center text-success fw-bold" placeholder="%" readonly style="background-color: transparent;"></td>
-                            <td class="align-middle"><input type="number" step="any" class="form-control" name="bom[${bomRowIndex}][total_amount_per_batch]" placeholder="1 lô" value="${formula.total_amount_per_batch || ''}" readonly style="background-color: transparent;"></td>
+                            <td class="align-middle">
+                                <div class="d-flex align-items-center mb-1">
+                                    <input type="number" step="any" class="form-control" name="bom[${bomRowIndex}][total_amount_per_batch]" placeholder="1 lô" value="${formula.total_amount_per_batch || ''}" readonly style="background-color: transparent;">
+                                </div>
+                                <div class="sub-amounts-batch-container"></div>
+                            </td>
                             <td class="text-center align-middle">
                                 <button type="button" class="btn btn-xs btn-danger btn_remove_bom_row"><i class="fa fa-trash"></i></button>
                             </td>
@@ -360,6 +388,7 @@
                     // Render sub-amounts
                     if (formula.sub_amounts && formula.sub_amounts.length > 0) {
                         const container = $tr.find('.sub-amounts-container');
+                        const batchContainer = $tr.find('.sub-amounts-batch-container');
                         formula.sub_amounts.forEach((sub, subIdx) => {
                             const subHtml = `
                                 <div class="sub-amount-item d-flex align-items-center mt-1">
@@ -376,6 +405,15 @@
                                 </div>
                             `;
                             container.append(subHtml);
+
+                            const subBatchHtml = `
+                                <div class="sub-amount-batch-item d-flex align-items-center mt-1" style="height: 28px;">
+                                    <input type="number" step="any" class="form-control py-0 text-center" 
+                                        name="bom[${bomRowIndex}][sub_amounts][${subIdx}][amount_per_batch]" 
+                                        placeholder="Lô" value="${sub.amount_per_batch || ''}" readonly style="height: 28px; font-size: 0.8rem; background-color: transparent;">
+                                </div>
+                            `;
+                            batchContainer.append(subBatchHtml);
                         });
                     }
 
@@ -421,6 +459,19 @@
                 }
             });
 
+            function reindexSubAmounts(row) {
+                const rowIndex = row.data('index');
+                
+                row.find('.sub-amounts-container .sub-amount-item').each(function(subIndex) {
+                    $(this).find('input[name$="[amount_per_unit]"]').attr('name', `bom[${rowIndex}][sub_amounts][${subIndex}][amount_per_unit]`);
+                    $(this).find('input[name$="[note]"]').attr('name', `bom[${rowIndex}][sub_amounts][${subIndex}][note]`);
+                });
+                
+                row.find('.sub-amounts-batch-container .sub-amount-batch-item').each(function(subIndex) {
+                    $(this).find('input[name$="[amount_per_batch]"]').attr('name', `bom[${rowIndex}][sub_amounts][${subIndex}][amount_per_batch]`);
+                });
+            }
+
             function calculateRowValues(row) {
                 const totalInput = row.find('input[name$="[total_amount_per_unit]"]');
                 const batchInput = row.find('input[name$="[total_amount_per_batch]"]');
@@ -454,6 +505,26 @@
                     ratioInput.val('');
                     batchInput.val('');
                 }
+
+                // Calculate batch values for each sub-amount
+                row.find('.sub-amounts-container .sub-amount-item').each(function(subIndex) {
+                    const subUnitVal = parseFloat($(this).find('input[name$="[amount_per_unit]"]').val());
+                    const subBatchInput = row.find('.sub-amounts-batch-container .sub-amount-batch-item').eq(subIndex).find('input[name$="[amount_per_batch]"]');
+                    
+                    if (!isNaN(subUnitVal)) {
+                        if (!isNaN(avgWeight) && avgWeight > 0 && window.currentBatchSize > 0) {
+                            const subBatchVal = (subUnitVal * window.currentBatchSize) / avgWeight;
+                            subBatchInput.val(subBatchVal.toFixed(3));
+                        } else if (window.currentBatchQty > 0) {
+                            const subBatchVal = (subUnitVal * window.currentBatchQty) / 1000000;
+                            subBatchInput.val(subBatchVal.toFixed(3));
+                        } else {
+                            subBatchInput.val('');
+                        }
+                    } else {
+                        subBatchInput.val('');
+                    }
+                });
                 
                 checkTableSum(isType0 ? 'type_0' : 'type_1');
             }
@@ -555,9 +626,8 @@
                 checkTableSum('type_1');
             });
 
-            // Initial render hook if needed
-            window.addEventListener('load', function() {
-                setTimeout(updateBOMNotes, 500);
-            });
-
+             // Initial render hook if needed
+             window.addEventListener('load', function() {
+                 setTimeout(updateBOMNotes, 500);
+             });
 </script>

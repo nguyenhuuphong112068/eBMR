@@ -1102,6 +1102,62 @@
         padding: 5px !important;
     }
 
+    /* Định dạng nổi bật cho Biến số kiểu Tính toán công thức (Auto Formula) */
+    .formula-result {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        font-weight: bold;
+        border: 2px dashed #4f46e5 !important; /* Đường viền đứt màu Indigo biểu thị tự động tính */
+        background-color: #f5f3ff !important; /* Màu nền tím cực nhạt */
+        color: #4c1d95 !important; /* Màu chữ tím đậm */
+        box-shadow: 0 2px 4px rgba(79, 70, 229, 0.08);
+        text-align: center;
+        min-width: 80px;
+        margin: 2px;
+    }
+
+    /* Khi Công thức tự động nằm trong ô Bảng */
+    td .formula-result {
+        display: flex !important;
+        width: 100% !important;
+        min-height: 38px;
+        margin: 0 !important;
+        border-radius: 0 !important;
+        border-width: 0 0 0 4px !important; /* Chỉ để viền bên trái làm điểm nhấn */
+        border-style: solid !important;
+        border-color: #4f46e5 !important; /* Màu viền trái tím */
+        justify-content: center;
+        align-items: center;
+        background-color: #f5f3ff !important; /* Màu nền tím */
+        white-space: normal;
+        text-align: center;
+        padding: 5px !important;
+    }
+
+    /* Thiết kế riêng cho nhãn Công thức trong màn hình Thiết kế (Designer Mode) */
+    .ebmr-field-badge.formula-preview {
+        border: 2px solid #4f46e5 !important; /* Viền tím trơn */
+        background-color: #f5f3ff !important; /* Nền tím nhạt */
+        color: #4c1d95 !important; /* Chữ tím */
+        box-shadow: 0 2px 4px rgba(79, 70, 229, 0.1);
+    }
+
+    .ebmr-field-badge.formula-preview:hover {
+        background-color: #ede9fe !important;
+    }
+
+    .ebmr-field-badge.formula-preview.active {
+        background-color: #ddd6fe !important;
+        box-shadow: inset 0 0 0 2px #4f46e5;
+    }
+
+    td .ebmr-field-badge.formula-preview {
+        background-color: #f5f3ff !important;
+        border-color: #4f46e5 !important;
+    }
+
     td:has(.ebmr-field-badge) {
         padding: 0 !important;
         vertical-align: stretch;
@@ -1238,5 +1294,48 @@
         text-align: right;
         pointer-events: none;
         white-space: nowrap;
+    }
+
+    /* Table Resizer Drag Handles */
+    .col-resizer {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        right: -3px;
+        width: 6px;
+        cursor: col-resize;
+        z-index: 100;
+        background-color: transparent;
+        transition: background-color 0.2s;
+    }
+    .col-resizer:hover, .col-resizer:active {
+        background-color: #007bff;
+    }
+
+    .row-resizer {
+        position: absolute;
+        bottom: -3px;
+        left: 0;
+        right: 0;
+        height: 6px;
+        cursor: row-resize;
+        z-index: 100;
+        background-color: transparent;
+        transition: background-color 0.2s;
+    }
+    .row-resizer:hover, .row-resizer:active {
+        background-color: #007bff;
+    }
+    .execution-badge.time {
+        color: #17a2b8;
+        background-color: #e0f4f7;
+    }
+    .execution-badge.executor {
+        color: #6610f2;
+        background-color: #f0e6ff;
+    }
+    .execution-badge.checker {
+        color: #fd7e14;
+        background-color: #fff0e6;
     }
 </style>

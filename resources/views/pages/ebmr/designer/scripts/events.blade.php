@@ -355,7 +355,7 @@
             // Fallback: Add to the end of the active section if no specific block is selected
             let lastIdxInSection = -1;
             for (let i = items.length - 1; i >= 0; i--) {
-                const itemSectId = (items[i].type === 'section') ? items[i].id : items[i].section_id;
+                const itemSectId = (items[i].type === 'section') ? (items[i].section_id || items[i].id) : items[i].section_id;
                 if (itemSectId === window.activeSectionId) {
                     lastIdxInSection = i;
                     break;
@@ -401,8 +401,14 @@
         const id = 'blk_' + Date.now() + Math.random().toString(36).substr(2, 5);
         let sectionId = window.activeSectionId || null;
         if (!sectionId && index !== null) {
-            if (index > 0 && items[index-1]) sectionId = items[index - 1].section_id;
-            else if (items.length > 0) sectionId = items[0].section_id;
+            if (index > 0 && items[index-1]) {
+                const prevItem = items[index - 1];
+                sectionId = prevItem.section_id || (prevItem.type === 'section' ? prevItem.id : null);
+            }
+            else if (items.length > 0) {
+                const firstItem = items[0];
+                sectionId = firstItem.section_id || (firstItem.type === 'section' ? firstItem.id : null);
+            }
         }
 
         items.splice(index, 0, { 
@@ -422,8 +428,14 @@
         
         let sectionId = window.activeSectionId || null;
         if (!sectionId && index !== null) {
-            if (index > 0 && items[index-1]) sectionId = items[index - 1].section_id;
-            else if (items.length > 0) sectionId = items[0].section_id;
+            if (index > 0 && items[index-1]) {
+                const prevItem = items[index - 1];
+                sectionId = prevItem.section_id || (prevItem.type === 'section' ? prevItem.id : null);
+            }
+            else if (items.length > 0) {
+                const firstItem = items[0];
+                sectionId = firstItem.section_id || (firstItem.type === 'section' ? firstItem.id : null);
+            }
         }
         const rowCount = rows.length;
         let colCount = 0;

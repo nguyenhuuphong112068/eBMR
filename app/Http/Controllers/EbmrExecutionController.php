@@ -429,6 +429,29 @@ class EbmrExecutionController extends Controller
 
         return response()->json(['success' => false, 'message' => 'Mật khẩu xác nhận không chính xác.']);
     }
+
+    /**
+     * Verify another user's credentials (e.g. for checker role) and return their full name
+     */
+    public function verifyChecker(Request $request)
+    {
+        $username = $request->username;
+        $password = $request->password;
+
+        if (!$username || !$password) {
+            return response()->json(['success' => false, 'message' => 'Vui lòng nhập tài khoản và mật khẩu.']);
+        }
+
+        $user = DB::table('user_management')->where('userName', $username)->first();
+        if ($user && Hash::check($password, $user->passWord)) {
+            return response()->json([
+                'success' => true,
+                'fullName' => $user->fullName ?? $user->userName
+            ]);
+        }
+
+        return response()->json(['success' => false, 'message' => 'Tài khoản hoặc mật khẩu không chính xác.']);
+    }
     private function injectContent(&$field, $block, $contentBlocks)
     {
         if (!$contentBlocks || empty($block->content)) return;
@@ -458,29 +481,29 @@ class EbmrExecutionController extends Controller
         } elseif ($block->type === 'table') {
             $rows = $field['rows'] ?? 0;
             $cols = $field['cols'] ?? 0;
-            $data = [];
-            
-            preg_match_all('/<td[^>]*>(.*?)<\/td>/is', $fullHtml, $matches);
-            $tdContents = $matches[1] ?? [];
-            
-            $idx = 0;
+            $cbMap = $contentBlocks ? $contentBlocks->keyBy('id') : collect();
+
             if (!isset($field['data'])) $field['data'] = [];
             for ($r = 0; $r < $rows; $r++) {
                 if (!isset($field['data'][$r])) $field['data'][$r] = [];
                 for ($c = 0; $c < $cols; $c++) {
-                    $content = $tdContents[$idx] ?? '';
-                    
-                    // --- VARIABLE INJECTION ---
-                    $content = preg_replace_callback('/\{\{(field_[0-9]+)\}\}/', function ($m) {
-                        return '<span contenteditable="false" class="ebmr-field-badge" data-field-id="'.$m[1].'" onclick="selectField(event, \''.$m[1].'\')"></span>';
-                    }, $content);
-
                     if (isset($field['data'][$r][$c]) && is_array($field['data'][$r][$c])) {
-                        $field['data'][$r][$c]['content'] = $content;
+                        $cell = &$field['data'][$r][$c];
+                        $dbId = $cell['db_id'] ?? null;
+                        if ($dbId && $cbMap->has($dbId)) {
+                            $cb = $cbMap->get($dbId);
+                            $content = $cb->vi_contents ?? '';
+                            
+                            // --- VARIABLE INJECTION ---
+                            $content = preg_replace_callback('/\{\{(field_[0-9]+)\}\}/', function ($m) {
+                                return '<span contenteditable="false" class="ebmr-field-badge" data-field-id="'.$m[1].'" onclick="selectField(event, \''.$m[1].'\')"></span>';
+                            }, $content);
+                            
+                            $cell['content'] = $content;
+                        }
                     } else {
-                        $field['data'][$r][$c] = ['content' => $content, 'rs' => 1, 'cs' => 1, 'hidden' => false];
+                        $field['data'][$r][$c] = ['content' => '', 'rs' => 1, 'cs' => 1, 'hidden' => false];
                     }
-                    $idx++;
                 }
             }
         }

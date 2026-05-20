@@ -4,7 +4,9 @@
         <div class="modal-content shadow-lg border-0" style="border-radius: 12px;">
             <div class="modal-header bg-light">
                 <h5 class="modal-title fw-bold text-navy"><i class="fas fa-folder-open me-2"></i> MỞ HỒ SƠ MẪU</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                <button type="button" class="close text-dark border-0 bg-transparent" data-dismiss="modal" data-bs-dismiss="modal" aria-label="Close" style="font-size: 1.5rem; outline: none; opacity: 0.8;">
+                    <span aria-hidden="true">&times;</span>
+                </button>
             </div>
             <div class="modal-body">
                 <div class="input-group mb-4">
@@ -35,7 +37,9 @@
         <div class="modal-content shadow-lg border-0" style="border-radius: 12px;">
             <div class="modal-header bg-warning text-dark">
                 <h5 class="modal-title fw-bold"><i class="fas fa-history me-2"></i> LỊCH SỬ THAY ĐỔI</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                <button type="button" class="close text-dark border-0 bg-transparent" data-dismiss="modal" data-bs-dismiss="modal" aria-label="Close" style="font-size: 1.5rem; outline: none; opacity: 0.8;">
+                    <span aria-hidden="true">&times;</span>
+                </button>
             </div>
             <div class="modal-body bg-light">
                 <div id="historyTimeline" class="position-relative">
@@ -79,7 +83,9 @@
         <div class="modal-content shadow-lg border-0" style="border-radius: 12px;">
             <div class="modal-header bg-light">
                 <h5 class="modal-title fw-bold text-navy"><i class="fas fa-link me-2"></i> CHÈN BIỂU MẪU CHUNG</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                <button type="button" class="close text-dark border-0 bg-transparent" data-dismiss="modal" data-bs-dismiss="modal" aria-label="Close" style="font-size: 1.5rem; outline: none; opacity: 0.8;">
+                    <span aria-hidden="true">&times;</span>
+                </button>
             </div>
             <div class="modal-body">
                 <div class="input-group mb-4">
@@ -414,6 +420,70 @@
             <div class="modal-footer bg-light border-0 py-2">
                 <button type="button" class="btn btn-secondary btn-sm px-4" data-dismiss="modal">Hủy</button>
                 <button type="button" class="btn btn-primary btn-sm px-4 fw-bold" onclick="saveAbbreviation()">Lưu</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Tạo Bảng Kiểm Tra Khối Lượng -->
+<div class="modal fade" id="weightChartCreatorModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0" style="border-radius: 12px;">
+            <div class="modal-header bg-danger text-white border-0 py-2 px-3">
+                <h5 class="modal-title fw-bold small"><i class="fas fa-balance-scale me-2"></i> BẢNG KT KHỐI LƯỢNG TRUNG BÌNH</h5>
+                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="small fw-bold mb-1">Khối lượng Trung bình chuẩn (g)</label>
+                    <input type="number" step="0.01" id="wcTargetWeight" class="form-control" placeholder="VD: 7.10" value="7.10">
+                </div>
+                <div class="mb-3">
+                    <label class="small fw-bold mb-1">% Độ lệch cho phép (±%)</label>
+                    <input type="number" step="0.1" id="wcDeviation" class="form-control" placeholder="VD: 3" value="3">
+                </div>
+                <div class="mb-3">
+                    <label class="small fw-bold mb-1">Tần suất lấy mẫu (Phút)</label>
+                    <input type="number" id="wcFrequency" class="form-control" placeholder="VD: 15" value="15">
+                </div>
+            </div>
+            <div class="modal-footer bg-light border-0 py-2">
+                <button type="button" class="btn btn-secondary btn-sm px-4" data-dismiss="modal">Hủy</button>
+                <button type="button" class="btn btn-danger btn-sm px-4 fw-bold" onclick="generateWeightChartTable()">Chèn Bảng & Biểu Đồ</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Xác thực Người kiểm tra (Cross-verification) -->
+<div class="modal fade" id="checkerAuthModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0" style="border-radius: 12px;">
+            <div class="modal-header bg-dark text-white border-0 py-2 px-3">
+                <h5 class="modal-title fw-bold small"><i class="fas fa-user-shield me-2"></i> XÁC THỰC NGƯỜI KIỂM TRA</h5>
+                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="small fw-bold mb-1">Tài khoản (Username)</label>
+                    <input type="text" id="checkerUsername" class="form-control" placeholder="Nhập tên đăng nhập">
+                </div>
+                <div class="mb-3">
+                    <label class="small fw-bold mb-1">Mật khẩu</label>
+                    <input type="password" id="checkerPassword" class="form-control" placeholder="Nhập mật khẩu">
+                </div>
+                <input type="hidden" id="checkerBlockId">
+                <input type="hidden" id="checkerRowIdx">
+                <input type="hidden" id="checkerColIdx">
+                <div id="checkerAuthError" class="text-danger small mt-2 d-none fw-bold"></div>
+            </div>
+            <div class="modal-footer bg-light border-0 py-2">
+                <button type="button" class="btn btn-secondary btn-sm px-3" data-dismiss="modal">Hủy</button>
+                <button type="button" class="btn btn-primary btn-sm px-4 fw-bold" onclick="submitCheckerAuth()">Xác nhận</button>
             </div>
         </div>
     </div>

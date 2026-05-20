@@ -89,7 +89,7 @@
 
         // Update active section context based on selection
         if (item) {
-            const newActiveId = (item.type === 'section') ? item.id : item.section_id;
+            const newActiveId = (item.type === 'section') ? (item.section_id || item.id) : item.section_id;
             if (newActiveId) {
                 window.activeSectionId = newActiveId;
                 // Update the section selector in toolbar to show which section is "Active"
@@ -2189,15 +2189,14 @@
 
         const modalEl = document.getElementById('linkGfModal');
         if (modalEl) {
-            if (window.bootstrap && bootstrap.Modal && typeof bootstrap.Modal.getInstance === 'function') {
+            const closeBtn = modalEl.querySelector('[data-dismiss="modal"], [data-bs-dismiss="modal"]');
+            if (closeBtn) {
+                closeBtn.click();
+            } else if (window.bootstrap && bootstrap.Modal && typeof bootstrap.Modal.getInstance === 'function') {
                 const modal = bootstrap.Modal.getInstance(modalEl);
                 if (modal) modal.hide();
             } else if (window.jQuery) {
                 $(modalEl).modal('hide');
-            } else {
-                // Fallback for older BS5 or if jQuery missing
-                const closeBtn = modalEl.querySelector('[data-bs-dismiss="modal"]');
-                if (closeBtn) closeBtn.click();
             }
         }
     }
@@ -2251,9 +2250,14 @@
                 window.gfFieldsCache[templateId] = fields;
 
                 // Merge into global fieldsConfig to support formulas and execution mode logic
-                if (window.fieldsConfig) {
-                    Object.assign(window.fieldsConfig, fields);
+                let targetFieldsConfig = null;
+                if (typeof fieldsConfig !== 'undefined') {
+                    targetFieldsConfig = fieldsConfig;
+                } else {
+                    if (!window.fieldsConfig) window.fieldsConfig = {};
+                    targetFieldsConfig = window.fieldsConfig;
                 }
+                Object.assign(targetFieldsConfig, fields);
 
                 renderGfPreviewContent(container, blocks, fields);
             })
@@ -2836,6 +2840,9 @@
 
                 if (typeof window.recalculateAllFormulas === 'function') window.recalculateAllFormulas();
                 renderBlocks();
+                if (field.block_id && typeof syncLinkedCharts === 'function') {
+                    syncLinkedCharts(field.block_id);
+                }
             }
         }).catch(err => {
             console.error("Error in modal promise:", err);
@@ -2875,6 +2882,7 @@
         let abbrevTable = items.find(item => item.isAbbreviationTable === true);
 
         if (!abbrevTable) {
+            const catId = "{{ $template->caterogy_id ?? 0 }}";
             // Nếu chưa có, tạo bảng mới
             abbrevTable = {
                 id: 'blk_abbrev_' + Date.now(),
@@ -2885,7 +2893,7 @@
                 cols: 3,
                 borderMode: 'visible',
                 hideHeader: false,
-                section_id: window.activeSectionId || (items.length > 0 ? items[items.length - 1].section_id : null),
+                section_id: catId,
                 columns: [
                     { label: 'STT', type: 'text', width: '10%' },
                     { label: 'Chữ viết tắt', type: 'text', width: '30%' },
@@ -2901,20 +2909,18 @@
                 dirty: true
             };
             
-            // Tìm section active để add vào cuối section đó
-            let insertIdx = items.length;
-            if (window.activeSectionId) {
-                for (let i = items.length - 1; i >= 0; i--) {
-                    if (items[i].section_id === window.activeSectionId || items[i].id === window.activeSectionId) {
-                        insertIdx = i + 1;
-                        break;
-                    }
+            // Tìm vị trí cuối cùng của các block ảo (virtual blocks) để chèn ngay dưới đó
+            let insertIdx = 0;
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].isVirtual) {
+                    insertIdx = i + 1;
                 }
             }
             items.splice(insertIdx, 0, abbrevTable);
             saveStateDebounced();
         } else {
             // Nếu có rồi, thêm dòng mới
+            abbrevTable.section_id = "{{ $template->caterogy_id ?? 0 }}";
             const stt = abbrevTable.data.length + 1;
             
             // Kiểm tra xem từ viết tắt đã tồn tại chưa
@@ -2954,6 +2960,314 @@
             position: 'top-end',
             showConfirmButton: false,
             timer: 2000
+        });
+    }
+
+    window.startContinuousBeep = function() {
+        window.stopContinuousBeep(); // Dọn dẹp trước nếu có
+        try {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContext) return;
+            const audioCtx = new AudioContext();
+            
+            function playBeep() {
+                try {
+                    // Còi hú đặc chủng phòng sản xuất (Dual Sawtooth + Frequency Sweep)
+                    const now = audioCtx.currentTime;
+                    
+                    // Tạo 2 bộ phát tần số cao để cộng hưởng giao thoa âm thanh (Acoustic Beating) cực kỳ chói tai
+                    const osc1 = audioCtx.createOscillator();
+                    const osc2 = audioCtx.createOscillator();
+                    const gainNode = audioCtx.createGain();
+                    
+                    osc1.connect(gainNode);
+                    osc2.connect(gainNode);
+                    gainNode.connect(audioCtx.destination);
+                    
+                    osc1.type = 'sawtooth';
+                    osc2.type = 'sawtooth';
+                    
+                    // Tần số cơ bản 2000Hz & 2025Hz (dải tần tai người nhạy cảm nhất)
+                    osc1.frequency.setValueAtTime(2000, now);
+                    osc2.frequency.setValueAtTime(2025, now);
+                    
+                    // Quét tần số cực nhanh lên 2800Hz (Hiệu ứng tiếng hú còi khẩn cấp)
+                    osc1.frequency.exponentialRampToValueAtTime(2800, now + 0.25);
+                    osc2.frequency.exponentialRampToValueAtTime(2825, now + 0.25);
+                    
+                    // Tăng âm lượng tối đa (Gain = 0.45)
+                    gainNode.gain.setValueAtTime(0.45, now);
+                    gainNode.gain.linearRampToValueAtTime(0.45, now + 0.2);
+                    gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+                    
+                    osc1.start(now);
+                    osc2.start(now);
+                    
+                    osc1.stop(now + 0.3);
+                    osc2.stop(now + 0.3);
+                } catch(e) { console.log('Audio loop error', e); }
+            }
+            playBeep();
+            window._alertBeepInterval = setInterval(playBeep, 700); // Lặp liên tục dồn dập (mỗi 0.7 giây)
+        } catch(e) { console.log('Beeper init error', e); }
+    };
+
+    window.stopContinuousBeep = function() {
+        if (window._alertBeepInterval) {
+            clearInterval(window._alertBeepInterval);
+            window._alertBeepInterval = null;
+        }
+    };
+
+    function autoFillTime(blockId, r, c) {
+        if (!window.isExecutionMode) return;
+        
+        const now = new Date();
+        const timeString = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')} ${now.getDate().toString().padStart(2, '0')}/${(now.getMonth()+1).toString().padStart(2, '0')}/${now.getFullYear()}`;
+        
+        if (!window.executionValues) window.executionValues = {};
+        if (!window.executionValues[blockId]) window.executionValues[blockId] = {};
+        
+        window.executionValues[blockId][`${r}_${c}`] = timeString;
+        
+        if (!window.executionValues[blockId]._meta) window.executionValues[blockId]._meta = {};
+        window.executionValues[blockId]._meta[`${r}_${c}`] = {
+            by: '{{ session("user.fullName") ?? session("user.username") ?? "" }}',
+            at: new Date().toISOString()
+        };
+        
+        if (typeof renderBlocks === 'function') renderBlocks();
+        
+        // Cập nhật biểu đồ nếu bảng này có liên kết
+        if (typeof syncLinkedCharts === 'function') syncLinkedCharts(blockId);
+
+        // Logic nhắc nhở (Timer & Countdown bar)
+        let alertMsg = 'Đã tự động lấy giờ hệ thống';
+        try {
+            let itemFreq = null;
+            // Lấy từ biến items (Chế độ Designer Preview)
+            if (typeof items !== 'undefined') {
+                const itm = items.find(i => i.id === blockId || i.uuid === blockId);
+                if (itm && itm.freq_minutes) itemFreq = parseInt(itm.freq_minutes);
+            } else if (window.items) {
+                const itm = window.items.find(i => i.id === blockId || i.uuid === blockId);
+                if (itm && itm.freq_minutes) itemFreq = parseInt(itm.freq_minutes);
+            }
+            
+            // Fallback: Tìm thẻ span trong table cell để lấy data-freq (Hỗ trợ chế độ Execute)
+            if (!itemFreq) {
+                const cellBadge = document.querySelector(`td[data-row="${r+1}"][data-col="${c}"] .execution-badge.time`);
+                if (cellBadge && cellBadge.getAttribute('data-freq')) {
+                    itemFreq = parseInt(cellBadge.getAttribute('data-freq'));
+                }
+            }
+            
+            console.log("Timer debug: blockId=", blockId, "itemFreq=", itemFreq);
+            
+            if (itemFreq) {
+                const freqMs = itemFreq * 60 * 1000;
+                
+                // Khởi tạo hoặc xóa đếm ngược cũ
+                if (!window._activeCountdowns) window._activeCountdowns = {};
+                window._activeCountdowns[blockId] = {
+                    startTime: Date.now(),
+                    freqMs: freqMs
+                };
+                
+                // Hiển thị thanh tiến trình
+                const container = document.getElementById(`countdown-container-${blockId}`);
+                if (container) container.style.display = 'block';
+                
+                if (!window._countdownIntervals) window._countdownIntervals = {};
+                if (window._countdownIntervals[blockId]) {
+                    clearInterval(window._countdownIntervals[blockId]);
+                }
+                
+                const updateCountdown = () => {
+                    const state = window._activeCountdowns[blockId];
+                    if (!state) return;
+                    
+                    const elapsed = Date.now() - state.startTime;
+                    const remaining = state.freqMs - elapsed;
+                    
+                    const bar = document.getElementById(`countdown-bar-${blockId}`);
+                    const text = document.getElementById(`countdown-text-${blockId}`);
+                    
+                    if (remaining <= 0) {
+                        if (bar) {
+                            bar.style.width = '0%';
+                            bar.className = 'progress-bar progress-bar-striped progress-bar-animated bg-danger';
+                        }
+                        if (text) text.innerText = 'Đã đến giờ lấy mẫu!';
+                        clearInterval(window._countdownIntervals[blockId]);
+                        delete window._activeCountdowns[blockId];
+                        return;
+                    }
+                    
+                    const percent = (remaining / state.freqMs) * 100;
+                    if (bar) {
+                        bar.style.width = `${percent}%`;
+                        if (percent > 50) {
+                            bar.className = 'progress-bar progress-bar-striped progress-bar-animated bg-success';
+                        } else if (percent > 20) {
+                            bar.className = 'progress-bar progress-bar-striped progress-bar-animated bg-warning';
+                        } else {
+                            bar.className = 'progress-bar progress-bar-striped progress-bar-animated bg-danger';
+                        }
+                    }
+                    
+                    if (text) {
+                        const totalSeconds = Math.ceil(remaining / 1000);
+                        const mins = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+                        const secs = (totalSeconds % 60).toString().padStart(2, '0');
+                        text.innerText = `${mins}:${secs}`;
+                    }
+                };
+                
+                updateCountdown();
+                window._countdownIntervals[blockId] = setInterval(updateCountdown, 1000);
+                
+                // Xóa timer kêu cũ nếu có
+                if (window._sampleTimers && window._sampleTimers[blockId]) {
+                    clearTimeout(window._sampleTimers[blockId]);
+                }
+                if (!window._sampleTimers) window._sampleTimers = {};
+                
+                window._sampleTimers[blockId] = setTimeout(() => {
+                    // Bắt đầu còi hú liên tục
+                    window.startContinuousBeep();
+                    
+                    Swal.fire({
+                        title: 'Đến giờ lấy mẫu!',
+                        html: `Đã qua <b>${itemFreq} phút</b> kể từ lần ghi nhận trước.<br>Vui lòng tiến hành lấy mẫu và cân trọng lượng!`,
+                        icon: 'warning',
+                        confirmButtonText: 'Đã hiểu',
+                        allowOutsideClick: false,
+                        allowEscapeKey: false
+                    }).then((result) => {
+                        window.stopContinuousBeep();
+                    });
+                }, freqMs); // Chờ freqMs
+                
+                alertMsg = `Đã lấy giờ. Hệ thống sẽ nhắc nhở sau ${itemFreq} phút.`;
+            }
+        } catch(e) { console.error(e); }
+
+        Swal.fire({
+            toast: true,
+            position: 'top-end',
+            icon: 'success',
+            title: alertMsg,
+            showConfirmButton: false,
+            timer: 3000
+        });
+    }
+
+    function autoFillExecutor(blockId, r, c) {
+        if (!window.isExecutionMode) return;
+        
+        const currentUser = '{{ session("user.fullName") ?? session("user.username") ?? "Người thực hiện" }}';
+        
+        if (!window.executionValues) window.executionValues = {};
+        if (!window.executionValues[blockId]) window.executionValues[blockId] = {};
+        
+        window.executionValues[blockId][`${r}_${c}`] = currentUser;
+        
+        if (!window.executionValues[blockId]._meta) window.executionValues[blockId]._meta = {};
+        window.executionValues[blockId]._meta[`${r}_${c}`] = {
+            by: currentUser,
+            at: new Date().toISOString()
+        };
+        
+        if (typeof renderBlocks === 'function') renderBlocks();
+    }
+
+    function openCheckerAuthModal(blockId, r, c) {
+        if (!window.isExecutionMode) return;
+        
+        document.getElementById('checkerBlockId').value = blockId;
+        document.getElementById('checkerRowIdx').value = r;
+        document.getElementById('checkerColIdx').value = c;
+        
+        document.getElementById('checkerUsername').value = '';
+        document.getElementById('checkerPassword').value = '';
+        document.getElementById('checkerAuthError').classList.add('d-none');
+        
+        $('#checkerAuthModal').modal('show');
+        
+        setTimeout(() => {
+            document.getElementById('checkerUsername').focus();
+        }, 500);
+    }
+
+    function submitCheckerAuth() {
+        const blockId = document.getElementById('checkerBlockId').value;
+        const r = document.getElementById('checkerRowIdx').value;
+        const c = document.getElementById('checkerColIdx').value;
+        
+        const username = document.getElementById('checkerUsername').value.trim();
+        const password = document.getElementById('checkerPassword').value;
+        const errorEl = document.getElementById('checkerAuthError');
+        
+        if (!username || !password) {
+            errorEl.innerText = 'Vui lòng nhập tài khoản và mật khẩu.';
+            errorEl.classList.remove('d-none');
+            return;
+        }
+
+        const btn = document.querySelector('#checkerAuthModal .btn-primary');
+        const oldText = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang xác thực...';
+        btn.disabled = true;
+
+        fetch('{{ route("pages.ebmr.verifyChecker") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]') ? document.querySelector('meta[name="csrf-token"]').content : ''
+            },
+            body: JSON.stringify({ username: username, password: password })
+        })
+        .then(res => res.json())
+        .then(data => {
+            btn.innerHTML = oldText;
+            btn.disabled = false;
+            
+            if (data.success) {
+                $('#checkerAuthModal').modal('hide');
+                
+                if (!window.executionValues) window.executionValues = {};
+                if (!window.executionValues[blockId]) window.executionValues[blockId] = {};
+                
+                window.executionValues[blockId][`${r}_${c}`] = data.fullName;
+                
+                if (!window.executionValues[blockId]._meta) window.executionValues[blockId]._meta = {};
+                window.executionValues[blockId]._meta[`${r}_${c}`] = {
+                    by: data.fullName,
+                    at: new Date().toISOString()
+                };
+                
+                if (typeof renderBlocks === 'function') renderBlocks();
+                
+                Swal.fire({
+                    toast: true,
+                    position: 'top-end',
+                    icon: 'success',
+                    title: `Đã xác thực: ${data.fullName}`,
+                    showConfirmButton: false,
+                    timer: 2000
+                });
+            } else {
+                errorEl.innerText = data.message || 'Xác thực thất bại.';
+                errorEl.classList.remove('d-none');
+            }
+        })
+        .catch(err => {
+            console.error('Lỗi xác thực:', err);
+            btn.innerHTML = oldText;
+            btn.disabled = false;
+            errorEl.innerText = 'Có lỗi xảy ra, vui lòng thử lại.';
+            errorEl.classList.remove('d-none');
         });
     }
 </script>

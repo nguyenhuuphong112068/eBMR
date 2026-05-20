@@ -169,7 +169,7 @@
         items.forEach((item, idx) => {
                 // Xác định phân đoạn (section) cho item hiện tại nếu nó chưa có hoặc là khối section
                 if (item.type === 'section') {
-                    activeSectionIdTracker = item.id;
+                    activeSectionIdTracker = item.section_id || item.id;
                 }
                 
                 // Chỉ tự động gán section_id nếu item chưa có section_id
@@ -179,7 +179,7 @@
                 
                 const itemSectionId = item.section_id;
 
-                const isHeader = item.isGfHeader || item.isBmrHeader || (item.type === 'section' && item.locked);
+                const isHeader = item.isGfHeader || item.isBmrHeader || (item.type === 'section' && item.locked) || item.isAbbreviationTable;
 
                 // Logic lọc phân đoạn: Nếu đang xem 1 phân đoạn cụ thể, chỉ hiện blocks của phân đoạn đó HOẶC các khối Header
                 if (!window.isViewAllMode && window.activeSectionId) {
@@ -298,13 +298,14 @@
                         data-row="0"
                         data-col="${cIdx}"
                         class="table-header-cell"
-                        style="width: ${c.width || 'auto'}; background-color: ${bg}; text-align: ${align}; font-weight: ${fw}; font-style: ${fs}; text-decoration: ${td}; font-size: ${fsz}; color: ${tc}; border-top: ${s.borderTop || ''}; border-bottom: ${s.borderBottom || ''}; border-left: ${s.borderLeft || ''}; border-right: ${s.borderRight || ''};">
+                        style="position: relative; width: ${c.width || 'auto'}; background-color: ${bg}; text-align: ${align}; font-weight: ${fw}; font-style: ${fs}; text-decoration: ${td}; font-size: ${fsz}; color: ${tc}; border-top: ${s.borderTop || ''}; border-bottom: ${s.borderBottom || ''}; border-left: ${s.borderLeft || ''}; border-right: ${s.borderRight || ''};">
                             <div class="header-content">${c.label}</div>
                             ${!window.isExecutionMode ? `
                             <div class="col-actions">
                                 <button class="btn-col-add" onclick="event.stopPropagation(); tableAddColumn(${cIdx+1})" title="Thêm cột bên phải"><i class="fas fa-plus"></i></button>
                                 <button class="btn-col-del" onclick="event.stopPropagation(); tableRemoveColumn(${cIdx})" title="Xóa cột"><i class="fas fa-times"></i></button>
                             </div>` : ''}
+                            ${!window.isExecutionMode ? `<div class="col-resizer" onmousedown="initResize(event, '${item.id}', 'col', ${cIdx})"></div>` : ''}
                         </th>`;
                     }).join('')}
                     ${window.isExecutionMode && item.canAddRows ? '<th style="width: 30px; border: none; background: transparent;"></th>' : ''}
@@ -348,6 +349,18 @@
                                 cellClass = "execution-input-cell";
                                 onclickAttr = `onclick="openExecutionInputModal('${blockKey}', ${r}, ${c}, 'signature')"`;
                                 displayContent = runVal ? `<div class="e-signature-done"><i class="fas fa-check-circle text-success me-1"></i>${runVal}</div>` : `<span class="execution-badge signature"><i class="fas fa-pen"></i> [Ký tên]</span>`;
+                            } else if (displayContent.includes('[Tự động lấy thời gian]')) {
+                                cellClass = "execution-input-cell";
+                                onclickAttr = `ondblclick="autoFillTime('${blockKey}', ${r}, ${c})" title="Nháy đúp chuột (Double-click) để lấy giờ hệ thống"`;
+                                displayContent = runVal ? runVal : `<span class="execution-badge time"><i class="fas fa-clock"></i> [Double-click lấy giờ]</span>`;
+                            } else if (displayContent.includes('[Người thực hiện]')) {
+                                cellClass = "execution-input-cell";
+                                onclickAttr = `onclick="autoFillExecutor('${blockKey}', ${r}, ${c})" title="Click để xác nhận người thực hiện"`;
+                                displayContent = runVal ? `<div class="e-signature-done"><i class="fas fa-user-check text-primary me-1"></i>${runVal}</div>` : `<span class="execution-badge executor"><i class="fas fa-user-edit"></i> [Người thực hiện]</span>`;
+                            } else if (displayContent.includes('[Người kiểm tra]')) {
+                                cellClass = "execution-input-cell";
+                                onclickAttr = `onclick="openCheckerAuthModal('${blockKey}', ${r}, ${c})" title="Click để xác thực người kiểm tra"`;
+                                displayContent = runVal ? `<div class="e-signature-done"><i class="fas fa-user-shield text-success me-1"></i>${runVal}</div>` : `<span class="execution-badge checker"><i class="fas fa-check-double"></i> [Người kiểm tra]</span>`;
                             }
                         } else {
                             finalEditable = (item.locked || window.isReadOnly) ? 'false' : 'true';
@@ -369,7 +382,7 @@
                         colspan="${cell.cs || 1}"
                         ${onclickAttr}
                         class="${cellClass} ${item.locked ? 'locked-cell' : ''}"
-                        style="width: ${cellWidth}; height: ${rowH}; background-color: ${cellBg}; text-align: ${cell.textAlign || ''}; font-weight: ${cell.fontWeight || ''}; font-style: ${cell.fontStyle || ''}; text-decoration: ${cell.textDecoration || ''}; font-size: ${cell.fontSize || ''}; color: ${cell.textColor || ''}; text-transform: ${cell.textTransform || ''}; border-top: ${cell.borderTop || ''}; border-bottom: ${cell.borderBottom || ''}; border-left: ${cell.borderLeft || ''}; border-right: ${cell.borderRight || ''};"
+                        style="position: relative; width: ${cellWidth}; height: ${rowH}; background-color: ${cellBg}; text-align: ${cell.textAlign || ''}; font-weight: ${cell.fontWeight || ''}; font-style: ${cell.fontStyle || ''}; text-decoration: ${cell.textDecoration || ''}; font-size: ${cell.fontSize || ''}; color: ${cell.textColor || ''}; text-transform: ${cell.textTransform || ''}; border-top: ${cell.borderTop || ''}; border-bottom: ${cell.borderBottom || ''}; border-left: ${cell.borderLeft || ''}; border-right: ${cell.borderRight || ''};"
                         oninput="updateTableInline('${item.id}', 'cell', ${r}, ${c}, this.innerHTML)">
                             <div class="cell-wrapper">${displayContent}</div>
                             ${metaHtml}
@@ -378,6 +391,8 @@
                                 <button class="btn-row-add" onclick="event.stopPropagation(); tableAddRow(${r+1})" title="Thêm dòng bên dưới"><i class="fas fa-plus"></i></button>
                                 <button class="btn-row-del" onclick="event.stopPropagation(); tableRemoveRow(${r})" title="Xóa dòng"><i class="fas fa-times"></i></button>
                             </div>` : ''}
+                            ${!window.isExecutionMode ? `<div class="col-resizer" onmousedown="initResize(event, '${item.id}', 'col', ${c + (cell.cs || 1) - 1})"></div>
+                            <div class="row-resizer" onmousedown="initResize(event, '${item.id}', 'row', ${r + (cell.rs || 1) - 1})"></div>` : ''}
                         </td>`;
         }
 
@@ -409,8 +424,80 @@
                                 `;
     }
 
+    let titleHtml = '';
+    if (item.isAbbreviationTable) {
+        let titleText = 'Danh Sách Viết Tắt';
+        const langMode = window.currentLangMode || 'vi';
+        if (langMode === 'en') {
+            titleText = 'List of Abbreviations';
+        } else if (langMode === 'dual') {
+            titleText = 'Danh Sách Viết Tắt / List of Abbreviations';
+        }
+        titleHtml = `
+            <div class="ebmr-section-header d-flex align-items-center mb-3 mt-4">
+                <div class="section-icon bg-info text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px; min-width: 40px;">
+                    <i class="fas fa-list-ul"></i>
+                </div>
+                <div class="flex-grow-1">
+                    <div class="section-title fw-bold text-uppercase" style="font-size: 1.2rem; color: #164e63; letter-spacing: 1px;">
+                        ${titleText}
+                    </div>
+                    <div class="section-line mt-1" style="height: 3px; background: linear-gradient(to right, #0ea5e9, transparent); border-radius: 2px;"></div>
+                </div>
+            </div>
+        `;
+    }
+
+    let progressHtml = '';
+    if (window.isExecutionMode && item.freq_minutes) {
+        const countdownState = window._activeCountdowns && window._activeCountdowns[item.id];
+        const isRunning = !!countdownState;
+        
+        let initialWidth = '100%';
+        let initialText = '--:--';
+        let initialClass = 'bg-success';
+        
+        if (isRunning) {
+            const elapsed = Date.now() - countdownState.startTime;
+            const remaining = countdownState.freqMs - elapsed;
+            if (remaining > 0) {
+                const percent = (remaining / countdownState.freqMs) * 100;
+                initialWidth = `${percent}%`;
+                
+                if (percent > 50) {
+                    initialClass = 'bg-success';
+                } else if (percent > 20) {
+                    initialClass = 'bg-warning';
+                } else {
+                    initialClass = 'bg-danger';
+                }
+                
+                const totalSeconds = Math.ceil(remaining / 1000);
+                const mins = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+                const secs = (totalSeconds % 60).toString().padStart(2, '0');
+                initialText = `${mins}:${secs}`;
+            } else {
+                initialWidth = '0%';
+                initialText = 'Đã đến giờ lấy mẫu!';
+                initialClass = 'bg-danger';
+            }
+        }
+        
+        progressHtml = `
+            <div class="sampling-countdown-container my-3 px-1" id="countdown-container-${item.id}" style="display: ${isRunning ? 'block' : 'none'};">
+                <div class="d-flex justify-content-between align-items-center mb-1" style="font-size: 0.85rem; color: #475569; font-weight: 600;">
+                    <span><i class="fas fa-hourglass-half me-1 text-primary"></i> Thời gian đến lần lấy mẫu tiếp theo:</span>
+                    <span id="countdown-text-${item.id}" style="font-family: monospace; font-size: 0.95rem; color: #1e293b;">${initialText}</span>
+                </div>
+                <div class="progress" style="height: 12px; background-color: #e2e8f0; border-radius: 6px; overflow: hidden; box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);">
+                    <div id="countdown-bar-${item.id}" class="progress-bar progress-bar-striped progress-bar-animated ${initialClass}" role="progressbar" style="width: ${initialWidth}; transition: width 1s linear, background-color 0.5s ease;"></div>
+                </div>
+            </div>
+        `;
+    }
+
     content =
-        `<div class="table-responsive-wrapper"><table class="mini-table ${borderClass}" style="--table-border-width: ${item.borderWeight || '1px'}; --table-border-color: #dee2e6;">${thead}<tbody>${rowsHtml}</tbody></table></div>${addRowBtn}`;
+        `${titleHtml}${progressHtml}<div class="table-responsive-wrapper"><table class="mini-table ${borderClass}" style="--table-border-width: ${item.borderWeight || '1px'}; --table-border-color: #dee2e6;">${thead}<tbody>${rowsHtml}</tbody></table></div>${addRowBtn}`;
     }
 
     // --- XỬ LÝ KHỐI VĂN BẢN TĨNH (STATIC TEXT) ---
@@ -420,8 +507,32 @@
         const borderClass = item.borderMode === 'dashed' ? 'border-dashed' : (item.borderMode === 'visible' ?
             'border-visible' : 'border-none');
 
+        let titleHtml = '';
+        if (item.isCalculationBlock && item.section_id === window.catId) {
+            let titleText = 'Tính Toán Công Thức';
+            const langMode = window.currentLangMode || 'vi';
+            if (langMode === 'en') {
+                titleText = 'Formula Calculation';
+            } else if (langMode === 'dual') {
+                titleText = 'Tính Toán Công Thức / Formula Calculation';
+            }
+            titleHtml = `
+                <div class="ebmr-section-header d-flex align-items-center mb-3 mt-4">
+                    <div class="section-icon bg-info text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px; min-width: 40px;">
+                        <i class="fas fa-calculator"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <div class="section-title fw-bold text-uppercase" style="font-size: 1.2rem; color: #164e63; letter-spacing: 1px;">
+                            ${titleText}
+                        </div>
+                        <div class="section-line mt-1" style="height: 3px; background: linear-gradient(to right, #0ea5e9, transparent); border-radius: 2px;"></div>
+                    </div>
+                </div>
+            `;
+        }
+
         content =
-            `<div class="static-text-display ${borderClass}" contenteditable="${textEditable}" spellcheck="false" 
+            `${titleHtml}<div class="static-text-display ${borderClass}" contenteditable="${textEditable}" spellcheck="false" 
                                             oninput="updateStaticTextInline('${item.id}', this.innerHTML); handleAutoCapitalize(this)">${displayContent}</div>`;
     }
 
@@ -459,9 +570,11 @@
     // --- XỬ LÝ KHỐI PHÂN ĐOẠN (SECTION) ---
     else if (item.type === 'section') {
         const labelEditable = (window.isReadOnly || window.isExecutionMode) ? 'false' : 'true';
+        const isRecalc = (item.stage_code === 'recalc' || (item.label && item.label.toUpperCase().includes('TÍNH TOÁN CÔNG THỨC')));
+        const iconClass = isRecalc ? 'fas fa-calculator' : 'fas fa-layer-group';
         content = `<div class="ebmr-section-header d-flex align-items-center" id="section-${item.id}">
                                          <div class="section-icon bg-info text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px; min-width: 40px;">
-                                            <i class="fas fa-layer-group"></i>
+                                            <i class="${iconClass}"></i>
                                          </div>
                                          <div class="flex-grow-1">
                                             <div class="section-title fw-bold text-uppercase" contenteditable="${labelEditable}" 
@@ -497,7 +610,7 @@
     // Tổng hợp HTML của khối
     div.innerHTML = `
                             ${actions}
-                            ${item.type !== 'static-text' && item.type !== 'section' && !window.isExecutionMode && item.label && item.label !== 'null' && !item.isGfHeader && !item.isBmrHeader ? `<span class="block-label">${item.label} ${item.locked ? '<i class="fas fa-lock ms-1 small"></i>' : ''}</span>` : ''}
+                            ${item.type !== 'static-text' && item.type !== 'section' && !window.isExecutionMode && item.label && item.label !== 'null' && !item.isGfHeader && !item.isBmrHeader && !item.isAbbreviationTable ? `<span class="block-label">${item.label} ${item.locked ? '<i class="fas fa-lock ms-1 small"></i>' : ''}</span>` : ''}
                             ${content}
                         `;
     currentGroup.appendChild(div);
@@ -756,7 +869,7 @@
                     if (field.type === 'formula') {
                         const dPlaces = (field.validation && field.validation.decimal_places !== null) ? field
                             .validation.decimal_places : 2;
-                        const result = calculateFormula(field.formula || '', dPlaces);
+                        const result = calculateFormula(field.formula || '', dPlaces, field.id);
                         badge.innerHTML = result;
                         badge.className = 'ebmr-field-value formula-result';
                         badge.setAttribute('data-field-id', fieldId); // Để recalculate tìm được
@@ -842,7 +955,7 @@
                         typeLabel = 'Công thức';
                         const dPlaces = (field.validation && field.validation.decimal_places !== null) ? field
                             .validation.decimal_places : 2;
-                        const testResult = calculateFormula(field.formula || '', dPlaces);
+                        const testResult = calculateFormula(field.formula || '', dPlaces, field.id);
 
                         // Resolve IDs to Labels for display
                         const formulaDisplay = (field.formula || '').replace(/\(([^)]+)\)/g, (match, id) => {
@@ -870,68 +983,95 @@
         return div.innerHTML;
     }
 
+    // Keep track of fields currently being calculated to prevent infinite loops (circular references)
+    let calculatingFields = new Set();
+
+    /**
+     * Hàm helper để chuyển đổi chuỗi giá trị (có thể chứa dấu phẩy phân tách phần nghìn) sang Float một cách an toàn
+     */
+    const parseNumberSafe = function(val) {
+        if (val === undefined || val === null || val === '') return 0;
+        if (typeof val === 'number') return val;
+        // Loại bỏ thẻ HTML và dấu phẩy phân cách phần nghìn
+        const clean = String(val).replace(/<[^>]*>/g, '').replace(/,/g, '').trim();
+        return parseFloat(clean) || 0;
+    };
+
     /**
      * Tính toán giá trị của một công thức toán học.
      * Nó tự động tìm kiếm các giá trị từ các ô có ID hoặc các biến số được định nghĩa trong công thức.
      * @param {string} formula - Chuỗi công thức, ví dụ: "(kl_tong) - (kl_bao)".
      */
-    window.calculateFormula = function(formula, decimalPlaces = 2) {
+    window.calculateFormula = function(formula, decimalPlaces = 2, targetFieldId = null) {
         if (!formula) return '0';
 
-        const valMap = {};
-        const dPlaces = (decimalPlaces !== null && decimalPlaces !== '') ? parseInt(decimalPlaces) : 2;
-
-        // BƯỚC 1: Thu thập giá trị từ các ô bảng (Table Cells) có đặt ID (cellId)
-        items.forEach(item => {
-            if (item.type === 'table' && item.data) {
-                item.data.forEach(row => {
-                    row.forEach(cell => {
-                        if (cell && cell.cellId) {
-                            // Ưu tiên giá trị mặc định nếu có, nếu không lấy nội dung ô
-                            const raw = (cell.defaultValue !== undefined && cell
-                                .defaultValue !== '') ? cell.defaultValue : (cell
-                                .content || '0');
-                            // Làm sạch HTML và chuyển đổi sang số
-                            const clean = typeof raw === 'string' ? raw.replace(/<[^>]*>/g,
-                                '').trim() : raw;
-                            valMap[cell.cellId] = parseFloat(clean) || 0;
-                        }
-                    });
-                });
+        if (targetFieldId) {
+            if (calculatingFields.has(targetFieldId)) {
+                return '0'; // Tránh lặp vô hạn do tham chiếu vòng
             }
-        });
+            calculatingFields.add(targetFieldId);
+        }
 
-        // BƯỚC 2: Thu thập giá trị từ các "Trường động" (Dynamic Fields) theo Tên hoặc Nhãn
-        Object.values(fieldsConfig).forEach(field => {
-            if (field.label || field.name) {
-                let val = 0;
-                if (window.isExecutionMode && window.executionValues && window.executionValues[field.id] !== undefined) {
-                    let raw = window.executionValues[field.id];
-                    if (raw && typeof raw === 'object' && raw.hasOwnProperty('default')) {
-                        val = raw.default;
-                    } else if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-                        const keys = Object.keys(raw);
-                        if (keys.length > 0) val = raw[keys[0]];
-                    } else {
-                        val = raw;
-                    }
-                } else {
-                    val = (field.defaultValue !== undefined && field.defaultValue !== '') ? field.defaultValue : 0;
-                }
-                if (field.label) valMap[field.label] = parseFloat(val) || 0;
-                if (field.name) valMap[field.name] = parseFloat(val) || 0;
-            }
-        });
-
-        // BƯỚC 3: Thay thế các định danh trong công thức bằng giá trị thực tế
-        // Ví dụ: "(kl_tong) - (kl_bao)" -> "100 - 5"
-        let processed = formula.replace(/\(([^)]+)\)/g, (match, id) => {
-            const trimmedId = id.trim();
-            return valMap[trimmedId] !== undefined ? valMap[trimmedId] : 0;
-        });
-
-        // BƯỚC 4: Tính toán biểu thức toán học cơ bản bằng hàm Function (an toàn hơn eval một chút)
         try {
+            const valMap = {};
+            const dPlaces = (decimalPlaces !== null && decimalPlaces !== '') ? parseInt(decimalPlaces) : 2;
+
+            // BƯỚC 1: Thu thập giá trị từ các ô bảng (Table Cells) có đặt ID (cellId)
+            items.forEach(item => {
+                if (item.type === 'table' && item.data) {
+                    item.data.forEach(row => {
+                        row.forEach(cell => {
+                            if (cell && cell.cellId) {
+                                // Ưu tiên giá trị mặc định nếu có, nếu không lấy nội dung ô
+                                const raw = (cell.defaultValue !== undefined && cell
+                                    .defaultValue !== '') ? cell.defaultValue : (cell
+                                    .content || '0');
+                                valMap[cell.cellId] = parseNumberSafe(raw);
+                            }
+                        });
+                    });
+                }
+            });
+
+            // BƯỚC 2: Thu thập giá trị từ các "Trường động" (Dynamic Fields) theo Tên hoặc Nhãn
+            Object.values(fieldsConfig).forEach(field => {
+                if (field.label || field.name) {
+                    let val = 0;
+                    if (field.type === 'formula') {
+                        // Nếu là trường công thức khác, tính toán đệ quy
+                        if (calculatingFields.has(field.id)) {
+                            val = 0; // Tránh lặp vô hạn
+                        } else {
+                            val = window.calculateFormula(field.formula || '', field.validation ? field.validation.decimal_places : 2, field.id);
+                        }
+                    } else if (window.isExecutionMode && window.executionValues && window.executionValues[field.id] !== undefined) {
+                        let raw = window.executionValues[field.id];
+                        if (raw && typeof raw === 'object' && raw.hasOwnProperty('default')) {
+                            val = raw.default;
+                        } else if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+                            const keys = Object.keys(raw);
+                            if (keys.length > 0) val = raw[keys[0]];
+                        } else {
+                            val = raw;
+                        }
+                    } else {
+                        val = (field.defaultValue !== undefined && field.defaultValue !== '') ? field.defaultValue : 0;
+                    }
+                    
+                    const parsedVal = parseNumberSafe(val);
+                    if (field.label) valMap[field.label] = parsedVal;
+                    if (field.name) valMap[field.name] = parsedVal;
+                }
+            });
+
+            // BƯỚC 3: Thay thế các định danh trong công thức bằng giá trị thực tế
+            // Ví dụ: "(kl_tong) - (kl_bao)" -> "100 - 5"
+            let processed = formula.replace(/\(([^)]+)\)/g, (match, id) => {
+                const trimmedId = id.trim();
+                return valMap[trimmedId] !== undefined ? valMap[trimmedId] : 0;
+            });
+
+            // BƯỚC 4: Tính toán biểu thức toán học cơ bản bằng hàm Function (an toàn hơn eval một chút)
             const result = new Function(`return ${processed}`)();
             // Định dạng kết quả hiển thị (phân tách hàng nghìn, số chữ số thập phân theo thiết lập)
             return (typeof result === 'number') ? result.toLocaleString('en-US', {
@@ -940,6 +1080,10 @@
             }) : result;
         } catch (e) {
             return '#ERR'; // Trả về lỗi nếu công thức không hợp lệ
+        } finally {
+            if (targetFieldId) {
+                calculatingFields.delete(targetFieldId);
+            }
         }
     };
 
@@ -958,7 +1102,7 @@
                 if (field && field.type === 'formula') {
                     const dPlaces = (field.validation && field.validation.decimal_places !== null) ? field
                         .validation.decimal_places : 2;
-                    badge.innerHTML = calculateFormula(field.formula || '', dPlaces);
+                    badge.innerHTML = calculateFormula(field.formula || '', dPlaces, field.id);
                 }
             }
         });

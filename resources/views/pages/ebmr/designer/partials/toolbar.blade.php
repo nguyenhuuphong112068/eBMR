@@ -53,6 +53,11 @@
                 <i class="fas fa-link"></i>
             </button>
 
+            <button class="btn btn-toolbar-action text-danger fw-bold" onmousedown="event.preventDefault();"
+                onclick="$('#weightChartCreatorModal').modal('show')" title="Bảng KT Khối lượng Trung bình">
+                <i class="fas fa-balance-scale"></i>
+            </button>
+
             <button class="btn btn-toolbar-action text-info fw-bold" onmousedown="event.preventDefault();"
                 onclick="addSection()" title="Thêm Phân đoạn">
                 <i class="fas fa-layer-group"></i>

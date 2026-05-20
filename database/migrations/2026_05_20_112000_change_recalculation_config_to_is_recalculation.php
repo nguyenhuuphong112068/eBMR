@@ -1,0 +1,30 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::table('ebmr_templates', function (Blueprint $table) {
+            $table->dropColumn('recalculation_config');
+            $table->boolean('is_recalculation')->default(0)->after('storage_conditions');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::table('ebmr_templates', function (Blueprint $table) {
+            $table->dropColumn('is_recalculation');
+            $table->text('recalculation_config')->nullable()->after('storage_conditions');
+        });
+    }
+};

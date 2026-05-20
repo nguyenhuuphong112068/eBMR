@@ -103,6 +103,72 @@ class EbmrDesignerController extends Controller
                         $isReadOnly = true;
                     }
 
+                    // Recalculation block auto-creation if is_recalculation == 1
+                    if ($template->is_recalculation == 1 && $template->type === 'BMR') {
+                        $recalcSectionId = $template->caterogy_id . '_recalc';
+                        $hasRecalc = DB::table('ebmr_template_blocks')
+                            ->where('template_id', $id)
+                            ->where('section_id', $recalcSectionId)
+                            ->exists();
+                        if (!$hasRecalc) {
+                            DB::table('ebmr_template_blocks')
+                                ->where('template_id', $id)
+                                ->increment('order', 2);
+
+                            $sectionBlockId = DB::table('ebmr_template_blocks')->insertGetId([
+                                'template_id' => $id,
+                                'section_id' => $recalcSectionId,
+                                'type' => 'section',
+                                'label' => 'section_recalc',
+                                'order' => 0,
+                                'properties' => json_encode([
+                                    'id' => 'blk_sec_recalc_' . uniqid(),
+                                    'type' => 'section',
+                                    'label' => 'TÍNH TOÁN CÔNG THỨC',
+                                    'stage_code' => 'recalc',
+                                    'section_id' => $recalcSectionId
+                                ]),
+                                'created_at' => now(),
+                                'updated_at' => now(),
+                            ]);
+
+                            $recalcBlockId = DB::table('ebmr_template_blocks')->insertGetId([
+                                'template_id' => $id,
+                                'section_id' => $recalcSectionId,
+                                'type' => 'static-text',
+                                'label' => 'TÍNH TOÁN CÔNG THỨC BLOCK',
+                                'order' => 1,
+                                'properties' => json_encode([
+                                    'id' => 'blk_recalc_' . uniqid(),
+                                    'type' => 'static-text',
+                                    'label' => 'TÍNH TOÁN CÔNG THỨC BLOCK',
+                                    'isCalculationBlock' => true,
+                                    'section_id' => $recalcSectionId
+                                ]),
+                                'created_at' => now(),
+                                'updated_at' => now(),
+                            ]);
+
+                            $defaultContent = '<p>Nguyên liệu trong công thức được tính trên dạng nguyên trạng, lượng nguyên liệu thực tế sử dụng cho mỗi mẻ được tính dựa trên hàm lượng nguyên trạng từng lô nguyên liệu.</p>';
+                            
+                            $contentId = DB::table('ebmr_content_blocks')->insertGetId([
+                                'ebmr_template_blocks_id' => $recalcBlockId,
+                                'template_id' => $id,
+                                'section_id' => $recalcSectionId,
+                                'type' => 'static-text',
+                                'vi_contents' => $defaultContent,
+                                'en_contents' => $defaultContent,
+                                'created_at' => now(),
+                                'updated_at' => now(),
+                            ]);
+
+                            $placeholder = "[[CONTENT_$contentId]]";
+                            DB::table('ebmr_template_blocks')->where('id', $recalcBlockId)->update([
+                                'content' => '<div class="static-text-display">' . $placeholder . '</div>'
+                            ]);
+                        }
+                    }
+
                     $blocks = DB::table('ebmr_template_blocks')->where('template_id', $id)->orderBy('order')->get();
 
                     // Fetch all content blocks for this template's blocks to minimize queries
@@ -171,7 +237,8 @@ class EbmrDesignerController extends Controller
                             $isHeader = ($block->section_id == $template->caterogy_id) || 
                                         ($f['isBmrHeader'] ?? false) || 
                                         ($f['isGfHeader'] ?? false) || 
-                                        (($f['type'] ?? '') === 'section' && ($f['locked'] ?? false));
+                                        (($f['type'] ?? '') === 'section' && ($f['locked'] ?? false)) ||
+                                        ($f['isAbbreviationTable'] ?? false);
 
                             if (! $sectionId || $block->section_id == $sectionId || $isHeader) {
                                 $f['section_id'] = $block->section_id; // Ensure section_id is in property for sorting
@@ -304,13 +371,38 @@ class EbmrDesignerController extends Controller
                 $id = DB::table('ebmr_templates')->insertGetId($data);
             }
 
-            // --- 1. HANDLE DELETIONS ---
+            // --- 2. EXTRACT ABBREVIATION TABLE ---
+            $abbrevData = null;
+            $abbrevDbId = null;
+            $filteredFields = [];
+            foreach ($fields as $field) {
+                if (!empty($field['isAbbreviationTable'])) {
+                    $abbrevData = $field;
+                    if (!empty($field['db_id'])) {
+                        $abbrevDbId = $field['db_id'];
+                    }
+                } else {
+                    $filteredFields[] = $field;
+                }
+            }
+            $fields = $filteredFields;
+            
+            if ($abbrevData) {
+                DB::table('ebmr_templates')->where('id', $id)->update([
+                    'abbreviations_List' => json_encode($abbrevData)
+                ]);
+            }
+            if ($abbrevDbId && !in_array($abbrevDbId, $deletedIds)) {
+                $deletedIds[] = $abbrevDbId;
+            }
+
+            // --- 3. HANDLE DELETIONS ---
             if ($isIncremental && ! empty($deletedIds)) {
                 DB::table('ebmr_template_blocks')->whereIn('id', $deletedIds)->delete();
                 DB::table('ebmr_content_blocks')->whereIn('ebmr_template_blocks_id', $deletedIds)->delete();
             }
 
-            // --- 2. INSERT/UPDATE DIRTY BLOCKS ---
+            // --- 4. INSERT/UPDATE DIRTY BLOCKS ---
             $templateRecord = DB::table('ebmr_templates')->where('id', $id)->first();
             $categoryId = $templateRecord->caterogy_id ?? 0;
             $currentSectionId = ($templateRecord->type === 'BMR' || $templateRecord->type === 'BPR') ? ($categoryId.'_0') : null;
@@ -898,38 +990,13 @@ class EbmrDesignerController extends Controller
     private function splitHtmlAndText($html, $placeholder)
     {
         // 1. Identify all variable spans and convert them to protected placeholders {{field_id}}
-        // This ensures they are treated as text and NOT stripped by strip_tags
         $htmlWithPlaceholders = preg_replace_callback('/<span[^>]*class="ebmr-field-badge"[^>]*data-field-id="([^"]+)"[^>]*>.*?<\/span>/i', function ($m) {
-            return ' {{'.$m[1].'}} '; // Add spaces to ensure it's treated as a separate node if needed
+            return '{{'.$m[1].'}}';
         }, $html);
 
-        // 2. Get clean text (which now contains our placeholders)
-        $text = trim(strip_tags($htmlWithPlaceholders));
-
-        // 3. If there's no text
-        if ($text === '') {
-            return [$html, ''];
-        }
-
-        // 4. Create the structure by replacing text nodes with [[CONTENT_ID]]
-        $first = true;
-        $structure = preg_replace_callback('/>([^<]+)</', function ($matches) use (&$first, $placeholder) {
-            if (trim($matches[1]) !== '') {
-                if ($first) {
-                    $first = false;
-
-                    return '>'.$placeholder.'<';
-                } else {
-                    return '><';
-                }
-            }
-
-            return $matches[0];
-        }, '>'.$htmlWithPlaceholders.'<');
-
-        $structure = substr($structure, 1, -1);
-
-        return [$structure, $text];
+        // We want to preserve full HTML formatting (bold, italic, list, paragraphs, breaks, alignment, etc.)
+        // So we return the placeholder as the structure and the rich HTML as the text.
+        return [$placeholder, $htmlWithPlaceholders];
     }
 
     public function aiTranslate(Request $request)
@@ -972,6 +1039,7 @@ class EbmrDesignerController extends Controller
                     "Guidelines:\n".
                     "- Use formal technical pharmaceutical terminology.\n".
                     "- Keep codes like SOP-123 or BMR-V1 unchanged.\n".
+                    "- Preserve all HTML tags (e.g. <b>, <strong>, <i>, <u>, <br>, <p>, <div>, etc.) and placeholders like {{field_id}} exactly in their respective positions.\n".
                     "- Return ONLY a JSON array of strings.\n".
                     '- Input: '.json_encode($textsToTranslate, JSON_UNESCAPED_UNICODE);
 

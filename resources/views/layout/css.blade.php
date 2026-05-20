@@ -1,7 +1,5 @@
-      <!-- Google Fonts: Inter -->
-      <link rel="preconnect" href="https://fonts.googleapis.com">
-      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+      <!-- Local Arimo Font -->
+      <link rel="stylesheet" href="{{ asset('fonts/Arimo/arimo.css') }}">
       
       <link rel="stylesheet" href="{{asset ('dataTable/plugins/fontawesome-free/css/all.min.css')}} ">
       <!-- DataTables -->
@@ -54,7 +52,7 @@
             }
 
             body {
-                  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                  font-family: 'Arimo', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
                   background: var(--bg-body);
                   background-attachment: fixed;
                   color: var(--text-main);

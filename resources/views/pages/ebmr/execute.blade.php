@@ -101,6 +101,38 @@
         </div>
     </div>
 
+    <!-- Modal: Xác thực Người kiểm tra (Cross-verification) -->
+    <div class="modal fade" id="checkerAuthModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-sm modal-dialog-centered">
+            <div class="modal-content shadow-lg border-0" style="border-radius: 12px;">
+                <div class="modal-header bg-dark text-white border-0 py-2 px-3">
+                    <h5 class="modal-title fw-bold small"><i class="fas fa-user-shield me-2"></i> XÁC THỰC NGƯỜI KIỂM TRA</h5>
+                    <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="small fw-bold mb-1">Tài khoản (Username)</label>
+                        <input type="text" id="checkerUsername" class="form-control" placeholder="Nhập tên đăng nhập">
+                    </div>
+                    <div class="mb-3">
+                        <label class="small fw-bold mb-1">Mật khẩu</label>
+                        <input type="password" id="checkerPassword" class="form-control" placeholder="Nhập mật khẩu">
+                    </div>
+                    <input type="hidden" id="checkerBlockId">
+                    <input type="hidden" id="checkerRowIdx">
+                    <input type="hidden" id="checkerColIdx">
+                    <div id="checkerAuthError" class="text-danger small mt-2 d-none fw-bold"></div>
+                </div>
+                <div class="modal-footer bg-light border-0 py-2">
+                    <button type="button" class="btn btn-secondary btn-sm px-3" data-dismiss="modal">Hủy</button>
+                    <button type="button" class="btn btn-primary btn-sm px-4 fw-bold" onclick="submitCheckerAuth()">Xác nhận</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         let currentExecContext = null;
 
@@ -195,6 +227,8 @@
             window.executionValues[blockId][`${row}_${col}`] = value;
 
             renderBlocks();
+            if (typeof syncLinkedCharts === 'function') syncLinkedCharts(blockId);
+            
             $('#executionInputModal').modal('hide');
         }
 
@@ -329,6 +363,18 @@
             color: #fd7e14;
             border-color: #ffe5b4;
         }
+        .execution-badge.time {
+            color: #17a2b8;
+            background-color: #e0f4f7;
+        }
+        .execution-badge.executor {
+            color: #6610f2;
+            background-color: #f0e6ff;
+        }
+        .execution-badge.checker {
+            color: #fd7e14;
+            background-color: #fff0e6;
+        }
         .execution-badge:hover {
             transform: translateY(-1px);
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
@@ -357,5 +403,6 @@
     @include('pages.ebmr.designer.scripts.render')
     @include('pages.ebmr.designer.scripts.table_ops')
     @include('pages.ebmr.designer.scripts.table_advanced')
+    @include('pages.ebmr.designer.scripts.chart_ops')
     @include('pages.ebmr.designer.scripts.events')
 @endsection
