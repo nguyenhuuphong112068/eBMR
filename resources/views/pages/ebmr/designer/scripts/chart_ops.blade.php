@@ -235,21 +235,68 @@
             yAxesTicks.stepSize = (calculatedMaxY - calculatedMinY) / 10;
         }
 
+        let isOutOfSpec = false;
+        if (config.data && Array.isArray(config.data) && config.data.length > 0) {
+            const numVals = config.data
+                .map(v => parseFloat(v))
+                .filter(v => !isNaN(v) && isFinite(v));
+                
+            if (numVals.length > 0) {
+                const dataMin = Math.min(...numVals);
+                const dataMax = Math.max(...numVals);
+                
+                if (config.minY !== null && dataMin < config.minY) {
+                    isOutOfSpec = true;
+                }
+                if (config.maxY !== null && dataMax > config.maxY) {
+                    isOutOfSpec = true;
+                }
+            }
+        }
+
+        const datasets = [{
+            label: Array.isArray(config.title) ? config.title[0] : (config.title || 'Dữ liệu'),
+            data: config.data,
+            backgroundColor: config.type === 'bar' ? 'rgba(26, 115, 232, 0.5)' : 'rgba(26, 115, 232, 0.1)',
+            borderColor: 'rgba(26, 115, 232, 1)',
+            borderWidth: 2,
+            pointRadius: 4,
+            pointBackgroundColor: '#ff0000',
+            fill: config.type === 'line',
+            spanGaps: false 
+        }];
+
+        if (config.minY !== null && config.labels && config.labels.length > 0) {
+            datasets.push({
+                label: 'Tiêu chuẩn Dưới (Min)',
+                data: Array(config.labels.length).fill(config.minY),
+                borderColor: isOutOfSpec ? 'rgba(239, 68, 68, 1)' : 'rgba(148, 163, 184, 0.8)',
+                borderWidth: isOutOfSpec ? 2.5 : 1.5,
+                borderDash: isOutOfSpec ? [] : [5, 5],
+                pointRadius: 0,
+                fill: false,
+                tension: 0
+            });
+        }
+
+        if (config.maxY !== null && config.labels && config.labels.length > 0) {
+            datasets.push({
+                label: 'Tiêu chuẩn Trên (Max)',
+                data: Array(config.labels.length).fill(config.maxY),
+                borderColor: isOutOfSpec ? 'rgba(239, 68, 68, 1)' : 'rgba(148, 163, 184, 0.8)',
+                borderWidth: isOutOfSpec ? 2.5 : 1.5,
+                borderDash: isOutOfSpec ? [] : [5, 5],
+                pointRadius: 0,
+                fill: false,
+                tension: 0
+            });
+        }
+
         chartInstances[canvasId] = new Chart(ctx, {
             type: config.type,
             data: {
                 labels: config.labels,
-                datasets: [{
-                    label: Array.isArray(config.title) ? config.title[0] : (config.title || 'Dữ liệu'),
-                    data: config.data,
-                    backgroundColor: config.type === 'bar' ? 'rgba(26, 115, 232, 0.5)' : 'rgba(26, 115, 232, 0.1)',
-                    borderColor: 'rgba(26, 115, 232, 1)',
-                    borderWidth: 2,
-                    pointRadius: 4,
-                    pointBackgroundColor: '#ff0000',
-                    fill: config.type === 'line',
-                    spanGaps: false 
-                }]
+                datasets: datasets
             },
             options: {
                 animation: { duration: 0 }, // Disable animation for "Live" feel
