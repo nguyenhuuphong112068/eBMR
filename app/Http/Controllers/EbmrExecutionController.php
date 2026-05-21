@@ -424,7 +424,11 @@ class EbmrExecutionController extends Controller
 
         $user = DB::table('user_management')->where('userName', $username)->first();
         if ($user && Hash::check($password, $user->passWord)) {
-            return response()->json(['success' => true]);
+            return response()->json([
+                'success' => true,
+                'fullName' => $user->fullName,
+                'signature_image' => $user->signature_image
+            ]);
         }
 
         return response()->json(['success' => false, 'message' => 'Mật khẩu xác nhận không chính xác.']);
@@ -446,7 +450,8 @@ class EbmrExecutionController extends Controller
         if ($user && Hash::check($password, $user->passWord)) {
             return response()->json([
                 'success' => true,
-                'fullName' => $user->fullName ?? $user->userName
+                'fullName' => $user->fullName ?? $user->userName,
+                'signature_image' => $user->signature_image
             ]);
         }
 
@@ -473,7 +478,7 @@ class EbmrExecutionController extends Controller
             }
 
             // --- VARIABLE INJECTION ---
-            $content = preg_replace_callback('/\{\{(field_[0-9]+)\}\}/', function ($m) {
+            $content = preg_replace_callback('/\{\{(field_[a-zA-Z0-9_]+)\}\}/', function ($m) {
                 return '<span contenteditable="false" class="ebmr-field-badge" data-field-id="'.$m[1].'" onclick="selectField(event, \''.$m[1].'\')"></span>';
             }, $content);
 
@@ -495,7 +500,7 @@ class EbmrExecutionController extends Controller
                             $content = $cb->vi_contents ?? '';
                             
                             // --- VARIABLE INJECTION ---
-                            $content = preg_replace_callback('/\{\{(field_[0-9]+)\}\}/', function ($m) {
+                            $content = preg_replace_callback('/\{\{(field_[a-zA-Z0-9_]+)\}\}/', function ($m) {
                                 return '<span contenteditable="false" class="ebmr-field-badge" data-field-id="'.$m[1].'" onclick="selectField(event, \''.$m[1].'\')"></span>';
                             }, $content);
                             
@@ -507,5 +512,278 @@ class EbmrExecutionController extends Controller
                 }
             }
         }
+    }
+
+    /**
+     * Tra cứu và hiển thị tài liệu PDF từ thư mục chia sẻ mạng theo mã tài liệu (đã được tối ưu bằng cách truy vấn DB trước để tìm ID)
+     */
+    public function viewDocumentByCode(Request $request, $code)
+    {
+        $basePath = "\\\\10.71.1.57\\inetpub\\wwwroot\\ATLDOCPRO500_PQ\\DOCPROVIEWER500\\STELLA\\Documents";
+
+        // Kiểm tra xem thư mục gốc có tồn tại và truy cập được không
+        if (!is_dir($basePath)) {
+            Log::error("Không thể truy cập thư mục mạng: " . $basePath);
+            return response()->view('errors.document_error', [
+                'message' => 'Không thể kết nối tới máy chủ lưu trữ tài liệu (thư mục chia sẻ mạng không khả dụng).'
+            ], 500);
+        }
+
+        // Giải mã URL trong trường hợp mã tài liệu chứa các ký tự đặc biệt được encode
+        $decodedCode = urldecode($code);
+        
+        // Chuẩn hóa mã tài liệu để lọc PHP (chuyển chữ thường, loại bỏ ký tự đặc biệt)
+        $normalizedUserCode = preg_replace('/[^a-z0-9]/', '', strtolower($decodedCode));
+        if (empty($normalizedUserCode)) {
+            return response()->view('errors.document_error', [
+                'message' => 'Mã tài liệu tìm kiếm không hợp lệ.'
+            ], 400);
+        }
+
+        // Làm sạch mã tài liệu trước khi tìm kiếm DB (loại bỏ khoảng trắng và các ký tự đặc biệt dư thừa ở đầu và cuối chuỗi)
+        $cleanedCode = trim($decodedCode);
+        $cleanedCode = preg_replace('/^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/', '', $cleanedCode);
+
+        // 1. Truy vấn database Doc để lấy thông tin tài liệu có mã tương ứng (sử dụng LIKE linh hoạt dựa trên chuỗi đã làm sạch)
+        try {
+            $likePattern = '%' . str_replace(['-', '_', ' '], '%', $cleanedCode) . '%';
+            $records = DB::connection('Doc')
+                ->table('Document_records')
+                ->where('Document_Code', 'like', $likePattern)
+                ->get();
+
+            // Lọc chính xác mã tài liệu trên PHP
+            $matchedRecords = $records->filter(function($r) use ($normalizedUserCode) {
+                $normalizedDocCode = preg_replace('/[^a-z0-9]/', '', strtolower($r->Document_Code));
+                return $normalizedDocCode === $normalizedUserCode;
+            });
+
+            if ($matchedRecords->isEmpty()) {
+                return response()->view('errors.document_error', [
+                    'message' => "Không tìm thấy thông tin tài liệu tương ứng với mã \"{$decodedCode}\" trong cơ sở dữ liệu."
+                ], 404);
+            }
+
+            // Chọn bản ghi mới nhất (có ID lớn nhất)
+            $bestRecord = $matchedRecords->sortByDesc('id')->first();
+            $id = $bestRecord->id;
+            $fileNameInDb = $bestRecord->FileimageFileName;
+
+        } catch (\Exception $e) {
+            Log::error("Lỗi khi truy vấn thông tin tài liệu từ DB Doc: " . $e->getMessage());
+            return response()->view('errors.document_error', [
+                'message' => 'Có lỗi xảy ra khi truy vấn cơ sở dữ liệu tài liệu: ' . $e->getMessage()
+            ], 500);
+        }
+
+        // 2. Tìm kiếm file PDF trên đĩa mạng bắt đầu bằng ID
+        $foundPath = null;
+        $foundName = '';
+
+        // Ưu tiên 1: Thử các đường dẫn trực tiếp (Cực nhanh - ~5-30ms)
+        $directPaths = [
+            $basePath . '/' . $id . '-' . $fileNameInDb,
+            $basePath . '/' . $id . ' ' . $fileNameInDb,
+        ];
+        foreach ($directPaths as $path) {
+            if (file_exists($path)) {
+                $foundPath = $path;
+                $foundName = basename($path);
+                break;
+            }
+        }
+
+        // Ưu tiên 2: Nếu không thấy, glob không đệ quy ở thư mục gốc (Nhanh - ~50ms)
+        if (!$foundPath) {
+            $patterns = [
+                $basePath . '/' . $id . '-*.pdf',
+                $basePath . '/' . $id . ' *.pdf',
+            ];
+            foreach ($patterns as $pattern) {
+                $results = glob($pattern);
+                if (!empty($results)) {
+                    $foundPath = $results[0];
+                    $foundName = basename($foundPath);
+                    break;
+                }
+            }
+        }
+
+        // Ưu tiên 3: Nếu vẫn không thấy, glob ở các thư mục con cấp 1 (Khoảng 200-500ms)
+        if (!$foundPath) {
+            $patterns = [
+                $basePath . '/*/' . $id . '-*.pdf',
+                $basePath . '/*/' . $id . ' *.pdf',
+            ];
+            foreach ($patterns as $pattern) {
+                $results = glob($pattern);
+                if (!empty($results)) {
+                    $foundPath = $results[0];
+                    $foundName = basename($foundPath);
+                    break;
+                }
+            }
+        }
+
+        // Ưu tiên 4: Fallback cuối cùng nếu vẫn không thấy - quét đệ quy sâu (Có thể chậm)
+        if (!$foundPath) {
+            try {
+                $dirIterator = new \RecursiveDirectoryIterator($basePath, \RecursiveDirectoryIterator::SKIP_DOTS);
+                $iterator = new \RecursiveIteratorIterator($dirIterator, \RecursiveDirectoryIterator::SELF_FIRST);
+
+                foreach ($iterator as $fileInfo) {
+                    if ($fileInfo->isFile() && strtolower($fileInfo->getExtension()) === 'pdf') {
+                        $basename = $fileInfo->getBasename();
+                        if (strpos($basename, (string)$id) === 0) {
+                            $foundPath = $fileInfo->getRealPath();
+                            $foundName = $basename;
+                            break;
+                        }
+                    }
+                }
+            } catch (\Exception $e) {
+                Log::error("Lỗi khi quét đệ quy thư mục mạng tìm ID {$id}: " . $e->getMessage());
+            }
+        }
+
+        // Trả kết quả file PDF
+        if ($foundPath && file_exists($foundPath)) {
+            return response()->file($foundPath, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'inline; filename="' . $foundName . '"'
+            ]);
+        }
+
+        return response()->view('errors.document_error', [
+            'message' => "Không tìm thấy tài liệu PDF thực tế nào tương ứng với ID {$id} (mã \"{$decodedCode}\") trên máy chủ tài liệu mạng."
+        ], 404);
+    }
+
+    /**
+     * Kiểm tra ngầm sự tồn tại của file PDF tài liệu trên máy chủ đĩa mạng mà không trả về file.
+     */
+    public function checkDocumentExists(Request $request, $code)
+    {
+        $basePath = "\\\\10.71.1.57\\inetpub\\wwwroot\\ATLDOCPRO500_PQ\\DOCPROVIEWER500\\STELLA\\Documents";
+
+        if (!is_dir($basePath)) {
+            return response()->json([
+                'exists' => false,
+                'message' => 'Không thể kết nối tới máy chủ lưu trữ tài liệu (thư mục chia sẻ mạng không khả dụng).'
+            ], 500);
+        }
+
+        $decodedCode = urldecode($code);
+        $normalizedUserCode = preg_replace('/[^a-z0-9]/', '', strtolower($decodedCode));
+        if (empty($normalizedUserCode)) {
+            return response()->json([
+                'exists' => false,
+                'message' => 'Mã tài liệu kiểm tra không hợp lệ.'
+            ], 400);
+        }
+
+        $cleanedCode = trim($decodedCode);
+        $cleanedCode = preg_replace('/^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/', '', $cleanedCode);
+
+        try {
+            $likePattern = '%' . str_replace(['-', '_', ' '], '%', $cleanedCode) . '%';
+            $records = DB::connection('Doc')
+                ->table('Document_records')
+                ->where('Document_Code', 'like', $likePattern)
+                ->get();
+
+            $matchedRecords = $records->filter(function($r) use ($normalizedUserCode) {
+                return preg_replace('/[^a-z0-9]/', '', strtolower($r->Document_Code)) === $normalizedUserCode;
+            });
+
+            if ($matchedRecords->isEmpty()) {
+                return response()->json([
+                    'exists' => false,
+                    'message' => "Không tìm thấy thông tin mã tài liệu \"{$decodedCode}\" trong cơ sở dữ liệu."
+                ]);
+            }
+
+            $bestRecord = $matchedRecords->sortByDesc('id')->first();
+            $id = $bestRecord->id;
+            $fileNameInDb = $bestRecord->FileimageFileName;
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'exists' => false,
+                'message' => 'Lỗi truy vấn cơ sở dữ liệu: ' . $e->getMessage()
+            ], 500);
+        }
+
+        $foundPath = null;
+        $directPaths = [
+            $basePath . '/' . $id . '-' . $fileNameInDb,
+            $basePath . '/' . $id . ' ' . $fileNameInDb,
+        ];
+        foreach ($directPaths as $path) {
+            if (file_exists($path)) {
+                $foundPath = $path;
+                break;
+            }
+        }
+
+        if (!$foundPath) {
+            $patterns = [
+                $basePath . '/' . $id . '-*.pdf',
+                $basePath . '/' . $id . ' *.pdf',
+            ];
+            foreach ($patterns as $pattern) {
+                $results = glob($pattern);
+                if (!empty($results)) {
+                    $foundPath = $results[0];
+                    break;
+                }
+            }
+        }
+
+        if (!$foundPath) {
+            $patterns = [
+                $basePath . '/*/' . $id . '-*.pdf',
+                $basePath . '/*/' . $id . ' *.pdf',
+            ];
+            foreach ($patterns as $pattern) {
+                $results = glob($pattern);
+                if (!empty($results)) {
+                    $foundPath = $results[0];
+                    break;
+                }
+            }
+        }
+
+        if (!$foundPath) {
+            try {
+                $dirIterator = new \RecursiveDirectoryIterator($basePath, \RecursiveDirectoryIterator::SKIP_DOTS);
+                $iterator = new \RecursiveIteratorIterator($dirIterator, \RecursiveDirectoryIterator::SELF_FIRST);
+
+                foreach ($iterator as $fileInfo) {
+                    if ($fileInfo->isFile() && strtolower($fileInfo->getExtension()) === 'pdf') {
+                        if (strpos($fileInfo->getBasename(), (string)$id) === 0) {
+                            $foundPath = $fileInfo->getRealPath();
+                            break;
+                        }
+                    }
+                }
+            } catch (\Exception $e) {
+                // Ignore errors
+            }
+        }
+
+        if ($foundPath && file_exists($foundPath)) {
+            return response()->json([
+                'exists' => true,
+                'id' => $id,
+                'fileName' => basename($foundPath),
+                'version' => $bestRecord->Version
+            ]);
+        }
+
+        return response()->json([
+            'exists' => false,
+            'message' => "Tài liệu khớp với ID {$id} (Version {$bestRecord->Version}) trong DB, nhưng không tìm thấy file PDF thực tế trên máy chủ đĩa mạng."
+        ]);
     }
 }

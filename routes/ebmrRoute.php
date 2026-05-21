@@ -18,6 +18,9 @@ Route::group(['prefix' => 'ebmr', 'as' => 'pages.ebmr.'], function () {
     Route::get('/get-history/{id}', [EbmrTemplateController::class, 'getHistory'])->name('getHistory');
     Route::get('/templates/next-version', [EbmrTemplateController::class, 'getNextVersion'])->name('getNextVersion');
     Route::get('/material-info', [EbmrTemplateController::class, 'getMaterialInfo'])->name('getMaterialInfo');
+    Route::get('/templates/{id}/testing-data', [EbmrTemplateController::class, 'getTestingData'])->name('getTestingData');
+    Route::post('/templates/{id}/testing-data', [EbmrTemplateController::class, 'saveTestingData'])->name('saveTestingData');
+    Route::post('/templates/testing-data/upload-image', [EbmrTemplateController::class, 'uploadTestingImage'])->name('uploadTestingImage');
 
     // 2. Designer & Content
     Route::get('/designer/{id?}', [EbmrDesignerController::class, 'designer'])->name('designer');
@@ -47,4 +50,6 @@ Route::group(['prefix' => 'ebmr', 'as' => 'pages.ebmr.'], function () {
     Route::post('/verify-checker', [EbmrExecutionController::class, 'verifyChecker'])->name('verifyChecker');
     Route::post('/log-error', [EbmrDesignerController::class, 'logError'])->name('logError');
     Route::post('/dynamic-options', [EbmrDesignerController::class, 'getDynamicOptions'])->name('dynamicOptions');
+    Route::get('/document/view-by-code/{code}', [EbmrExecutionController::class, 'viewDocumentByCode'])->name('viewDocumentByCode');
+    Route::get('/document/check-exists/{code}', [EbmrExecutionController::class, 'checkDocumentExists'])->name('checkDocumentExists');
 });

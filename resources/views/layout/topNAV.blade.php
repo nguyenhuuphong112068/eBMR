@@ -35,7 +35,9 @@
 
         @if(session('user'))
         <li class="nav-item d-none d-md-flex flex-column align-items-end me-4" style="line-height: 1.2;">
-            <span class="fw-bold" style="color: var(--bg-dark); font-size: 0.95rem;">{{ session('user')['fullName'] ?? 'User' }}</span>
+            <span class="fw-bold" style="color: var(--bg-dark); font-size: 0.95rem;">
+                {{ session('user')['fullName'] ?? 'User' }}
+            </span>
             <span class="text-muted fw-medium" style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;">{{ session('user')['userGroup'] ?? '' }}</span>
         </li>
         @endif

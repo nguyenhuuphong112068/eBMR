@@ -560,18 +560,21 @@ class EbmrDesignerController extends Controller
                     $props = json_decode($eb->properties, true);
                     $fId = $props['id'] ?? null;
                     if ($fId && ! isset($frontendToDbMap[$fId])) {
-                        $frontendToDbMap[$fId] = $eb->id;
+                        $frontendToDbMap[$fId] = ['db_id' => $eb->id];
                     }
                 }
 
-                // Clear existing variables for this template to avoid orphans
-                DB::table('ebmr_variants')->where('template_id', $id)->delete();
+                // Chỉ xoá các biến không còn nằm trong fieldsConfig (orphans)
+                $keepFieldKeys = array_keys((array) $fieldsConfig);
+                DB::table('ebmr_variants')
+                    ->where('template_id', $id)
+                    ->whereNotIn('field_key', $keepFieldKeys)
+                    ->delete();
 
-                $variantRows = [];
                 foreach ($fieldsConfig as $fieldKey => $config) {
                     $configArr = (array) $config;
 
-                    // Extract core fields, keep the rest in 'config' JSON
+                    // Trích xuất các trường cốt lõi, giữ các phần cấu hình còn lại trong JSON 'config'
                     $name = $configArr['name'] ?? null;
                     $label = $configArr['label'] ?? null;
                     $type = $configArr['type'] ?? 'text';
@@ -579,16 +582,23 @@ class EbmrDesignerController extends Controller
                     $vBlockUuid = $configArr['block_id'] ?? null;
                     $importantVarId = $configArr['important_var_id'] ?? null;
 
-                    // Resolve Frontend UUID to DB ID
+                    // Ánh xạ Frontend UUID sang DB ID
                     $vBlockId = null;
                     if ($vBlockUuid && isset($frontendToDbMap[$vBlockUuid])) {
-                        $vBlockId = $frontendToDbMap[$vBlockUuid];
+                        $vBlockId = is_array($frontendToDbMap[$vBlockUuid])
+                            ? ($frontendToDbMap[$vBlockUuid]['db_id'] ?? null)
+                            : $frontendToDbMap[$vBlockUuid];
                     }
 
-                    // Remove core fields from the JSON to avoid redundancy
+                    // Loại bỏ các trường cốt lõi khỏi cấu hình JSON để tránh dư thừa
                     unset($configArr['id'], $configArr['name'], $configArr['label'], $configArr['type'], $configArr['section_id'], $configArr['block_id'], $configArr['important_var_id']);
 
-                    $variantRows[] = [
+                    $existingVariant = DB::table('ebmr_variants')
+                        ->where('template_id', $id)
+                        ->where('field_key', (string) $fieldKey)
+                        ->first();
+
+                    $data = [
                         'template_id' => $id,
                         'field_key' => (string) $fieldKey,
                         'name' => (string) $name,
@@ -598,29 +608,19 @@ class EbmrDesignerController extends Controller
                         'section_id' => $vSectionId ? (string) $vSectionId : null,
                         'block_id' => $vBlockId,
                         'config' => json_encode($configArr),
-                        'created_at' => now()->toDateTimeString(),
                         'updated_at' => now()->toDateTimeString(),
                     ];
-                }
 
-                if (! empty($variantRows)) {
-                    foreach ($variantRows as $row) {
+                    if ($existingVariant) {
+                        DB::table('ebmr_variants')
+                            ->where('id', $existingVariant->id)
+                            ->update($data);
+                    } else {
+                        $data['created_at'] = now()->toDateTimeString();
                         try {
-                            DB::table('ebmr_variants')->insert([
-                                'template_id' => (int) $row['template_id'],
-                                'field_key' => (string) $row['field_key'],
-                                'name' => (string) $row['name'],
-                                'label' => (string) $row['label'],
-                                'type' => (string) $row['type'],
-                                'important_var_id' => $row['important_var_id'],
-                                'section_id' => $row['section_id'] ? (string) $row['section_id'] : null,
-                                'block_id' => $row['block_id'] ? (int) $row['block_id'] : null,
-                                'config' => (string) $row['config'],
-                                'created_at' => (string) $row['created_at'],
-                                'updated_at' => (string) $row['updated_at'],
-                            ]);
+                            DB::table('ebmr_variants')->insert($data);
                         } catch (\Exception $e) {
-                            \Log::error('Error saving variant: '.$e->getMessage(), ['row' => $row]);
+                            \Log::error('Error inserting variant: '.$e->getMessage(), ['data' => $data]);
                             throw $e;
                         }
                     }
@@ -832,7 +832,7 @@ class EbmrDesignerController extends Controller
 
             // --- VARIABLE INJECTION ---
             // Convert placeholders {{field_id}} back to spans
-            $content = preg_replace_callback('/\{\{(field_[0-9]+)\}\}/', function ($m) {
+            $content = preg_replace_callback('/\{\{(field_[a-zA-Z0-9_]+)\}\}/', function ($m) {
                 return '<span contenteditable="false" class="ebmr-field-badge" data-field-id="'.$m[1].'" onclick="selectField(event, \''.$m[1].'\')"></span>';
             }, $content);
 
@@ -872,7 +872,7 @@ class EbmrDesignerController extends Controller
                         }
 
                         // --- VARIABLE INJECTION ---
-                        $text = preg_replace_callback('/\{\{(field_[0-9]+)\}\}/', function ($m) {
+                        $text = preg_replace_callback('/\{\{(field_[a-zA-Z0-9_]+)\}\}/', function ($m) {
                             return '<span contenteditable="false" class="ebmr-field-badge" data-field-id="'.$m[1].'" onclick="selectField(event, \''.$m[1].'\')"></span>';
                         }, $text);
 

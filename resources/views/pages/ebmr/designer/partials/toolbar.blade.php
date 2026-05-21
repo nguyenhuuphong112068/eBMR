@@ -81,8 +81,18 @@
                     <button class="dropdown-item rounded mb-1" onclick="insertDynamicField('formula')">🧮 Thiết lập Công thức</button>
                 </div>
             </div>
+
+            <button class="btn btn-toolbar-action text-success fw-bold ms-1" onmousedown="event.preventDefault();" onclick="toggleCriteriaSidebar()" title="Liên kết Tiêu chuẩn (Data-Binding)">
+                <i class="fas fa-vial"></i>
+            </button>
             <button class="btn btn-toolbar-action text-muted ms-1" onmousedown="event.preventDefault();" onclick="openSymbolModal()" title="Ký hiệu đặc biệt">
                 <i class="fas fa-omega"></i>
+            </button>
+            <button class="btn btn-toolbar-action text-danger fw-bold ms-1" onmousedown="event.preventDefault();" onclick="insertDocumentNetworkLink()" title="Liên kết tài liệu mạng (PDF)">
+                <i class="fas fa-file-pdf"></i>
+            </button>
+            <button class="btn btn-toolbar-action text-secondary ms-1" onmousedown="event.preventDefault();" onclick="removeDocumentNetworkLink()" title="Hủy liên kết tài liệu mạng">
+                <i class="fas fa-unlink"></i>
             </button>
 
             <button class="btn btn-toolbar-action text-primary ms-2 border-start ps-2" onmousedown="event.preventDefault();" onclick="openVariableSummaryModal()" title="Danh sách biến số đã cài đặt">

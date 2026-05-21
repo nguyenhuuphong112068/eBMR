@@ -101,6 +101,10 @@
                                 <input type="number" class="form-control form-control-sm" oninput="batchSyncFieldConfig('validation.max', this.value)">
                             </div>
                         </div>
+                        <div class="form-check form-switch ps-4 pt-1 mt-2">
+                            <input class="form-check-input ms-n4" type="checkbox" id="batchFieldAllowOutOfBounds" onchange="batchSyncFieldConfig('validation.allow_out_of_bounds', this.checked)">
+                            <label class="form-check-label small text-muted" style="font-size: 0.75em;" for="batchFieldAllowOutOfBounds">Cho phép nhập ngoài giới hạn?</label>
+                        </div>
                     </div>
                 </div>
             `;

@@ -488,3 +488,40 @@
         </div>
     </div>
 </div>
+
+<!-- Criteria Binding Modal removed in favor of Drag & Drop Sidebar -->
+
+<!-- Modal 3B: Carousel Viewer (Xem Hình Ảnh Carousel Card) -->
+<div class="modal fade" id="modalCarouselViewer" tabindex="-1" role="dialog" aria-hidden="true" style="z-index: 1070;">
+    <div class="modal-dialog modal-dialog-centered modal-xl lightbox-carousel-modal" role="document">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header border-0 text-dark py-3 d-flex justify-content-between align-items-center lightbox-carousel-header">
+                <h5 class="modal-title font-weight-bold text-dark d-flex align-items-center">
+                    <i class="fas fa-eye me-2 text-warning"></i>
+                    <span id="carouselViewerTitle" style="font-size: 1.1rem; letter-spacing: 0.3px;">Xem hình ảnh minh họa</span>
+                </h5>
+                <div class="lightbox-toolbar">
+                    <button type="button" class="close text-dark border-0 bg-transparent fs-4 p-0 m-0" onclick="$('#modalCarouselViewer').modal('hide');" aria-label="Close" style="outline: none; opacity: 0.85; line-height: 1;">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+            </div>
+            <div class="modal-body p-0 d-flex justify-content-center align-items-center" style="background-color: transparent; min-height: 650px; height: 75vh; position: relative;">
+                <div id="testingCarousel" class="carousel slide w-100 h-100" data-ride="carousel">
+                    <ol class="carousel-indicators" id="testingCarouselIndicators" style="bottom: 120px;">
+                        <!-- Dynamic indicators -->
+                    </ol>
+                    <div class="carousel-inner" id="testingCarouselInner">
+                        <!-- Dynamic slides -->
+                    </div>
+                    <a class="carousel-control-prev-premium" href="#testingCarousel" role="button" data-slide="prev" title="Ảnh trước">
+                        <i class="fas fa-chevron-left fa-lg"></i>
+                    </a>
+                    <a class="carousel-control-next-premium" href="#testingCarousel" role="button" data-slide="next" title="Ảnh sau">
+                        <i class="fas fa-chevron-right fa-lg"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

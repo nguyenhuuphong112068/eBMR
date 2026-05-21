@@ -242,4 +242,424 @@
 
         $('#variableSummaryModal').modal('show');
     };
+
+    /**
+     * ==============================================================
+     * CRITERIA DATA-BINDING – Drag & Drop Right Sidebar Operations
+     * ==============================================================
+     */
+    let allCriteriaData = [];
+    let allStagesMap = {};
+
+    window.toggleCriteriaSidebar = function() {
+        const sidebar = document.getElementById('criteriaSidebar');
+        if (!sidebar) return;
+
+        if (sidebar.classList.contains('d-none')) {
+            sidebar.classList.remove('d-none');
+            loadCriteriaSidebarData();
+        } else {
+            closeCriteriaSidebar();
+        }
+    };
+
+    window.closeCriteriaSidebar = function() {
+        const sidebar = document.getElementById('criteriaSidebar');
+        if (sidebar) {
+            sidebar.classList.add('d-none');
+        }
+    };
+
+    function loadCriteriaSidebarData() {
+        const currentTemplateId = window.templateId || '{{ $template->id ?? 0 }}';
+        const listContainer = document.getElementById('criteriaSidebarList');
+        if (!listContainer) return;
+
+        if (!currentTemplateId || currentTemplateId === '0' || currentTemplateId === '') {
+            listContainer.innerHTML = '<div class="text-center text-danger py-4 small fw-bold">Không tìm thấy mã hồ sơ hiện tại. Vui lòng lưu hồ sơ trước khi liên kết tiêu chuẩn!</div>';
+            return;
+        }
+
+        listContainer.innerHTML = '<div class="text-center py-4 text-muted small"><div class="spinner-border spinner-border-sm text-info me-2"></div> Đang tải tiêu chuẩn...</div>';
+
+        $.ajax({
+            url: '/ebmr/templates/' + currentTemplateId + '/testing-data',
+            method: 'GET',
+            success: function(res) {
+                if (res.success && res.testing && res.testing.length > 0) {
+                    allCriteriaData = res.testing;
+                    allStagesMap = {};
+
+                    // Build stages map and dropdown filter options
+                    const filterDropdown = document.getElementById('criteriaSidebarStageFilter');
+                    if (filterDropdown) {
+                        filterDropdown.innerHTML = '<option value="">-- Tất cả công đoạn --</option>';
+                    }
+
+                    if (res.sections) {
+                        res.sections.forEach(s => {
+                            allStagesMap[s.id] = s.label;
+                            if (filterDropdown) {
+                                const opt = document.createElement('option');
+                                opt.value = s.id;
+                                opt.textContent = s.label;
+                                filterDropdown.appendChild(opt);
+                            }
+                        });
+                    }
+
+                    // Render cards
+                    renderCriteriaSidebarCards();
+
+                    // Attach filter events
+                    const searchInput = document.getElementById('criteriaSidebarSearch');
+                    if (searchInput) {
+                        searchInput.addEventListener('input', renderCriteriaSidebarCards);
+                    }
+                    if (filterDropdown) {
+                        filterDropdown.addEventListener('change', renderCriteriaSidebarCards);
+                    }
+
+                    // Dynamic update image indicator
+                    updateCriteriaImageIndicators();
+
+                } else {
+                    listContainer.innerHTML = '<div class="text-center py-4 text-muted small">Chưa có tiêu chuẩn kiểm nghiệm nào được thiết lập cho hồ sơ này.<br><small class="text-danger d-block mt-2">Mở Danh sách hồ sơ -> Nhấp chuột phải -> Thiết lập Tiêu chuẩn.</small></div>';
+                }
+            },
+            error: function(err) {
+                listContainer.innerHTML = '<div class="text-center text-danger py-4 small">Lỗi kết nối khi tải dữ liệu tiêu chuẩn!</div>';
+            }
+        });
+    }
+
+    function renderCriteriaSidebarCards() {
+        const listContainer = document.getElementById('criteriaSidebarList');
+        if (!listContainer) return;
+
+        const searchVal = (document.getElementById('criteriaSidebarSearch')?.value || '').toLowerCase().trim();
+        const stageVal = document.getElementById('criteriaSidebarStageFilter')?.value || '';
+
+        let filtered = allCriteriaData.filter(item => {
+            const matchesSearch = item.name.toLowerCase().includes(searchVal);
+            const matchesStage = stageVal === "" || item.stage === stageVal;
+            return matchesSearch && matchesStage;
+        });
+
+        if (filtered.length === 0) {
+            listContainer.innerHTML = '<div class="text-center py-4 text-muted small">Không tìm thấy tiêu chuẩn phù hợp</div>';
+            return;
+        }
+
+        let html = '';
+        filtered.forEach(item => {
+            let min = '', max = '', op = '', unit = '';
+            if (item.limits) {
+                try {
+                    const l = typeof item.limits === 'string' ? JSON.parse(item.limits) : item.limits;
+                    op = l.operator || '';
+                    unit = l.unit || '';
+                    if (op === 'range' || op === '±') {
+                        min = l.value || '';
+                        max = l.value_high || '';
+                    } else {
+                        min = max = l.value || '';
+                    }
+                } catch(e) {}
+            }
+
+            const specHtmlStr = typeof item.specifictions === 'string' ? item.specifictions : '';
+            const stageName = allStagesMap[item.stage] || item.stage || 'Chung';
+            const cleanSpec = stripHtmlTags(specHtmlStr) || '...';
+
+            html += `
+            <div class="card criteria-card shadow-sm p-2 mb-2">
+                <div class="d-flex justify-content-between align-items-start mb-1" style="font-size: 0.7rem;">
+                    <span class="badge bg-secondary py-1 px-2" style="border-radius: 4px;">${stageName}</span>
+                    <span class="text-muted fw-bold">STT: ${item.stt || '-'}</span>
+                </div>
+                <div class="fw-bold text-navy mb-2" style="font-size: 0.8rem; line-height: 1.2;">${item.name}</div>
+                
+                <div class="d-flex flex-column gap-1">
+                    <!-- Name Pill -->
+                    <div class="draggable-pill" 
+                         draggable="true" 
+                         ondragstart="window.onCriteriaDragStart(event, '${item.id}', 'NAME', '${encodeURIComponent(item.name)}')"
+                         title="Kéo thả để điền Tên chỉ tiêu">
+                         <i class="fas fa-tag text-muted me-2" style="font-size: 0.7rem;"></i>
+                         <span class="fw-bold me-1">1. Chỉ tiêu:</span> 
+                         <span class="text-truncate" style="max-width: 200px; font-style: italic;">${item.name}</span>
+                    </div>
+                    
+                    <!-- Spec Pill -->
+                    <div class="draggable-pill" 
+                         draggable="true" 
+                         ondragstart="window.onCriteriaDragStart(event, '${item.id}', 'SPEC', '${encodeURIComponent(item.name)}', '${encodeURIComponent(specHtmlStr)}')"
+                         title="Kéo thả để điền Tiêu chuẩn">
+                         <i class="fas fa-file-alt text-primary me-2" style="font-size: 0.7rem;"></i>
+                         <span class="fw-bold me-1">2. Tiêu chuẩn:</span> 
+                         <span class="text-truncate" style="max-width: 180px; color: #475569;">${cleanSpec}</span>
+                    </div>
+                    
+                    <!-- Result Pill -->
+                    <div class="draggable-pill" 
+                         draggable="true" 
+                         ondragstart="window.onCriteriaDragStart(event, '${item.id}', 'RESULT', '${encodeURIComponent(item.name)}', '', '${min}', '${max}', '${op}', '${unit}')"
+                         title="Kéo thả để chèn ô kết quả kiểm nghiệm">
+                         <i class="fas fa-sliders-h text-danger me-2" style="font-size: 0.7rem;"></i>
+                         <span class="fw-bold me-1">3. Giới hạn:</span>
+                         <span class="fw-bold text-danger text-uppercase">${op} ${min} ${max ? 'đến ' + max : ''} ${unit}</span>
+                    </div>
+                </div>
+            </div>
+            `;
+        });
+
+        listContainer.innerHTML = html;
+    }
+
+    function stripHtmlTags(html) {
+        if (!html) return '';
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        return doc.body.textContent || "";
+    }
+
+    window.onCriteriaDragStart = function(event, id, type, nameEnc, specEnc, min, max, op, unit) {
+        event.dataTransfer.setData('criteria-id', id);
+        event.dataTransfer.setData('criteria-type', type);
+        event.dataTransfer.setData('criteria-name', nameEnc);
+        event.dataTransfer.setData('criteria-spec', specEnc || '');
+        event.dataTransfer.setData('criteria-min', min || '');
+        event.dataTransfer.setData('criteria-max', max || '');
+        event.dataTransfer.setData('criteria-op', op || '');
+        event.dataTransfer.setData('criteria-unit', unit || '');
+    };
+
+    function normalizeVarName(str) {
+        if (!str) return 'kq';
+        return str
+            .toLowerCase()
+            .replace(/à|á|ạ|ả|ã|â|ầ|ấ|ậ|ẩ|ẫ|ă|ằ|ắ|ặ|ẳ|ẵ/g, "a")
+            .replace(/è|é|ẹ|ẻ|ẽ|ê|ề|ế|ệ|ể|ễ/g, "e")
+            .replace(/ì|í|ị|ỉ|ĩ/g, "i")
+            .replace(/ò|ó|ọ|ỏ|õ|ô|ồ|ố|ộ|ổ|ỗ|ơ|ờ|ớ|ợ|ở|ỡ/g, "o")
+            .replace(/ù|ú|ụ|ủ|ũ|ư|ừ|ứ|ự|ử|ữ/g, "u")
+            .replace(/ỳ|ý|ỵ|ỷ|ỹ/g, "y")
+            .replace(/đ/g, "d")
+            .replace(/[^a-z0-9_]/g, "_")
+            .replace(/_+/g, "_")
+            .replace(/^_+|_+$/g, "");
+    }
+
+    window.handleCriteriaDrop = function(event, blockId, r, c) {
+        event.preventDefault();
+        const cell = event.currentTarget;
+        cell.classList.remove('criteria-drag-over');
+
+        const id = event.dataTransfer.getData('criteria-id');
+        if (!id) return;
+
+        const type = event.dataTransfer.getData('criteria-type');
+        const name = decodeURIComponent(event.dataTransfer.getData('criteria-name') || '');
+        const spec = decodeURIComponent(event.dataTransfer.getData('criteria-spec') || '');
+        const min = event.dataTransfer.getData('criteria-min');
+        const max = event.dataTransfer.getData('criteria-max');
+        const op = event.dataTransfer.getData('criteria-op');
+        const unit = event.dataTransfer.getData('criteria-unit');
+
+        let html = '';
+        if (type === 'NAME') {
+            html = `<span class="criteria-name-display text-navy fw-bold" contenteditable="false" data-criteria-bind="NAME" data-criteria-id="${id}" title="Chỉ tiêu: ${name}">${name}</span>`;
+        } else if (type === 'SPEC') {
+            html = `<span class="criteria-display text-primary fw-bold" contenteditable="false" data-criteria-bind="SPEC" data-criteria-id="${id}" title="Tiêu chuẩn: ${name}">${spec || ('[Tiêu chuẩn: ' + name + ']')}</span>`;
+        } else if (type === 'RESULT') {
+            // Auto-create a corresponding variable in fieldsConfig
+            const fieldId = 'field_crit_' + id;
+            if (!fieldsConfig[fieldId]) {
+                // Determine appropriate field type (number vs checkbox/tick)
+                let isNumeric = true;
+                if (op === 'N/A' || op === '') {
+                    if (min === '' || isNaN(parseFloat(min))) {
+                        isNumeric = false;
+                    }
+                } else if (op === 'range' || op === '±') {
+                    if (min === '' || isNaN(parseFloat(min)) || max === '' || isNaN(parseFloat(max))) {
+                        isNumeric = false;
+                    }
+                } else {
+                    if (min === '' || isNaN(parseFloat(min))) {
+                        isNumeric = false;
+                    }
+                }
+
+                let varMin = null;
+                let varMax = null;
+
+                if (isNumeric) {
+                    const parsedMin = min !== '' && !isNaN(parseFloat(min)) ? parseFloat(min) : null;
+                    const parsedMax = max !== '' && !isNaN(parseFloat(max)) ? parseFloat(max) : null;
+
+                    if (op === '<' || op === '<=') {
+                        varMax = parsedMin;
+                    } else if (op === '>' || op === '>=') {
+                        varMin = parsedMin;
+                    } else if (op === 'range') {
+                        varMin = parsedMin;
+                        varMax = parsedMax;
+                    } else if (op === '±') {
+                        if (parsedMin !== null && parsedMax !== null) {
+                            varMin = parsedMin - parsedMax;
+                            varMax = parsedMin + parsedMax;
+                        }
+                    } else if (op === '=' || op === '') {
+                        varMin = parsedMin;
+                        varMax = parsedMin;
+                    }
+                }
+
+                fieldsConfig[fieldId] = {
+                    id: fieldId,
+                    name: normalizeVarName(name),
+                    label: name,
+                    type: isNumeric ? 'number' : 'select',
+                    validation: {
+                        required: true,
+                        min: varMin,
+                        max: varMax,
+                        decimal_places: null
+                    },
+                    options: isNumeric ? [] : ['Đạt', 'Không đạt'],
+                    section_id: window.activeSectionId || null,
+                    block_id: blockId,
+                    instruction: 'Giới hạn tiêu chuẩn: ' + op + ' ' + min + ' ' + (max ? 'đến ' + max : '') + ' ' + unit
+                };
+            }
+            
+            html = `<span contenteditable="false" class="ebmr-field-badge" data-field-id="${fieldId}" onclick="selectField(event, '${fieldId}')"></span>\u200B`;
+        }
+
+        // Insert into the cell's wrapper
+        const wrapper = cell.querySelector('.cell-wrapper');
+        if (wrapper) {
+            wrapper.innerHTML = html;
+            updateTableInline(blockId, 'cell', r, c, wrapper.innerHTML);
+            saveStateDebounced();
+            renderBlocks();
+            // Trigger check for newly dropped criteria
+            setTimeout(updateCriteriaImageIndicators, 50);
+        }
+    };
+
+    // Auto-load criteria data on page load
+    document.addEventListener('DOMContentLoaded', () => {
+        const currentTemplateId = window.templateId || '{{ $template->id ?? 0 }}';
+        if (currentTemplateId && currentTemplateId !== '0' && currentTemplateId !== '') {
+            $.ajax({
+                url: '/ebmr/templates/' + currentTemplateId + '/testing-data',
+                method: 'GET',
+                success: function(res) {
+                    if (res.success && res.testing) {
+                        allCriteriaData = res.testing;
+                        if (res.sections) {
+                            res.sections.forEach(s => {
+                                allStagesMap[s.id] = s.label;
+                            });
+                        }
+                        updateCriteriaImageIndicators();
+                    }
+                }
+            });
+        }
+
+        // MutationObserver to watch for newly added criteria tags on canvas
+        const editorContent = document.getElementById('editor-content');
+        if (editorContent) {
+            const observer = new MutationObserver(() => {
+                updateCriteriaImageIndicators();
+            });
+            observer.observe(editorContent, {
+                childList: true,
+                subtree: true
+            });
+        }
+    });
+
+    // Function to update visual indicators for standards with images
+    window.updateCriteriaImageIndicators = function() {
+        document.querySelectorAll('span.criteria-display[data-criteria-id]').forEach(span => {
+            const id = span.getAttribute('data-criteria-id');
+            const item = (allCriteriaData || []).find(c => String(c.id) === String(id));
+            if (item && item.images && item.images.length > 0) {
+                if (span.getAttribute('data-has-images') !== 'true') {
+                    span.setAttribute('data-has-images', 'true');
+                    span.setAttribute('title', 'Xem hình ảnh đính kèm (Nhấp chuột để mở)');
+                }
+            } else {
+                span.removeAttribute('data-has-images');
+            }
+        });
+    };
+
+    // Click handler for criteria display tags that contain images
+    document.addEventListener('click', function(e) {
+        const span = e.target.closest('span.criteria-display[data-criteria-id]');
+        if (span && span.getAttribute('data-has-images') === 'true') {
+            const id = span.getAttribute('data-criteria-id');
+            const item = (allCriteriaData || []).find(c => String(c.id) === String(id));
+            if (item && item.images && item.images.length > 0) {
+                showCriteriaImagesCarousel(item);
+            }
+        }
+    });
+
+    function showCriteriaImagesCarousel(item) {
+        $('#carouselViewerTitle').text('Hình ảnh minh họa: ' + item.name);
+
+        const indicators = $('#testingCarouselIndicators');
+        const inner = $('#testingCarouselInner');
+        
+        indicators.empty();
+        inner.empty();
+
+        item.images.forEach((img, idx) => {
+            const activeClass = idx === 0 ? 'active' : '';
+            indicators.append(`
+                <li data-target="#testingCarousel" data-slide-to="${idx}" class="${activeClass}"></li>
+            `);
+
+            const descHtml = img.image_description 
+                ? `<p class="mb-0 small">${escapeHtml(img.image_description)}</p>` 
+                : '';
+
+            inner.append(`
+                <div class="carousel-item ${activeClass} h-100" style="position: relative;">
+                    <div class="carousel-item-premium">
+                        <img src="${img.image_path}" alt="${escapeHtml(img.image_name)}">
+                    </div>
+                    <div class="carousel-caption-premium">
+                        <h6>${escapeHtml(img.image_name)}</h6>
+                        ${descHtml}
+                    </div>
+                </div>
+            `);
+        });
+
+        // Initialize bootstrap carousel
+        $('#testingCarousel').carousel({
+            interval: false
+        }).carousel(0);
+
+        $('#modalCarouselViewer').modal('show');
+    }
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        return text
+            .toString()
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
 </script>

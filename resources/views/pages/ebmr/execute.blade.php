@@ -150,7 +150,7 @@
             }
         }
 
-        function openExecutionInputModal(blockId, row, col, type) {
+        window.openExecutionInputModal = function openExecutionInputModal(blockId, row, col, type) {
             if (window.isReadOnly) return;
             currentExecContext = { blockId, row, col, type };
             
@@ -209,7 +209,7 @@
                         return;
                     }
                     
-                    value = "{{ session('user')['fullName'] ?? 'Signed' }}";
+                    value = res.signature_image ? res.signature_image : (res.fullName || "{{ session('user')['fullName'] ?? 'Signed' }}");
                 } catch (err) {
                     Swal.fire('Lỗi', 'Không thể kết nối đến máy chủ', 'error');
                     btn.disabled = false;
@@ -223,8 +223,22 @@
             }
 
             // Update local state
+            // Nếu row và col đều là 'default' => đây là biến số đơn (không phải ô bảng),
+            // cần dùng key 'default' thay vì 'default_default' để khớp cấu trúc DB và render.
+            const cellKey = (row === 'default' && col === 'default') ? 'default' : `${row}_${col}`;
             if (!window.executionValues[blockId]) window.executionValues[blockId] = {};
-            window.executionValues[blockId][`${row}_${col}`] = value;
+            window.executionValues[blockId][cellKey] = value;
+
+            // Cập nhật metadata ngay lập tức để hiển thị người ký và thời gian
+            if (type === 'signature') {
+                const now = new Date();
+                const formattedTime = now.toLocaleDateString('vi-VN') + ' ' + now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+                if (!window.executionValues[blockId]._meta) window.executionValues[blockId]._meta = {};
+                window.executionValues[blockId]._meta[cellKey] = {
+                    by: '{{ session("user")["fullName"] ?? session("user")["username"] ?? "Người thực hiện" }}',
+                    at: formattedTime
+                };
+            }
 
             renderBlocks();
             if (typeof syncLinkedCharts === 'function') syncLinkedCharts(blockId);

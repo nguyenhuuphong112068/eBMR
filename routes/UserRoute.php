@@ -20,6 +20,7 @@ Route::prefix('/User')
         Route::get('','index')->name('list');
         Route::post('store','store')->name('store');
         Route::post('update', 'update')->name('update');
+        Route::post('update-signature', 'updateSignature')->name('updateSignature');
         Route::post('deActive/{id}','deActive')->name('deActive'); 
     
     });

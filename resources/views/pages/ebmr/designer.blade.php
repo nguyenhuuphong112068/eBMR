@@ -15,6 +15,7 @@
     <div class="content-wrapper" id="mainContent" style="background-color: #f1f3f4; min-height: 100vh;"> {{-- Vùng bao quanh toàn bộ nội dung, đặt màu nền xám nhạt --}}
         @include('pages.ebmr.designer.partials.toolbar') {{-- Nhúng thanh công cụ (Toolbar) chứa các nút Bold, Italic, Chèn bảng... --}}
         @include('pages.ebmr.designer.partials.canvas') {{-- Nhúng vùng làm việc chính (Canvas) nơi hiển thị trang giấy A4 --}}
+        @include('pages.ebmr.designer.partials.criteria_sidebar') {{-- Nhúng thanh trượt liên kết tiêu chuẩn --}}
     </div>
 
     <script> {{-- Khởi tạo các biến Javascript toàn cục từ dữ liệu phía Backend (Laravel) --}}

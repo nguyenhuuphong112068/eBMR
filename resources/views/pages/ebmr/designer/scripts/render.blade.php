@@ -139,6 +139,23 @@
 </style>
 <script>
     /**
+     * Hàm helper hiển thị chữ ký dưới dạng hình ảnh (nếu là base64) hoặc text (nếu là chữ viết thường).
+     */
+    function getSignatureDisplayHtml(runVal, type = 'signature') {
+        if (!runVal) return '';
+        let iconClass = 'fa-check-circle text-success';
+        if (type === 'executor') iconClass = 'fa-user-check text-primary';
+        if (type === 'checker') iconClass = 'fa-user-shield text-success';
+        
+        if (runVal.startsWith('data:image/')) {
+            return `<div class="e-signature-done" style="display: inline-flex; align-items: center; justify-content: center; gap: 4px;">
+                <img src="${runVal}" style="max-height: 45px; max-width: 130px; object-fit: contain; mix-blend-mode: multiply; vertical-align: middle;" />
+            </div>`;
+        }
+        return `<div class="e-signature-done"><i class="fas ${iconClass} me-1"></i>${runVal}</div>`;
+    }
+
+    /**
      * Hàm chính để vẽ toàn bộ giao diện dựa trên mảng dữ liệu `items`.
      * Nó dọn dẹp nội dung cũ và tạo mới các phần tử HTML tương ứng với từng loại khối (bảng, văn bản, phân đoạn...).
      */
@@ -348,7 +365,7 @@
                             } else if (displayContent.includes('[Ký tên]')) {
                                 cellClass = "execution-input-cell";
                                 onclickAttr = `onclick="openExecutionInputModal('${blockKey}', ${r}, ${c}, 'signature')"`;
-                                displayContent = runVal ? `<div class="e-signature-done"><i class="fas fa-check-circle text-success me-1"></i>${runVal}</div>` : `<span class="execution-badge signature"><i class="fas fa-pen"></i> [Ký tên]</span>`;
+                                displayContent = runVal ? getSignatureDisplayHtml(runVal, 'signature') : `<span class="execution-badge signature"><i class="fas fa-pen"></i> [Ký tên]</span>`;
                             } else if (displayContent.includes('[Tự động lấy thời gian]')) {
                                 cellClass = "execution-input-cell";
                                 onclickAttr = `ondblclick="autoFillTime('${blockKey}', ${r}, ${c})" title="Nháy đúp chuột (Double-click) để lấy giờ hệ thống"`;
@@ -356,11 +373,11 @@
                             } else if (displayContent.includes('[Người thực hiện]')) {
                                 cellClass = "execution-input-cell";
                                 onclickAttr = `onclick="autoFillExecutor('${blockKey}', ${r}, ${c})" title="Click để xác nhận người thực hiện"`;
-                                displayContent = runVal ? `<div class="e-signature-done"><i class="fas fa-user-check text-primary me-1"></i>${runVal}</div>` : `<span class="execution-badge executor"><i class="fas fa-user-edit"></i> [Người thực hiện]</span>`;
+                                displayContent = runVal ? getSignatureDisplayHtml(runVal, 'executor') : `<span class="execution-badge executor"><i class="fas fa-user-edit"></i> [Người thực hiện]</span>`;
                             } else if (displayContent.includes('[Người kiểm tra]')) {
                                 cellClass = "execution-input-cell";
                                 onclickAttr = `onclick="openCheckerAuthModal('${blockKey}', ${r}, ${c})" title="Click để xác thực người kiểm tra"`;
-                                displayContent = runVal ? `<div class="e-signature-done"><i class="fas fa-user-shield text-success me-1"></i>${runVal}</div>` : `<span class="execution-badge checker"><i class="fas fa-check-double"></i> [Người kiểm tra]</span>`;
+                                displayContent = runVal ? getSignatureDisplayHtml(runVal, 'checker') : `<span class="execution-badge checker"><i class="fas fa-check-double"></i> [Người kiểm tra]</span>`;
                             }
                         } else {
                             finalEditable = (item.locked || window.isReadOnly) ? 'false' : 'true';
@@ -383,7 +400,11 @@
                         ${onclickAttr}
                         class="${cellClass} ${item.locked ? 'locked-cell' : ''}"
                         style="position: relative; width: ${cellWidth}; height: ${rowH}; background-color: ${cellBg}; text-align: ${cell.textAlign || ''}; font-weight: ${cell.fontWeight || ''}; font-style: ${cell.fontStyle || ''}; text-decoration: ${cell.textDecoration || ''}; font-size: ${cell.fontSize || ''}; color: ${cell.textColor || ''}; text-transform: ${cell.textTransform || ''}; border-top: ${cell.borderTop || ''}; border-bottom: ${cell.borderBottom || ''}; border-left: ${cell.borderLeft || ''}; border-right: ${cell.borderRight || ''};"
-                        oninput="updateTableInline('${item.id}', 'cell', ${r}, ${c}, this.innerHTML)">
+                        oninput="updateTableInline('${item.id}', 'cell', ${r}, ${c}, this.innerHTML)"
+                        ${!window.isExecutionMode ? `
+                            ondragover="event.preventDefault(); this.classList.add('criteria-drag-over');"
+                            ondragleave="this.classList.remove('criteria-drag-over');"
+                            ondrop="window.handleCriteriaDrop(event, '${item.id}', ${r}, ${c})"` : ''}>
                             <div class="cell-wrapper">${displayContent}</div>
                             ${metaHtml}
                             ${!window.isExecutionMode && c === 0 ? `
@@ -898,8 +919,22 @@
                         badge.setAttribute('data-field-id', fieldId);
 
                         if (field.type === 'signature') {
-                            badge.innerHTML =
-                                `<span class="badge bg-light text-primary border" style="cursor: ${window.isReadOnly ? 'default' : 'pointer'};" ${!window.isReadOnly ? 'onclick="Swal.fire(\'Chế độ chạy thử\', \'Đây là mô phỏng chữ ký\', \'info\')"' : ''}><i class="fas fa-signature me-1"></i> Ký tên</span>${metaHtml}`;
+                            let clickAttr = '';
+                            if (!window.isReadOnly) {
+                                clickAttr = `onclick="openExecutionInputModal('${fieldId}', 'default', 'default', 'signature')"`;
+                            }
+                            
+                            let signatureHtml = '';
+                            if (val) {
+                                if (val.startsWith('data:image/')) {
+                                    signatureHtml = `<img src="${val}" style="max-height: 40px; max-width: 120px; object-fit: contain; mix-blend-mode: multiply; vertical-align: middle; cursor: ${window.isReadOnly ? 'default' : 'pointer'};" ${clickAttr} />`;
+                                } else {
+                                    signatureHtml = `<span class="badge bg-light text-success border" style="cursor: ${window.isReadOnly ? 'default' : 'pointer'}; font-weight: 600;" ${clickAttr}><i class="fas fa-check-circle me-1"></i>${val}</span>`;
+                                }
+                            } else {
+                                signatureHtml = `<span class="badge bg-light text-primary border" style="cursor: ${window.isReadOnly ? 'default' : 'pointer'};" ${clickAttr}><i class="fas fa-signature me-1"></i> [Ký tên]</span>`;
+                            }
+                            badge.innerHTML = `${signatureHtml}${metaHtml}`;
                             badge.className = 'ebmr-field-badge ebmr-field-value';
                         } else if (field.type === 'checkbox') {
                             badge.innerHTML =
@@ -926,8 +961,28 @@
                             // Các loại khác: Văn bản, Số, Ngày
                             const placeholder = field.label || '...';
                             const displayVal = val || '';
+                            
+                            let extraStyle = '';
+                            if (field.type === 'number' && val !== null && val !== undefined && val !== '') {
+                                const numVal = Number(val);
+                                if (!isNaN(numVal) && field.validation) {
+                                    let isOutOfBounds = false;
+                                    const minVal = field.validation.min;
+                                    const maxVal = field.validation.max;
+                                    if (minVal !== null && minVal !== undefined && minVal !== '' && !isNaN(Number(minVal)) && numVal < Number(minVal)) {
+                                        isOutOfBounds = true;
+                                    }
+                                    if (maxVal !== null && maxVal !== undefined && maxVal !== '' && !isNaN(Number(maxVal)) && numVal > Number(maxVal)) {
+                                        isOutOfBounds = true;
+                                    }
+                                    if (isOutOfBounds) {
+                                        extraStyle = 'color: #d93025; font-weight: bold; background-color: #fce8e6; border: 1px solid #fad2cf; padding: 2px 4px; border-radius: 4px;';
+                                    }
+                                }
+                            }
+
                             badge.innerHTML =
-                                `<span class="execution-input-test" ${!window.isReadOnly ? 'onclick="openVariableInputModal(\''+fieldId+'\')"' : ''} style="cursor: ${window.isReadOnly ? 'default' : 'pointer'}; border-bottom: 1px dotted #1a73e8; min-width: 30px; display: inline-block; outline: none; position: relative;">${displayVal || `<span style="color: #6c757d; font-style: italic;">${placeholder}</span>`}${metaHtml}</span>`;
+                                `<span class="execution-input-test" ${!window.isReadOnly ? 'onclick="openVariableInputModal(\''+fieldId+'\')"' : ''} style="cursor: ${window.isReadOnly ? 'default' : 'pointer'}; border-bottom: 1px dotted #1a73e8; min-width: 30px; display: inline-block; outline: none; position: relative; ${extraStyle}">${displayVal || `<span style="color: #6c757d; font-style: italic;">${placeholder}</span>`}${metaHtml}</span>`;
                             badge.className = 'ebmr-field-badge ebmr-field-value';
                         }
                 }
@@ -980,6 +1035,98 @@
                 }
             }
         });
+
+        // Populate and validate result-inputs in execution mode
+        const resultInputs = div.querySelectorAll('.result-input');
+        resultInputs.forEach(inp => {
+            const fieldId = inp.getAttribute('data-field-id');
+            if (fieldId && window.executionValues) {
+                let val = window.executionValues[fieldId] || '';
+                // Handle nested structure if any
+                if (val && typeof val === 'object' && val.hasOwnProperty('default')) {
+                    val = val.default;
+                } else if (val && typeof val === 'object' && !Array.isArray(val)) {
+                    const keys = Object.keys(val);
+                    if (keys.length > 0) val = val[keys[0]];
+                }
+                
+                inp.setAttribute('value', val); // populate value in DOM
+                
+                if (window.isExecutionMode) {
+                    // Activate execution class
+                    inp.classList.remove('criteria-design-mode');
+                    inp.classList.add('criteria-exec-mode');
+                    inp.style.pointerEvents = 'auto';
+                    inp.removeAttribute('readonly');
+
+                    // If value is set, do validation
+                    if (val !== '') {
+                        const op = inp.getAttribute('data-criteria-op') || '';
+                        const minAttr = inp.getAttribute('data-criteria-min') || '';
+                        const maxAttr = inp.getAttribute('data-criteria-max') || '';
+                        const min = parseFloat(minAttr);
+                        const max = parseFloat(maxAttr);
+                        const numVal = parseFloat(val);
+                        
+                        let pass = false;
+                        let isNumeric = !isNaN(numVal) && !isNaN(parseFloat(minAttr)) && op !== 'N/A';
+                        
+                        if (isNumeric) {
+                            if (op === 'range') {
+                                pass = (numVal >= min && numVal <= max);
+                            } else if (op === '±') {
+                                pass = (numVal >= (min - max) && numVal <= (min + max));
+                            } else if (op === '<') {
+                                pass = (numVal < min);
+                            } else if (op === '<=') {
+                                pass = (numVal <= min);
+                            } else if (op === '>') {
+                                pass = (numVal > min);
+                            } else if (op === '>=') {
+                                pass = (numVal >= min);
+                            } else if (op === '=' || op === '') {
+                                pass = (numVal === min);
+                            } else {
+                                if (!isNaN(min) && !isNaN(max) && min !== max) {
+                                    pass = (numVal >= min && numVal <= max);
+                                } else if (!isNaN(min)) {
+                                    pass = (numVal === min);
+                                }
+                            }
+                        } else {
+                            // Text validation (case-insensitive string comparison)
+                            const minStr = minAttr.trim().toLowerCase();
+                            const valStr = String(val).trim().toLowerCase();
+                            if (minStr !== '') {
+                                pass = (valStr === minStr);
+                            } else {
+                                return; // Không đủ thông tin
+                            }
+                        }
+                        
+                        inp.classList.remove('criteria-pass', 'criteria-fail');
+                        if (pass) {
+                            inp.classList.add('criteria-pass');
+                            inp.style.backgroundColor = '#d4edda';
+                            inp.style.color = '#155724';
+                            inp.style.borderColor = '#28a745';
+                        } else {
+                            inp.classList.add('criteria-fail');
+                            inp.style.backgroundColor = '#f8d7da';
+                            inp.style.color = '#721c24';
+                            inp.style.borderColor = '#dc3545';
+                        }
+                    }
+                } else {
+                    // Design mode
+                    inp.classList.remove('criteria-exec-mode');
+                    inp.classList.add('criteria-design-mode');
+                    inp.style.pointerEvents = 'none';
+                    inp.setAttribute('readonly', 'true');
+                }
+            }
+        });
+
         return div.innerHTML;
     }
 

@@ -1817,6 +1817,7 @@
                 <select class="form-select form-select-sm" onchange="syncFieldConfig('${fieldId}', 'type', this.value)">
                     <option value="text" ${field.type === 'text' ? 'selected' : ''}>Văn bản tự do</option>
                     <option value="number" ${field.type === 'number' ? 'selected' : ''}>Số liệu (Tính toán)</option>
+                    <option value="checkbox" ${field.type === 'checkbox' ? 'selected' : ''}>Hộp kiểm tra (Tick)</option>
                     <option value="formula" ${field.type === 'formula' ? 'selected' : ''}>Công thức tự động (=)</option>
                     <option value="date" ${field.type === 'date' ? 'selected' : ''}>Ngày tháng</option>
                     <option value="signature" ${field.type === 'signature' ? 'selected' : ''}>Chữ ký điện tử</option>
@@ -1948,6 +1949,10 @@
                         <div class="mt-2">
                             <label class="small text-muted" style="font-size: 0.75em;">Chữ số thập phân</label>
                             <input type="number" class="form-control form-control-sm" min="0" max="6" placeholder="Bỏ trống nếu là số nguyên" value="${field.validation.decimal_places !== null ? field.validation.decimal_places : ''}" oninput="syncFieldConfig('${fieldId}', 'validation.decimal_places', this.value)">
+                        </div>
+                        <div class="form-check form-switch ps-4 pt-1 mt-2">
+                            <input class="form-check-input ms-n4" type="checkbox" id="fieldAllowOutOfBounds" ${field.validation && field.validation.allow_out_of_bounds ? 'checked' : ''} onchange="syncFieldConfig('${fieldId}', 'validation.allow_out_of_bounds', this.checked)">
+                            <label class="form-check-label small text-muted" style="font-size: 0.75em;" for="fieldAllowOutOfBounds">Cho phép nhập ngoài giới hạn?</label>
                         </div>
                     </div>
                 </div>
@@ -2712,10 +2717,10 @@
         if (field.type === 'number') {
             inputType = 'number';
             if (field.validation) {
-                if (field.validation.min !== null && field.validation.min !== '') inputAttributes.min = field
-                    .validation.min;
-                if (field.validation.max !== null && field.validation.max !== '') inputAttributes.max = field
-                    .validation.max;
+                if (!field.validation.allow_out_of_bounds) {
+                    if (field.validation.min !== null && field.validation.min !== '') inputAttributes.min = field.validation.min;
+                    if (field.validation.max !== null && field.validation.max !== '') inputAttributes.max = field.validation.max;
+                }
                 if (field.validation.decimal_places && parseInt(field.validation.decimal_places) > 0) {
                     inputAttributes.step = '0.' + '0'.repeat(parseInt(field.validation.decimal_places) - 1) + '1';
                 } else {
@@ -2796,7 +2801,7 @@
                 }
                 if (field.type === 'number' && value !== '') {
                     const num = Number(value);
-                    if (field.validation) {
+                    if (field.validation && !field.validation.allow_out_of_bounds) {
                         if (field.validation.min !== null && field.validation.min !== '' && num <
                             parseFloat(field.validation.min)) {
                             return 'Giá trị phải lớn hơn hoặc bằng ' + field.validation.min;
@@ -3166,12 +3171,14 @@
     function autoFillExecutor(blockId, r, c) {
         if (!window.isExecutionMode) return;
         
+        const currentUserSignature = @json(session('user.signature_image') ?? session('user')['signature_image'] ?? null);
         const currentUser = '{{ session("user.fullName") ?? session("user.username") ?? "Người thực hiện" }}';
+        const signatureVal = currentUserSignature ? currentUserSignature : currentUser;
         
         if (!window.executionValues) window.executionValues = {};
         if (!window.executionValues[blockId]) window.executionValues[blockId] = {};
         
-        window.executionValues[blockId][`${r}_${c}`] = currentUser;
+        window.executionValues[blockId][`${r}_${c}`] = signatureVal;
         
         if (!window.executionValues[blockId]._meta) window.executionValues[blockId]._meta = {};
         window.executionValues[blockId]._meta[`${r}_${c}`] = {
@@ -3239,7 +3246,7 @@
                 if (!window.executionValues) window.executionValues = {};
                 if (!window.executionValues[blockId]) window.executionValues[blockId] = {};
                 
-                window.executionValues[blockId][`${r}_${c}`] = data.fullName;
+                window.executionValues[blockId][`${r}_${c}`] = data.signature_image ? data.signature_image : data.fullName;
                 
                 if (!window.executionValues[blockId]._meta) window.executionValues[blockId]._meta = {};
                 window.executionValues[blockId]._meta[`${r}_${c}`] = {
@@ -3269,5 +3276,253 @@
             errorEl.innerText = 'Có lỗi xảy ra, vui lòng thử lại.';
             errorEl.classList.remove('d-none');
         });
+    }
+
+    /**
+     * Biến chuỗi ký tự đang chọn thành liên kết tài liệu mạng.
+     */
+    function insertDocumentNetworkLink() {
+        const selection = window.getSelection();
+        if (selection.rangeCount === 0) return;
+        
+        const range = selection.getRangeAt(0);
+        const selectedText = range.toString().trim();
+
+        if (!selectedText) {
+            if (typeof toastr !== 'undefined') {
+                toastr.warning("Vui lòng bôi chọn mã tài liệu (ví dụ: SSP-SOP-026) trước khi liên kết tài liệu mạng!");
+            } else {
+                alert("Vui lòng bôi chọn mã tài liệu (ví dụ: SSP-SOP-026) trước khi liên kết tài liệu mạng!");
+            }
+            return;
+        }
+
+        // Lưu trữ vùng chọn để phục hồi sau khi gọi Ajax bất đồng bộ kết thúc
+        const savedRange = range.cloneRange();
+        const originalText = selectedText;
+        
+        // Chuẩn bị URL kiểm tra sự tồn tại của tài liệu
+        const docCode = encodeURIComponent(selectedText);
+        const checkUrl = `/ebmr/document/check-exists/${docCode}`;
+
+        // Đổi con trỏ chuột sang trạng thái chờ xử lý
+        document.body.style.cursor = 'wait';
+
+        // Gọi Ajax kiểm tra ngầm
+        $.ajax({
+            url: checkUrl,
+            method: 'GET',
+            dataType: 'json',
+            success: function(response) {
+                // Khôi phục con trỏ chuột về mặc định
+                document.body.style.cursor = 'default';
+
+                if (response && response.exists) {
+                    // Phục hồi lại vùng chọn ban đầu để chèn thẻ liên kết HTML
+                    const sel = window.getSelection();
+                    sel.removeAllRanges();
+                    sel.addRange(savedRange);
+
+                    // Tạo thẻ liên kết HTML trỏ tới route viewDocumentByCode
+                    const linkHtml = `<a href="/ebmr/document/view-by-code/${docCode}" class="ebmr-doc-link" target="_blank" data-doc-code="${originalText}">${originalText}</a>`;
+
+                    // Chèn thẻ liên kết HTML vào văn bản
+                    document.execCommand('insertHTML', false, linkHtml);
+
+                    // Kích hoạt đồng bộ hóa dữ liệu (trigger oninput)
+                    const selectionNode = sel.anchorNode;
+                    const activeCell = selectionNode ? (selectionNode.nodeType === 3 ? selectionNode.parentElement : selectionNode).closest('.mini-table td') : null;
+                    const editable = activeCell || (selectionNode ? (selectionNode.nodeType === 3 ? selectionNode.parentElement : selectionNode).closest('[contenteditable="true"]') : null);
+                    
+                    if (editable && typeof editable.oninput === 'function') {
+                        editable.oninput();
+                    }
+                    
+                    // Lưu trạng thái ngay lập tức
+                    if (typeof saveStateDebounced === 'function') {
+                        saveStateDebounced();
+                    }
+                    
+                    // Hiển thị Toast thông báo thành công nếu hệ thống có tích hợp toastr
+                    if (typeof toastr !== 'undefined') {
+                        toastr.success(`Liên kết thành công tài liệu: ${response.fileName} (Version ${response.version})`);
+                    }
+                } else {
+                    const errorMsg = (response && response.message) ? response.message : 'Không tìm thấy tài liệu thực tế trên máy chủ.';
+                    if (typeof toastr !== 'undefined') {
+                        toastr.error(errorMsg, 'Cảnh báo tài liệu không tồn tại', { timeOut: 8000, closeButton: true });
+                    } else {
+                        alert(`[Cảnh báo tài liệu không tồn tại]\n\n${errorMsg}`);
+                    }
+                }
+            },
+            error: function(xhr) {
+                // Khôi phục con trỏ chuột về mặc định
+                document.body.style.cursor = 'default';
+                
+                let errorMsg = 'Có lỗi xảy ra khi kết nối tới máy chủ.';
+                if (xhr.responseJSON && xhr.responseJSON.message) {
+                    errorMsg = xhr.responseJSON.message;
+                }
+                if (typeof toastr !== 'undefined') {
+                    toastr.error(errorMsg, 'Lỗi kết nối hệ thống', { timeOut: 8000, closeButton: true });
+                } else {
+                    alert(`[Lỗi kết nối]\n\n${errorMsg}`);
+                }
+            }
+        });
+    }
+
+    /**
+     * Hủy liên kết tài liệu mạng đã cài đặt cho chuỗi ký tự đang chọn.
+     */
+    function removeDocumentNetworkLink() {
+        // Thực hiện lệnh hủy liên kết HTML trên vùng chọn hiện tại
+        document.execCommand('unlink', false, null);
+        
+        // Kích hoạt đồng bộ hóa dữ liệu (trigger oninput)
+        const selection = window.getSelection();
+        const selectionNode = selection.anchorNode;
+        const activeCell = selectionNode ? (selectionNode.nodeType === 3 ? selectionNode.parentElement : selectionNode).closest('.mini-table td') : null;
+        const editable = activeCell || (selectionNode ? (selectionNode.nodeType === 3 ? selectionNode.parentElement : selectionNode).closest('[contenteditable="true"]') : null);
+        
+        if (editable && typeof editable.oninput === 'function') {
+            editable.oninput();
+        }
+        
+        // Lưu trạng thái ngay lập tức
+        if (typeof saveStateDebounced === 'function') {
+            saveStateDebounced();
+        }
+    }
+</script>
+
+<script>
+    /**
+     * FALLBACK: openExecutionInputModal cho chế độ Chạy thử (Designer Preview).
+     * Chỉ được khai báo nếu hàm này chưa tồn tại (tức là không phải trang Thực thi).
+     * Trang execute.blade.php đã tự định nghĩa hàm này với Bootstrap modal riêng.
+     */
+    if (typeof window.openExecutionInputModal !== 'function') {
+        window.openExecutionInputModal = function(blockId, row, col, type) {
+            if (!window.isExecutionMode) return;
+            if (window.isReadOnly) return;
+
+            // Tính toán cellKey chuẩn (khớp với cấu trúc DB)
+            const cellKey = (row === 'default' && col === 'default') ? 'default' : `${row}_${col}`;
+
+            if (type === 'signature') {
+                // Hiển thị dialog nhập mật khẩu xác nhận chữ ký
+                Swal.fire({
+                    title: '<i class="fas fa-signature me-2 text-primary"></i>Xác nhận chữ ký điện tử',
+                    html: `
+                        <div class="text-start mb-3 small text-muted">
+                            <i class="fas fa-info-circle me-1 text-info"></i>
+                            Nhập mật khẩu tài khoản của bạn để xác nhận chữ ký điện tử.
+                        </div>
+                        <input type="password" id="swal-sig-password" class="swal2-input" placeholder="Mật khẩu xác nhận" autocomplete="current-password">
+                    `,
+                    showCancelButton: true,
+                    confirmButtonText: '<i class="fas fa-check me-1"></i> Xác nhận',
+                    cancelButtonText: 'Hủy',
+                    confirmButtonColor: '#0d6efd',
+                    showLoaderOnConfirm: true,
+                    didOpen: () => {
+                        const inp = document.getElementById('swal-sig-password');
+                        if (inp) inp.focus();
+                    },
+                    preConfirm: () => {
+                        const password = document.getElementById('swal-sig-password').value;
+                        if (!password) {
+                            Swal.showValidationMessage('Vui lòng nhập mật khẩu xác nhận');
+                            return false;
+                        }
+
+                        const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+                        const csrfToken = csrfMeta ? csrfMeta.content : '';
+
+                        return fetch('{{ route("pages.ebmr.verifyPassword") }}', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': csrfToken
+                            },
+                            body: JSON.stringify({ password: password, _token: csrfToken })
+                        })
+                        .then(res => {
+                            if (!res.ok) throw new Error('Lỗi kết nối máy chủ');
+                            return res.json();
+                        })
+                        .then(data => {
+                            if (!data.success) {
+                                Swal.showValidationMessage(data.message || 'Mật khẩu không chính xác');
+                                return false;
+                            }
+                            return data;
+                        })
+                        .catch(err => {
+                            Swal.showValidationMessage('Không thể kết nối đến máy chủ: ' + err.message);
+                            return false;
+                        });
+                    },
+                    allowOutsideClick: () => !Swal.isLoading()
+                }).then(result => {
+                    if (result.isConfirmed && result.value) {
+                        const data = result.value;
+                        const signatureVal = data.signature_image ? data.signature_image : (data.fullName || 'Đã ký');
+
+                        if (!window.executionValues) window.executionValues = {};
+                        if (!window.executionValues[blockId]) window.executionValues[blockId] = {};
+                        window.executionValues[blockId][cellKey] = signatureVal;
+
+                        // Gán metadata ngay lập tức
+                        const now = new Date();
+                        const formattedTime = now.toLocaleDateString('vi-VN') + ' ' + now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+                        if (!window.executionValues[blockId]._meta) window.executionValues[blockId]._meta = {};
+                        window.executionValues[blockId]._meta[cellKey] = {
+                            by: data.fullName || '',
+                            at: formattedTime
+                        };
+
+                        if (typeof renderBlocks === 'function') renderBlocks();
+                        if (typeof syncLinkedCharts === 'function') syncLinkedCharts(blockId);
+
+                        Swal.fire({
+                            toast: true,
+                            position: 'top-end',
+                            icon: 'success',
+                            title: `Đã xác nhận chữ ký: ${data.fullName || ''}`,
+                            showConfirmButton: false,
+                            timer: 2000
+                        });
+                    }
+                });
+
+            } else {
+                // Chế độ nhập dữ liệu văn bản thông thường
+                const existingVal = (window.executionValues && window.executionValues[blockId])
+                    ? (window.executionValues[blockId][cellKey] || '')
+                    : '';
+
+                Swal.fire({
+                    title: 'Nhập dữ liệu',
+                    input: 'textarea',
+                    inputValue: existingVal,
+                    inputAttributes: { rows: 3, placeholder: 'Nhập nội dung...' },
+                    showCancelButton: true,
+                    confirmButtonText: 'Xác nhận',
+                    cancelButtonText: 'Hủy',
+                }).then(result => {
+                    if (result.isConfirmed) {
+                        if (!window.executionValues) window.executionValues = {};
+                        if (!window.executionValues[blockId]) window.executionValues[blockId] = {};
+                        window.executionValues[blockId][cellKey] = result.value;
+                        if (typeof renderBlocks === 'function') renderBlocks();
+                        if (typeof syncLinkedCharts === 'function') syncLinkedCharts(blockId);
+                    }
+                });
+            }
+        };
     }
 </script>

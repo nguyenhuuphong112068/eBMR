@@ -549,7 +549,7 @@ class EbmrTemplateController extends Controller
             }
 
             // --- VARIABLE INJECTION ---
-            $content = preg_replace_callback('/\{\{(field_[0-9]+)\}\}/', function ($m) {
+            $content = preg_replace_callback('/\{\{(field_[a-zA-Z0-9_]+)\}\}/', function ($m) {
                 return '<span contenteditable="false" class="ebmr-field-badge" data-field-id="'.$m[1].'" onclick="selectField(event, \''.$m[1].'\')"></span>';
             }, $content);
 
@@ -575,7 +575,7 @@ class EbmrTemplateController extends Controller
                             $content = $cb->vi_contents ?? '';
                             
                             // --- VARIABLE INJECTION ---
-                            $content = preg_replace_callback('/\{\{(field_[0-9]+)\}\}/', function ($m) {
+                            $content = preg_replace_callback('/\{\{(field_[a-zA-Z0-9_]+)\}\}/', function ($m) {
                                 return '<span contenteditable="false" class="ebmr-field-badge" data-field-id="'.$m[1].'" onclick="selectField(event, \''.$m[1].'\')"></span>';
                             }, $content);
                             
@@ -714,4 +714,214 @@ class EbmrTemplateController extends Controller
             }
         }
     }
+
+    /**
+     * Get BMR template sections (stages) and saved testing criteria
+     */
+    public function getTestingData($id)
+    {
+        // Get all unique section IDs present in this template
+        $presentSectionIds = DB::table('ebmr_template_blocks')
+            ->where('template_id', $id)
+            ->whereNotNull('section_id')
+            ->distinct()
+            ->pluck('section_id');
+
+        $sectionsMaster = DB::table('sections')->get()->keyBy('code');
+
+        $excludeStages = [
+            'TÍNH TOÁN CÔNG THỨC', 
+            'CÂN NGUYÊN LIỆU', 
+            'PHIẾU KIỂM NGHIỆM', 
+            'PHIẾU KN',
+            'PHIẾU KIỂM NGHIỆM BÁN THÀNH PHẨM',
+            'TÍNH TOÁN CÔNG THỨC VÀ CÂN'
+        ];
+
+        $sections = [];
+        foreach ($presentSectionIds as $sid) {
+            $parts = explode('_', $sid);
+            $code = end($parts);
+
+            // Try to find the section block for the label
+            $sectionBlock = DB::table('ebmr_template_blocks')
+                ->where('template_id', $id)
+                ->where('section_id', $sid)
+                ->where('type', 'section')
+                ->first();
+
+            $label = 'N/A';
+            if ($sectionBlock) {
+                $prop = json_decode($sectionBlock->properties);
+                $label = $prop->label ?? 'N/A';
+            } else {
+                // Fallback to sections master table
+                $label = $sectionsMaster[$code]->name ?? ('Phân đoạn '.$code);
+            }
+
+            // Exclude non-standard stages
+            if (in_array(mb_strtoupper(trim($label)), $excludeStages)) {
+                continue;
+            }
+
+            $sections[] = [
+                'id' => $sid,
+                'label' => $label,
+                'code' => (int) $code, // For numerical sorting
+            ];
+        }
+
+        // Sort sections by code numerically
+        usort($sections, function ($a, $b) {
+            return $a['code'] <=> $b['code'];
+        });
+
+        // Query any existing testing criteria for this template
+        $testing = DB::table('testing')
+            ->where('ebmr_templace_id', $id)
+            ->orderBy('stt', 'asc')
+            ->get()
+            ->map(function ($row) {
+                // Check if specifictions is a JSON string
+                $decoded = json_decode($row->specifictions);
+                if (json_last_error() === JSON_ERROR_NONE) {
+                    $row->specifictions = $decoded;
+                }
+                
+                $row->limits = json_decode($row->limits);
+
+                // Fetch associated images
+                $row->images = DB::table('testing_images')
+                    ->where('testing_id', $row->id)
+                    ->orderBy('id', 'asc')
+                    ->get()
+                    ->toArray();
+
+                return $row;
+            });
+
+        return response()->json([
+            'success' => true,
+            'sections' => $sections,
+            'testing' => $testing,
+        ]);
+    }
+
+    /**
+     * Save BMR template testing criteria
+     */
+    public function saveTestingData(Request $request, $id)
+    {
+        $criteria = $request->input('criteria', []);
+
+        DB::beginTransaction();
+        try {
+            // Delete previous testing criteria and images for this template
+            $oldTestingIds = DB::table('testing')
+                ->where('ebmr_templace_id', $id)
+                ->pluck('id');
+            
+            DB::table('testing_images')->whereIn('testing_id', $oldTestingIds)->delete();
+            DB::table('testing')->where('ebmr_templace_id', $id)->delete();
+
+            // Insert new testing criteria
+            foreach ($criteria as $item) {
+                $specs = $item['specifictions'] ?? '';
+                if (is_array($specs)) {
+                    $specs = json_encode($specs, JSON_UNESCAPED_UNICODE);
+                }
+
+                $limitsJson = isset($item['limits']) ? json_encode($item['limits'], JSON_UNESCAPED_UNICODE) : json_encode(null);
+
+                $testingId = DB::table('testing')->insertGetId([
+                    'ebmr_templace_id' => $id,
+                    'stage' => $item['stage'] ?? '',
+                    'stt' => (int)($item['stt'] ?? 1),
+                    'name' => $item['name'] ?? '',
+                    'specifictions' => $specs,
+                    'limits' => $limitsJson,
+                    'note' => $item['note'] ?? null,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+                // Save associated images and rename them according to ebmr_templates_id + testing_id + index
+                $images = $item['images'] ?? [];
+                foreach ($images as $idx => $img) {
+                    $originalPath = $img['image_path'] ?? '';
+                    $finalPath = $originalPath;
+
+                    if ($originalPath) {
+                        $localPath = public_path(ltrim($originalPath, '/'));
+                        if (file_exists($localPath)) {
+                            $extension = pathinfo($localPath, PATHINFO_EXTENSION);
+                            $newName = "{$id}_{$testingId}_{$idx}.{$extension}";
+                            $newLocalPath = public_path("img/testing_img/{$newName}");
+
+                            // Ensure directory exists
+                            $dir = dirname($newLocalPath);
+                            if (!file_exists($dir)) {
+                                mkdir($dir, 0755, true);
+                            }
+
+                            if ($localPath !== $newLocalPath) {
+                                rename($localPath, $newLocalPath);
+                            }
+                            $finalPath = "/img/testing_img/{$newName}";
+                        }
+                    }
+
+                    DB::table('testing_images')->insert([
+                        'testing_id' => $testingId,
+                        'image_path' => $finalPath,
+                        'image_name' => $img['image_name'] ?? '',
+                        'image_description' => $img['image_description'] ?? '',
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Lưu tiêu chuẩn kiểm nghiệm thành công!',
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Đã xảy ra lỗi khi lưu tiêu chuẩn: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Upload an image for testing criteria
+     */
+    public function uploadTestingImage(Request $request)
+    {
+        if ($request->hasFile('image')) {
+            $file = $request->file('image');
+            $originalName = $file->getClientOriginalName();
+            $filename = 'temp_' . time() . '_' . \Illuminate\Support\Str::random(8) . '.' . $file->getClientOriginalExtension();
+            
+            // Ensure directory exists
+            $dir = public_path('img/testing_img');
+            if (!file_exists($dir)) {
+                mkdir($dir, 0755, true);
+            }
+            
+            $file->move($dir, $filename);
+            
+            return response()->json([
+                'success' => true,
+                'url' => '/img/testing_img/' . $filename,
+                'name' => pathinfo($originalName, PATHINFO_FILENAME)
+            ]);
+        }
+        return response()->json(['success' => false, 'message' => 'Không tìm thấy file hình ảnh'], 400);
+    }
 }
+

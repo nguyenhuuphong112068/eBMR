@@ -72,7 +72,7 @@
         // Also check if any field is used in a formula
         Object.values(fieldsConfig).forEach(f => {
             if (f.type === 'formula' && f.formula) {
-                const matches = f.formula.match(/field_[0-9]+/g);
+                const matches = f.formula.match(/field_[a-zA-Z0-9_]+/g);
                 if (matches) matches.forEach(m => usedFieldIds.add(m));
             }
         });

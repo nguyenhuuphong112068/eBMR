@@ -128,6 +128,20 @@ return [
             'trust_server_certificate' => env('DB_MMS_TRUST_SERVER_CERTIFICATE', true),
         ],
 
+        'Doc' => [
+            'driver' => env('DB_DOC_DRIVER', 'sqlsrv'),
+            'host' => env('DB_DOC_HOST'),
+            'port' => env('DB_DOC_PORT', 1433),
+            'database' => env('DB_DOC_DATABASE'),
+            'username' => env('DB_DOC_USERNAME'),
+            'password' => env('DB_DOC_PASSWORD'),
+            'charset' => 'utf8',
+            'prefix' => '',
+            'encrypt' => env('DB_DOC_ENCRYPT', false),
+            'trust_server_certificate' => env('DB_DOC_TRUST_SERVER_CERTIFICATE', true),
+        ],
+
+
         // 'cal1' => [
         //     'driver' => env('DB_CAL1_DRIVER', 'sqlsrv'),
         //     'host' => env('DB_CAL1_HOST'),

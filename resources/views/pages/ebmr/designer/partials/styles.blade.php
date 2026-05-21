@@ -1338,4 +1338,305 @@
         color: #fd7e14;
         background-color: #fff0e6;
     }
+
+    /* =====================================================
+       CRITERIA DATA-BINDING STYLES
+       ===================================================== */
+
+    /* Badge hiển thị chữ tiêu chuẩn (chế độ chỉ xem) */
+    span.criteria-display {
+        display: inline-block;
+        background: transparent !important;
+        color: inherit !important;
+        border: none !important;
+        border-radius: 0 !important;
+        padding: 0 !important;
+        font-size: 100% !important;
+        font-weight: normal !important;
+        cursor: default;
+        user-select: text;
+        transition: none !important;
+    }
+
+    span.criteria-display:hover {
+        background: transparent !important;
+        border-color: transparent !important;
+    }
+
+    /* Ô nhập kết quả kiểm nghiệm ở chế độ thiết kế */
+    input.result-input.criteria-design-mode {
+        background: #fff8e1 !important;
+        border: 1.5px dashed #ffc107 !important;
+        color: #856404 !important;
+        cursor: not-allowed !important;
+        opacity: 0.8;
+    }
+
+    /* Ô nhập kết quả kiểm nghiệm ở chế độ chạy thử – chưa nhập */
+    input.result-input.criteria-exec-mode {
+        background: #fff !important;
+        border: 1.5px solid #17a2b8 !important;
+        color: #000 !important;
+        cursor: text !important;
+        transition: background 0.2s, border-color 0.2s, color 0.2s;
+    }
+
+    input.result-input.criteria-exec-mode:focus {
+        outline: none !important;
+        box-shadow: 0 0 0 2px rgba(23, 162, 184, 0.25) !important;
+    }
+
+    /* Kết quả ĐẠT */
+    input.result-input.criteria-pass {
+        background: #d4edda !important;
+        border-color: #28a745 !important;
+        color: #155724 !important;
+        font-weight: 700;
+    }
+
+    /* Kết quả KHÔNG ĐẠT */
+    input.result-input.criteria-fail {
+        background: #f8d7da !important;
+        border-color: #dc3545 !important;
+        color: #721c24 !important;
+        font-weight: 700;
+        animation: criteria-fail-shake 0.3s ease;
+    }
+
+    @keyframes criteria-fail-shake {
+        0%, 100% { transform: translateX(0); }
+        25%       { transform: translateX(-3px); }
+        75%       { transform: translateX(3px); }
+    }
+
+    @media print {
+        span.criteria-display {
+            background: transparent !important;
+            border: none !important;
+            color: inherit !important;
+            font-weight: normal;
+            padding: 0;
+        }
+        input.result-input {
+            border: none !important;
+            border-bottom: 1px solid #000 !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+            background: transparent !important;
+            color: #000 !important;
+        }
+    }
+
+    /* Criteria Sidebar Panel (Drawer style) */
+    .criteria-sidebar {
+        position: fixed;
+        top: 57px; /* Below AdminLTE header height */
+        right: 0;
+        width: 380px;
+        height: calc(100vh - 57px);
+        z-index: 1045;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        display: flex;
+        flex-direction: column;
+        background: #ffffff;
+        box-shadow: -10px 0 25px rgba(0, 0, 0, 0.15) !important;
+        border-left: 1px solid #e2e8f0;
+    }
+    
+    .criteria-sidebar.d-none {
+        transform: translateX(100%);
+        display: none !important;
+    }
+
+    /* Draggable Pills Styling */
+    .criteria-card {
+        transition: all 0.2s ease;
+        border-radius: 8px;
+        border: 1px solid #e2e8f0 !important;
+        background-color: #f8fafc;
+    }
+    
+    .criteria-card:hover {
+        border-color: #cbd5e1 !important;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+    }
+    
+    .draggable-pill {
+        padding: 5px 10px;
+        border-radius: 6px;
+        cursor: grab;
+        display: flex;
+        align-items: center;
+        transition: all 0.15s ease;
+        user-select: none;
+        background-color: #ffffff;
+        border: 1px solid #cbd5e1 !important;
+        font-size: 0.75rem;
+    }
+    
+    .draggable-pill:hover {
+        background-color: #f1f5f9;
+        border-color: #10b981 !important; /* Green hover for spec-binding theme */
+        transform: translateY(-1px);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+    }
+    
+    .draggable-pill:active {
+        cursor: grabbing;
+        background-color: #ecfdf5;
+        border-color: #059669 !important;
+    }
+    
+    /* Highlight cell on drag over */
+    .criteria-drag-over {
+        background-color: rgba(16, 185, 129, 0.15) !important;
+        border: 2px dashed #10b981 !important;
+        box-shadow: inset 0 0 0 2px rgba(16, 185, 129, 0.2);
+    }
+
+    /* Lightbox Carousel Premium CSS */
+    .lightbox-carousel-modal {
+        max-width: 1150px;
+        width: 95%;
+    }
+    .lightbox-carousel-modal .modal-content {
+        background: rgba(255, 255, 255, 0.98) !important;
+        backdrop-filter: blur(20px);
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15) !important;
+    }
+    .lightbox-carousel-header {
+        background: rgba(248, 250, 252, 0.85) !important;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    }
+    .carousel-item-premium {
+        height: calc(100% - 150px);
+        text-align: center;
+        background-color: transparent;
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .carousel-item-premium img {
+        max-height: 100%;
+        max-width: 100%;
+        object-fit: contain;
+        border-radius: 8px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.12);
+        transition: transform 0.3s ease;
+    }
+    .carousel-caption-premium {
+        position: absolute;
+        bottom: 15px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(15, 23, 42, 0.85) !important;
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        color: #fff;
+        padding: 12px 24px;
+        text-align: left;
+        width: 90%;
+        max-width: 800px;
+        border-radius: 14px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+    }
+    .carousel-caption-premium h6 {
+        font-size: 0.95rem;
+        font-weight: 700;
+        margin-bottom: 4px;
+        color: #f8fafc;
+    }
+    .carousel-caption-premium p {
+        font-size: 0.8rem;
+        color: #cbd5e1;
+        margin-bottom: 0;
+        line-height: 1.4;
+    }
+    .carousel-control-prev-premium,
+    .carousel-control-next-premium {
+        width: 48px;
+        height: 48px;
+        background: rgba(15, 23, 42, 0.06);
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: absolute;
+        top: calc(50% - 75px);
+        transform: translateY(-50%);
+        transition: all 0.2s ease;
+        color: #1e293b;
+        opacity: 0.8;
+    }
+    .carousel-control-prev-premium:hover,
+    .carousel-control-next-premium:hover {
+        background: rgba(15, 23, 42, 0.12);
+        opacity: 1;
+        color: #0f172a;
+        text-decoration: none;
+    }
+    .carousel-control-prev-premium {
+        left: 20px;
+    }
+    .carousel-control-next-premium {
+        right: 20px;
+    }
+    .lightbox-carousel-modal .carousel-indicators li {
+        background-color: #94a3b8 !important;
+    }
+    .lightbox-carousel-modal .carousel-indicators li.active {
+        background-color: #0f172a !important;
+    }
+    .lightbox-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    .lightbox-btn {
+        background: rgba(15, 23, 42, 0.06);
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        color: #334155;
+        border-radius: 8px;
+        padding: 6px 12px;
+        font-size: 0.85rem;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .lightbox-btn:hover {
+        background: rgba(15, 23, 42, 0.12);
+        color: #0f172a;
+        text-decoration: none;
+    }
+
+    /* Style for criteria display that has images */
+    span.criteria-display[data-has-images="true"] {
+        cursor: pointer !important;
+        position: relative;
+        text-decoration: underline dotted #ffc107 2px !important;
+    }
+
+    /* Định dạng liên kết tài liệu mạng PDF */
+    .ebmr-doc-link {
+        color: #1a73e8 !important;
+        text-decoration: underline dashed #1a73e8 1.5px !important;
+        text-underline-offset: 3px;
+        font-weight: 600 !important;
+        cursor: pointer !important;
+        transition: all 0.2s ease-in-out;
+    }
+    .ebmr-doc-link:hover {
+        color: #1557b0 !important;
+        text-decoration: underline solid #1557b0 1.5px !important;
+        background-color: rgba(26, 115, 232, 0.08);
+        border-radius: 4px;
+        padding: 0 4px;
+        margin: 0 -4px;
+    }
 </style>

@@ -185,4 +185,40 @@ class UserController extends Controller
                 ]);
                 return redirect()->back()->with('success', 'Vô Hiệu Hóa thành công!');
         }
+
+        public function updateSignature(Request $request)
+        {
+            $request->validate([
+                'signature_image' => 'required|string',
+                'user_id' => 'nullable|integer',
+            ]);
+
+            $loggedInUserId = session('user')['userId'] ?? null;
+            if (!$loggedInUserId) {
+                return response()->json(['success' => false, 'message' => 'Phiên đăng nhập hết hạn.'], 401);
+            }
+
+            // Nếu truyền user_id, sử dụng user_id đó, ngược lại dùng user hiện tại
+            $targetUserId = $request->input('user_id') ?: $loggedInUserId;
+
+            DB::table('user_management')
+                ->where('id', $targetUserId)
+                ->update([
+                    'signature_image' => $request->signature_image,
+                    'updated_at' => now(),
+                ]);
+
+            // Cập nhật session nếu đang đổi chữ ký cho chính mình
+            if ($targetUserId == $loggedInUserId) {
+                $userSession = session('user');
+                $userSession['signature_image'] = $request->signature_image;
+                session()->put('user', $userSession);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Cập nhật chữ ký mẫu thành công!',
+                'signature_image' => $request->signature_image
+            ]);
+        }
 }

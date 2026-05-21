@@ -659,4 +659,129 @@
             }
         }
     });
+
+    /**
+     * ======================================================
+     * CRITERIA DATA-BINDING – Execution Mode Validation
+     * ======================================================
+     * Khi người dùng chuyển sang chế độ Chạy thử (Execution Mode),
+     * các ô nhập liệu data-criteria-bind="RESULT" sẽ:
+     *  1. Được kích hoạt (pointer-events: auto) để nhập được.
+     *  2. Tự động bôi đỏ / xanh khi giá trị vượt / nằm trong tiêu chuẩn.
+     */
+
+    // Hook vào setDesignerMode để kích hoạt / vô hiệu hoá các result-input
+    const _originalSetDesignerMode = window.setDesignerMode || setDesignerMode;
+    window.setDesignerMode = function(isExecute) {
+        _originalSetDesignerMode(isExecute);
+        activateCriteriaInputs(isExecute);
+    };
+
+    function activateCriteriaInputs(isExecute) {
+        // Tìm tất cả các input kết quả kiểm nghiệm đã được gắn thuộc tính
+        const resultInputs = document.querySelectorAll('.result-input[data-criteria-bind="RESULT"]');
+        resultInputs.forEach(function(inp) {
+            if (isExecute) {
+                // Execution mode: cho phép nhập liệu
+                inp.style.pointerEvents = 'auto';
+                inp.readOnly = false;
+                inp.classList.remove('criteria-design-mode');
+                inp.classList.add('criteria-exec-mode');
+            } else {
+                // Design mode: chỉ placeholder, không cho nhập
+                inp.style.pointerEvents = 'none';
+                inp.readOnly = true;
+                inp.classList.remove('criteria-exec-mode');
+                inp.classList.add('criteria-design-mode');
+                // Reset về trạng thái chưa nhập
+                inp.classList.remove('criteria-pass', 'criteria-fail');
+                inp.style.backgroundColor = '';
+                inp.style.color = '';
+            }
+        });
+    }
+
+    // Lắng nghe sự kiện input trực tiếp trên tài liệu (event delegation)
+    document.addEventListener('input', function(e) {
+        const inp = e.target;
+        if (!inp.classList.contains('result-input')) return;
+        if (!window.isExecutionMode) return;
+
+        // Auto-save input to execution values if it has data-field-id
+        const fieldId = inp.getAttribute('data-field-id');
+        if (fieldId) {
+            if (!window.executionValues) window.executionValues = {};
+            window.executionValues[fieldId] = inp.value;
+            if (typeof window.recalculateAllFormulas === 'function') {
+                window.recalculateAllFormulas();
+            }
+        }
+
+        const op  = inp.getAttribute('data-criteria-op')  || '';
+        const minAttr = inp.getAttribute('data-criteria-min') || '';
+        const maxAttr = inp.getAttribute('data-criteria-max') || '';
+
+        const min = parseFloat(minAttr);
+        const max = parseFloat(maxAttr);
+        const val = parseFloat(inp.value);
+
+        // Xoá trạng thái cũ
+        inp.classList.remove('criteria-pass', 'criteria-fail');
+        inp.style.backgroundColor = '';
+        inp.style.color = '';
+        inp.title = inp.getAttribute('title') || '';
+
+        if (inp.value.trim() === '') return;
+
+        let pass = false;
+        let isNumeric = !isNaN(val) && !isNaN(parseFloat(minAttr)) && op !== 'N/A';
+
+        if (isNumeric) {
+            if (op === 'range') {
+                pass = (val >= min && val <= max);
+            } else if (op === '±') {
+                // min = giá trị trung tâm, max = ± delta
+                pass = (val >= (min - max) && val <= (min + max));
+            } else if (op === '<') {
+                pass = (val < min);
+            } else if (op === '<=') {
+                pass = (val <= min);
+            } else if (op === '>') {
+                pass = (val > min);
+            } else if (op === '>=') {
+                pass = (val >= min);
+            } else if (op === '=' || op === '') {
+                pass = (val === min);
+            } else {
+                // Không có toán tử rõ ràng: nếu có cả min và max thì kiểm tra range
+                if (!isNaN(min) && !isNaN(max) && min !== max) {
+                    pass = (val >= min && val <= max);
+                } else if (!isNaN(min)) {
+                    pass = (val === min);
+                } else {
+                    return; // Không đủ thông tin để kiểm tra
+                }
+            }
+        } else {
+            // Text validation (case-insensitive string comparison)
+            const minStr = minAttr.trim().toLowerCase();
+            const valStr = inp.value.trim().toLowerCase();
+            if (minStr === '') {
+                return; // Không đủ thông tin để kiểm tra
+            }
+            pass = (valStr === minStr);
+        }
+
+        if (pass) {
+            inp.classList.add('criteria-pass');
+            inp.style.backgroundColor = '#d4edda';
+            inp.style.color = '#155724';
+            inp.style.borderColor = '#28a745';
+        } else {
+            inp.classList.add('criteria-fail');
+            inp.style.backgroundColor = '#f8d7da';
+            inp.style.color = '#721c24';
+            inp.style.borderColor = '#dc3545';
+        }
+    });
 </script>
