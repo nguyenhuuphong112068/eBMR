@@ -876,9 +876,11 @@
             <div class="chat-header">
                 <h5 class="mb-0">TIN NHẮN</h5>
                 <div class="d-flex align-items-center">
+                    {{-- 
                     <button class="btn btn-sm btn-outline-primary me-2" onclick="showCreateGroupModal()">
                         <i class="fas fa-plus"></i> Nhóm
                     </button>
+                    --}}
                     <button class="btn btn-sm btn-light" onclick="toggleChat(false)">
                         <i class="fas fa-times"></i>
                     </button>
@@ -1172,54 +1174,10 @@
             };
 
             function loadChatGroups() {
-                $.get("{{ route('chat.groups', [], false) }}", function(data) {
-                    let html = '';
-                    let totalUnread = 0;
-
-                    data.forEach(g => {
-                        let unreadHtml = g.unread_count > 0 ?
-                            `<span class="unread-badge">${g.unread_count}</span>` : '';
-                        let onlineHtml = g.is_online ?
-                            `<span class="online-dot" title="Online"></span>` : '';
-                        totalUnread += g.unread_count;
-
-                        html += `
-                            <div class="chat-group-item" onclick="openChatWindow(${g.id}, '${g.display_name}', ${g.is_online || false})">
-                                <div class="chat-group-info">
-                                    <div class="chat-group-name">
-                                        ${onlineHtml}
-                                        <b>${g.display_name}</b>
-                                        ${unreadHtml}
-                                    </div>
-                                    <div class="chat-group-last-msg">${g.last_message || 'Chưa có tin nhắn'}</div>
-                                </div>
-                            </div>
-                        `;
-
-                        if (g.last_time) {
-                            if (chatGroupLastTimes[g.id] && g.last_time > chatGroupLastTimes[g.id]) {
-                                if (g.last_sender_id != currentUserId) {
-                                    blinkTitle("Có tin nhắn mới...");
-                                    if (!openChatGroups.includes(g.id)) {
-                                        openChatWindow(g.id, g.display_name, g.is_online || false);
-                                    }
-                                }
-                            }
-                            chatGroupLastTimes[g.id] = g.last_time;
-                        }
-                    });
-
-                    if (totalUnread > 0) {
-                        $('#unread-total-badge').text(totalUnread).removeClass('d-none');
-                        $('.chat-trigger').addClass('blinking');
-                    } else {
-                        $('#unread-total-badge').addClass('d-none');
-                        $('.chat-trigger').removeClass('blinking');
-                    }
-
-                    $('#chatList').html(html ||
-                        '<div class="text-center p-3 text-muted">Chưa có hội thoại nào</div>');
-                });
+                // Disabled /chat/groups route
+                $('#unread-total-badge').addClass('d-none');
+                $('.chat-trigger').removeClass('blinking');
+                $('#chatList').html('<div class="text-center p-3 text-muted">Chưa có hội thoại nào</div>');
             }
 
             function loadContacts() {
@@ -1940,26 +1898,8 @@
             };
 
             window.submitCreateGroup = function() {
-                let name = $('#newGroupName').val();
-                let members = [];
-                $('input[name="group_members"]:checked').each(function() {
-                    members.push($(this).val());
-                });
-
-                if (!name || members.length === 0) {
-                    alert('Vui lòng nhập tên nhóm và chọn ít nhất 1 thành viên');
-                    return;
-                }
-
-                $.post("{{ route('chat.createGroup') }}", {
-                    _token: "{{ csrf_token() }}",
-                    name: name,
-                    member_ids: members
-                }, function(res) {
-                    $('#createGroupModal').modal('hide');
-                    loadChatGroups();
-                    openChatWindow(res.id, name);
-                });
+                // Disabled /chat/create-group route
+                alert('Chức năng tạo nhóm tạm thời bị khóa.');
             };
 
             const commonEmojis = [

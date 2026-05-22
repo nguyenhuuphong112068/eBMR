@@ -13,11 +13,11 @@ window.SCALE_PRESETS = {
     'and': {
         label: 'A&D (AND)',
         icon: 'fa-balance-scale',
-        baudRate: 9600,
+        baudRate: 2400,
         dataBits: 7,
         parity: 'even',
         stopBits: 1,
-        description: 'Cân A&D/AND — Định dạng 17 ký tự ASCII'
+        description: 'Cân A&D/AND — Định dạng 17 ký tự ASCII (Mặc định 2400 bps)'
     },
     'mettler': {
         label: 'Mettler Toledo',
@@ -123,12 +123,14 @@ window.ScaleParsers = {
      * Parse theo hãng đã chọn trong cài đặt
      */
     parse(rawLine, brand) {
+        let result = null;
         switch (brand) {
-            case 'and':      return this.parseAND(rawLine);
-            case 'mettler':  return this.parseMettlerToledo(rawLine);
-            case 'sartorius': return this.parseSartorius(rawLine);
-            default:         return this.parseAutoDetect(rawLine);
+            case 'and':      result = this.parseAND(rawLine); break;
+            case 'mettler':  result = this.parseMettlerToledo(rawLine); break;
+            case 'sartorius': result = this.parseSartorius(rawLine); break;
         }
+        if (result) return result;
+        return this.parseAutoDetect(rawLine);
     }
 };
 
@@ -145,6 +147,8 @@ window.ScaleManager = (function () {
     let _callbacks = [];           // Danh sách callbacks đăng ký nhận dữ liệu
     let _lastParsedResult = null;
     let _currentBrand = 'auto';
+    let _lastDataTime = 0;
+    let _smartQueryTimer = null;
 
     // Kiểm tra trình duyệt hỗ trợ Web Serial API
     function _isSupported() {
@@ -228,9 +232,8 @@ window.ScaleManager = (function () {
     // Vòng lặp đọc streaming liên tục
     async function _startReading() {
         _isReading = true;
-        _textDecoder = new TextDecoderStream();
-        _readableStreamClosed = _port.readable.pipeTo(_textDecoder.writable);
-        _reader = _textDecoder.readable.getReader();
+        const decoder = new TextDecoder();
+        _reader = _port.readable.getReader();
         _log('Bắt đầu lắng nghe dữ liệu từ cân...', 'info');
 
         try {
@@ -238,15 +241,18 @@ window.ScaleManager = (function () {
                 const { value, done } = await _reader.read();
                 if (done) break;
                 if (value) {
-                    _lineBuffer += value;
-                    // Xử lý từng dòng (kết thúc bằng \n hoặc \r\n)
-                    const lines = _lineBuffer.split(/\r?\n/);
+                    const text = decoder.decode(value, { stream: true });
+                    _lineBuffer += text;
+                    // Xử lý từng dòng (kết thúc bằng \r, \n hoặc \r\n)
+                    const lines = _lineBuffer.split(/\r\n|\r|\n/);
                     _lineBuffer = lines.pop(); // Giữ phần chưa hoàn chỉnh lại
 
                     for (const line of lines) {
                         const trimmed = line.trim();
                         if (!trimmed) continue;
                         _log(`← ${trimmed}`, 'data');
+
+                        _lastDataTime = Date.now();
 
                         const result = window.ScaleParsers.parse(trimmed, _currentBrand);
                         if (result) {
@@ -275,6 +281,51 @@ window.ScaleManager = (function () {
             }
         } finally {
             _reader.releaseLock();
+        }
+    }
+
+    async function _write(command) {
+        if (!_port || !_port.writable) return;
+        try {
+            const encoder = new TextEncoder();
+            const writer = _port.writable.getWriter();
+            await writer.write(encoder.encode(command));
+            writer.releaseLock();
+            _log(`→ Gửi lệnh: ${JSON.stringify(command)}`, 'info');
+        } catch (err) {
+            console.error('Lỗi gửi lệnh đến cân:', err);
+            _log(`❌ Lỗi gửi lệnh: ${err.message}`, 'error');
+        }
+    }
+
+    function _startSmartQuery() {
+        _lastDataTime = Date.now();
+        _stopSmartQuery();
+        _smartQueryTimer = setInterval(async () => {
+            if (!_port || !_isReading) {
+                _stopSmartQuery();
+                return;
+            }
+            const timeSinceLastData = Date.now() - _lastDataTime;
+            if (timeSinceLastData > 1500) {
+                // Đã hơn 1.5 giây chưa nhận được dữ liệu, gửi lệnh truy vấn tương ứng
+                if (_currentBrand === 'and') {
+                    await _write("Q\r\n");
+                } else if (_currentBrand === 'mettler') {
+                    await _write("SI\r\n");
+                } else if (_currentBrand === 'sartorius') {
+                    await _write(String.fromCharCode(27) + "P\r\n");
+                }
+                // Cập nhật lại thời gian để tránh gửi quá dồn dập
+                _lastDataTime = Date.now();
+            }
+        }, 1000);
+    }
+
+    function _stopSmartQuery() {
+        if (_smartQueryTimer) {
+            clearInterval(_smartQueryTimer);
+            _smartQueryTimer = null;
         }
     }
 
@@ -312,6 +363,15 @@ window.ScaleManager = (function () {
                     stopBits: Number(config.stopBits) || 1,
                     flowControl: 'none'
                 });
+
+                // Thiết lập các tín hiệu RTS/DTR cho kết nối RS-232/USB-to-Serial
+                try {
+                    await _port.setSignals({ dataTerminalReady: true, requestToSend: true });
+                    _log('✅ Khởi tạo tín hiệu DTR/RTS thành công', 'success');
+                } catch (signalErr) {
+                    console.warn('Không thể cài đặt tín hiệu RTS/DTR:', signalErr);
+                }
+
                 _currentBrand = brand;
                 _isReading = true;
                 _updateStatus(true);
@@ -323,6 +383,13 @@ window.ScaleManager = (function () {
 
                 // Bắt đầu đọc streaming
                 _startReading(); // Không await — chạy nền
+
+                // Kích hoạt các lệnh ban đầu và smart query
+                if (brand === 'mettler') {
+                    await _write("SIR\r\n");
+                }
+                _startSmartQuery();
+
                 return true;
             } catch (err) {
                 _port = null;
@@ -343,6 +410,7 @@ window.ScaleManager = (function () {
          */
         async disconnect() {
             _isReading = false;
+            _stopSmartQuery();
             _callbacks = [];
             _lineBuffer = '';
             _lastParsedResult = null;
@@ -448,122 +516,16 @@ window.writeScaleValueToField = function(fieldId, value, unit) {
 };
 
 /**
- * Lấy ngay kết quả hiện tại (không cần ổn định) và điền vào ô biến số
- */
-window.takeScaleValueImmediately = function(fieldId) {
-    const result = window.ScaleManager.getLastResult();
-    if (result && result.value !== undefined) {
-        window.writeScaleValueToField(fieldId, result.value, result.unit);
-        window.closeScalePopover();
-        if (typeof toastr !== 'undefined') {
-            toastr.success(`✅ Lấy giá trị: ${result.value} ${result.unit} (Lấy ngay)`, 'Cân điện tử', { timeOut: 3000 });
-        }
-    } else {
-        if (typeof toastr !== 'undefined') {
-            toastr.warning('Chưa nhận được số liệu nào từ cân để lấy ngay.', 'Cân điện tử');
-        }
-    }
-};
-
-/**
  * Lắng nghe và điền giá trị từ cân vào biến số fieldId.
- * Mở popover hiển thị số cân liên tục và nút "Lấy ngay".
+ * LUÔN LUÔN mở modal kết nối theo yêu cầu mới.
  * @param {string} fieldId
  */
 window.readScaleValueIntoField = async function(fieldId) {
     const field = fieldsConfig ? fieldsConfig[fieldId] : null;
     if (!field) return;
 
-    // Nếu chưa kết nối, mở modal kết nối
-    if (!window.ScaleManager.isConnected()) {
-        window.openScaleConnectionModal(fieldId);
-        return;
-    }
-
-    // Đóng popover cũ nếu có
-    window.closeScalePopover();
-
-    // Tìm nút bấm để hiển thị trạng thái và định vị popover
-    const badgeEl = document.querySelector(`.ebmr-field-badge[data-field-id="${fieldId}"]`);
-    const readBtn = badgeEl ? badgeEl.querySelector('.btn-read-scale') : null;
-    if (readBtn) {
-        readBtn.classList.add('reading');
-        readBtn.title = 'Đang đọc dữ liệu từ cân...';
-    }
-
-    // Tạo popover mới
-    const popover = document.createElement('div');
-    popover.className = 'scale-reader-popover';
-    popover.innerHTML = `
-        <div style="font-size: 0.72rem; font-weight: bold; color: #475569; margin-bottom: 2px;">
-            <i class="fas fa-balance-scale"></i> Đọc cân vào ô số
-        </div>
-        <div class="scale-reader-popover-live" id="scale-popover-live-val">—.—</div>
-        <div style="font-size: 0.65rem; color: #64748b; text-align: center;" id="scale-popover-status">
-            Đang nhận dữ liệu...
-        </div>
-        <div class="scale-reader-popover-buttons">
-            <button class="scale-reader-popover-btn scale-reader-popover-btn-primary" onclick="window.takeScaleValueImmediately('${fieldId}')">
-                <i class="fas fa-check"></i> Lấy ngay
-            </button>
-            <button class="scale-reader-popover-btn scale-reader-popover-btn-secondary" onclick="window.closeScalePopover()">
-                Hủy
-            </button>
-        </div>
-    `;
-    
-    document.body.appendChild(popover);
-    currentActivePopover = popover;
-
-    // Hàm định vị popover phía trên nút bấm
-    function positionPopover() {
-        if (!readBtn || !popover) return;
-        const rect = readBtn.getBoundingClientRect();
-        const popoverRect = popover.getBoundingClientRect();
-        
-        const top = rect.top + window.scrollY - popoverRect.height - 8;
-        const left = rect.left + window.scrollX + (rect.width / 2) - (popoverRect.width / 2);
-        
-        popover.style.top = `${top}px`;
-        popover.style.left = `${left}px`;
-    }
-    
-    positionPopover();
-    setTimeout(positionPopover, 50); // Chạy lại sau 50ms phòng trường hợp font/layout chưa tải xong
-
-    // Lắng nghe dữ liệu liên tục từ cân
-    currentActiveUnsubscribe = window.ScaleManager.onData(function(result) {
-        const liveValEl = document.getElementById('scale-popover-live-val');
-        const statusEl = document.getElementById('scale-popover-status');
-        
-        if (liveValEl) {
-            liveValEl.textContent = `${result.value} ${result.unit}`;
-            liveValEl.className = `scale-reader-popover-live ${result.stable ? 'stable' : 'unstable'}`;
-        }
-        
-        if (statusEl) {
-            statusEl.innerHTML = result.stable 
-                ? '<span class="text-success"><i class="fas fa-check-circle"></i> Ổn định (Tự động điền...)</span>' 
-                : '<span class="text-warning"><i class="fas fa-spinner fa-spin"></i> Đang dao động...</span>';
-        }
-
-        // Nếu cân báo ổn định -> tự động điền và đóng popover
-        if (result.stable) {
-            window.writeScaleValueToField(fieldId, result.value, result.unit);
-            window.closeScalePopover();
-            if (typeof toastr !== 'undefined') {
-                toastr.success(`✅ Đã đọc: ${result.value} ${result.unit} (Ổn định)`, 'Cân điện tử', { timeOut: 3000 });
-            }
-        }
-    });
-
-    // Tự động đóng nếu không có phản hồi từ cân sau 30 giây
-    currentActiveTimeout = setTimeout(() => {
-        window.closeScalePopover();
-        if (typeof toastr !== 'undefined') {
-            toastr.warning('Đã ngưng chờ dữ liệu từ cân.', 'Cân điện tử');
-        }
-    }, 30000);
+    // Luôn mở modal kết nối
+    window.openScaleConnectionModal(fieldId);
 };
 
 // ============================================================
@@ -602,12 +564,82 @@ window.openScaleConnectionModal = function(fieldId) {
         toggleCustomScaleFields(savedBrand);
     }
 
-    // Hiện modal
-    if (typeof bootstrap !== 'undefined') {
-        const modal = new bootstrap.Modal(document.getElementById('scaleConnectionModal'));
-        modal.show();
-    } else if (typeof $ !== 'undefined') {
-        $('#scaleConnectionModal').modal('show');
+    // Hiển thị ngay giá trị cuối cùng từ cân nếu có
+    const liveVal = document.getElementById('scale-live-value');
+    if (liveVal) {
+        const lastResult = window.ScaleManager.getLastResult();
+        if (lastResult) {
+            liveVal.textContent = `${lastResult.value} ${lastResult.unit}`;
+            liveVal.className = `scale-live-value ${lastResult.stable ? 'stable' : 'unstable'}`;
+        } else {
+            liveVal.textContent = '—.— g';
+            liveVal.className = 'scale-live-value stable';
+        }
+    }
+
+    // Hủy đăng ký listener cũ nếu có để tránh trùng lặp
+    if (window._scaleModalUnsubscribe) {
+        window._scaleModalUnsubscribe();
+        window._scaleModalUnsubscribe = null;
+    }
+
+    // Đăng ký lắng nghe dữ liệu để tự động điền khi cân báo ổn định
+    if (fieldId) {
+        window._scaleModalUnsubscribe = window.ScaleManager.onData(function(result) {
+            if (result.stable) {
+                window.writeScaleValueToField(fieldId, result.value, result.unit);
+                
+                // Đóng modal
+                const modalEl = document.getElementById('scaleConnectionModal');
+                if (modalEl) {
+                    if (typeof bootstrap !== 'undefined') {
+                        const inst = bootstrap.Modal.getInstance(modalEl) || (bootstrap.Modal.getOrCreateInstance ? bootstrap.Modal.getOrCreateInstance(modalEl) : null);
+                        if (inst) inst.hide();
+                        else if (typeof $ !== 'undefined') {
+                            $(modalEl).modal('hide');
+                        }
+                    } else if (typeof $ !== 'undefined') {
+                        $(modalEl).modal('hide');
+                    }
+                }
+                
+                if (typeof toastr !== 'undefined') {
+                    toastr.success(`✅ Đã đọc: ${result.value} ${result.unit} (Ổn định)`, 'Cân điện tử', { timeOut: 3000 });
+                }
+            }
+        });
+
+        // Lắng nghe sự kiện ẩn modal để hủy đăng ký listener
+        const modalEl = document.getElementById('scaleConnectionModal');
+        if (modalEl && !modalEl._hasHideListener) {
+            modalEl._hasHideListener = true;
+            const cleanup = () => {
+                if (window._scaleModalUnsubscribe) {
+                    window._scaleModalUnsubscribe();
+                    window._scaleModalUnsubscribe = null;
+                }
+            };
+            if (typeof bootstrap !== 'undefined') {
+                modalEl.addEventListener('hidden.bs.modal', cleanup);
+            } else if (typeof $ !== 'undefined') {
+                $(modalEl).on('hidden.bs.modal', cleanup);
+            }
+        }
+    }
+
+    // Hiện modal nếu chưa hiển thị
+    const modalEl = document.getElementById('scaleConnectionModal');
+    let isModalVisible = false;
+    if (modalEl) {
+        isModalVisible = modalEl.classList.contains('show');
+    }
+    if (!isModalVisible) {
+        if (typeof bootstrap !== 'undefined') {
+            const modal = bootstrap.Modal.getOrCreateInstance ? bootstrap.Modal.getOrCreateInstance(modalEl) : new bootstrap.Modal(modalEl);
+            modal.show();
+        } else if (typeof $ !== 'undefined') {
+            $('#scaleConnectionModal').modal('show');
+        }
     }
 };
 

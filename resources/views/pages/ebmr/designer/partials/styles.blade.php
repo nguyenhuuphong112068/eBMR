@@ -1689,37 +1689,37 @@
         height: 22px;
         border: none;
         border-radius: 50%;
-        background: linear-gradient(135deg, #16a34a, #15803d);
+        background: linear-gradient(135deg, #dc2626, #b91c1c);
         color: white;
         font-size: 10px;
         cursor: pointer;
         margin-left: 4px;
         vertical-align: middle;
         transition: all 0.2s ease;
-        box-shadow: 0 1px 4px rgba(22, 163, 74, 0.3);
+        box-shadow: 0 1px 4px rgba(220, 38, 38, 0.3);
         flex-shrink: 0;
         position: relative;
     }
 
     .btn-read-scale:hover {
-        background: linear-gradient(135deg, #15803d, #166534);
-        box-shadow: 0 2px 8px rgba(22, 163, 74, 0.5);
+        background: linear-gradient(135deg, #b91c1c, #991b1b);
+        box-shadow: 0 2px 8px rgba(220, 38, 38, 0.5);
         transform: scale(1.1);
     }
 
     /* Trạng thái đang đọc (animation xoay) */
     .btn-read-scale.reading {
-        background: linear-gradient(135deg, #f59e0b, #d97706);
-        animation: scale-reading-pulse 0.8s ease-in-out infinite;
+        background: linear-gradient(135deg, #ef4444, #dc2626);
+        animation: scale-reading-pulse-red 0.8s ease-in-out infinite;
     }
 
     .btn-read-scale.reading i {
         animation: spin 1s linear infinite;
     }
 
-    @keyframes scale-reading-pulse {
-        0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.6); }
-        50%       { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0); }
+    @keyframes scale-reading-pulse-red {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6); }
+        50%       { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
     }
 
     @keyframes spin {
@@ -1761,15 +1761,21 @@
         padding: 12px 0;
         letter-spacing: 0.05em;
         transition: color 0.3s ease;
+        color: #dc2626;
     }
 
     .scale-live-value.stable {
-        color: #16a34a;
+        color: #dc2626;
     }
 
     .scale-live-value.unstable {
-        color: #f59e0b;
-        animation: scale-reading-pulse 0.5s ease-in-out infinite;
+        color: #dc2626;
+        animation: scale-live-pulse-red 0.5s ease-in-out infinite;
+    }
+
+    @keyframes scale-live-pulse-red {
+        0%, 100% { opacity: 1; }
+        50%       { opacity: 0.4; }
     }
 
     /* Card chọn hãng cân */

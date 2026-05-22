@@ -149,19 +149,19 @@ N +  123.450 g \r\n         ← Net stable
 
 ```
 [Chế độ Thực thi / Chạy thử]
-  → Biến số kiểu 'number' hiển thị nút ⚖️ xanh lá
+  → Biến số kiểu 'number' hiển thị nút ⚖️ màu đỏ gradient
   → Click nút ⚖️
-      → Nếu chưa kết nối: mở #scaleConnectionModal
+      → Luôn hiển thị #scaleConnectionModal (bỏ qua popover cũ)
+      → Hiển thị ngay giá trị cân gần nhất (cache) nếu có, tránh hiển thị "—.— g" trống
+      → Nếu chưa kết nối:
           → Chọn hãng cân → Click "Kết nối"
           → Web Serial API requestPort() + open()
           → Streaming bắt đầu
-          → Giá trị live hiển thị real-time trong modal
-          → Click "Đọc giá trị ngay" hoặc tự động sau 500ms
-      → Nếu đã kết nối: subscribe nhận giá trị ổn định
-          → timeout 15 giây
-          → Nhận giá trị stable → điền window.executionValues[fieldId]
-          → recalculateAllFormulas()
-          → Re-render badge
+          → Giá trị live hiển thị real-time trong modal (nền/viền đỏ nhạt, text màu đỏ)
+      → Đọc và ghi nhận dữ liệu:
+          → Tự động: khi nhận được giá trị ổn định (stable), điền vào biến số và tự động đóng modal
+          → Thủ công: click "Đọc giá trị ngay" để lấy giá trị hiện tại ngay lập tức và đóng modal
+          → Tự động cleanup listener khi ẩn modal (sự kiện hidden.bs.modal)
 ```
 
 ---

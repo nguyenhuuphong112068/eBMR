@@ -1069,7 +1069,7 @@
  
                     const label = field.label || `[${typeLabel}]`;
                     const scaleIndicator = (field.type === 'number' && field.scaleEnabled) 
-                        ? `<span class="ms-1 text-success" title="⚖️ Đã bật kết nối Cân điện tử" style="cursor: pointer;" onclick="event.stopPropagation(); window.openScaleConnectionModal('${fieldId}')"><i class="fas fa-balance-scale"></i></span>` 
+                        ? `<span class="ms-1 text-danger" title="⚖️ Đã bật kết nối Cân điện tử" style="cursor: pointer;" onclick="event.stopPropagation(); window.openScaleConnectionModal('${fieldId}')"><i class="fas fa-balance-scale"></i></span>` 
                         : '';
                     badge.className =
                         `ebmr-field-badge ${selectedFieldId === fieldId ? 'active' : ''} ${field.type === 'formula' ? 'formula-preview' : ''}`;

@@ -2061,11 +2061,11 @@
                 </div>
 
                 <!-- KẾT NỐI CÂN ĐIỆN TỬ -->
-                <div class="card border-0 shadow-none mb-3" style="background: linear-gradient(135deg, #f0fdf4, #dcfce7); border: 1px solid #bbf7d0 !important;">
+                <div class="card border-0 shadow-none mb-3" style="background: linear-gradient(135deg, #fef2f2, #fee2e2); border: 1px solid #fecaca !important;">
                     <div class="card-body p-3">
                         <div class="d-flex align-items-center gap-2 mb-2">
-                            <i class="fas fa-balance-scale text-success"></i>
-                            <label class="small fw-bold mb-0 text-success-emphasis">Kết nối Cân điện tử (RS-232)</label>
+                            <i class="fas fa-balance-scale text-danger"></i>
+                            <label class="small fw-bold mb-0 text-danger-emphasis">Kết nối Cân điện tử (RS-232)</label>
                         </div>
                         <div class="form-check form-switch ps-4 mb-2">
                             <input class="form-check-input ms-n4" type="checkbox" id="scaleEnabledCheck_${fieldId}"
@@ -2084,7 +2084,7 @@
                                 <option value="custom"  ${(field.scalePreset) === 'custom'            ? 'selected' : ''}>⚙️ Tùy chỉnh</option>
                             </select>
                             <div class="form-text" style="font-size: 0.65rem;">
-                                Nút <i class="fas fa-balance-scale text-success"></i> sẽ xuất hiện cạnh ô nhập liệu ở chế độ Thực thi.
+                                Nút <i class="fas fa-balance-scale text-danger"></i> sẽ xuất hiện cạnh ô nhập liệu ở chế độ Thực thi.
                             </div>
                         </div>
                     </div>
