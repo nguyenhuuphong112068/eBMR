@@ -924,7 +924,7 @@
                         if (r > 0) {
                             const rIdx = r - 1;
                             if (item.data && item.data[rIdx] && item.data[rIdx][c] !== undefined) {
-                                if (typeof item.data[rIdx][c] !== 'object') {
+                                if (!item.data[rIdx][c] || typeof item.data[rIdx][c] !== 'object') {
                                     item.data[rIdx][c] = {
                                         content: item.data[rIdx][c],
                                         rs: 1,
@@ -966,7 +966,7 @@
                     if (prop && r > 0) {
                         const rIdx = r - 1;
                         if (item.data && item.data[rIdx] && item.data[rIdx][c] !== undefined) {
-                            if (typeof item.data[rIdx][c] !== 'object') {
+                            if (!item.data[rIdx][c] || typeof item.data[rIdx][c] !== 'object') {
                                 item.data[rIdx][c] = {
                                     content: item.data[rIdx][c],
                                     rs: 1,
@@ -1083,6 +1083,21 @@
     document.addEventListener('paste', function(e) {
         const target = e.target.closest('.static-text-display, .mini-table td');
         if (!target) return;
+
+        // Try to get HTML content first to check for ebmr-field-badge
+        const html = (e.clipboardData || window.clipboardData).getData('text/html');
+        if (html && html.includes('ebmr-field-badge')) {
+            e.preventDefault();
+            saveState();
+            if (typeof window.duplicateFieldBadgesInHtml === 'function') {
+                const duplicatedHtml = window.duplicateFieldBadgesInHtml(html);
+                document.execCommand("insertHTML", false, duplicatedHtml);
+            } else {
+                document.execCommand("insertHTML", false, html);
+            }
+            saveStateDebounced();
+            return;
+        }
 
         e.preventDefault();
 
@@ -1291,6 +1306,93 @@
 
         if (typeof saveStateDebounced === 'function') saveStateDebounced();
     }
+
+    /**
+     * Thay đổi hướng chữ (Text Direction) cho các ô/cột được chọn.
+     * @param {string} direction - Hướng chữ ('horizontal', 'vertical-down', 'vertical-up').
+     */
+    window.changeTextDirection = function(direction) {
+        const selection = window.getSelection();
+        const selectedCells = document.querySelectorAll('.selected-cell');
+        const selectionNode = selection.anchorNode;
+        const activeCell = selectionNode ? (selectionNode.nodeType === 3 ? selectionNode.parentElement : selectionNode)
+            .closest('.mini-table td, .mini-table th') : null;
+
+        let writingMode = '';
+        let transform = '';
+
+        if (direction === 'vertical-down') {
+            writingMode = 'vertical-rl';
+            transform = 'none';
+        } else if (direction === 'vertical-up') {
+            writingMode = 'vertical-rl';
+            transform = 'rotate(180deg)';
+        } else {
+            writingMode = 'horizontal-tb';
+            transform = 'none';
+        }
+
+        const targets = [];
+        if (selectedCells.length > 0) {
+            selectedCells.forEach(cell => targets.push(cell));
+        } else if (activeCell) {
+            targets.push(activeCell);
+        }
+
+        if (targets.length > 0) {
+            saveState();
+            targets.forEach(cell => {
+                const rStr = cell.dataset.row;
+                const cStr = cell.dataset.col;
+                if (rStr === undefined || cStr === undefined) return;
+                const r = parseInt(rStr);
+                const c = parseInt(cStr);
+
+                const table = cell.closest('.mini-table');
+                const blockItem = table ? table.closest('.block-item') : null;
+                const itemId = blockItem ? blockItem.getAttribute('data-id') : null;
+                const item = items.find(i => i.id === itemId);
+
+                if (item) {
+                    item.dirty = true;
+                    if (r === 0) {
+                        // Header row
+                        if (item.columns && item.columns[c]) {
+                            if (!item.columns[c].style) item.columns[c].style = {};
+                            item.columns[c].style.writingMode = writingMode;
+                            item.columns[c].style.transform = transform;
+                        }
+                    } else {
+                        // Body row
+                        const rIdx = r - 1;
+                        if (item.data && item.data[rIdx] && item.data[rIdx][c] !== undefined) {
+                            if (!item.data[rIdx][c] || typeof item.data[rIdx][c] !== 'object') {
+                                item.data[rIdx][c] = {
+                                    content: cell.innerHTML,
+                                    rs: 1,
+                                    cs: 1,
+                                    hidden: false
+                                };
+                            }
+                            item.data[rIdx][c].writingMode = writingMode;
+                            item.data[rIdx][c].transform = transform;
+                        }
+                    }
+                }
+
+                // Update DOM directly
+                cell.style.writingMode = writingMode;
+                const inner = cell.querySelector('.cell-wrapper, .header-content');
+                if (inner) {
+                    inner.style.transform = transform;
+                    inner.style.transformOrigin = 'center center';
+                    inner.style.display = 'inline-block';
+                    inner.style.width = '100%';
+                }
+            });
+            saveStateDebounced();
+        }
+    };
 
     /**
      * Xử lý tải ảnh lên và chèn vào vị trí con trỏ dưới dạng Base64.
@@ -1741,6 +1843,7 @@
     function updateTableCellProp(itemId, r, c, prop, val) {
         const item = items.find(i => i.id === itemId);
         if (!item) return;
+        item.dirty = true;
 
         const selectedCells = Array.from(document.querySelectorAll('.selected-cell'))
             .filter(cell => cell.closest('.block-item').getAttribute('data-id') === itemId);
@@ -1956,8 +2059,39 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- KẾT NỐI CÂN ĐIỆN TỬ -->
+                <div class="card border-0 shadow-none mb-3" style="background: linear-gradient(135deg, #f0fdf4, #dcfce7); border: 1px solid #bbf7d0 !important;">
+                    <div class="card-body p-3">
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <i class="fas fa-balance-scale text-success"></i>
+                            <label class="small fw-bold mb-0 text-success-emphasis">Kết nối Cân điện tử (RS-232)</label>
+                        </div>
+                        <div class="form-check form-switch ps-4 mb-2">
+                            <input class="form-check-input ms-n4" type="checkbox" id="scaleEnabledCheck_${fieldId}"
+                                   ${field.scaleEnabled ? 'checked' : ''}
+                                   onchange="syncFieldConfig('${fieldId}', 'scaleEnabled', this.checked); document.getElementById('scaleBrandRow_${fieldId}').classList.toggle('d-none', !this.checked);">
+                            <label class="form-check-label small fw-bold" for="scaleEnabledCheck_${fieldId}">
+                                Cho phép đọc từ cân điện tử
+                            </label>
+                        </div>
+                        <div id="scaleBrandRow_${fieldId}" class="${field.scaleEnabled ? '' : 'd-none'}">
+                            <label class="small text-muted mb-1" style="font-size: 0.72rem;">Hãng cân mặc định</label>
+                            <select class="form-select form-select-sm" onchange="syncFieldConfig('${fieldId}', 'scalePreset', this.value)">
+                                <option value="and"     ${(field.scalePreset || 'and') === 'and'      ? 'selected' : ''}>⚖️ A&D (AND)</option>
+                                <option value="mettler" ${(field.scalePreset) === 'mettler'           ? 'selected' : ''}>🏋️ Mettler Toledo</option>
+                                <option value="sartorius" ${(field.scalePreset) === 'sartorius'       ? 'selected' : ''}>🔬 Sartorius</option>
+                                <option value="custom"  ${(field.scalePreset) === 'custom'            ? 'selected' : ''}>⚙️ Tùy chỉnh</option>
+                            </select>
+                            <div class="form-text" style="font-size: 0.65rem;">
+                                Nút <i class="fas fa-balance-scale text-success"></i> sẽ xuất hiện cạnh ô nhập liệu ở chế độ Thực thi.
+                            </div>
+                        </div>
+                    </div>
+                </div>
             `;
         } else if (field.type === 'select') {
+
             const dsType = field.dataSource ? field.dataSource.type : 'manual';
             typeHtml += `
                 <div class="mb-3">
@@ -1999,7 +2133,30 @@
         }
 
         typeHtml += `
+            <div class="card bg-light border-0 shadow-none mb-3">
+                <div class="card-body p-3">
+                    <label class="small fw-bold mb-2"><i class="fas fa-arrows-alt-h me-1"></i>Kích thước & Vị trí</label>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <label class="small text-muted" style="font-size: 0.75em;">Chiều rộng (px)</label>
+                            <input type="number" class="form-control form-control-sm" placeholder="Mặc định" min="50"
+                                   value="${(field.style && field.style.width) ? parseInt(field.style.width) : ''}" 
+                                   oninput="const val = this.value ? this.value + 'px' : ''; syncFieldConfig('${fieldId}', 'style.width', val); const badge = document.querySelector('.ebmr-field-badge[data-field-id=\\'${fieldId}\\']'); if(badge) { if(val) badge.style.setProperty('width', val, 'important'); else badge.style.removeProperty('width'); }">
+                        </div>
+                        <div class="col-6">
+                            <label class="small text-muted" style="font-size: 0.75em;">Lề trái (px)</label>
+                            <input type="number" class="form-control form-control-sm" placeholder="Mặc định" min="0"
+                                   value="${(field.style && field.style.marginLeft) ? parseInt(field.style.marginLeft) : ''}" 
+                                   oninput="const val = this.value ? this.value + 'px' : ''; syncFieldConfig('${fieldId}', 'style.marginLeft', val); const badge = document.querySelector('.ebmr-field-badge[data-field-id=\\'${fieldId}\\']'); if(badge) { if(val) badge.style.setProperty('margin-left', val, 'important'); else badge.style.removeProperty('margin-left'); }">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        typeHtml += `
             <div class="mt-4 text-center">
+                <button class="btn btn-sm btn-outline-primary w-100 mb-2" onclick="copyVariable('${fieldId}')"><i class="fas fa-copy me-1"></i> Sao chép cấu hình</button>
                 <button class="btn btn-sm btn-outline-danger w-100" onclick="deleteDynamicField('${fieldId}')"><i class="fas fa-trash-alt me-1"></i> Xóa biến số</button>
             </div>
         `;
@@ -2306,17 +2463,9 @@
                         const td = s.textDecoration || '';
                         const fsz = s.fontSize || '';
                         const tc = s.textColor || '';
-                        return ` < th contenteditable = "false"
-                    spellcheck = "false"
-                    data - row = "0"
-                    data - col = "${cIdx}"
-                    class = "table-header-cell"
-                    style =
-                        "width: ${c.width || 'auto'}; background-color: ${bg}; text-align: ${align}; font-weight: ${fw}; font-style: ${fs}; text-decoration: ${td}; font-size: ${fsz}; color: ${tc};" >
-                        <
-                        div class = "header-content" > $ {
-                            c.label || ''
-                        } < /div></th > `;
+                        const wm = s.writingMode || '';
+                        const tf = s.transform || '';
+                        return `<th contenteditable="false" spellcheck="false" data-row="0" data-col="${cIdx}" class="table-header-cell" style="width: ${c.width || 'auto'}; background-color: ${bg}; text-align: ${align}; font-weight: ${fw}; font-style: ${fs}; text-decoration: ${td}; font-size: ${fsz}; color: ${tc}; writing-mode: ${wm};"><div class="header-content" style="transform: ${tf}; transform-origin: center center; display: inline-block; width: 100%;">${c.label || ''}</div></th>`;
                     }).join('')}</tr></thead>`;
                 }
 
@@ -2374,7 +2523,7 @@
                         }
 
                         cellsHtml +=
-                            `<td contenteditable="false" spellcheck="false" data-row="${r+1}" data-col="${c}" rowspan="${cell.rs || 1}" colspan="${cell.cs || 1}" ${onclickAttr} class="${cellClass}" style="width: ${cellWidth}; height: ${rowH}; background-color: ${cellBg}; text-align: ${cell.textAlign || ''}; font-weight: ${cell.fontWeight || ''}; font-style: ${cell.fontStyle || ''}; text-decoration: ${cell.textDecoration || ''}; font-size: ${cell.fontSize || ''}; color: ${cell.textColor || ''}; text-transform: ${cell.textTransform || ''};"><div class="cell-wrapper">${displayContent}</div></td>`;
+                            `<td contenteditable="false" spellcheck="false" data-row="${r+1}" data-col="${c}" rowspan="${cell.rs || 1}" colspan="${cell.cs || 1}" ${onclickAttr} class="${cellClass}" style="width: ${cellWidth}; height: ${rowH}; background-color: ${cellBg}; text-align: ${cell.textAlign || ''}; font-weight: ${cell.fontWeight || ''}; font-style: ${cell.fontStyle || ''}; text-decoration: ${cell.textDecoration || ''}; font-size: ${cell.fontSize || ''}; color: ${cell.textColor || ''}; text-transform: ${cell.textTransform || ''}; writing-mode: ${cell.writingMode || ''};"><div class="cell-wrapper" style="transform: ${cell.transform || ''}; transform-origin: center center; display: inline-block; width: 100%;">${displayContent}</div></td>`;
                     }
                     rowsHtml += `<tr>${cellsHtml}</tr>`;
                 }
@@ -2730,6 +2879,10 @@
         } else if (field.type === 'date') {
             inputType = 'text'; // Fallback for SweetAlert2 older versions
             inputAttributes.type = 'date';
+            
+            // Luôn luôn hiển thị giá trị input là ngày hiện tại (now)
+            const d = new Date();
+            currentVal = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         } else if (field.type === 'text') {
             inputType = 'textarea';
             inputAttributes.rows = 4;
@@ -2830,16 +2983,33 @@
             const isConfirmed = result.isConfirmed || (result.value !== undefined && !result.dismiss);
             
             if (isConfirmed) {
-                const finalValue = result.value;
+                let finalValue = result.value;
                 
                 console.log("Modal confirmed with value:", finalValue);
                 console.log("fieldId:", fieldId);
+
+                // Định dạng lại YYYY-MM-DD từ datepicker thành DD/MM/YYYY để hiển thị và lưu thống nhất
+                if (field.type === 'date' && finalValue) {
+                    const parts = finalValue.split('-');
+                    if (parts.length === 3) {
+                        finalValue = `${parts[2]}/${parts[1]}/${parts[0]}`;
+                    }
+                }
 
                 // Đảm bảo cấu trúc đồng nhất với Server (cell_id = 'default' cho các biến đơn)
                 if (typeof window.executionValues[fieldId] !== 'object' || window.executionValues[fieldId] === null) {
                     window.executionValues[fieldId] = {};
                 }
                 window.executionValues[fieldId]['default'] = finalValue;
+
+                // Ghi nhận thông tin người ký và thời gian tương tự tự động điền để phục vụ kiểm toán (BMR)
+                if (field.type === 'date') {
+                    if (!window.executionValues[fieldId]._meta) window.executionValues[fieldId]._meta = {};
+                    window.executionValues[fieldId]._meta['default'] = {
+                        by: '{{ session("user.fullName") ?? session("user.username") ?? "" }}',
+                        at: new Date().toISOString()
+                    };
+                }
 
                 console.log("window.executionValues after update:", window.executionValues);
 
@@ -3021,6 +3191,60 @@
         if (window._alertBeepInterval) {
             clearInterval(window._alertBeepInterval);
             window._alertBeepInterval = null;
+        }
+    };
+
+    let dateClickTimer = null;
+    window.handleDateVariableClick = function(event, fieldId, hasDefaultNow) {
+        if (event) event.stopPropagation();
+        if (!window.isExecutionMode) return;
+        if (window.isReadOnly) return;
+        
+        // Kiểm tra hasDefaultNow động từ fieldsConfig đề phòng trường hợp sidebar thiết lập giá trị mặc định "now" mà chưa re-render block
+        const field = fieldsConfig[fieldId];
+        const isNow = hasDefaultNow || (field && field.defaultValue && field.defaultValue.toLowerCase() === 'now');
+        
+        if (!isNow) {
+            openVariableInputModal(fieldId);
+            return;
+        }
+        
+        if (dateClickTimer) {
+            clearTimeout(dateClickTimer);
+            dateClickTimer = null;
+            autoFillDateVariable(fieldId);
+        } else {
+            dateClickTimer = setTimeout(() => {
+                dateClickTimer = null;
+                openVariableInputModal(fieldId);
+            }, 450);
+        }
+    };
+
+    window.autoFillDateVariable = function(fieldId) {
+        if (!window.isExecutionMode) return;
+        if (window.isReadOnly) return;
+
+        const now = new Date();
+        const timeString = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')} ${now.getDate().toString().padStart(2, '0')}/${(now.getMonth()+1).toString().padStart(2, '0')}/${now.getFullYear()}`;
+
+        if (!window.executionValues) window.executionValues = {};
+        if (typeof window.executionValues[fieldId] !== 'object' || window.executionValues[fieldId] === null) {
+            window.executionValues[fieldId] = {};
+        }
+        window.executionValues[fieldId]['default'] = timeString;
+
+        if (!window.executionValues[fieldId]._meta) window.executionValues[fieldId]._meta = {};
+        window.executionValues[fieldId]._meta['default'] = {
+            by: '{{ session("user.fullName") ?? session("user.username") ?? "" }}',
+            at: new Date().toISOString()
+        };
+
+        if (typeof window.recalculateAllFormulas === 'function') window.recalculateAllFormulas();
+        if (typeof renderBlocks === 'function') renderBlocks();
+        const field = fieldsConfig[fieldId];
+        if (field && field.block_id && typeof syncLinkedCharts === 'function') {
+            syncLinkedCharts(field.block_id);
         }
     };
 

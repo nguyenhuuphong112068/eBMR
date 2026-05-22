@@ -84,6 +84,18 @@
                         @enderror
                     </div>
 
+                    {{-- CHỨC VỤ --}}
+                    <div class="form-group">
+                        <label for="designationUpdate">Chức Vụ</label>
+                        <select class="form-control" name="designation_id" id="designationUpdate">
+                            <option value="">-- Chọn Chức Vụ --</option>
+                            @foreach ($designations as $designation)
+                                <option value="{{ $designation->id }}">
+                                    {{ $designation->name }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
 
                     <div class="row">
                         <div class="col-md-6">

@@ -39,8 +39,11 @@
 
         saveState();
         const item = items.find(i => i.id === selectedId);
-        
-        let minR = 999, maxR = -1, minC = 999, maxC = -1;
+
+        let minR = 999,
+            maxR = -1,
+            minC = 999,
+            maxC = -1;
         cells.forEach(c => {
             const r = parseInt(c.dataset.row) - 1;
             const co = parseInt(c.dataset.col);
@@ -51,7 +54,12 @@
         });
 
         if (!item.data[minR][minC] || typeof item.data[minR][minC] !== 'object') {
-            item.data[minR][minC] = { content: item.data[minR][minC] || '', rs: 1, cs: 1, hidden: false };
+            item.data[minR][minC] = {
+                content: item.data[minR][minC] || '',
+                rs: 1,
+                cs: 1,
+                hidden: false
+            };
         }
         const mainCell = item.data[minR][minC];
         mainCell.rs = maxR - minR + 1;
@@ -62,7 +70,12 @@
             for (let c = minC; c <= maxC; c++) {
                 if (r === minR && c === minC) continue;
                 if (!item.data[r][c] || typeof item.data[r][c] !== 'object') {
-                    item.data[r][c] = { content: item.data[r][c] || '', rs: 1, cs: 1, hidden: false };
+                    item.data[r][c] = {
+                        content: item.data[r][c] || '',
+                        rs: 1,
+                        cs: 1,
+                        hidden: false
+                    };
                 }
                 if (item.data[r][c].content) {
                     combinedContent += (combinedContent ? " " : "") + item.data[r][c].content;
@@ -72,6 +85,7 @@
         }
         if (combinedContent) mainCell.content += (mainCell.content ? " " : "") + combinedContent;
 
+        item.dirty = true;
         renderBlocks();
     }
 
@@ -82,7 +96,12 @@
         if (r < 0 || !item) return;
 
         if (!item.data[r][c] || typeof item.data[r][c] !== 'object') {
-            item.data[r][c] = { content: item.data[r][c] || '', rs: 1, cs: 1, hidden: false };
+            item.data[r][c] = {
+                content: item.data[r][c] || '',
+                rs: 1,
+                cs: 1,
+                hidden: false
+            };
         }
         const cell = item.data[r][c];
 
@@ -118,7 +137,12 @@
             for (let ir = r; ir < r + totalRs; ir++) {
                 for (let ic = c; ic < c + totalCs; ic++) {
                     if (!item.data[ir][ic] || typeof item.data[ir][ic] !== 'object') {
-                        item.data[ir][ic] = { content: item.data[ir][ic] || '', rs: 1, cs: 1, hidden: false };
+                        item.data[ir][ic] = {
+                            content: item.data[ir][ic] || '',
+                            rs: 1,
+                            cs: 1,
+                            hidden: false
+                        };
                     }
                     item.data[ir][ic].hidden = true;
                     item.data[ir][ic].rs = 1;
@@ -141,9 +165,18 @@
                 for (let i = 0; i < extraCols; i++) {
                     const insertAt = c + 1;
                     item.cols++;
-                    item.columns.splice(insertAt, 0, { label: 'Split', type: 'text', width: 'auto' });
+                    item.columns.splice(insertAt, 0, {
+                        label: 'Split',
+                        type: 'text',
+                        width: 'auto'
+                    });
                     for (let ir = 0; ir < item.rows; ir++) {
-                        item.data[ir].splice(insertAt, 0, { content: '', rs: 1, cs: 1, hidden: true });
+                        item.data[ir].splice(insertAt, 0, {
+                            content: '',
+                            rs: 1,
+                            cs: 1,
+                            hidden: true
+                        });
                         const rowCell = item.data[ir][c];
                         if (ir >= r && ir < r + totalRs) {
                             if (ir === r) item.data[ir][insertAt].hidden = false;
@@ -161,10 +194,15 @@
                 for (let i = 0; i < extraRows; i++) {
                     const insertAt = r + 1;
                     item.rows++;
-                    if (!item.rowHeights) item.rowHeights = new Array(item.rows-1).fill('auto');
+                    if (!item.rowHeights) item.rowHeights = new Array(item.rows - 1).fill('auto');
                     item.rowHeights.splice(insertAt, 0, 'auto');
                     const newRow = [];
-                    for(let ic=0; ic < item.cols; ic++) newRow.push({content:'', rs:1, cs:1, hidden:true});
+                    for (let ic = 0; ic < item.cols; ic++) newRow.push({
+                        content: '',
+                        rs: 1,
+                        cs: 1,
+                        hidden: true
+                    });
                     item.data.splice(insertAt, 0, newRow);
 
                     for (let ic = 0; ic < item.cols; ic++) {
@@ -189,11 +227,13 @@
             const modalInstance = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
             modalInstance.hide();
         }
+        item.dirty = true;
         renderBlocks();
     }
 
     // --- Manual Sizing ---
     function updateManualSize(type, val) {
+
         saveState();
         const item = items.find(i => i.id === selectedId);
         if (!item || item.type !== 'table') return;
@@ -219,15 +259,17 @@
                 item.rowHeights[rowIdx] = val;
             });
         }
+        item.dirty = true;
         renderBlocks();
     }
 
     function distributeTableSizes(type) {
+
         saveState();
         const item = items.find(i => i.id === selectedId);
         if (!item || item.type !== 'table') return;
         const cells = document.querySelectorAll('.selected-cell');
-        
+
         if (type === 'cols') {
             const selectedCols = new Set();
             cells.forEach(cell => selectedCols.add(parseInt(cell.dataset.col)));
@@ -252,6 +294,7 @@
                 selectedRows.forEach(rIdx => item.rowHeights[rIdx] = firstRowH);
             }
         }
+        item.dirty = true;
         renderBlocks();
     }
 </script>

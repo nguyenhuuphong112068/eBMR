@@ -662,4 +662,348 @@
             .replace(/"/g, "&quot;")
             .replace(/'/g, "&#039;");
     }
+
+    window.duplicateFieldBadgesInHtml = function(html) {
+        if (!html || typeof html !== 'string' || !html.includes('ebmr-field-badge')) {
+            return html;
+        }
+        
+        let configObj = null;
+        if (typeof fieldsConfig !== 'undefined') {
+            configObj = fieldsConfig;
+        } else if (window.fieldsConfig) {
+            configObj = window.fieldsConfig;
+        }
+        if (!configObj) return html;
+
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = html;
+        const badges = tempDiv.querySelectorAll('.ebmr-field-badge');
+        
+        badges.forEach(badge => {
+            const oldId = badge.getAttribute('data-field-id');
+            if (oldId && configObj[oldId]) {
+                const newId = 'field_' + Math.floor(Math.random() * 1000000);
+                const oldConfig = configObj[oldId];
+                
+                // Tạo config mới, đổi tên tránh trùng
+                let newName = oldConfig.name || `Var_${newId}`;
+                let baseName = newName;
+                let num = 1;
+                const match = newName.match(/^(.*?)(\d+)$/);
+                if (match) {
+                    baseName = match[1];
+                    num = parseInt(match[2]) + 1;
+                }
+                
+                newName = baseName + num;
+                while (Object.values(configObj).some(f => f && f.name === newName)) {
+                    num++;
+                    newName = baseName + num;
+                }
+                
+                configObj[newId] = {
+                    ...oldConfig,
+                    id: newId,
+                    name: newName
+                };
+                
+                badge.setAttribute('data-field-id', newId);
+                badge.setAttribute('onclick', `selectField(event, '${newId}')`);
+            }
+        });
+        
+        return tempDiv.innerHTML;
+    };
+
+    window.copyVariable = function(fieldId) {
+        const field = fieldsConfig[fieldId];
+        if (!field) return;
+        window.copiedVariableConfig = JSON.parse(JSON.stringify(field));
+        toastr.success('Đã sao chép cấu hình biến số: ' + (field.label || field.name));
+    };
+
+    window.pasteVariable = function() {
+        if (!window.copiedVariableConfig) {
+            toastr.warning('Chưa có biến số nào được sao chép.');
+            return;
+        }
+
+        const oldConfig = window.copiedVariableConfig;
+
+        // Check if there is an active table cell selection or selected cells
+        const selectedCells = document.querySelectorAll('.selected-cell');
+        if (selectedCells.length > 0) {
+            saveState();
+            selectedCells.forEach(td => {
+                const block = td.closest('.block-item');
+                if (!block) return;
+                const blockId = block.getAttribute('data-id');
+                const item = items.find(i => i.id === blockId);
+                if (!item || item.type !== 'table') return;
+
+                const rStr = td.dataset.row;
+                const cStr = td.dataset.col;
+                if (rStr === undefined || cStr === undefined) return;
+
+                const r = parseInt(rStr) - 1; // 1-indexed for non-header
+                const c = parseInt(cStr);
+
+                // For multi-cell, each cell needs a unique ID!
+                const cellId = 'field_' + Math.floor(Math.random() * 1000000);
+                let cellName = oldConfig.name || `Var_${cellId}`;
+                let cellBaseName = cellName;
+                let cellNum = 1;
+                const cellMatch = cellName.match(/^(.*?)(\d+)$/);
+                if (cellMatch) {
+                    cellBaseName = cellMatch[1];
+                    cellNum = parseInt(cellMatch[2]) + 1;
+                }
+                
+                cellName = cellBaseName + cellNum;
+                while (Object.values(fieldsConfig).some(f => f && f.name === cellName)) {
+                    cellNum++;
+                    cellName = cellBaseName + cellNum;
+                }
+
+                fieldsConfig[cellId] = {
+                    ...oldConfig,
+                    id: cellId,
+                    name: cellName,
+                    block_id: blockId,
+                    section_id: item.section_id || null
+                };
+
+                const cellBadgeHtml = `<span contenteditable="false" class="ebmr-field-badge" data-field-id="${cellId}" onclick="selectField(event, '${cellId}')"></span>\u200B`;
+
+                if (!item.data[r][c] || typeof item.data[r][c] !== 'object') {
+                    item.data[r][c] = {
+                        content: cellBadgeHtml,
+                        rs: 1,
+                        cs: 1,
+                        hidden: false
+                    };
+                } else {
+                    item.data[r][c].content = cellBadgeHtml;
+                }
+                item.dirty = true;
+            });
+            renderBlocks();
+            toastr.success('Đã dán biến số vào các ô đã chọn');
+            return;
+        }
+
+        // Insert at cursor
+        if (savedTextSelection) {
+            const currentSel = window.getSelection();
+            currentSel.removeAllRanges();
+            currentSel.addRange(savedTextSelection);
+        }
+
+        const currentSel = window.getSelection();
+        if (currentSel && currentSel.rangeCount > 0) {
+            const range = currentSel.getRangeAt(0);
+            
+            // Check if cursor is actually inside a contenteditable area
+            const startContainer = range.startContainer;
+            const element = startContainer.nodeType === 1 ? startContainer : startContainer.parentElement;
+            if (element && element.closest('[contenteditable="true"]')) {
+                const newId = 'field_' + Math.floor(Math.random() * 1000000);
+                
+                let newName = oldConfig.name || `Var_${newId}`;
+                let baseName = newName;
+                let num = 1;
+                const match = newName.match(/^(.*?)(\d+)$/);
+                if (match) {
+                    baseName = match[1];
+                    num = parseInt(match[2]) + 1;
+                }
+                
+                newName = baseName + num;
+                while (Object.values(fieldsConfig).some(f => f && f.name === newName)) {
+                    num++;
+                    newName = baseName + num;
+                }
+
+                let detectedBlockId = selectedId;
+                let detectedSectionId = window.activeSectionId;
+                const blockEl = element.closest('.block-item');
+                if (blockEl) {
+                    detectedBlockId = blockEl.getAttribute('data-id');
+                    const sectionEl = blockEl.closest('.section-group-wrapper');
+                    if (sectionEl) {
+                        detectedSectionId = sectionEl.getAttribute('data-section-id');
+                    }
+                }
+
+                fieldsConfig[newId] = {
+                    ...oldConfig,
+                    id: newId,
+                    name: newName,
+                    block_id: detectedBlockId,
+                    section_id: detectedSectionId
+                };
+
+                const span = document.createElement('span');
+                span.contentEditable = "false";
+                span.className = "ebmr-field-badge";
+                span.setAttribute('data-field-id', newId);
+                span.setAttribute('onclick', `selectField(event, '${newId}')`);
+                const zeroWidthSpace = document.createTextNode('\u200B');
+                
+                range.deleteContents();
+                range.insertNode(zeroWidthSpace);
+                range.insertNode(span);
+                range.setStartAfter(zeroWidthSpace);
+                range.collapse(true);
+                currentSel.removeAllRanges();
+                currentSel.addRange(range);
+                
+                const ce = span.closest('[contenteditable="true"]');
+                if (ce) {
+                    ce.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+                saveStateDebounced();
+                renderBlocks();
+                selectField(null, newId);
+                toastr.success('Đã dán biến số thành công');
+                return;
+            }
+        }
+        
+        // If not in contenteditable, check if we have a single active table cell
+        const activeCell = document.querySelector('td.active, th.active') || document.activeElement?.closest('td, th');
+        if (activeCell) {
+            const block = activeCell.closest('.block-item');
+            if (block) {
+                const blockId = block.getAttribute('data-id');
+                const item = items.find(i => i.id === blockId);
+                if (item && item.type === 'table') {
+                    const rStr = activeCell.dataset.row;
+                    const cStr = activeCell.dataset.col;
+                    if (rStr !== undefined && cStr !== undefined) {
+                        saveState();
+                        const r = parseInt(rStr) - 1;
+                        const c = parseInt(cStr);
+                        if (r >= 0) {
+                            const newId = 'field_' + Math.floor(Math.random() * 1000000);
+                            
+                            let newName = oldConfig.name || `Var_${newId}`;
+                            let baseName = newName;
+                            let num = 1;
+                            const match = newName.match(/^(.*?)(\d+)$/);
+                            if (match) {
+                                baseName = match[1];
+                                num = parseInt(match[2]) + 1;
+                            }
+                            
+                            newName = baseName + num;
+                            while (Object.values(fieldsConfig).some(f => f && f.name === newName)) {
+                                num++;
+                                newName = baseName + num;
+                            }
+
+                            fieldsConfig[newId] = {
+                                ...oldConfig,
+                                id: newId,
+                                name: newName,
+                                block_id: blockId,
+                                section_id: item.section_id || null
+                            };
+
+                            const cellBadgeHtml = `<span contenteditable="false" class="ebmr-field-badge" data-field-id="${newId}" onclick="selectField(event, '${newId}')"></span>\u200B`;
+
+                            if (!item.data[r][c] || typeof item.data[r][c] !== 'object') {
+                                item.data[r][c] = { content: cellBadgeHtml, rs: 1, cs: 1, hidden: false };
+                            } else {
+                                item.data[r][c].content = cellBadgeHtml;
+                            }
+                            item.dirty = true;
+                            renderBlocks();
+                            selectField(null, newId);
+                            toastr.success('Đã dán biến số vào ô đang chọn');
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        toastr.warning('Vui lòng đặt con trỏ chuột vào vùng soạn thảo hoặc chọn ô bảng để dán biến số.');
+    };
+
+    /**
+     * Kích hoạt chế độ kéo thả điều chỉnh kích thước (width) và vị trí (margin-left) của thẻ biến số.
+     * @param {MouseEvent} e - Sự kiện mousedown.
+     * @param {string} fieldId - ID của biến số.
+     * @param {string} handleType - 'left' để chỉnh lề trái, 'right' để chỉnh độ rộng.
+     */
+    window.initBadgeResize = function(e, fieldId, handleType) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // Chọn biến số để cập nhật Properties Panel
+        if (typeof selectField === 'function') {
+            selectField(null, fieldId);
+        }
+        
+        const badgeEl = document.querySelector(`.ebmr-field-badge[data-field-id="${fieldId}"]`);
+        if (!badgeEl) return;
+        
+        const initialMouseX = e.clientX;
+        
+        if (!fieldsConfig[fieldId]) {
+            fieldsConfig[fieldId] = { id: fieldId };
+        }
+        if (!fieldsConfig[fieldId].style) {
+            fieldsConfig[fieldId].style = {};
+        }
+        const styleObj = fieldsConfig[fieldId].style;
+        
+        const computedStyle = window.getComputedStyle(badgeEl);
+        const initialWidth = parseInt(styleObj.width || computedStyle.width) || badgeEl.offsetWidth;
+        const initialMarginLeft = parseInt(styleObj.marginLeft || computedStyle.marginLeft) || 0;
+        
+        const originalBodyCursor = document.body.style.cursor;
+        document.body.style.cursor = 'ew-resize';
+        
+        const onMouseMove = (moveEvent) => {
+            const deltaX = moveEvent.clientX - initialMouseX;
+            
+            if (handleType === 'right') {
+                const newWidth = Math.max(50, initialWidth + deltaX);
+                badgeEl.style.setProperty('width', `${newWidth}px`, 'important');
+                styleObj.width = `${newWidth}px`;
+                
+                // Đồng bộ lên Input chiều rộng trong Properties Panel nếu đang chọn
+                const wInput = document.querySelector('input[oninput*="style.width"]');
+                if (wInput && selectedFieldId === fieldId) {
+                    wInput.value = newWidth;
+                }
+            } else if (handleType === 'left') {
+                const newMarginLeft = Math.max(0, initialMarginLeft + deltaX);
+                badgeEl.style.setProperty('margin-left', `${newMarginLeft}px`, 'important');
+                styleObj.marginLeft = `${newMarginLeft}px`;
+                
+                // Đồng bộ lên Input lề trái trong Properties Panel nếu đang chọn
+                const mlInput = document.querySelector('input[oninput*="style.marginLeft"]');
+                if (mlInput && selectedFieldId === fieldId) {
+                    mlInput.value = newMarginLeft;
+                }
+            }
+        };
+        
+        const onMouseUp = () => {
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+            document.body.style.cursor = originalBodyCursor;
+            
+            if (typeof saveStateDebounced === 'function') {
+                saveStateDebounced();
+            }
+        };
+        
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+    };
 </script>

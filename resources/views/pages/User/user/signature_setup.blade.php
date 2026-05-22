@@ -25,7 +25,7 @@
                     <div class="d-flex align-items-center gap-2">
                         <span class="small fw-bold text-muted me-1">Màu mực:</span>
                         <button type="button" class="btn btn-sm rounded-circle sig-color-btn active" style="width: 28px; height: 28px; background-color: #0000aa; border: 2px solid #fff; box-shadow: 0 0 0 1px #cbd5e1;" onclick="changeSigColor('#0000aa')" title="Mực xanh"></button>
-                        <button type="button" class="btn btn-sm rounded-circle sig-color-btn" style="width: 28px; height: 28px; background-color: #000000; border: 2px solid #fff; box-shadow: 0 0 0 1px #cbd5e1;" onclick="changeSigColor('#000000')" title="Mực đen"></button>
+                        <button type="button" class="btn btn-sm rounded-circle sig-color-btn" style="width: 28px; height: 28px; background-color: #f406f8ff; border: 2px solid #fff; box-shadow: 0 0 0 1px #cbd5e1;" onclick="changeSigColor('#f406f8ff')" title="Mực đen"></button>
                     </div>
                     
                     <div class="d-flex gap-2">
@@ -260,25 +260,29 @@
             
             Swal.fire({
                 title: 'Xác thực mật khẩu',
-                text: 'Vui lòng nhập mật khẩu đăng nhập của bạn để tiếp tục cấu hình chữ ký:',
-                input: 'password',
-                inputAttributes: {
-                    autocapitalize: 'off',
-                    autocorrect: 'off',
-                    required: 'true',
-                    placeholder: 'Mật khẩu của bạn'
-                },
+                html: `
+                    <div class="mb-3 text-muted text-center" style="font-size: 0.95rem; line-height: 1.5;">Vui lòng nhập mật khẩu đăng nhập của bạn để tiếp tục cấu hình chữ ký:</div>
+                    <div style="position: relative; width: 100%; max-width: 360px; margin: 0 auto; display: flex; align-items: center;">
+                        <input type="password" id="swal-input-password" class="swal2-input" placeholder="Mật khẩu của bạn" autofocus style="width: 100%; box-sizing: border-box; padding-right: 40px; margin: 0;">
+                        <button type="button" id="toggle-password-btn" onclick="const inp = document.getElementById('swal-input-password'); const isP = inp.type === 'password'; inp.type = isP ? 'text' : 'password'; this.innerHTML = isP ? '<i class=&quot;fas fa-eye-slash&quot;></i>' : '<i class=&quot;fas fa-eye&quot;></i>'; inp.focus();" style="position: absolute; right: 15px; background: none; border: none; cursor: pointer; color: #6b7280; font-size: 1.1rem; padding: 4px; outline: none; z-index: 10; display: flex; align-items: center; justify-content: center; line-height: 1;">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                `,
                 showCancelButton: true,
                 confirmButtonColor: '#0891b2',
                 cancelButtonColor: '#ef4444',
                 confirmButtonText: 'Xác thực',
                 cancelButtonText: 'Hủy',
                 showLoaderOnConfirm: true,
-                preConfirm: (password) => {
+                preConfirm: () => {
+                    const passwordInput = document.getElementById('swal-input-password');
+                    const password = passwordInput ? passwordInput.value : '';
                     if (!password) {
                         Swal.showValidationMessage('Vui lòng nhập mật khẩu.');
                         return false;
                     }
+                    
                     return fetch("{{ route('pages.ebmr.verifyPassword') }}", {
                         method: 'POST',
                         headers: {
@@ -306,7 +310,8 @@
                 },
                 allowOutsideClick: () => !Swal.isLoading()
             }).then((result) => {
-                if (result.isConfirmed) {
+               
+                if (result) {
                     currentSigSetupUserId = userId;
                     
                     // Cập nhật trạng thái alert dựa trên việc có chữ ký hay chưa

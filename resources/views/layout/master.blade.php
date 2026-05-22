@@ -2123,7 +2123,7 @@
         })();
     </script>
     <script src="{{ asset('js/tribute.min.js') }}"></script>
-    @include('layout.signature_setup')
+    @include('pages.user.user.signature_setup')
 </body>
 
 </html>

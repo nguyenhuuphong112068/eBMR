@@ -1,11 +1,17 @@
 <!-- Google Docs Style Toolbar -->
 <div class="editor-toolbar shadow-sm d-flex flex-column px-4 py-2 bg-white">
     <div class="d-flex align-items-center w-100">
-        <div class="d-flex align-items-center border-end pe-3 me-3 gap-1 {{ $isReadOnly ? 'opacity-50 pointer-events-none' : '' }}">
-            <button class="btn btn-toolbar" onclick="undo()" title="Undo" {{ $isReadOnly ? 'disabled' : '' }}><i class="fas fa-undo"></i></button>
-            <button class="btn btn-toolbar" onclick="redo()" title="Redo" {{ $isReadOnly ? 'disabled' : '' }}><i class="fas fa-redo"></i></button>
-            <button class="btn btn-toolbar" id="btn-format-painter" onclick="toggleFormatPainter()" title="Sao chép định dạng" {{ $isReadOnly ? 'disabled' : '' }}><i class="fas fa-paint-roller"></i></button>
-            <button class="btn btn-toolbar" onclick="clearFormatting()" title="Xóa định dạng" {{ $isReadOnly ? 'disabled' : '' }}><i class="fas fa-remove-format"></i></button>
+        <div
+            class="d-flex align-items-center border-end pe-3 me-3 gap-1 {{ $isReadOnly ? 'opacity-50 pointer-events-none' : '' }}">
+            <button class="btn btn-toolbar" onclick="undo()" title="Undo" {{ $isReadOnly ? 'disabled' : '' }}><i
+                    class="fas fa-undo"></i></button>
+            <button class="btn btn-toolbar" onclick="redo()" title="Redo" {{ $isReadOnly ? 'disabled' : '' }}><i
+                    class="fas fa-redo"></i></button>
+            <button class="btn btn-toolbar" id="btn-format-painter" onclick="toggleFormatPainter()"
+                title="Sao chép định dạng" {{ $isReadOnly ? 'disabled' : '' }}><i
+                    class="fas fa-paint-roller"></i></button>
+            <button class="btn btn-toolbar" onclick="clearFormatting()" title="Xóa định dạng"
+                {{ $isReadOnly ? 'disabled' : '' }}><i class="fas fa-remove-format"></i></button>
             <button class="btn btn-toolbar" onclick="openTemplateModal()" title="Mở hồ sơ">
                 <i class="fas fa-folder-open"></i>
             </button>
@@ -14,7 +20,8 @@
             </button>
             <button class="btn btn-toolbar" onclick="window.print()" title="In hồ sơ"><i
                     class="fas fa-print"></i></button>
-            <button class="btn btn-toolbar" onclick="document.getElementById('wordImporter').click()" title="Nhập từ Word (.doc, .docx)">
+            <button class="btn btn-toolbar" onclick="document.getElementById('wordImporter').click()"
+                title="Nhập từ Word (.doc, .docx)">
                 <i class="fas fa-file-word text-primary"></i>
             </button>
             <input type="file" id="wordImporter" class="d-none" accept=".doc, .docx" onchange="importWordFile(this)">
@@ -27,7 +34,7 @@
                     data-toggle="dropdown" aria-expanded="false" title="Chèn Bảng">
                     <i class="fas fa-table"></i>
                 </button>
-                    <div class="dropdown-menu table-selector-dropdown p-3" aria-labelledby="tableDropdown">
+                <div class="dropdown-menu table-selector-dropdown p-3" aria-labelledby="tableDropdown">
                     <div class="grid-container" id="table-grid">
                     </div>
                     <div class="grid-label" id="grid-selection-label">1 x 1 Table</div>
@@ -49,7 +56,8 @@
             </button>
 
 
-            <button class="btn btn-toolbar-action" onmousedown="event.preventDefault();" onclick="openLinkGfModal()" title="BM Chung">
+            <button class="btn btn-toolbar-action" onmousedown="event.preventDefault();" onclick="openLinkGfModal()"
+                title="BM Chung">
                 <i class="fas fa-link"></i>
             </button>
 
@@ -68,34 +76,53 @@
                     onclick="insertDynamicField()" title="Chèn Biến số">
                     <i class="fas fa-keyboard"></i>
                 </button>
-                <button type="button" class="btn btn-toolbar-action text-primary dropdown-toggle dropdown-toggle-split" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                <button type="button" class="btn btn-toolbar-action text-primary dropdown-toggle dropdown-toggle-split"
+                    data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                     <span class="sr-only">Toggle Dropdown</span>
                 </button>
                 <div class="dropdown-menu shadow-lg p-2" style="border-radius: 12px; min-width: 180px;">
-                    <button class="dropdown-item rounded mb-1" onclick="insertDynamicField('text')">✒️ Nhập Văn bản</button>
-                    <button class="dropdown-item rounded mb-1" onclick="insertDynamicField('number')">🔢 Nhập Số</button>
-                    <button class="dropdown-item rounded mb-1" onclick="insertDynamicField('date')">📅 Nhập Ngày</button>
-                    <button class="dropdown-item rounded mb-1" onclick="insertDynamicField('signature')">✍️ Nhập Chữ ký</button>
-                    <button class="dropdown-item rounded mb-1" onclick="insertDynamicField('checkbox')">☑️ Nhập Tick</button>
-                    <button class="dropdown-item rounded mb-1" onclick="insertDynamicField('select')">🔘 Nhập Lựa chọn</button>
-                    <button class="dropdown-item rounded mb-1" onclick="insertDynamicField('formula')">🧮 Thiết lập Công thức</button>
+                    <button class="dropdown-item rounded mb-1" onclick="insertDynamicField('text')">✒️ Nhập Văn
+                        bản</button>
+                    <button class="dropdown-item rounded mb-1" onclick="insertDynamicField('number')">🔢 Nhập
+                        Số</button>
+                    <button class="dropdown-item rounded mb-1" onclick="insertDynamicField('date')">📅 Nhập
+                        Ngày</button>
+                    <button class="dropdown-item rounded mb-1" onclick="insertDynamicField('signature')">✍️ Nhập Chữ
+                        ký</button>
+                    <button class="dropdown-item rounded mb-1" onclick="insertDynamicField('checkbox')">☑️ Nhập
+                        Tick</button>
+                    <button class="dropdown-item rounded mb-1" onclick="insertDynamicField('select')">🔘 Nhập Lựa
+                        chọn</button>
+                    <button class="dropdown-item rounded mb-1" onclick="insertDynamicField('formula')">🧮 Thiết lập
+                        Công thức</button>
                 </div>
             </div>
 
-            <button class="btn btn-toolbar-action text-success fw-bold ms-1" onmousedown="event.preventDefault();" onclick="toggleCriteriaSidebar()" title="Liên kết Tiêu chuẩn (Data-Binding)">
+            <button class="btn btn-toolbar-action text-primary ms-1" onmousedown="event.preventDefault();"
+                onclick="pasteVariable()" title="Dán Biến số (Ctrl + Shift + V hoặc click)">
+                <i class="fas fa-paste"></i>
+            </button>
+
+            <button class="btn btn-toolbar-action text-success fw-bold ms-1" onmousedown="event.preventDefault();"
+                onclick="toggleCriteriaSidebar()" title="Liên kết Tiêu chuẩn (Data-Binding)">
                 <i class="fas fa-vial"></i>
             </button>
-            <button class="btn btn-toolbar-action text-muted ms-1" onmousedown="event.preventDefault();" onclick="openSymbolModal()" title="Ký hiệu đặc biệt">
+            <button class="btn btn-toolbar-action text-muted ms-1" onmousedown="event.preventDefault();"
+                onclick="openSymbolModal()" title="Ký hiệu đặc biệt">
                 <i class="fas fa-omega"></i>
             </button>
-            <button class="btn btn-toolbar-action text-danger fw-bold ms-1" onmousedown="event.preventDefault();" onclick="insertDocumentNetworkLink()" title="Liên kết tài liệu mạng (PDF)">
+            <button class="btn btn-toolbar-action text-danger fw-bold ms-1" onmousedown="event.preventDefault();"
+                onclick="insertDocumentNetworkLink()" title="Liên kết tài liệu mạng (PDF)">
                 <i class="fas fa-file-pdf"></i>
             </button>
-            <button class="btn btn-toolbar-action text-secondary ms-1" onmousedown="event.preventDefault();" onclick="removeDocumentNetworkLink()" title="Hủy liên kết tài liệu mạng">
+            <button class="btn btn-toolbar-action text-secondary ms-1" onmousedown="event.preventDefault();"
+                onclick="removeDocumentNetworkLink()" title="Hủy liên kết tài liệu mạng">
                 <i class="fas fa-unlink"></i>
             </button>
 
-            <button class="btn btn-toolbar-action text-primary ms-2 border-start ps-2" onmousedown="event.preventDefault();" onclick="openVariableSummaryModal()" title="Danh sách biến số đã cài đặt">
+            <button class="btn btn-toolbar-action text-primary ms-2 border-start ps-2"
+                onmousedown="event.preventDefault();" onclick="openVariableSummaryModal()"
+                title="Danh sách biến số đã cài đặt">
                 <i class="fas fa-tasks"></i>
             </button>
         </div>
@@ -103,10 +130,9 @@
         <div class="ms-auto d-flex gap-2">
             <!-- Designer / Execute Mode Toggle -->
             <!-- Designer / Execute Mode Toggle (Unified) -->
-            <button type="button" id="btn-mode-toggle" 
-                class="btn btn-sm px-3 {{ empty($isExecutionMode) ? 'btn-primary' : 'btn-success' }}" 
-                onclick="setDesignerMode(!window.isExecutionMode)" 
-                style="border-radius: 20px;"
+            <button type="button" id="btn-mode-toggle"
+                class="btn btn-sm px-3 {{ empty($isExecutionMode) ? 'btn-primary' : 'btn-success' }}"
+                onclick="setDesignerMode(!window.isExecutionMode)" style="border-radius: 20px;"
                 title="Chuyển chế độ (Ctrl + E)">
                 <i class="fas {{ empty($isExecutionMode) ? 'fa-edit' : 'fa-play' }} me-1"></i>
                 <span id="mode-text">{{ empty($isExecutionMode) ? 'Thiết kế' : 'Chạy thử' }}</span>
@@ -114,10 +140,12 @@
 
             <!-- Language Selector -->
             <div class="btn-group" role="group">
-                <button id="langModeBtn" type="button" class="btn btn-outline-secondary px-2 dropdown-toggle" data-toggle="dropdown" style="border-radius: 20px;" title="Ngôn ngữ">
+                <button id="langModeBtn" type="button" class="btn btn-outline-secondary px-2 dropdown-toggle"
+                    data-toggle="dropdown" style="border-radius: 20px;" title="Ngôn ngữ">
                     <i class="fas fa-language"></i>
                 </button>
-                <div class="dropdown-menu dropdown-menu-right shadow-lg p-2" style="border-radius: 12px; min-width: 200px;">
+                <div class="dropdown-menu dropdown-menu-right shadow-lg p-2"
+                    style="border-radius: 12px; min-width: 200px;">
                     <button class="dropdown-item rounded mb-1" onclick="setLanguageMode('vi')">
                         <i class="fas fa-check me-2 text-success" id="check-vi"></i> 1. Tiếng Việt (Gốc)
                     </button>
@@ -134,7 +162,8 @@
                 </div>
             </div>
 
-            <button id="viewModeToggle" class="btn {{ empty($activeSectionId) ? 'btn-info' : 'btn-outline-info' }} px-3"
+            <button id="viewModeToggle"
+                class="btn {{ empty($activeSectionId) ? 'btn-info' : 'btn-outline-info' }} px-3"
                 onclick="toggleViewMode()" style="border-radius: 20px;" title="Thay đổi chế độ xem">
                 @if (empty($activeSectionId))
                     <i class="fas fa-th-list"></i>
@@ -142,7 +171,8 @@
                     <i class="fas fa-expand-arrows-alt"></i>
                 @endif
             </button>
-            <button class="btn btn-navy px-3" onclick="saveTemplate()" style="border-radius: 20px;" {{ $isReadOnly ? 'disabled' : '' }} title="Lưu hồ sơ mẫu">
+            <button class="btn btn-navy px-3" onclick="saveTemplate()" style="border-radius: 20px;"
+                {{ $isReadOnly ? 'disabled' : '' }} title="Lưu hồ sơ mẫu">
                 <i class="fas fa-cloud-upload-alt"></i>
             </button>
         </div>
@@ -161,14 +191,18 @@
             <option value="P">Đoạn văn (14pt)</option>
         </select>
         <div class="d-flex align-items-center gap-1 border-start ps-2 ms-2 border-end pe-2">
-            <button class="btn btn-toolbar-action p-0 d-flex align-items-center justify-content-center" style="width: 24px; height: 24px; border-radius: 4px;" onclick="changeFontSize(-1)" title="Giảm cỡ chữ">
+            <button class="btn btn-toolbar-action p-0 d-flex align-items-center justify-content-center"
+                style="width: 24px; height: 24px; border-radius: 4px;" onclick="changeFontSize(-1)"
+                title="Giảm cỡ chữ">
                 <i class="fas fa-minus" style="font-size: 0.7rem;"></i>
             </button>
             <div class="dropdown d-inline-block" title="Cỡ chữ">
-                <button class="btn btn-toolbar dropdown-toggle px-2 fw-bold" type="button" data-toggle="dropdown" aria-expanded="false" style="min-width: 45px;">
+                <button class="btn btn-toolbar dropdown-toggle px-2 fw-bold" type="button" data-toggle="dropdown"
+                    aria-expanded="false" style="min-width: 45px;">
                     <span id="fontSizeDisplay">16</span>
                 </button>
-                <div class="dropdown-menu shadow-lg p-2" style="min-width: 80px; max-height: 300px; overflow-y: auto;">
+                <div class="dropdown-menu shadow-lg p-2"
+                    style="min-width: 80px; max-height: 300px; overflow-y: auto;">
                     <button class="dropdown-item rounded mb-1" onclick="applyCustomFontSize(10)">10</button>
                     <button class="dropdown-item rounded mb-1" onclick="applyCustomFontSize(12)">12</button>
                     <button class="dropdown-item rounded mb-1" onclick="applyCustomFontSize(14)">14</button>
@@ -182,7 +216,9 @@
                     <button class="dropdown-item rounded mb-1" onclick="applyCustomFontSize(48)">48</button>
                 </div>
             </div>
-            <button class="btn btn-toolbar-action p-0 d-flex align-items-center justify-content-center" style="width: 24px; height: 24px; border-radius: 4px;" onclick="changeFontSize(1)" title="Tăng cỡ chữ">
+            <button class="btn btn-toolbar-action p-0 d-flex align-items-center justify-content-center"
+                style="width: 24px; height: 24px; border-radius: 4px;" onclick="changeFontSize(1)"
+                title="Tăng cỡ chữ">
                 <i class="fas fa-plus" style="font-size: 0.7rem;"></i>
             </button>
         </div>
@@ -260,6 +296,23 @@
                 class="fas fa-align-right"></i></button>
         <button class="btn btn-toolbar" onclick="formatDoc('justifyFull')" title="Canh đều"><i
                 class="fas fa-align-justify"></i></button>
+        <div class="dropdown d-inline-block" title="Hướng chữ">
+            <button class="btn btn-toolbar dropdown-toggle" type="button" id="textDirectionDropdown"
+                data-toggle="dropdown" aria-expanded="false">
+                <i class="fas fa-font"></i><i class="fas fa-arrows-alt-v" style="font-size: 0.6rem; margin-left: 2px;"></i>
+            </button>
+            <div class="dropdown-menu p-2 shadow-lg" aria-labelledby="textDirectionDropdown" style="min-width: 180px;">
+                <button class="dropdown-item rounded mb-1" onclick="changeTextDirection('horizontal')">
+                    <i class="fas fa-align-left me-2"></i> Ngang (Mặc định)
+                </button>
+                <button class="dropdown-item rounded mb-1" onclick="changeTextDirection('vertical-down')">
+                    <i class="fas fa-long-arrow-alt-down me-2"></i> Xoay dọc xuống (90°)
+                </button>
+                <button class="dropdown-item rounded mb-1" onclick="changeTextDirection('vertical-up')">
+                    <i class="fas fa-long-arrow-alt-up me-2"></i> Xoay dọc lên (270°)
+                </button>
+            </div>
+        </div>
         <div class="border-end mx-1" style="height: 18px;"></div>
 
         <button class="btn btn-toolbar" onclick="formatDoc('insertUnorderedList')" title="Danh sách dạng dấu chấm"><i
@@ -291,7 +344,8 @@
         </div>
 
         <div class="border-end mx-1" style="height: 18px;"></div>
-        <button class="btn btn-toolbar" onmousedown="event.preventDefault();" onclick="addAbbreviation()" title="Thêm danh mục chữ viết tắt">
+        <button class="btn btn-toolbar" onmousedown="event.preventDefault();" onclick="addAbbreviation()"
+            title="Thêm danh mục chữ viết tắt">
             <i class="fas fa-spell-check text-primary"></i>
         </button>
         <button class="btn btn-toolbar" onclick="document.getElementById('imageUploader').click()"

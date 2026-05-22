@@ -1,4 +1,45 @@
 <script>
+    function saveScrollPosition() {
+        const scrollPositions = [];
+        
+        // 1. Save window scroll
+        scrollPositions.push({
+            element: window,
+            top: window.scrollY || window.pageYOffset || 0,
+            left: window.scrollX || window.pageXOffset || 0
+        });
+        
+        // 2. Save scroll position of designer-workspace and all its parents
+        const workspace = document.getElementById('designer-workspace');
+        if (workspace) {
+            let parent = workspace;
+            while (parent) {
+                if (parent.scrollTop > 0 || parent.scrollLeft > 0) {
+                    scrollPositions.push({
+                        element: parent,
+                        top: parent.scrollTop,
+                        left: parent.scrollLeft
+                    });
+                }
+                parent = parent.parentElement;
+            }
+        }
+        
+        return scrollPositions;
+    }
+
+    function restoreScrollPosition(scrollPositions) {
+        if (!scrollPositions) return;
+        scrollPositions.forEach(pos => {
+            if (pos.element === window) {
+                window.scrollTo(pos.left, pos.top);
+            } else if (document.body.contains(pos.element)) {
+                pos.element.scrollTop = pos.top;
+                pos.element.scrollLeft = pos.left;
+            }
+        });
+    }
+
     function saveTemplate() {
         if (window.isExecutionMode) {
             Swal.fire({
@@ -10,6 +51,7 @@
             return;
         }
 
+        const savedScroll = saveScrollPosition();
 
         // Show loading swal to prevent multiple clicks
         Swal.fire({
@@ -138,6 +180,10 @@
                     }
 
                     renderBlocks();
+                    
+                    // Restore scroll position immediately
+                    restoreScrollPosition(savedScroll);
+                    setTimeout(() => restoreScrollPosition(savedScroll), 0);
 
                     Swal.fire({
                         title: 'Thành công',
@@ -145,6 +191,10 @@
                         icon: 'success',
                         showConfirmButton: false,
                         timer: 1500
+                    }).then(() => {
+                        // Restore scroll position again after sweetalert closes
+                        restoreScrollPosition(savedScroll);
+                        setTimeout(() => restoreScrollPosition(savedScroll), 0);
                     });
                 } else {
                     Swal.fire('Thất bại', res.message || 'Không thể lưu hồ sơ', 'error');

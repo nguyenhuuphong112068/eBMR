@@ -1,6 +1,7 @@
 <?php
 use App\Http\Controllers\Pages\MaterData\DepartmentController;
 use App\Http\Controllers\Pages\MaterData\UnitController;
+use App\Http\Controllers\Pages\MaterData\MarketController;
 use App\Http\Controllers\Pages\MaterData\ProductNameController;
 use App\Http\Controllers\Pages\MaterData\SpecificationController;
 use App\Http\Controllers\UploadDataController;
@@ -39,6 +40,12 @@ Route::prefix('/materData')
             Route::post('store', 'store')->name('store');
             Route::post('update', 'update')->name('update');
             Route::post('destroy', 'destroy')->name('destroy');
+        });
+        Route::prefix('/market')->name('market.')->controller(MarketController::class)->group(function () {
+            Route::get('', 'index')->name('list');
+            Route::post('store', 'store')->name('store');
+            Route::post('update', 'update')->name('update');
+            Route::post('delete', 'delete')->name('delete');
         });
         Route::prefix('/materialRole')->name('materialRole.')->controller(\App\Http\Controllers\Pages\MaterData\MaterialRoleController::class)->group(function () {
             Route::get('', 'index')->name('list');

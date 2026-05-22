@@ -1,4 +1,5 @@
-<nav class="main-header navbar navbar-expand navbar-white navbar-light shadow-sm px-4" style="border-bottom: 1px solid rgba(0,0,0,0.05); background: rgba(255, 255, 255, 0.8) !important; backdrop-filter: blur(10px);">
+<nav class="main-header navbar navbar-expand navbar-white navbar-light shadow-sm px-4"
+    style="border-bottom: 1px solid rgba(0,0,0,0.05); background: rgba(255, 255, 255, 0.8) !important; backdrop-filter: blur(10px);">
     <!-- Left navbar links -->
     <ul class="navbar-nav">
         <li class="nav-item">
@@ -33,17 +34,19 @@
             </div>
         </li>
 
-        @if(session('user'))
-        <li class="nav-item d-none d-md-flex flex-column align-items-end me-4" style="line-height: 1.2;">
-            <span class="fw-bold" style="color: var(--bg-dark); font-size: 0.95rem;">
-                {{ session('user')['fullName'] ?? 'User' }}
-            </span>
-            <span class="text-muted fw-medium" style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;">{{ session('user')['userGroup'] ?? '' }}</span>
-        </li>
+        @if (session('user'))
+            <li class="nav-item d-none d-md-flex flex-column align-items-end me-4" style="line-height: 1.2;">
+                <span class="fw-bold" style="color: var(--bg-dark); font-size: 0.95rem;">
+                    {{ session('user')['fullName'] ?? 'User' }}
+                </span>
+                <span class="text-muted fw-medium"
+                    style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;">{{ session('user')['userGroup'] ?? '' }}</span>
+            </li>
         @endif
 
         <li class="nav-item">
-            <a href="{{ route('logout') }}" class="btn btn-outline-danger btn-sm border-0" style="padding: 8px 12px; border-radius: 10px; transition: all var(--transition);">
+            <a href="{{ route('logout') }}" class="btn btn-outline-danger btn-sm border-0"
+                style="padding: 8px 12px; border-radius: 10px; transition: all var(--transition);">
                 <i class="fas fa-power-off"></i>
             </a>
         </li>

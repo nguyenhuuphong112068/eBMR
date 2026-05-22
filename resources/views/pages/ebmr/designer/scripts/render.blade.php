@@ -310,13 +310,15 @@
                         const td = s.textDecoration || '';
                         const fsz = s.fontSize || '';
                         const tc = s.textColor || '';
+                        const wm = s.writingMode || '';
+                        const tf = s.transform || '';
                         return `<th contenteditable="false"
                         spellcheck="false"
                         data-row="0"
                         data-col="${cIdx}"
                         class="table-header-cell"
-                        style="position: relative; width: ${c.width || 'auto'}; background-color: ${bg}; text-align: ${align}; font-weight: ${fw}; font-style: ${fs}; text-decoration: ${td}; font-size: ${fsz}; color: ${tc}; border-top: ${s.borderTop || ''}; border-bottom: ${s.borderBottom || ''}; border-left: ${s.borderLeft || ''}; border-right: ${s.borderRight || ''};">
-                            <div class="header-content">${c.label}</div>
+                        style="position: relative; width: ${c.width || 'auto'}; background-color: ${bg}; text-align: ${align}; font-weight: ${fw}; font-style: ${fs}; text-decoration: ${td}; font-size: ${fsz}; color: ${tc}; border-top: ${s.borderTop || ''}; border-bottom: ${s.borderBottom || ''}; border-left: ${s.borderLeft || ''}; border-right: ${s.borderRight || ''}; writing-mode: ${wm};">
+                            <div class="header-content" style="transform: ${tf}; transform-origin: center center; display: inline-block; width: 100%;">${c.label}</div>
                             ${!window.isExecutionMode ? `
                             <div class="col-actions">
                                 <button class="btn-col-add" onclick="event.stopPropagation(); tableAddColumn(${cIdx+1})" title="Thêm cột bên phải"><i class="fas fa-plus"></i></button>
@@ -399,13 +401,13 @@
                         colspan="${cell.cs || 1}"
                         ${onclickAttr}
                         class="${cellClass} ${item.locked ? 'locked-cell' : ''}"
-                        style="position: relative; width: ${cellWidth}; height: ${rowH}; background-color: ${cellBg}; text-align: ${cell.textAlign || ''}; font-weight: ${cell.fontWeight || ''}; font-style: ${cell.fontStyle || ''}; text-decoration: ${cell.textDecoration || ''}; font-size: ${cell.fontSize || ''}; color: ${cell.textColor || ''}; text-transform: ${cell.textTransform || ''}; border-top: ${cell.borderTop || ''}; border-bottom: ${cell.borderBottom || ''}; border-left: ${cell.borderLeft || ''}; border-right: ${cell.borderRight || ''};"
+                        style="position: relative; width: ${cellWidth}; height: ${rowH}; background-color: ${cellBg}; text-align: ${cell.textAlign || ''}; font-weight: ${cell.fontWeight || ''}; font-style: ${cell.fontStyle || ''}; text-decoration: ${cell.textDecoration || ''}; font-size: ${cell.fontSize || ''}; color: ${cell.textColor || ''}; text-transform: ${cell.textTransform || ''}; border-top: ${cell.borderTop || ''}; border-bottom: ${cell.borderBottom || ''}; border-left: ${cell.borderLeft || ''}; border-right: ${cell.borderRight || ''}; writing-mode: ${cell.writingMode || ''};"
                         oninput="updateTableInline('${item.id}', 'cell', ${r}, ${c}, this.innerHTML)"
                         ${!window.isExecutionMode ? `
                             ondragover="event.preventDefault(); this.classList.add('criteria-drag-over');"
                             ondragleave="this.classList.remove('criteria-drag-over');"
                             ondrop="window.handleCriteriaDrop(event, '${item.id}', ${r}, ${c})"` : ''}>
-                            <div class="cell-wrapper">${displayContent}</div>
+                            <div class="cell-wrapper" style="transform: ${cell.transform || ''}; transform-origin: center center; display: inline-block; width: 100%;">${displayContent}</div>
                             ${metaHtml}
                             ${!window.isExecutionMode && c === 0 ? `
                             <div class="row-actions">
@@ -884,6 +886,23 @@
             const fieldId = badge.getAttribute('data-field-id');
             const field = config[fieldId];
             if (field) {
+                // Apply style properties if they exist
+                if (field.style) {
+                    if (field.style.width) {
+                        badge.style.setProperty('width', field.style.width, 'important');
+                    } else {
+                        badge.style.removeProperty('width');
+                    }
+                    if (field.style.marginLeft) {
+                        badge.style.setProperty('margin-left', field.style.marginLeft, 'important');
+                    } else {
+                        badge.style.removeProperty('margin-left');
+                    }
+                } else {
+                    badge.style.removeProperty('width');
+                    badge.style.removeProperty('margin-left');
+                }
+
                 // TRƯỜNG HỢP 1: Chế độ THỰC THI (Cho phép nhập thử để xem kết quả)
                 if (window.isExecutionMode) {
                     // Nếu là thẻ công thức, thực hiện tính toán ngay
@@ -957,8 +976,17 @@
                                     `<select class="form-select-sm border-0 border-bottom bg-transparent" ${window.isReadOnly ? 'disabled' : ''} onchange="window.executionValues['${fieldId}'] = this.value; if(typeof window.recalculateAllFormulas === 'function') window.recalculateAllFormulas()"><option value="">--</option>${optionsArr.map(o => `<option value="${o}" ${val === o ? 'selected' : ''}>${o}</option>`).join('')}</select>${metaHtml}`;
                             }
                             badge.className = 'ebmr-field-badge ebmr-field-value';
+                        } else if (field.type === 'date') {
+                            const placeholder = field.label || 'Chọn ngày...';
+                            const displayVal = val || '';
+                            const isNow = (field.defaultValue && field.defaultValue.toLowerCase() === 'now');
+                            const titleAttr = isNow ? 'title="Nhấp đúp chuột (Double-click) để lấy ngày giờ hệ thống"' : '';
+                            
+                            badge.innerHTML =
+                                `<span class="execution-input-test" ${!window.isReadOnly ? `onclick="handleDateVariableClick(event, '${fieldId}', ${isNow})"` : ''} style="cursor: ${window.isReadOnly ? 'default' : 'pointer'}; border-bottom: 1px dotted #1a73e8; min-width: 30px; display: inline-block; outline: none; position: relative;" ${titleAttr}>${displayVal || `<span style="color: #6c757d; font-style: italic;">${placeholder}</span>`}${metaHtml}</span>`;
+                            badge.className = 'ebmr-field-badge ebmr-field-value';
                         } else {
-                            // Các loại khác: Văn bản, Số, Ngày
+                            // Các loại khác: Văn bản, Số
                             const placeholder = field.label || '...';
                             const displayVal = val || '';
                             
@@ -980,18 +1008,29 @@
                                     }
                                 }
                             }
+ 
+                            // Nút đọc cân: chỉ hiện khi người thiết kế bật "Lấy dữ liệu từ cân" trong cấu hình biến số
+                            const scaleEnabled = field.type === 'number'
+                                && !window.isReadOnly
+                                && field.scaleEnabled === true
+                                && ('serial' in navigator);
+                            const scaleBtnHtml = scaleEnabled
+                                ? `<button class="btn-read-scale" onclick="event.stopPropagation(); window.readScaleValueIntoField('${fieldId}')" title="⚖️ Đọc giá trị từ Cân điện tử (RS-232)"><i class="fas fa-balance-scale"></i></button>`
+                                : '';
+
 
                             badge.innerHTML =
-                                `<span class="execution-input-test" ${!window.isReadOnly ? 'onclick="openVariableInputModal(\''+fieldId+'\')"' : ''} style="cursor: ${window.isReadOnly ? 'default' : 'pointer'}; border-bottom: 1px dotted #1a73e8; min-width: 30px; display: inline-block; outline: none; position: relative; ${extraStyle}">${displayVal || `<span style="color: #6c757d; font-style: italic;">${placeholder}</span>`}${metaHtml}</span>`;
+                                `<span class="execution-input-test" ${!window.isReadOnly ? 'onclick="openVariableInputModal(\''+fieldId+'\')"' : ''} style="cursor: ${window.isReadOnly ? 'default' : 'pointer'}; border-bottom: 1px dotted #1a73e8; min-width: 30px; display: inline-block; outline: none; position: relative; ${extraStyle}">${displayVal || `<span style="color: #6c757d; font-style: italic;">${placeholder}</span>`}${metaHtml}</span>${scaleBtnHtml}`;
                             badge.className = 'ebmr-field-badge ebmr-field-value';
                         }
+
                 }
                 // TRƯỜNG HỢP 2: Chế độ THIẾT KẾ (Hiển thị badge kèm icon loại dữ liệu)
                 else {
                     let icon = 'fa-edit';
                     let typeLabel = '';
                     let extra = '';
-
+ 
                     // Xác định Icon dựa theo loại trường (field type)
                     if (field.type === 'signature') {
                         icon = 'fa-signature';
@@ -1011,14 +1050,14 @@
                         const dPlaces = (field.validation && field.validation.decimal_places !== null) ? field
                             .validation.decimal_places : 2;
                         const testResult = calculateFormula(field.formula || '', dPlaces, field.id);
-
+ 
                         // Resolve IDs to Labels for display
                         const formulaDisplay = (field.formula || '').replace(/\(([^)]+)\)/g, (match, id) => {
                             const targetField = Object.values(fieldsConfig).find(f => f.name === id || f
                                 .label === id);
                             return targetField ? (targetField.label || id) : id;
                         });
-
+ 
                         extra =
                             `<span class="ms-1 border-start ps-1 text-primary">${testResult}</span>${formulaDisplay ? `<span class="ms-2 small text-muted" style="font-size: 0.8em; font-style: italic;">(${formulaDisplay})</span>` : ''}`;
                     } else if (field.type === 'select') {
@@ -1027,11 +1066,18 @@
                     } else {
                         typeLabel = 'Text';
                     }
-
+ 
                     const label = field.label || `[${typeLabel}]`;
+                    const scaleIndicator = (field.type === 'number' && field.scaleEnabled) 
+                        ? `<span class="ms-1 text-success" title="⚖️ Đã bật kết nối Cân điện tử" style="cursor: pointer;" onclick="event.stopPropagation(); window.openScaleConnectionModal('${fieldId}')"><i class="fas fa-balance-scale"></i></span>` 
+                        : '';
                     badge.className =
                         `ebmr-field-badge ${selectedFieldId === fieldId ? 'active' : ''} ${field.type === 'formula' ? 'formula-preview' : ''}`;
-                    badge.innerHTML = `<i class="fas ${icon}"></i> ${label}${extra}`;
+                    badge.innerHTML = `
+                        <span class="badge-drag-handle badge-left-handle" onmousedown="window.initBadgeResize(event, '${fieldId}', 'left')"></span>
+                        <i class="fas ${icon}"></i> ${label}${extra}${scaleIndicator}
+                        <span class="badge-drag-handle badge-right-handle" onmousedown="window.initBadgeResize(event, '${fieldId}', 'right')"></span>
+                    `;
                 }
             }
         });

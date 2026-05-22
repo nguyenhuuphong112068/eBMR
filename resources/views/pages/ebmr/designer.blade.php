@@ -48,4 +48,5 @@
     @include('pages.ebmr.designer.scripts.events') {{-- Quản lý các sự kiện phím tắt (Ctrl+S, Ctrl+Z) và các sự kiện chung --}}
     @include('pages.ebmr.designer.scripts.symbol_ops') {{-- Xử lý chèn các ký tự đặc biệt (Symbol Picker) --}}
     @include('pages.ebmr.designer.scripts.import_word') {{-- Xử lý import file Word (.docx) --}}
+    @include('pages.ebmr.designer.scripts.scale_reader') {{-- Tích hợp đọc dữ liệu từ Cân Điện Tử qua RS-232 --}}
 @endsection

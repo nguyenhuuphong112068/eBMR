@@ -419,4 +419,5 @@
     @include('pages.ebmr.designer.scripts.table_advanced')
     @include('pages.ebmr.designer.scripts.chart_ops')
     @include('pages.ebmr.designer.scripts.events')
+    @include('pages.ebmr.designer.scripts.scale_reader') {{-- Tích hợp đọc dữ liệu từ Cân Điện Tử qua RS-232 --}}
 @endsection

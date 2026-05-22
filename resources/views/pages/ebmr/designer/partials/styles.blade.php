@@ -1081,6 +1081,42 @@
         margin: 2px;
         min-width: 80px;
         text-align: center;
+        position: relative !important;
+    }
+
+    /* Drag handles for variables */
+    .ebmr-field-badge .badge-drag-handle {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 6px;
+        background-color: rgba(217, 119, 6, 0.3);
+        cursor: ew-resize;
+        opacity: 0;
+        transition: opacity 0.15s ease, background-color 0.15s ease, width 0.15s ease;
+        z-index: 10;
+    }
+
+    .ebmr-field-badge:hover .badge-drag-handle,
+    .ebmr-field-badge.active .badge-drag-handle {
+        opacity: 1;
+    }
+
+    .ebmr-field-badge .badge-drag-handle:hover {
+        background-color: rgba(217, 119, 6, 0.85);
+        width: 8px;
+    }
+
+    .ebmr-field-badge .badge-left-handle {
+        left: 0;
+        border-top-left-radius: 4px;
+        border-bottom-left-radius: 4px;
+    }
+
+    .ebmr-field-badge .badge-right-handle {
+        right: 0;
+        border-top-right-radius: 4px;
+        border-bottom-right-radius: 4px;
     }
 
     /* Make variable fill the whole table cell */
@@ -1639,4 +1675,271 @@
         padding: 0 4px;
         margin: 0 -4px;
     }
+
+    /* ============================================================
+       SCALE READER — Nút Đọc Cân & Modal Kết Nối
+       ============================================================ */
+
+    /* Nút ⚖️ đọc cân inline cạnh ô biến số */
+    .btn-read-scale {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 22px;
+        height: 22px;
+        border: none;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #16a34a, #15803d);
+        color: white;
+        font-size: 10px;
+        cursor: pointer;
+        margin-left: 4px;
+        vertical-align: middle;
+        transition: all 0.2s ease;
+        box-shadow: 0 1px 4px rgba(22, 163, 74, 0.3);
+        flex-shrink: 0;
+        position: relative;
+    }
+
+    .btn-read-scale:hover {
+        background: linear-gradient(135deg, #15803d, #166534);
+        box-shadow: 0 2px 8px rgba(22, 163, 74, 0.5);
+        transform: scale(1.1);
+    }
+
+    /* Trạng thái đang đọc (animation xoay) */
+    .btn-read-scale.reading {
+        background: linear-gradient(135deg, #f59e0b, #d97706);
+        animation: scale-reading-pulse 0.8s ease-in-out infinite;
+    }
+
+    .btn-read-scale.reading i {
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes scale-reading-pulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.6); }
+        50%       { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0); }
+    }
+
+    @keyframes spin {
+        from { transform: rotate(0deg); }
+        to   { transform: rotate(360deg); }
+    }
+
+    /* Chấm tròn trạng thái kết nối */
+    .scale-status-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        display: inline-block;
+        flex-shrink: 0;
+    }
+
+    .scale-status-dot.connected {
+        background: #16a34a;
+        box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.25);
+        animation: scale-blink 2s ease-in-out infinite;
+    }
+
+    .scale-status-dot.disconnected {
+        background: #dc2626;
+    }
+
+    @keyframes scale-blink {
+        0%, 100% { opacity: 1; }
+        50%       { opacity: 0.5; }
+    }
+
+    /* Hiển thị giá trị live từ cân */
+    .scale-live-value {
+        display: block;
+        font-size: 2.2rem;
+        font-weight: 700;
+        font-family: 'Courier New', monospace;
+        text-align: center;
+        padding: 12px 0;
+        letter-spacing: 0.05em;
+        transition: color 0.3s ease;
+    }
+
+    .scale-live-value.stable {
+        color: #16a34a;
+    }
+
+    .scale-live-value.unstable {
+        color: #f59e0b;
+        animation: scale-reading-pulse 0.5s ease-in-out infinite;
+    }
+
+    /* Card chọn hãng cân */
+    .scale-brand-card {
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 12px 8px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        background: #fafafa;
+    }
+
+    .scale-brand-card:hover {
+        border-color: #16a34a;
+        background: #f0fdf4;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(22, 163, 74, 0.15);
+    }
+
+    .scale-brand-card.selected {
+        border-color: #16a34a;
+        background: #dcfce7;
+    }
+
+    /* Vùng log raw data */
+    #scale-raw-log {
+        background: #0f172a;
+        color: #94a3b8;
+        border-radius: 6px;
+        padding: 8px 10px;
+        height: 120px;
+        overflow-y: auto;
+        font-family: 'Courier New', monospace;
+        font-size: 0.72rem;
+        scrollbar-width: thin;
+    }
+
+    /* Hiển thị nút đọc cân trong print thì ẩn */
+    @media print {
+        .btn-read-scale { display: none !important; }
+    }
+
+    /* Popover đọc cân inline */
+    .scale-reader-popover {
+        position: absolute;
+        z-index: 1050;
+        background: white;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+        padding: 8px 12px;
+        width: 190px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-family: inherit;
+        pointer-events: auto;
+    }
+    
+    .scale-reader-popover::after {
+        content: "";
+        position: absolute;
+        bottom: -6px;
+        left: 50%;
+        transform: translateX(-50%);
+        border-width: 6px 6px 0;
+        border-style: solid;
+        border-color: white transparent;
+        display: block;
+        width: 0;
+    }
+
+    .scale-reader-popover-live {
+        font-family: 'Courier New', monospace;
+        font-size: 1.3rem;
+        font-weight: bold;
+        text-align: center;
+        padding: 4px;
+        border-radius: 4px;
+        background: #f1f5f9;
+        color: #475569;
+        border: 1px solid #e2e8f0;
+    }
+    
+    .scale-reader-popover-live.stable {
+        color: #16a34a;
+        background: #dcfce7;
+        border-color: #bbf7d0;
+    }
+    
+    .scale-reader-popover-live.unstable {
+        color: #d97706;
+        background: #fef3c7;
+        border-color: #fde68a;
+    }
+    
+    .scale-reader-popover-buttons {
+        display: flex;
+        gap: 4px;
+    }
+    
+    .scale-reader-popover-btn {
+        flex: 1;
+        padding: 4px 6px;
+        font-size: 0.72rem;
+        font-weight: bold;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        transition: background 0.15s ease;
+    }
+    
+    .scale-reader-popover-btn-primary {
+        background: #16a34a;
+        color: white;
+    }
+    
+    .scale-reader-popover-btn-primary:hover {
+        background: #15803d;
+    }
+    
+    .scale-reader-popover-btn-secondary {
+        background: #e2e8f0;
+        color: #475569;
+    }
+    
+    .scale-reader-popover-btn-secondary:hover {
+        background: #cbd5e1;
+    }
+
+    /* Floating Status Pill for Scale */
+    .scale-floating-status {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1040;
+        background: rgba(15, 23, 42, 0.85);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        color: white;
+        padding: 8px 16px;
+        border-radius: 30px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-family: 'Courier New', monospace;
+        font-weight: bold;
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+    
+    .scale-floating-status:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        background: rgba(15, 23, 42, 0.95);
+        border-color: rgba(22, 163, 74, 0.5);
+    }
+
+    .scale-status-dot.unstable-dot {
+        background: #f59e0b;
+        box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25);
+        animation: scale-blink 1s ease-in-out infinite;
+    }
 </style>
+

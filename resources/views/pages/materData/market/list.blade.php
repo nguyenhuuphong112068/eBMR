@@ -9,11 +9,10 @@
 @endsection
 
 @section('mainContent')
-    @include('pages.User.user.dataTable')
+    @include('pages.materData.market.dataTable')
 @endsection
 
 @section('model')
-    @include('pages.User.user.create')
-    @include('pages.User.user.update')
-    @include('pages.User.user.history')
+    @include('pages.materData.market.create')
+    @include('pages.materData.market.update')
 @endsection

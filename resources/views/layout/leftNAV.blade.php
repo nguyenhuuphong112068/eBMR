@@ -122,8 +122,8 @@
                                 class="nav-link"><i class="far fa-circle nav-icon text-info"></i>
                                 <p>Phòng Ban</p>
                             </a></li>
-                        <li class="nav-item"><a href="{{ route('pages.materData.unit.list') }}"
-                                class="nav-link"><i class="far fa-circle nav-icon text-primary"></i>
+                        <li class="nav-item"><a href="{{ route('pages.materData.unit.list') }}" class="nav-link"><i
+                                    class="far fa-circle nav-icon text-primary"></i>
                                 <p>Đơn Vị</p>
                             </a></li>
                         <li class="nav-item"><a href="{{ route('pages.materData.productName.list') }}"
@@ -133,6 +133,10 @@
                         <li class="nav-item"><a href="{{ route('pages.materData.specification.list') }}"
                                 class="nav-link"><i class="far fa-circle nav-icon text-danger"></i>
                                 <p>Qui Cách Đóng Gói</p>
+                            </a></li>
+                        <li class="nav-item"><a href="{{ route('pages.materData.market.list') }}" class="nav-link"><i
+                                    class="far fa-circle nav-icon text-danger"></i>
+                                <p>Thị Trường</p>
                             </a></li>
                         <li class="nav-item"><a href="{{ route('pages.materData.materialRole.list') }}"
                                 class="nav-link"><i class="far fa-circle nav-icon text-warning"></i>
@@ -147,7 +151,8 @@
 
                 <!-- Droplist Menu Danh Muc  -->
                 <li class="nav-item has-treeview {{ str_contains(url()->current(), 'category') ? 'menu-open' : '' }}">
-                    <a href="#" class="nav-link {{ str_contains(url()->current(), 'category') ? 'active' : '' }}">
+                    <a href="#"
+                        class="nav-link {{ str_contains(url()->current(), 'category') ? 'active' : '' }}">
                         <i class="fas fa-newspaper"></i>
                         <p>
                             Danh Mục
@@ -178,12 +183,12 @@
                             </a>
                         </li>
 
-                        <li class="nav-item">
+                        {{-- <li class="nav-item">
                             <a href="{{ route('pages.category.mf.list') }}" class="nav-link">
                                 <i class="far fa-circle nav-icon"></i>
                                 <p>Biểu mẫu gốc</p>
                             </a>
-                        </li>
+                        </li> --}}
                     </ul>
                 </li>
 
@@ -206,13 +211,13 @@
                                 <p>Biểu mẫu dùng chung</p>
                             </a>
                         </li>
-                        <li class="nav-item">
+                        {{-- <li class="nav-item">
                             <a href="{{ route('pages.ebmr.templates') }}?type=MF"
                                 class="nav-link {{ request('type') == 'MF' ? 'active' : '' }}">
                                 <i class="fas fa-file-invoice nav-icon"></i>
                                 <p>Biểu mẫu gốc</p>
                             </a>
-                        </li>
+                        </li> --}}
                         <li class="nav-item">
                             <a href="{{ route('pages.ebmr.templates') }}?type=BMR"
                                 class="nav-link {{ request('type') == 'BMR' || !request('type') ? 'active' : '' }}">
@@ -337,8 +342,10 @@
                     </ul>
                 </li> --}}
 
-                <li class="nav-item has-treeview {{ str_contains(url()->current(), 'ai-training') ? 'menu-open' : '' }}">
-                    <a href="{{ route('ai_training.index') }}" class="nav-link {{ str_contains(url()->current(), 'ai-training') ? 'active' : '' }}">
+                <li
+                    class="nav-item has-treeview {{ str_contains(url()->current(), 'ai-training') ? 'menu-open' : '' }}">
+                    <a href="{{ route('ai_training.index') }}"
+                        class="nav-link {{ str_contains(url()->current(), 'ai-training') ? 'active' : '' }}">
                         <i class="fas fa-brain"></i>
                         <p>Huấn Luyện AI</p>
                     </a>

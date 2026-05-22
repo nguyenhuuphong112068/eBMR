@@ -15,6 +15,7 @@ class UserController extends Controller
                 $groups = DB::table('stage_groups')->get();
                 $deparments = DB::table('deparments')->where('active', true)->get();
                 $roles = DB::table('roles')->get();
+                $designations = DB::table('designations')->orderBy('name')->get();
                
                 $datas = DB::table('user_management')
                     ->where ('isActive',1)
@@ -29,6 +30,11 @@ class UserController extends Controller
                         
                         $user->role_ids = $roles->pluck('role_id')->toArray();
                         $user->role_names = $roles->pluck('name')->join(', ');
+
+                        // Lấy tên chức vụ
+                        $user->designation_name = $user->designation_id 
+                            ? DB::table('designations')->where('id', $user->designation_id)->value('name') 
+                            : null;
                         return $user;
                     });
                
@@ -38,7 +44,8 @@ class UserController extends Controller
                         'datas' => $datas, 
                         'deparments' => $deparments, 
                         'roles' => $roles, 
-                        'groups' => $groups]);
+                        'groups' => $groups,
+                        'designations' => $designations]);
         }
     
 
@@ -85,14 +92,16 @@ class UserController extends Controller
 
                 $userGroups = $request->userGroup; // Mảng role IDs
                 $primaryRoleName = DB::table('roles')->where('id', $userGroups[0])->value('name');
+                $hashedPassword = Hash::make($request->passWord);
 
                 $user_id = DB::table('user_management')->insertGetId([
                         'userName' => $request->userName,
-                        'passWord' => Hash::make($request->passWord),
+                        'passWord' => $hashedPassword,
                         'fullName' => $request->fullName,
                         'userGroup' => $primaryRoleName, // Lưu role đầu tiên làm primary
                         'deparment' => $request->deparment,
                         'groupName' => $request->groupName,
+                        'designation_id' => $request->designation_id,
                         'mail' => $request->mail,
                         'changePWdate' => today()->addDays(90),
                         'prepareBy' => session('user')['fullName'] ?? 'Admin',
@@ -107,6 +116,30 @@ class UserController extends Controller
                     ];
                 }
                 DB::table('user_role')->insert($rolesToInsert);
+
+                // Ghi nhận lịch sử thay đổi lần đầu tiên
+                DB::table('user_history')->insert([
+                    'user_id' => $user_id,
+                    'userName' => $request->userName,
+                    'userGroup' => $primaryRoleName,
+                    'fullName' => $request->fullName,
+                    'deparment' => $request->deparment,
+                    'groupName' => $request->groupName,
+                    'designation_id' => $request->designation_id,
+                    'mail' => $request->mail,
+                    'isActive' => 1,
+                    'isLocked' => 0,
+                    'changePWdate' => today()->addDays(90),
+                    'prepareBy' => session('user')['fullName'] ?? 'Admin',
+                    'created_at' => now(),
+                ]);
+
+                // Ghi nhận mật khẩu khởi tạo vào lịch sử mật khẩu
+                DB::table('pass_word_history')->insert([
+                    'user_id' => $user_id,
+                    'passWord' => $hashedPassword,
+                    'created_at' => now(),
+                ]);
 
                 return redirect()->back()->with('success', 'Đã thêm thành công!');    
         }
@@ -142,22 +175,58 @@ class UserController extends Controller
                     return redirect()->back()->withErrors($validator, 'updateErrors')->withInput();
                 } 
                 
+                $currentUser = DB::table('user_management')->where('id', $request->id)->first();
+                if (!$currentUser) {
+                    return redirect()->back()->with('error', 'Không tìm thấy người dùng!');
+                }
+
+                // Check mật khẩu trùng trong 3 lần gần nhất
+                $newHashedPassword = null;
+                if ($request->filled('passWord')) {
+                    $oldPasswords = DB::table('pass_word_history')
+                        ->where('user_id', $request->id)
+                        ->orderBy('created_at', 'desc')
+                        ->orderBy('id', 'desc')
+                        ->limit(3)
+                        ->get();
+
+                    foreach ($oldPasswords as $oldPass) {
+                        if (Hash::check($request->passWord, $oldPass->passWord)) {
+                            return redirect()->back()
+                                ->withErrors(['passWord' => 'Mật khẩu mới không được trùng với 3 mật khẩu đã sử dụng gần nhất.'], 'updateErrors')
+                                ->withInput();
+                        }
+                    }
+                    $newHashedPassword = Hash::make($request->passWord);
+                }
+
                 $userGroups = $request->userGroup;
                 $primaryRoleName = DB::table('roles')->where('id', $userGroups[0])->value('name');
+
+                // Detect if any field changed (excluding password)
+                $hasChanges = false;
+                if ($currentUser->fullName !== $request->fullName ||
+                    $currentUser->userGroup !== $primaryRoleName ||
+                    $currentUser->deparment !== $request->deparment ||
+                    $currentUser->groupName !== $request->groupName ||
+                    (int)$currentUser->designation_id !== (int)$request->designation_id ||
+                    $currentUser->mail !== $request->mail) {
+                    $hasChanges = true;
+                }
 
                 $updateData = [
                     'fullName' => $request->fullName,
                     'userGroup' => $primaryRoleName,
                     'deparment' => $request->deparment,
                     'groupName' => $request->groupName,
+                    'designation_id' => $request->designation_id,
                     'mail' => $request->mail,
                     'prepareBy' => session('user')['fullName'] ?? 'Admin',
                     'updated_at' => now(),
                 ];
 
-                // Chỉ cập nhật mật khẩu nếu có nhập mới
-                if ($request->filled('passWord')) {
-                    $updateData['passWord'] = Hash::make($request->passWord);
+                if ($newHashedPassword) {
+                    $updateData['passWord'] = $newHashedPassword;
                 }
 
                 DB::table('user_management')->where('id', $request->id)->update($updateData);
@@ -173,16 +242,65 @@ class UserController extends Controller
                 }
                 DB::table('user_role')->insert($rolesToInsert);
 
+                // Ghi nhận lịch sử nếu có sự thay đổi
+                if ($hasChanges) {
+                    DB::table('user_history')->insert([
+                        'user_id' => $request->id,
+                        'userName' => $currentUser->userName,
+                        'userGroup' => $primaryRoleName,
+                        'fullName' => $request->fullName,
+                        'deparment' => $request->deparment,
+                        'groupName' => $request->groupName,
+                        'designation_id' => $request->designation_id,
+                        'mail' => $request->mail,
+                        'isActive' => $currentUser->isActive,
+                        'isLocked' => $currentUser->isLocked,
+                        'changePWdate' => $currentUser->changePWdate,
+                        'signature_image' => $currentUser->signature_image,
+                        'prepareBy' => session('user')['fullName'] ?? 'Admin',
+                        'created_at' => now(),
+                    ]);
+                }
+
+                // Ghi nhận lịch sử mật khẩu nếu thay đổi mật khẩu
+                if ($newHashedPassword) {
+                    DB::table('pass_word_history')->insert([
+                        'user_id' => $request->id,
+                        'passWord' => $newHashedPassword,
+                        'created_at' => now(),
+                    ]);
+                }
+
                 return redirect()->back()->with('success', 'Đã cập nhật thành công!');   
         }
 
         public function deActive(string|int $id){
-                
-               DB::table('user_management')->where('id', $id)->update([
+                $currentUser = DB::table('user_management')->where('id', $id)->first();
+                if ($currentUser) {
+                    DB::table('user_management')->where('id', $id)->update([
+                             'isActive' => 0,
+                             'prepareBy' => session('user')['fullName'] ?? 'Admin',
+                             'updated_at' => now(), 
+                    ]);
+
+                    // Ghi nhận lịch sử thay đổi
+                    DB::table('user_history')->insert([
+                        'user_id' => $id,
+                        'userName' => $currentUser->userName,
+                        'userGroup' => $currentUser->userGroup,
+                        'fullName' => $currentUser->fullName,
+                        'deparment' => $currentUser->deparment,
+                        'groupName' => $currentUser->groupName,
+                        'designation_id' => $currentUser->designation_id,
+                        'mail' => $currentUser->mail,
                         'isActive' => 0,
-                        'prepareBy' => session('user')['fullName'],
-                        'updated_at' => now(), 
-                ]);
+                        'isLocked' => $currentUser->isLocked,
+                        'changePWdate' => $currentUser->changePWdate,
+                        'signature_image' => $currentUser->signature_image,
+                        'prepareBy' => session('user')['fullName'] ?? 'Admin',
+                        'created_at' => now(),
+                    ]);
+                }
                 return redirect()->back()->with('success', 'Vô Hiệu Hóa thành công!');
         }
 
@@ -201,12 +319,33 @@ class UserController extends Controller
             // Nếu truyền user_id, sử dụng user_id đó, ngược lại dùng user hiện tại
             $targetUserId = $request->input('user_id') ?: $loggedInUserId;
 
-            DB::table('user_management')
-                ->where('id', $targetUserId)
-                ->update([
+            $currentUser = DB::table('user_management')->where('id', $targetUserId)->first();
+            if ($currentUser) {
+                DB::table('user_management')
+                    ->where('id', $targetUserId)
+                    ->update([
+                        'signature_image' => $request->signature_image,
+                        'updated_at' => now(),
+                    ]);
+
+                // Ghi nhận lịch sử thay đổi
+                DB::table('user_history')->insert([
+                    'user_id' => $targetUserId,
+                    'userName' => $currentUser->userName,
+                    'userGroup' => $currentUser->userGroup,
+                    'fullName' => $currentUser->fullName,
+                    'deparment' => $currentUser->deparment,
+                    'groupName' => $currentUser->groupName,
+                    'designation_id' => $currentUser->designation_id,
+                    'mail' => $currentUser->mail,
+                    'isActive' => $currentUser->isActive,
+                    'isLocked' => $currentUser->isLocked,
+                    'changePWdate' => $currentUser->changePWdate,
                     'signature_image' => $request->signature_image,
-                    'updated_at' => now(),
+                    'prepareBy' => session('user')['fullName'] ?? 'Admin',
+                    'created_at' => now(),
                 ]);
+            }
 
             // Cập nhật session nếu đang đổi chữ ký cho chính mình
             if ($targetUserId == $loggedInUserId) {
@@ -219,6 +358,27 @@ class UserController extends Controller
                 'success' => true,
                 'message' => 'Cập nhật chữ ký mẫu thành công!',
                 'signature_image' => $request->signature_image
+            ]);
+        }
+
+        public function history($id)
+        {
+            $histories = DB::table('user_history')
+                ->where('user_id', $id)
+                ->orderBy('created_at', 'desc')
+                ->get()
+                ->map(function($history) {
+                    $history->designation_name = $history->designation_id 
+                        ? DB::table('designations')->where('id', $history->designation_id)->value('name') 
+                        : null;
+                    
+                    $history->formatted_date = \Carbon\Carbon::parse($history->created_at)->format('H:i:s d/m/Y');
+                    return $history;
+                });
+
+            return response()->json([
+                'success' => true,
+                'data' => $histories
             ]);
         }
 }

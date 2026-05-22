@@ -308,6 +308,9 @@
 
     function sanitizePastedHtml(html) {
         if (!html) return html;
+        if (typeof window.duplicateFieldBadgesInHtml === 'function') {
+            html = window.duplicateFieldBadgesInHtml(html);
+        }
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
         

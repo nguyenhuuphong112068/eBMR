@@ -22,6 +22,7 @@ Route::prefix('/User')
         Route::post('update', 'update')->name('update');
         Route::post('update-signature', 'updateSignature')->name('updateSignature');
         Route::post('deActive/{id}','deActive')->name('deActive'); 
+        Route::get('history/{id}', 'history')->name('history');
     
     });
 

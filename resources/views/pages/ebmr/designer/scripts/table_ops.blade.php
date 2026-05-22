@@ -312,6 +312,7 @@
                 toastr.warning('Không thể xóa tất cả các cột của bảng');
             }
         }
+        item.dirty = true;
         renderBlocks();
         selectItem(selectedId);
     }
@@ -393,6 +394,9 @@
             resizing = false;
             document.removeEventListener('mousemove', onMouseMove);
             document.removeEventListener('mouseup', onMouseUp);
+            if (resItem) {
+                resItem.dirty = true;
+            }
             renderBlocks(); 
         };
 

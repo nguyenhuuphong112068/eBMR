@@ -24,11 +24,13 @@
                                 <th>Tên Người Dùng</th>
                                 <th>Phòng Ban</th>
                                 <th>Tổ</th>
+                                <th>Chức Vụ</th>
                                 <th>Mail</th>
                                 <th>Người Tạo</th>
                                 <th>Ngày Tạo</th>
                                 <th class="text-center">Chữ ký</th>
                                 <th class="text-center">Thu thập chữ ký</th>
+                                <th class="text-center">Lịch sử</th>
                                 <th class="text-center">Sửa</th>
                                 <th class="text-center">Vô hiệu hóa</th>
                             </tr>
@@ -46,6 +48,7 @@
                                         <span class="badge bg-primary-soft text-primary px-2 py-1" style="font-size: 0.85rem; font-weight: 500;">{{ $data->deparment }}</span>
                                     </td>
                                     <td>{{ $data->groupName }}</td>
+                                    <td>{{ $data->designation_name ?? '' }}</td>
                                     <td>{{ $data->mail }}</td>
                                     <td class="small text-muted">{{ $data->prepareBy }}</td>
                                     <td class="small">{{ \Carbon\Carbon::parse($data->created_at)->format('d/m/Y') }}</td>
@@ -67,10 +70,19 @@
                                     </td>
 
                                     <td class="text-center align-middle">
+                                        <button type="button" class="btn btn-sm btn-icon btn-light-info btn-history border shadow-sm"
+                                            data-id="{{ $data->id }}" data-fullname="{{ $data->fullName }}"
+                                            title="Xem lịch sử thay đổi">
+                                            <i class="fas fa-history"></i>
+                                        </button>
+                                    </td>
+
+                                    <td class="text-center align-middle">
                                         <button type="button" class="btn btn-sm btn-icon btn-light-warning btn-edit border shadow-sm" data-id="{{ $data->id }}"
                                             data-username="{{ $data->userName }}" data-usergroup='@json($data->role_ids)'
                                             data-fullname="{{ $data->fullName }}" data-deparment="{{ $data->deparment }}"
                                             data-groupname="{{ $data->groupName }}" data-mail="{{ $data->mail }}"
+                                            data-designation-id="{{ $data->designation_id }}"
                                             data-toggle="modal" data-target="#UpdateModal"
                                             title="Chỉnh sửa">
                                             <i class="fas fa-pen"></i>
@@ -139,6 +151,7 @@
             modal.find('input[name="fullName"]').val(button.data('fullname'));
             modal.find('select[name="deparment"]').val(button.data('deparment'));
             modal.find('select[name="groupName"]').val(button.data('groupname'));
+            modal.find('select[name="designation_id"]').val(button.data('designation-id'));
             modal.find('input[name="mail"]').val(button.data('mail'));
         });
 
@@ -179,6 +192,75 @@
             }
         });
 
+        // Load and Show User History
+        $('.btn-history').click(function() {
+            const button = $(this);
+            const userId = button.data('id');
+            const fullName = button.data('fullname');
+            
+            const modal = $('#historyModal');
+            modal.find('#historyModalUserSubtitle').text(`Tài khoản: ${fullName}`);
+            
+            modal.find('#historyLoading').removeClass('d-none');
+            modal.find('#historyContent').addClass('d-none');
+            modal.find('#historyEmpty').addClass('d-none');
+            
+            modal.modal('show');
+            
+            $.ajax({
+                url: `/User/user/history/${userId}`,
+                type: 'GET',
+                dataType: 'json',
+                success: function(response) {
+                    modal.find('#historyLoading').addClass('d-none');
+                    if (response.success && response.data && response.data.length > 0) {
+                        let html = '';
+                        response.data.forEach((item, index) => {
+                            const statusBadge = item.isActive == 1 
+                                ? '<span class="badge bg-light-success text-success border px-2 py-1">Hoạt động</span>' 
+                                : '<span class="badge bg-light-danger text-danger border px-2 py-1">Vô hiệu hóa</span>';
+                            
+                            const signatureHtml = item.signature_image 
+                                ? `<img src="${item.signature_image}" style="max-height: 32px; max-width: 90px; mix-blend-mode: multiply; object-fit: contain;">` 
+                                : '<span class="text-muted small"><i>Chưa có</i></span>';
+                                
+                            html += `
+                                <tr>
+                                    <td class="text-center fw-bold text-muted small">${index + 1}</td>
+                                    <td class="fw-bold text-primary">${item.userName || ''}</td>
+                                    <td><span class="badge bg-light text-dark border px-2 py-1">${item.userGroup || ''}</span></td>
+                                    <td class="fw-bold text-dark">${item.fullName || ''}</td>
+                                    <td>
+                                        <span class="badge bg-primary-soft text-primary px-2 py-1">${item.deparment || ''}</span>
+                                        <span class="small text-muted d-block mt-1">${item.groupName || ''}</span>
+                                    </td>
+                                    <td>${item.designation_name || ''}</td>
+                                    <td>${item.mail || ''}</td>
+                                    <td class="text-center">${statusBadge}</td>
+                                    <td class="text-center align-middle">${signatureHtml}</td>
+                                    <td class="small text-muted">${item.prepareBy || ''}</td>
+                                    <td class="small text-nowrap">${item.formatted_date}</td>
+                                </tr>
+                            `;
+                        });
+                        modal.find('#historyTableBody').html(html);
+                        modal.find('#historyContent').removeClass('d-none');
+                    } else {
+                        modal.find('#historyEmpty').removeClass('d-none');
+                    }
+                },
+                error: function(xhr) {
+                    modal.find('#historyLoading').addClass('d-none');
+                    modal.find('#historyEmpty').removeClass('d-none');
+                    Swal.fire({
+                        title: 'Lỗi!',
+                        text: 'Không thể tải lịch sử thay đổi.',
+                        icon: 'error'
+                    });
+                }
+            });
+        });
+
     });
 </script>
 
@@ -186,6 +268,16 @@
     <style>
         .bg-primary-soft {
             background: rgba(8, 145, 178, 0.1);
+        }
+
+        .bg-light-success {
+            background: #f0fdf4 !important;
+            color: #166534 !important;
+        }
+
+        .bg-light-danger {
+            background: #ffe4e6 !important;
+            color: #9f1239 !important;
         }
 
         .btn-light-warning {
