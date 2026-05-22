@@ -6,6 +6,19 @@
  * Chế độ: Streaming (lắng nghe liên tục, tự động cập nhật giá trị).
  */
 
+// Tải danh sách thiết bị cân từ DB
+window.SCALE_DEVICES = @json(\DB::table('instrument')->where('type', 'scale')->get());
+
+// Khôi phục scaleConfig từ localStorage nếu có
+try {
+    const stored = localStorage.getItem('ebmr_scale_config');
+    if (stored) {
+        window.scaleConfig = JSON.parse(stored);
+    }
+} catch (e) {
+    console.error('Failed to load scale config from localStorage', e);
+}
+
 // ============================================================
 // CÀI ĐẶT HÃNG CÂN (SCALE PRESETS)
 // ============================================================
@@ -135,10 +148,12 @@ window.ScaleParsers = {
 };
 
 // ============================================================
-// SCALE MANAGER — Quản lý kết nối và streaming RS-232
+// SCALE MANAGER — Quản lý kết nối và streaming (RS-232 / WebSocket)
 // ============================================================
 window.ScaleManager = (function () {
     let _port = null;
+    let _socket = null;            // WebSocket reference
+    let _connType = 'serial';      // 'serial' | 'websocket'
     let _reader = null;
     let _readableStreamClosed = null;
     let _textDecoder = null;
@@ -175,16 +190,43 @@ window.ScaleManager = (function () {
         const statusText = document.getElementById('scale-status-text');
         const connectBtn = document.getElementById('scale-connect-btn');
         const disconnectBtn = document.getElementById('scale-disconnect-btn');
+        const headerEl = document.getElementById('scale-modal-header');
+        const iconContainer = document.getElementById('scale-modal-icon-container');
+        const closeBtn = document.getElementById('scale-modal-close-btn');
 
         if (statusDot) {
             statusDot.className = `scale-status-dot ${connected ? 'connected' : 'disconnected'}`;
         }
         if (statusText) {
             statusText.textContent = connected ? 'Đã kết nối' : 'Chưa kết nối';
-            statusText.className = `small fw-bold ms-2 ${connected ? 'text-success' : 'text-danger'}`;
+            statusText.className = `small fw-bold ms-1`;
         }
         if (connectBtn) connectBtn.classList.toggle('d-none', connected);
         if (disconnectBtn) disconnectBtn.classList.toggle('d-none', !connected);
+
+        if (headerEl) {
+            if (connected) {
+                headerEl.style.background = 'linear-gradient(135deg, #15803d, #22c55e)';
+                headerEl.style.color = '#ffffff';
+            } else {
+                headerEl.style.background = '#fffbeb';
+                headerEl.style.color = '#78350f';
+            }
+        }
+        if (iconContainer) {
+            if (connected) {
+                iconContainer.style.background = 'rgba(255, 255, 255, 0.2)';
+            } else {
+                iconContainer.style.background = 'rgba(120, 53, 15, 0.1)';
+            }
+        }
+        if (closeBtn) {
+            if (connected) {
+                closeBtn.classList.add('btn-close-white');
+            } else {
+                closeBtn.classList.remove('btn-close-white');
+            }
+        }
     }
 
     // Cập nhật trạng thái floating status pill
@@ -229,7 +271,7 @@ window.ScaleManager = (function () {
         }
     }
 
-    // Vòng lặp đọc streaming liên tục
+    // Vòng lặp đọc streaming liên tục cho Web Serial
     async function _startReading() {
         _isReading = true;
         const decoder = new TextDecoder();
@@ -285,16 +327,27 @@ window.ScaleManager = (function () {
     }
 
     async function _write(command) {
-        if (!_port || !_port.writable) return;
-        try {
-            const encoder = new TextEncoder();
-            const writer = _port.writable.getWriter();
-            await writer.write(encoder.encode(command));
-            writer.releaseLock();
-            _log(`→ Gửi lệnh: ${JSON.stringify(command)}`, 'info');
-        } catch (err) {
-            console.error('Lỗi gửi lệnh đến cân:', err);
-            _log(`❌ Lỗi gửi lệnh: ${err.message}`, 'error');
+        if (_connType === 'serial') {
+            if (!_port || !_port.writable) return;
+            try {
+                const encoder = new TextEncoder();
+                const writer = _port.writable.getWriter();
+                await writer.write(encoder.encode(command));
+                writer.releaseLock();
+                _log(`→ Gửi lệnh: ${JSON.stringify(command)}`, 'info');
+            } catch (err) {
+                console.error('Lỗi gửi lệnh đến cân:', err);
+                _log(`❌ Lỗi gửi lệnh: ${err.message}`, 'error');
+            }
+        } else if (_connType === 'websocket') {
+            if (!_socket || _socket.readyState !== WebSocket.OPEN) return;
+            try {
+                _socket.send(command);
+                _log(`→ Gửi lệnh: ${JSON.stringify(command)}`, 'info');
+            } catch (err) {
+                console.error('Lỗi gửi lệnh đến cân qua WebSocket:', err);
+                _log(`❌ Lỗi gửi lệnh: ${err.message}`, 'error');
+            }
         }
     }
 
@@ -302,10 +355,15 @@ window.ScaleManager = (function () {
         _lastDataTime = Date.now();
         _stopSmartQuery();
         _smartQueryTimer = setInterval(async () => {
-            if (!_port || !_isReading) {
+            const connected = _connType === 'serial'
+                ? (_port !== null && _isReading)
+                : (_socket !== null && _socket.readyState === WebSocket.OPEN);
+            
+            if (!connected) {
                 _stopSmartQuery();
                 return;
             }
+            
             const timeSinceLastData = Date.now() - _lastDataTime;
             if (timeSinceLastData > 1500) {
                 // Đã hơn 1.5 giây chưa nhận được dữ liệu, gửi lệnh truy vấn tương ứng
@@ -331,77 +389,203 @@ window.ScaleManager = (function () {
 
     return {
         isSupported: _isSupported,
-        isConnected: () => _port !== null && _isReading,
+        isConnected: () => {
+            if (_connType === 'serial') {
+                return _port !== null && _isReading;
+            } else if (_connType === 'websocket') {
+                return _socket !== null && _socket.readyState === WebSocket.OPEN;
+            }
+            return false;
+        },
+        updateStatus: _updateStatus,
         getLastResult: () => _lastParsedResult,
         getCurrentBrand: () => _currentBrand,
 
         /**
          * Kết nối đến cân
          * @param {string} brand - 'and' | 'mettler' | 'sartorius' | 'custom'
-         * @param {object} customConfig - Cài đặt tùy chỉnh (chỉ dùng khi brand = 'custom')
+         * @param {object} config - Cài đặt tùy chỉnh (custom serial hoặc websocket IP/port)
          */
-        async connect(brand, customConfig = null) {
-            if (!_isSupported()) {
-                Swal.fire('Không hỗ trợ', 'Trình duyệt của bạn không hỗ trợ Web Serial API.<br>Vui lòng dùng Chrome hoặc Edge phiên bản 89+.', 'error');
-                return false;
-            }
-            if (_port) {
-                _log('Đã kết nối rồi! Vui lòng ngắt kết nối trước.', 'error');
-                return false;
-            }
+        async connect(brand, config = null) {
+            const connType = config ? config.connectionType : 'serial';
 
-            const preset = window.SCALE_PRESETS[brand] || window.SCALE_PRESETS['custom'];
-            const config = brand === 'custom' && customConfig ? customConfig : preset;
+            if (connType === 'websocket') {
+                const ip = config.ip;
+                const port = config.port;
+                const wsUrl = `ws://${ip}:${port}`;
 
-            try {
-                // Mở popup chọn cổng COM — bắt buộc gọi từ gesture của người dùng
-                _port = await navigator.serial.requestPort();
-                await _port.open({
-                    baudRate: Number(config.baudRate) || 9600,
-                    dataBits: Number(config.dataBits) || 8,
-                    parity: config.parity || 'none',
-                    stopBits: Number(config.stopBits) || 1,
-                    flowControl: 'none'
+                if (_socket) {
+                    _log('Đã kết nối WebSocket rồi! Vui lòng ngắt kết nối trước.', 'error');
+                    return false;
+                }
+                if (_port) {
+                    _log('Cổng Serial đang hoạt động! Vui lòng ngắt kết nối trước.', 'error');
+                    return false;
+                }
+
+                return new Promise((resolve) => {
+                    _log(`Đang kết nối tới WebSocket ${wsUrl}...`, 'info');
+                    try {
+                        _socket = new WebSocket(wsUrl);
+                    } catch (e) {
+                        _log(`❌ Lỗi khởi tạo WebSocket: ${e.message}`, 'error');
+                        Swal.fire('Lỗi khởi tạo', `Không thể tạo kết nối WebSocket tới ${wsUrl}.<br>${e.message}`, 'error');
+                        _socket = null;
+                        resolve(false);
+                        return;
+                    }
+                    
+                    let resolved = false;
+
+                    _socket.onopen = () => {
+                        _connType = 'websocket';
+                        _currentBrand = brand;
+                        _updateStatus(true);
+                        _updateFloatingPill(true);
+                        _log(`✅ Đã kết nối WebSocket! IP: ${ip}:${port} | Hãng cân: ${brand}`, 'success');
+                        
+                        // Lưu vào cài đặt toàn cục và localStorage
+                        window.scaleConfig = { brand, ...config };
+                        try {
+                            localStorage.setItem('ebmr_scale_config', JSON.stringify(window.scaleConfig));
+                        } catch (err) {
+                            console.error('Failed to save scale config', err);
+                        }
+
+                        resolved = true;
+                        resolve(true);
+
+                        // Kích hoạt các lệnh ban đầu và smart query
+                        if (brand === 'mettler') {
+                            _write("SIR\r\n");
+                        }
+                        _startSmartQuery();
+                    };
+
+                    _socket.onmessage = (event) => {
+                        const text = event.data;
+                        _lineBuffer += text;
+                        const lines = _lineBuffer.split(/\r\n|\r|\n/);
+                        _lineBuffer = lines.pop(); // Giữ lại phần chưa hoàn chỉnh
+
+                        for (const line of lines) {
+                            const trimmed = line.trim();
+                            if (!trimmed) continue;
+                            _log(`← ${trimmed}`, 'data');
+                            _lastDataTime = Date.now();
+
+                            const result = window.ScaleParsers.parse(trimmed, _currentBrand);
+                            if (result) {
+                                _lastParsedResult = result;
+                                _callbacks.forEach(cb => {
+                                    try { cb(result); } catch(e) { console.error('Scale callback error:', e); }
+                                });
+
+                                const liveVal = document.getElementById('scale-live-value');
+                                if (liveVal) {
+                                    liveVal.textContent = `${result.value} ${result.unit}`;
+                                    liveVal.className = `scale-live-value ${result.stable ? 'stable' : 'unstable'}`;
+                                }
+                                _updateFloatingPill(true, result);
+                            }
+                        }
+                    };
+
+                    _socket.onerror = (err) => {
+                        console.error('WebSocket scale error:', err);
+                        _log(`❌ Lỗi kết nối WebSocket tới ${wsUrl}.`, 'error');
+                        if (!resolved) {
+                            _socket = null;
+                            resolved = true;
+                            Swal.fire('Lỗi kết nối', `Không thể kết nối WebSocket tới ${ip}:${port}`, 'error');
+                            resolve(false);
+                        }
+                    };
+
+                    _socket.onclose = (event) => {
+                        _log(`🔌 WebSocket đóng kết nối (${event.code}).`, 'info');
+                        _updateStatus(false);
+                        _updateFloatingPill(false);
+                        _socket = null;
+                        _lineBuffer = '';
+                        _lastParsedResult = null;
+                        _stopSmartQuery();
+                    };
                 });
+            } else {
+                // Kết nối Serial (Web Serial API)
+                if (!_isSupported()) {
+                    Swal.fire('Không hỗ trợ', 'Trình duyệt của bạn không hỗ trợ Web Serial API.<br>Vui lòng dùng Chrome hoặc Edge phiên bản 89+.', 'error');
+                    return false;
+                }
+                if (_port) {
+                    _log('Đã kết nối serial rồi! Vui lòng ngắt kết nối trước.', 'error');
+                    return false;
+                }
+                if (_socket) {
+                    _log('Kết nối WebSocket đang hoạt động! Vui lòng ngắt kết nối trước.', 'error');
+                    return false;
+                }
 
-                // Thiết lập các tín hiệu RTS/DTR cho kết nối RS-232/USB-to-Serial
+                const preset = window.SCALE_PRESETS[brand] || window.SCALE_PRESETS['custom'];
+                const serialConfig = brand === 'custom' && config ? config : preset;
+
                 try {
-                    await _port.setSignals({ dataTerminalReady: true, requestToSend: true });
-                    _log('✅ Khởi tạo tín hiệu DTR/RTS thành công', 'success');
-                } catch (signalErr) {
-                    console.warn('Không thể cài đặt tín hiệu RTS/DTR:', signalErr);
+                    // Mở popup chọn cổng COM — bắt buộc gọi từ gesture của người dùng
+                    _port = await navigator.serial.requestPort();
+                    await _port.open({
+                        baudRate: Number(serialConfig.baudRate) || 9600,
+                        dataBits: Number(serialConfig.dataBits) || 8,
+                        parity: serialConfig.parity || 'none',
+                        stopBits: Number(serialConfig.stopBits) || 1,
+                        flowControl: 'none'
+                    });
+
+                    // Thiết lập các tín hiệu RTS/DTR cho kết nối RS-232/USB-to-Serial
+                    try {
+                        await _port.setSignals({ dataTerminalReady: true, requestToSend: true });
+                        _log('✅ Khởi tạo tín hiệu DTR/RTS thành công', 'success');
+                    } catch (signalErr) {
+                        console.warn('Không thể cài đặt tín hiệu RTS/DTR:', signalErr);
+                    }
+
+                    _connType = 'serial';
+                    _currentBrand = brand;
+                    _isReading = true;
+                    _updateStatus(true);
+                    _updateFloatingPill(true); // Hiển thị status pill ở góc màn hình
+                    _log(`✅ Đã kết nối Serial! Hãng cân: ${preset.label} | Baud: ${serialConfig.baudRate}`, 'success');
+
+                    // Lưu vào cài đặt toàn cục và localStorage
+                    window.scaleConfig = { brand, connectionType: 'serial', ...serialConfig };
+                    try {
+                        localStorage.setItem('ebmr_scale_config', JSON.stringify(window.scaleConfig));
+                    } catch (err) {
+                        console.error('Failed to save scale config', err);
+                    }
+
+                    // Bắt đầu đọc streaming
+                    _startReading(); // Không await — chạy nền
+
+                    // Kích hoạt các lệnh ban đầu và smart query
+                    if (brand === 'mettler') {
+                        await _write("SIR\r\n");
+                    }
+                    _startSmartQuery();
+
+                    return true;
+                } catch (err) {
+                    _port = null;
+                    _isReading = false;
+                    _updateFloatingPill(false);
+                    if (err.name === 'NotFoundError') {
+                        _log('Người dùng đã hủy chọn cổng COM.', 'info');
+                    } else {
+                        _log(`❌ Không thể kết nối: ${err.message}`, 'error');
+                        Swal.fire('Lỗi kết nối', `Không thể mở cổng serial.<br><small>${err.message}</small>`, 'error');
+                    }
+                    return false;
                 }
-
-                _currentBrand = brand;
-                _isReading = true;
-                _updateStatus(true);
-                _updateFloatingPill(true); // Hiển thị status pill ở góc màn hình
-                _log(`✅ Đã kết nối! Hãng cân: ${preset.label} | Baud: ${config.baudRate}`, 'success');
-
-                // Lưu vào cài đặt toàn cục phiên làm việc
-                window.scaleConfig = { brand, ...config };
-
-                // Bắt đầu đọc streaming
-                _startReading(); // Không await — chạy nền
-
-                // Kích hoạt các lệnh ban đầu và smart query
-                if (brand === 'mettler') {
-                    await _write("SIR\r\n");
-                }
-                _startSmartQuery();
-
-                return true;
-            } catch (err) {
-                _port = null;
-                _isReading = false;
-                _updateFloatingPill(false);
-                if (err.name === 'NotFoundError') {
-                    _log('Người dùng đã hủy chọn cổng COM.', 'info');
-                } else {
-                    _log(`❌ Không thể kết nối: ${err.message}`, 'error');
-                    Swal.fire('Lỗi kết nối', `Không thể mở cổng serial.<br><small>${err.message}</small>`, 'error');
-                }
-                return false;
             }
         },
 
@@ -424,15 +608,24 @@ window.ScaleManager = (function () {
                     await _port.close();
                     _port = null;
                 }
-                _updateStatus(false);
-                _updateFloatingPill(false); // Ẩn status pill
-                _log('🔌 Đã ngắt kết nối.', 'info');
             } catch (err) {
                 _port = null;
-                _updateStatus(false);
-                _updateFloatingPill(false);
-                console.warn('Scale disconnect error:', err);
+                console.warn('Scale serial disconnect error:', err);
             }
+
+            try {
+                if (_socket) {
+                    _socket.close();
+                    _socket = null;
+                }
+            } catch (err) {
+                _socket = null;
+                console.warn('Scale websocket disconnect error:', err);
+            }
+
+            _updateStatus(false);
+            _updateFloatingPill(false); // Ẩn status pill
+            _log('🔌 Đã ngắt kết nối.', 'info');
         },
 
         /**
@@ -543,24 +736,63 @@ window.openScaleConnectionModal = function(fieldId) {
 
     // Cập nhật UI nút kết nối theo trạng thái hiện tại
     const isConnected = window.ScaleManager.isConnected();
-    const connectBtn = document.getElementById('scale-connect-btn');
-    const disconnectBtn = document.getElementById('scale-disconnect-btn');
-    const statusDot = document.getElementById('scale-status-dot');
-    const statusText = document.getElementById('scale-status-text');
+    window.ScaleManager.updateStatus(isConnected);
 
-    if (statusDot) statusDot.className = `scale-status-dot ${isConnected ? 'connected' : 'disconnected'}`;
-    if (statusText) {
-        statusText.textContent = isConnected ? 'Đã kết nối' : 'Chưa kết nối';
-        statusText.className = `small fw-bold ms-2 ${isConnected ? 'text-success' : 'text-danger'}`;
+    // Khôi phục lựa chọn thiết bị và cấu hình tương ứng
+    const savedDeviceId = localStorage.getItem('ebmr_selected_scale_device_id');
+    const deviceSelect = document.getElementById('scale-device-select');
+    let loadedFromDevice = false;
+
+    if (deviceSelect) {
+        if (savedDeviceId && (window.SCALE_DEVICES || []).some(d => String(d.id) === String(savedDeviceId))) {
+            deviceSelect.value = savedDeviceId;
+            window.onScaleDeviceSelected(savedDeviceId);
+            loadedFromDevice = true;
+        } else {
+            deviceSelect.value = '';
+        }
     }
-    if (connectBtn) connectBtn.classList.toggle('d-none', isConnected);
-    if (disconnectBtn) disconnectBtn.classList.toggle('d-none', !isConnected);
 
-    // Khôi phục lựa chọn hãng cân từ cài đặt phiên
-    const savedBrand = window.scaleConfig ? window.scaleConfig.brand : 'and';
-    const brandSelect = document.getElementById('scale-brand-select');
-    if (brandSelect) {
-        brandSelect.value = savedBrand;
+    if (!loadedFromDevice) {
+        // Khôi phục lựa chọn hãng cân từ cài đặt phiên
+        const savedBrand = window.scaleConfig ? window.scaleConfig.brand : 'and';
+        const brandSelect = document.getElementById('scale-brand-select');
+        if (brandSelect) {
+            brandSelect.value = savedBrand;
+        }
+
+        // Khôi phục phương thức kết nối, IP và Port từ cài đặt phiên
+        const savedType = window.scaleConfig ? (window.scaleConfig.connectionType || 'serial') : 'serial';
+        const serialRadio = document.getElementById('scale-conn-type-serial');
+        const wsRadio = document.getElementById('scale-conn-type-websocket');
+        if (savedType === 'websocket') {
+            if (wsRadio) wsRadio.checked = true;
+            window.onChangeScaleConnectionType('websocket');
+        } else {
+            if (serialRadio) serialRadio.checked = true;
+            window.onChangeScaleConnectionType('serial');
+        }
+
+        const savedIp = window.scaleConfig ? (window.scaleConfig.ip || '') : '';
+        const savedPort = window.scaleConfig ? (window.scaleConfig.port || '') : '';
+        const ipInput = document.getElementById('scale-websocket-ip');
+        const portInput = document.getElementById('scale-websocket-port');
+        if (ipInput) ipInput.value = savedIp;
+        if (portInput) portInput.value = savedPort;
+
+        // Khôi phục serial tùy chỉnh nếu có
+        if (savedType === 'serial' && savedBrand === 'custom' && window.scaleConfig) {
+            const baudSelect = document.getElementById('scale-custom-baud');
+            const databitsSelect = document.getElementById('scale-custom-databits');
+            const paritySelect = document.getElementById('scale-custom-parity');
+            const stopbitsSelect = document.getElementById('scale-custom-stopbits');
+            if (baudSelect && window.scaleConfig.baudRate) baudSelect.value = window.scaleConfig.baudRate;
+            if (databitsSelect && window.scaleConfig.dataBits) databitsSelect.value = window.scaleConfig.dataBits;
+            if (paritySelect && window.scaleConfig.parity) paritySelect.value = window.scaleConfig.parity;
+            if (stopbitsSelect && window.scaleConfig.stopBits) stopbitsSelect.value = window.scaleConfig.stopBits;
+        }
+
+        // Cập nhật hiển thị cài đặt tùy chỉnh
         toggleCustomScaleFields(savedBrand);
     }
 
@@ -604,7 +836,7 @@ window.openScaleConnectionModal = function(fieldId) {
                 }
                 
                 if (typeof toastr !== 'undefined') {
-                    toastr.success(`✅ Đã đọc: ${result.value} ${result.unit} (Ổn định)`, 'Cân điện tử', { timeOut: 3000 });
+                     toastr.success(`✅ Đã đọc: ${result.value} ${result.unit} (Ổn định)`, 'Cân điện tử', { timeOut: 3000 });
                 }
             }
         });
@@ -644,12 +876,45 @@ window.openScaleConnectionModal = function(fieldId) {
 };
 
 /**
+ * Xử lý thay đổi phương thức kết nối
+ */
+window.onChangeScaleConnectionType = function(type) {
+    const webSocketFields = document.getElementById('scale-websocket-fields');
+    const customFields = document.getElementById('scale-custom-fields');
+    const serialInfo = document.getElementById('scale-serial-info');
+    const webSocketInfo = document.getElementById('scale-websocket-info');
+    const brandSelect = document.getElementById('scale-brand-select');
+    const brand = brandSelect ? brandSelect.value : 'and';
+
+    if (type === 'websocket') {
+        if (webSocketFields) webSocketFields.classList.remove('d-none');
+        if (customFields) customFields.classList.add('d-none');
+        if (serialInfo) serialInfo.classList.add('d-none');
+        if (webSocketInfo) webSocketInfo.classList.remove('d-none');
+    } else {
+        if (webSocketFields) webSocketFields.classList.add('d-none');
+        if (customFields) {
+            customFields.classList.toggle('d-none', brand !== 'custom');
+        }
+        if (serialInfo) serialInfo.classList.remove('d-none');
+        if (webSocketInfo) webSocketInfo.classList.add('d-none');
+    }
+};
+
+/**
  * Hiện/ẩn form cài đặt tùy chỉnh khi chọn hãng "custom"
  */
 window.toggleCustomScaleFields = function(brand) {
     const customFields = document.getElementById('scale-custom-fields');
     if (customFields) {
-        customFields.classList.toggle('d-none', brand !== 'custom');
+        const connTypeInput = document.querySelector('input[name="scale-connection-type"]:checked');
+        const connType = connTypeInput ? connTypeInput.value : 'serial';
+        
+        if (connType === 'serial') {
+            customFields.classList.toggle('d-none', brand !== 'custom');
+        } else {
+            customFields.classList.add('d-none');
+        }
     }
 };
 
@@ -660,17 +925,38 @@ window.connectScaleFromModal = async function() {
     const brandSelect = document.getElementById('scale-brand-select');
     const brand = brandSelect ? brandSelect.value : 'and';
 
-    let customConfig = null;
-    if (brand === 'custom') {
-        customConfig = {
-            baudRate: parseInt(document.getElementById('scale-custom-baud').value) || 9600,
-            dataBits: parseInt(document.getElementById('scale-custom-databits').value) || 8,
-            parity: document.getElementById('scale-custom-parity').value || 'none',
-            stopBits: parseInt(document.getElementById('scale-custom-stopbits').value) || 1
-        };
+    const connTypeInput = document.querySelector('input[name="scale-connection-type"]:checked');
+    const connectionType = connTypeInput ? connTypeInput.value : 'serial';
+
+    let config = { connectionType };
+
+    if (connectionType === 'serial') {
+        if (brand === 'custom') {
+            config.baudRate = parseInt(document.getElementById('scale-custom-baud').value) || 9600;
+            config.dataBits = parseInt(document.getElementById('scale-custom-databits').value) || 8;
+            config.parity = document.getElementById('scale-custom-parity').value || 'none';
+            config.stopBits = parseInt(document.getElementById('scale-custom-stopbits').value) || 1;
+        }
+    } else {
+        const ipInput = document.getElementById('scale-websocket-ip');
+        const portInput = document.getElementById('scale-websocket-port');
+        const ip = ipInput ? ipInput.value.trim() : '';
+        const port = portInput ? portInput.value.trim() : '';
+
+        if (!ip) {
+            Swal.fire('Lỗi nhập liệu', 'Vui lòng điền địa chỉ IP của thiết bị.', 'warning');
+            return;
+        }
+        if (!port) {
+            Swal.fire('Lỗi nhập liệu', 'Vui lòng điền cổng (Port) kết nối.', 'warning');
+            return;
+        }
+
+        config.ip = ip;
+        config.port = port;
     }
 
-    const success = await window.ScaleManager.connect(brand, customConfig);
+    const success = await window.ScaleManager.connect(brand, config);
     if (success) {
         // Nếu có fieldId đang chờ → tự động đọc luôn sau 500ms
         if (window._scaleTargetFieldId) {
@@ -714,5 +1000,99 @@ window.readScaleFromModal = function() {
             }
         }
     }
+};
+
+/**
+ * Ẩn/hiện chi tiết cấu hình phần cứng
+ */
+window.toggleScaleDetails = function() {
+    const isAdmin = @json(session('user') && session('user')['userGroup'] == 'Admin');
+    if (!isAdmin) return;
+    const container = document.getElementById('scale-hardware-details-container');
+    const icon = document.getElementById('scale-details-icon');
+    if (container) {
+        if (container.style.display === 'none') {
+            container.style.display = 'block';
+            if (icon) {
+                icon.classList.remove('fa-chevron-down');
+                icon.classList.add('fa-chevron-up');
+            }
+        } else {
+            container.style.display = 'none';
+            if (icon) {
+                icon.classList.remove('fa-chevron-up');
+                icon.classList.add('fa-chevron-down');
+            }
+        }
+    }
+};
+
+/**
+ * Xử lý khi chọn thiết bị từ dropdown
+ */
+window.onScaleDeviceSelected = function(deviceId) {
+    const inputsToToggle = [
+        document.getElementById('scale-conn-type-serial'),
+        document.getElementById('scale-conn-type-websocket'),
+        document.getElementById('scale-brand-select'),
+        document.getElementById('scale-websocket-ip'),
+        document.getElementById('scale-websocket-port'),
+        document.getElementById('scale-custom-baud'),
+        document.getElementById('scale-custom-databits'),
+        document.getElementById('scale-custom-parity'),
+        document.getElementById('scale-custom-stopbits')
+    ];
+
+    if (!deviceId) {
+        localStorage.removeItem('ebmr_selected_scale_device_id');
+        // Cho phép chỉnh sửa khi tự nhập cấu hình
+        inputsToToggle.forEach(input => {
+            if (input) input.disabled = false;
+        });
+        return;
+    }
+
+    const device = (window.SCALE_DEVICES || []).find(d => String(d.id) === String(deviceId));
+    if (!device) return;
+
+    localStorage.setItem('ebmr_selected_scale_device_id', deviceId);
+
+    // Điền cấu hình vào modal
+    const connType = device.connection_type || 'serial';
+    const serialRadio = document.getElementById('scale-conn-type-serial');
+    const wsRadio = document.getElementById('scale-conn-type-websocket');
+    if (connType === 'websocket') {
+        if (wsRadio) wsRadio.checked = true;
+    } else {
+        if (serialRadio) serialRadio.checked = true;
+    }
+    window.onChangeScaleConnectionType(connType);
+
+    const brand = device.brand || 'and';
+    const brandSelect = document.getElementById('scale-brand-select');
+    if (brandSelect) {
+        brandSelect.value = brand;
+    }
+    window.toggleCustomScaleFields(brand);
+
+    const ipInput = document.getElementById('scale-websocket-ip');
+    const portInput = document.getElementById('scale-websocket-port');
+    if (ipInput) ipInput.value = device.ip || '';
+    if (portInput) portInput.value = device.port || '';
+
+    const baudSelect = document.getElementById('scale-custom-baud');
+    const databitsSelect = document.getElementById('scale-custom-databits');
+    const paritySelect = document.getElementById('scale-custom-parity');
+    const stopbitsSelect = document.getElementById('scale-custom-stopbits');
+
+    if (baudSelect && device.baud_rate) baudSelect.value = device.baud_rate;
+    if (databitsSelect && device.data_bits) databitsSelect.value = device.data_bits;
+    if (paritySelect && device.parity) paritySelect.value = device.parity;
+    if (stopbitsSelect && device.stop_bits) stopbitsSelect.value = device.stop_bits;
+
+    // Vô hiệu hóa chỉnh sửa khi chọn thiết bị có sẵn từ dữ liệu gốc
+    inputsToToggle.forEach(input => {
+        if (input) input.disabled = true;
+    });
 };
 </script>

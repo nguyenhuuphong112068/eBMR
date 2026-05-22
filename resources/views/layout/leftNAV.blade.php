@@ -146,6 +146,10 @@
                                 class="nav-link"><i class="far fa-circle nav-icon text-success"></i>
                                 <p>Tiêu chuẩn NL</p>
                             </a></li>
+                        <li class="nav-item"><a href="{{ route('pages.materData.instrument.list') }}"
+                                class="nav-link"><i class="far fa-circle nav-icon text-primary"></i>
+                                <p>Thiết bị sản xuất</p>
+                            </a></li>
                     </ul>
                 </li>
 
