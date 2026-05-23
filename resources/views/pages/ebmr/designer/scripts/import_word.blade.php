@@ -534,15 +534,17 @@
                         if (currentIdx !== -1) insertIndex = currentIdx + 1;
                     } else if (window.activeSectionId) {
                         // Chèn vào cuối phân đoạn đang active
-                        let lastIdxInSection = -1;
-                        for (let i = items.length - 1; i >= 0; i--) {
-                            const itemSectId = (items[i].type === 'section') ? (items[i].section_id || items[i].id) : items[i].section_id;
-                            if (itemSectId === window.activeSectionId) {
+                        const secIdx = items.findIndex(item => item.type === 'section' && item.id === window.activeSectionId);
+                        if (secIdx !== -1) {
+                            let lastIdxInSection = secIdx;
+                            for (let i = secIdx + 1; i < items.length; i++) {
+                                if (items[i].type === 'section') {
+                                    break;
+                                }
                                 lastIdxInSection = i;
-                                break;
                             }
+                            insertIndex = lastIdxInSection + 1;
                         }
-                        if (lastIdxInSection !== -1) insertIndex = lastIdxInSection + 1;
                     }
                 }
 

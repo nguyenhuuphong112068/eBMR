@@ -663,7 +663,7 @@
             .replace(/'/g, "&#039;");
     }
 
-    window.duplicateFieldBadgesInHtml = function(html) {
+    window.duplicateFieldBadgesInHtml = function(html, newBlockId = null, newSectionId = null) {
         if (!html || typeof html !== 'string' || !html.includes('ebmr-field-badge')) {
             return html;
         }
@@ -707,6 +707,9 @@
                     id: newId,
                     name: newName
                 };
+
+                if (newBlockId) configObj[newId].block_id = newBlockId;
+                if (newSectionId) configObj[newId].section_id = newSectionId;
                 
                 badge.setAttribute('data-field-id', newId);
                 badge.setAttribute('onclick', `selectField(event, '${newId}')`);

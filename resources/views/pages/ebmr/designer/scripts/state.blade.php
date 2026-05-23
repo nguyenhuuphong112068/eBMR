@@ -26,9 +26,9 @@
     function injectVirtualBlocks() {
         const type = "{{ $template->type ?? 'BMR' }}";
         const catId = window.catId;
-        
+
         let virtualBlocks = [];
-        
+
         if (type === 'GF') {
             // Biểu mẫu dùng chung (GF) không tự động khởi tạo block thông tin chung và header
         } else {
@@ -36,50 +36,50 @@
             virtualBlocks.push({
                 id: 'sys_bmr_sec_header',
                 type: 'section',
-                label: 'BMR HEADER',
+                label: 'HEADER',
                 section_id: catId,
                 locked: true,
                 isVirtual: true
             });
-            
+
             // 2. BMR Header (Table)
             let bmrHeader = generateDefaultBmrHeader();
             bmrHeader.id = 'sys_bmr_tbl_header';
             bmrHeader.isVirtual = true;
             virtualBlocks.push(bmrHeader);
-            
+
             // QUY TRÌNH PHÊ DUYỆT
             virtualBlocks.push({
                 id: 'sys_bmr_sec_approval',
                 type: 'section',
-                label: 'QUY TRÌNH PHÊ DUYỆT',
+                label: 'PHÊ DUYỆT',
                 section_id: catId,
                 locked: true,
                 isVirtual: true
             });
-            
+
             let sigTable = generateSignatureTable();
             sigTable.id = 'sys_bmr_tbl_signatures';
             virtualBlocks.push(sigTable);
-            
-            
+
+
             if (type !== 'MF' && type !== 'BPR') {
                 // 3. THÔNG TIN CHUNG SẢN PHẨM (Section)
                 virtualBlocks.push({
                     id: 'sys_bmr_sec_common_info',
                     type: 'section',
-                    label: 'THÔNG TIN CHUNG SẢN PHẨM',
+                    label: 'THÔNG TIN SẢN PHẨM',
                     section_id: catId,
                     locked: true,
                     isVirtual: true
                 });
-                
+
                 // 4. MÔ TẢ SẢN PHẨM (Table)
                 let descTable = generateProductDescriptionTable();
                 descTable.id = 'sys_bmr_tbl_desc';
                 descTable.isVirtual = true;
                 virtualBlocks.push(descTable);
-                
+
                 // 5. CÔNG THỨC PHA CHẾ (Section)
                 virtualBlocks.push({
                     id: 'sys_bmr_sec_recipe',
@@ -89,7 +89,7 @@
                     locked: true,
                     isVirtual: true
                 });
-                
+
                 // 6. Recipe Tables & Notes
                 let recipes = generateRecipeTables();
                 recipes.forEach((tbl, idx) => {
@@ -99,18 +99,18 @@
                 });
             }
         }
-        
+
         // Load abbreviation table from ebmr_templates.abbreviations_List
         let abbrevListStr = `{!! addslashes($template->abbreviations_List ?? '') !!}`;
         let abbrevTable = null;
         if (abbrevListStr) {
             try {
                 abbrevTable = JSON.parse(abbrevListStr);
-            } catch(e) {
+            } catch (e) {
                 console.error("Error parsing abbreviations_List", e);
             }
         }
-        
+
         // Find if there is an old abbreviation table in items
         const abbrevIdx = items.findIndex(i => i.isAbbreviationTable === true && !i.isVirtual);
         if (abbrevIdx !== -1) {
@@ -121,12 +121,15 @@
         }
 
         // Biểu mẫu dùng chung (GF) không dùng các nhãn hệ thống để lọc, tránh xóa nhãn tự thiết kế
-        let sysLabels = ['BMR HEADER', 'BMR Header', 'GF Header', 'QUY TRÌNH PHÊ DUYỆT', 'THÔNG TIN CHUNG SẢN PHẨM', 'MÔ TẢ SẢN PHẨM', 'CÔNG THỨC PHA CHẾ', '1. NGUYÊN LIỆU PHA CHẾ', '2. NGUYÊN LIỆU KHÁC (BAO PHIM/NANG)', 'Ghi chú nguyên liệu pha chế', 'Ghi chú nguyên liệu khác', 'THÔNG TIN CHUNG', 'Trình Ký'];
+        let sysLabels = ['BMR HEADER', 'BMR Header', 'GF Header', 'QUY TRÌNH PHÊ DUYỆT', 'THÔNG TIN CHUNG SẢN PHẨM',
+            'MÔ TẢ SẢN PHẨM', 'CÔNG THỨC PHA CHẾ', '1. NGUYÊN LIỆU PHA CHẾ', '2. NGUYÊN LIỆU KHÁC (BAO PHIM/NANG)',
+            'Ghi chú nguyên liệu pha chế', 'Ghi chú nguyên liệu khác', 'THÔNG TIN CHUNG', 'Trình Ký'
+        ];
         if (type === 'GF') {
             sysLabels = [];
         }
         items = items.filter(i => !sysLabels.includes(i.label));
-        
+
         // Prepend virtual blocks
         items.unshift(...virtualBlocks);
 
@@ -138,7 +141,7 @@
             insertIdx++;
         }
     }
-    
+
     injectVirtualBlocks();
 
     // Auto-unlock existing linked templates that were locked by previous logic
@@ -257,7 +260,7 @@
         const id = 'blk_header_' + Date.now();
         const t = {
             id: "{{ $template->id ?? '' }}",
-            code: "{{ $template->doc_code ?? $template->category_code ?? '' }}",
+            code: "{{ $template->doc_code ?? ($template->category_code ?? '') }}",
             edition: "{{ $template->version ?? '1' }}",
             name: "{{ $template->category_name ?? '' }}",
             dosage: "{{ $template->dosage_name ?? '' }}",
@@ -420,7 +423,7 @@
         const id = 'blk_desc_' + Date.now();
         const formulas = @json($template->formulas ?? []);
         let labelClaimsHtml = '';
-        
+
         let activeIngredients = formulas.filter(f => f.role && f.role.trim().toLowerCase() === 'hoạt chất');
         if (activeIngredients.length > 0) {
             let dosageUnit = "{{ mb_strtolower($template->dosage_name ?? 'viên') }}";
@@ -430,7 +433,10 @@
                 if (matName.includes('(')) {
                     matName = matName.split('(')[0].trim();
                 }
-                let amount = Number(f.total_amount_per_unit).toLocaleString('vi-VN', {minimumFractionDigits: 0, maximumFractionDigits: 2});
+                let amount = Number(f.total_amount_per_unit).toLocaleString('vi-VN', {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 2
+                });
                 lines.push(`<div style="display: flex; width: 100%; max-width: 450px; margin-left: 20px;">
                                 <span>${matName}</span>
                                 <span style="flex-grow: 1; border-bottom: 1px dotted #000; margin: 0 5px; position: relative; top: -5px;"></span>
@@ -706,10 +712,10 @@
                         let bVal = parseFloat(sub.amount_per_batch) || 0;
                         unitParts.push(
                             `${Number(uVal).toLocaleString('vi-VN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}<sup>(${stt}${subLabel})</sup>`
-                            );
+                        );
                         batchParts.push(
                             `${Number(bVal).toLocaleString('vi-VN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}<sup>(${stt}${subLabel})</sup>`
-                            );
+                        );
 
                         if (sub.note) {
                             notesHtml +=
@@ -973,9 +979,10 @@
     function generateSignatureTable() {
         const id = 'sys_bmr_tbl_signatures';
         const workflows = @json($template->workflows ?? []);
-        const createdByName = "{{ $template->owner_name ?? '' }}"; 
-        const createdAtStr = "{{ $template->created_at ?? '' }}"; 
-        
+        const createdByName = "{{ $template->owner_name ?? '' }}";
+        const createdAtStr = "{{ $template->created_at ?? '' }}";
+        const createdBySignature = "{{ $template->owner_signature ?? '' }}";
+
         let columns = [{
                 label: '-',
                 type: 'text',
@@ -997,12 +1004,36 @@
                 width: '20%'
             }
         ];
-        
+
         let data = [
-            [{ content: '-', rs: 1, cs: 1, textAlign: 'center', fontWeight: 'bold' },
-             { content: 'HỌ VÀ TÊN', rs: 1, cs: 1, textAlign: 'center', fontWeight: 'bold' },
-             { content: 'CHỮ KÝ', rs: 1, cs: 1, textAlign: 'center', fontWeight: 'bold' },
-             { content: 'NGÀY', rs: 1, cs: 1, textAlign: 'center', fontWeight: 'bold' }
+            [{
+                    content: '-',
+                    rs: 1,
+                    cs: 1,
+                    textAlign: 'center',
+                    fontWeight: 'bold'
+                },
+                {
+                    content: 'HỌ VÀ TÊN',
+                    rs: 1,
+                    cs: 1,
+                    textAlign: 'center',
+                    fontWeight: 'bold'
+                },
+                {
+                    content: 'CHỮ KÝ',
+                    rs: 1,
+                    cs: 1,
+                    textAlign: 'center',
+                    fontWeight: 'bold'
+                },
+                {
+                    content: 'NGÀY',
+                    rs: 1,
+                    cs: 1,
+                    textAlign: 'center',
+                    fontWeight: 'bold'
+                }
             ]
         ];
 
@@ -1027,46 +1058,114 @@
         }
 
         // 1. Soạn thảo
-        data.push([
-            { content: 'Người soạn thảo', rs: 1, cs: 1, textAlign: 'left' },
-            { content: `<div>Người lập</div><div class="mt-2">${createdByName}</div>`, rs: 1, cs: 1, textAlign: 'left' },
-            { content: `<span class="text-success"><i class="fas fa-check-circle me-1"></i> Đã ký</span>`, rs: 1, cs: 1, textAlign: 'center' },
-            { content: formatDate(createdAtStr), rs: 1, cs: 1, textAlign: 'center' }
+        let authorSigContent = `<span class="text-success"><i class="fas fa-check-circle me-1"></i> Đã ký</span>`;
+        if (createdBySignature) {
+            authorSigContent = `<img src="${createdBySignature}" style="max-height: 40px; max-width: 120px;" alt="Chữ ký">`;
+        }
+
+        data.push([{
+                content: 'Người soạn thảo',
+                rs: 1,
+                cs: 1,
+                textAlign: 'left'
+            },
+            {
+                content: `<div>Người lập</div><div class="mt-2">${createdByName}</div>`,
+                rs: 1,
+                cs: 1,
+                textAlign: 'left'
+            },
+            {
+                content: authorSigContent,
+                rs: 1,
+                cs: 1,
+                textAlign: 'center'
+            },
+            {
+                content: formatDate(createdAtStr),
+                rs: 1,
+                cs: 1,
+                textAlign: 'center'
+            }
         ]);
 
         if (workflows && workflows.length > 0) {
-             workflows.forEach(wf => {
-                 let roleText = 'Người kiểm tra';
-                 if (wf.role === 'approver') roleText = 'Người phê duyệt';
-                 if (wf.role === 'authorizer') roleText = 'Người duyệt ban hành';
-                 if (wf.role === 'reviewer') roleText = 'Người kiểm tra';
+            workflows.forEach(wf => {
+                let roleText = 'Người kiểm tra';
+                if (wf.role === 'approver') roleText = 'Người phê duyệt';
+                if (wf.role === 'authorizer') roleText = 'Người duyệt ban hành';
+                if (wf.role === 'reviewer') roleText = 'Người kiểm tra';
 
-                 let nameText = `<div>${wf.title || wf.department_name || ''}</div><div class="mt-2">${wf.fullName || ''}</div>`;
-                 
-                 let dateText = '';
-                 let sigText = '';
-                 if (wf.status === 'approved') {
-                     dateText = formatDate(wf.created_at);
-                     sigText = `<span class="text-success" style="font-weight: bold;"><i class="fas fa-check-circle me-1"></i> Đã ký</span>`;
-                 } else if (wf.status === 'rejected') {
-                     sigText = `<span class="text-danger" style="font-weight: bold;"><i class="fas fa-times-circle me-1"></i> Từ chối</span>`;
-                 }
+                let nameText =
+                    `<div>${wf.title || wf.department_name || ''}</div><div class="mt-2">${wf.fullName || ''}</div>`;
 
-                 data.push([
-                    { content: roleText, rs: 1, cs: 1, textAlign: 'left' },
-                    { content: nameText, rs: 1, cs: 1, textAlign: 'left' },
-                    { content: sigText, rs: 1, cs: 1, textAlign: 'center' },
-                    { content: dateText, rs: 1, cs: 1, textAlign: 'center' }
-                 ]);
-             });
+                let dateText = '';
+                let sigText = '';
+                if (wf.status === 'approved') {
+                    dateText = formatDate(wf.created_at);
+                    if (wf.signature_image) {
+                        sigText = `<img src="${wf.signature_image}" style="max-height: 40px; max-width: 120px;" alt="Chữ ký">`;
+                    } else {
+                        sigText = `<span class="text-success" style="font-weight: bold;"><i class="fas fa-check-circle me-1"></i> Đã ký</span>`;
+                    }
+                } else if (wf.status === 'rejected') {
+                    sigText =
+                        `<span class="text-danger" style="font-weight: bold;"><i class="fas fa-times-circle me-1"></i> Từ chối</span>`;
+                }
+
+                data.push([{
+                        content: roleText,
+                        rs: 1,
+                        cs: 1,
+                        textAlign: 'left'
+                    },
+                    {
+                        content: nameText,
+                        rs: 1,
+                        cs: 1,
+                        textAlign: 'left'
+                    },
+                    {
+                        content: sigText,
+                        rs: 1,
+                        cs: 1,
+                        textAlign: 'center'
+                    },
+                    {
+                        content: dateText,
+                        rs: 1,
+                        cs: 1,
+                        textAlign: 'center'
+                    }
+                ]);
+            });
         } else {
-             // Fallback empty rows
-             data.push([
-                { content: 'Người kiểm tra', rs: 1, cs: 1, textAlign: 'left' },
-                { content: '', rs: 1, cs: 1, textAlign: 'left' },
-                { content: '', rs: 1, cs: 1, textAlign: 'center' },
-                { content: '', rs: 1, cs: 1, textAlign: 'center' }
-             ]);
+            // Fallback empty rows
+            data.push([{
+                    content: 'Người kiểm tra',
+                    rs: 1,
+                    cs: 1,
+                    textAlign: 'left'
+                },
+                {
+                    content: '',
+                    rs: 1,
+                    cs: 1,
+                    textAlign: 'left'
+                },
+                {
+                    content: '',
+                    rs: 1,
+                    cs: 1,
+                    textAlign: 'center'
+                },
+                {
+                    content: '',
+                    rs: 1,
+                    cs: 1,
+                    textAlign: 'center'
+                }
+            ]);
         }
 
         return {

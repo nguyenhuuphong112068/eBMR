@@ -6,6 +6,14 @@
 
             const cell = e.target.closest('td, th');
             if (cell && cell.closest('.mini-table')) {
+                const blockItem = cell.closest('.block-item');
+                const bId = blockItem ? blockItem.getAttribute('data-id') : null;
+                
+                // Nếu đang giữ Shift và click vào block khác, đây là chọn dải block, không phải chọn ô
+                if (e.shiftKey && bId && bId !== selectedId) {
+                    return;
+                }
+
                 isSelecting = true;
                 startCell = cell;
                 activeRowIdx = parseInt(cell.dataset.row);
@@ -16,9 +24,6 @@
                     clearSelection();
                     cell.classList.add('selected-cell');
                 }
-                
-                const blockItem = cell.closest('.block-item');
-                const bId = blockItem ? blockItem.getAttribute('data-id') : null;
                 
                 // Default: select table/item (we handle field selection on mouseup if it was a single click)
                 if (bId) selectItem(bId, false);
@@ -128,7 +133,21 @@
                     // If NOT writing in a text box/input, or if we have a table selection, handle cell-level operations
                     if (!isWriting || (hasMultiSelection && !isInput)) {
                         const targetCell = hasMultiSelection ? selectedCells[0] : e.target.closest('td, th');
-                        if (!targetCell) return;
+                        if (!targetCell) {
+                            if (key === 'c') {
+                                e.preventDefault();
+                                copyBlock();
+                            } else if (key === 'x') {
+                                e.preventDefault();
+                                cutBlock();
+                            } else if (key === 'v') {
+                                if (window.blockClipboard && window.blockClipboard.blocks && window.blockClipboard.blocks.length > 0) {
+                                    e.preventDefault();
+                                    pasteBlock();
+                                }
+                            }
+                            return;
+                        }
                         
                         const table = targetCell.closest('.mini-table');
                         if (!table) return;
@@ -356,15 +375,17 @@
             if (currentIdx !== -1) insertIndex = currentIdx + 1;
         } else if (window.activeSectionId) {
             // Fallback: Add to the end of the active section if no specific block is selected
-            let lastIdxInSection = -1;
-            for (let i = items.length - 1; i >= 0; i--) {
-                const itemSectId = (items[i].type === 'section') ? (items[i].section_id || items[i].id) : items[i].section_id;
-                if (itemSectId === window.activeSectionId) {
+            const secIdx = items.findIndex(item => item.type === 'section' && item.id === window.activeSectionId);
+            if (secIdx !== -1) {
+                let lastIdxInSection = secIdx;
+                for (let i = secIdx + 1; i < items.length; i++) {
+                    if (items[i].type === 'section') {
+                        break;
+                    }
                     lastIdxInSection = i;
-                    break;
                 }
+                insertIndex = lastIdxInSection + 1;
             }
-            if (lastIdxInSection !== -1) insertIndex = lastIdxInSection + 1;
         }
 
         if (htmlData) {
@@ -380,10 +401,13 @@
                 }
             };
 
-            Array.from(body.childNodes).forEach(node => {
+            const processNode = (node) => {
                 if (node.nodeName === 'TABLE') {
                     flushPending();
                     addPastedTableBlock(node, insertIndex++);
+                } else if (node.nodeType === Node.ELEMENT_NODE && node.querySelector('table')) {
+                    // Container element containing tables, recurse into its children
+                    Array.from(node.childNodes).forEach(processNode);
                 } else {
                     // Collect everything else (div, p, span, br, text) into pending
                     if (node.nodeType === Node.ELEMENT_NODE) {
@@ -392,7 +416,9 @@
                         pendingContent += node.textContent;
                     }
                 }
-            });
+            };
+
+            Array.from(body.childNodes).forEach(processNode);
             flushPending();
         } else {
             addPastedTextBlock(plainText, insertIndex);

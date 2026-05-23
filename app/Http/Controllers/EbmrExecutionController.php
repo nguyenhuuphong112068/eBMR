@@ -96,8 +96,19 @@ class EbmrExecutionController extends Controller
         $record = DB::table('ebmr_records')->where('id', $id)->first();
         if (!$record) return redirect()->back()->with('error', 'Hồ sơ không tồn tại.');
 
-        $template = DB::table('ebmr_templates')->where('id', $record->template_id)->first();
+        $template = DB::table('ebmr_templates')
+            ->leftJoin('user_management', 'ebmr_templates.owner_id', '=', 'user_management.id')
+            ->where('ebmr_templates.id', $record->template_id)
+            ->select('ebmr_templates.*', 'user_management.fullName as owner_name', 'user_management.signature_image as owner_signature')
+            ->first();
         if (!$template) return redirect()->back()->with('error', 'Mẫu hồ sơ không tồn tại.');
+
+        $template->workflows = DB::table('ebmr_template_workflows')
+            ->leftJoin('user_management', 'ebmr_template_workflows.user_id', '=', 'user_management.id')
+            ->where('template_id', $template->id)
+            ->orderBy('step_order')
+            ->select('ebmr_template_workflows.*', 'user_management.fullName', 'user_management.groupName as title', 'user_management.deparment as department_name', 'user_management.signature_image as signature_image')
+            ->get();
 
         if ($template->type === 'GF') {
             $cat = DB::table('gf_category')->where('id', $template->caterogy_id)->first();

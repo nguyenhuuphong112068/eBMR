@@ -23,7 +23,7 @@ class EbmrDesignerController extends Controller
                 $template = DB::table('ebmr_templates')
                     ->leftJoin('user_management', 'ebmr_templates.owner_id', '=', 'user_management.id')
                     ->where('ebmr_templates.id', $id)
-                    ->select('ebmr_templates.*', 'user_management.fullName as owner_name')
+                    ->select('ebmr_templates.*', 'user_management.fullName as owner_name', 'user_management.signature_image as owner_signature')
                     ->first();
                 if ($template) {
                     // Update session title based on type
@@ -285,7 +285,7 @@ class EbmrDesignerController extends Controller
                         ->leftJoin('user_management', 'ebmr_template_workflows.user_id', '=', 'user_management.id')
                         ->where('template_id', $id)
                         ->orderBy('step_order')
-                        ->select('ebmr_template_workflows.*', 'user_management.fullName', 'user_management.groupName as title', 'user_management.deparment as department_name')
+                        ->select('ebmr_template_workflows.*', 'user_management.fullName', 'user_management.groupName as title', 'user_management.deparment as department_name', 'user_management.signature_image as signature_image')
                         ->get();
                     $template->workflows = $workflows;
 

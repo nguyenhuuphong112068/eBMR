@@ -1,0 +1,1303 @@
+﻿<style>
+    /* N├║t h├ánh ─æß╗Öng nhanh cho Bß║úng (Google Docs style) */
+    .table-header-cell,
+    .mini-table td {
+        position: relative;
+    }
+
+    .cell-wrapper {
+        min-height: 1.5em;
+        /* ─Éß║úm bß║úo d├▓ng rß╗ùng c├│ chiß╗üu cao bß║▒ng d├▓ng c├│ 1 chß╗» */
+        padding: 2px;
+    }
+
+    .col-actions,
+    .row-actions {
+        position: absolute;
+        display: none;
+        background: rgba(255, 255, 255, 0.95);
+        border: 1px solid #0d6efd;
+        border-radius: 4px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        z-index: 1050;
+        padding: 2px;
+    }
+
+    /* Chß╗ënh lß║íi vß╗ï tr├¡ ─æß╗â kh├┤ng bß╗ï cß║»t bß╗ƒi wrapper c├│ overflow:hidden */
+    .col-actions {
+        top: 5px;
+        right: 5px;
+        flex-direction: row;
+    }
+
+    .row-actions {
+        top: 50%;
+        left: 5px;
+        transform: translateY(-50%);
+        flex-direction: row;
+    }
+
+    .table-header-cell:hover .col-actions,
+    .mini-table td:hover .row-actions {
+        display: flex;
+    }
+
+    .btn-col-add,
+    .btn-col-del,
+    .btn-row-add,
+    .btn-row-del {
+        border: none;
+        background: transparent;
+        color: #6c757d;
+        padding: 2px 5px;
+        font-size: 10px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .btn-col-add:hover,
+    .btn-row-add:hover {
+        color: #0d6efd;
+        background: #e7f1ff;
+    }
+
+    .btn-col-del:hover,
+    .btn-row-del:hover {
+        color: #dc3545;
+        background: #fff5f5;
+    }
+
+    /* Border Modes */
+    .border-mode-none,
+    .border-mode-none th,
+    .border-mode-none td {
+        border: 1px solid transparent;
+    }
+
+    .border-mode-none:hover {
+        border: 1px dashed #ccc;
+    }
+
+    .border-mode-all th,
+    .border-mode-all td {
+        border: var(--table-border-width, 1px) solid var(--table-border-color, #dee2e6);
+    }
+
+    .border-mode-outer {
+        border: var(--table-border-width, 1px) solid var(--table-border-color, #dee2e6);
+    }
+
+    .border-mode-outer th,
+    .border-mode-outer td {
+        border: none;
+    }
+
+    .border-mode-rows th,
+    .border-mode-rows td {
+        border: none;
+        border-bottom: var(--table-border-width, 1px) solid var(--table-border-color, #dee2e6);
+    }
+
+    .border-mode-rows tr:last-child td {
+        border-bottom: none;
+    }
+
+    .border-mode-cols th,
+    .border-mode-cols td {
+        border: none;
+        border-right: var(--table-border-width, 1px) solid var(--table-border-color, #dee2e6);
+    }
+
+    .border-mode-cols tr td:last-child,
+    .border-mode-cols tr th:last-child {
+        border-right: none;
+    }
+
+    .mini-table.border-mode-none tr:hover td {
+        border: 1px dashed #eee !important;
+    }
+
+    /* Active state for border selector */
+    .border-selector-grid .btn.active {
+        background-color: #e7f1ff !important;
+        color: #0d6efd !important;
+        border-color: #0d6efd !important;
+        box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+    }
+
+    @media print {
+
+        .col-actions,
+        .row-actions,
+        .btn-row-add,
+        .btn-row-del,
+        .btn-col-add,
+        .btn-col-del {
+            display: none !important;
+        }
+    }
+</style>
+<script>
+    /**
+     * H├ám helper hiß╗ân thß╗ï chß╗» k├╜ d╞░ß╗¢i dß║íng h├¼nh ß║únh (nß║┐u l├á base64) hoß║╖c text (nß║┐u l├á chß╗» viß║┐t th╞░ß╗¥ng).
+     */
+    function getSignatureDisplayHtml(runVal, type = 'signature') {
+        if (!runVal) return '';
+        let iconClass = 'fa-check-circle text-success';
+        if (type === 'executor') iconClass = 'fa-user-check text-primary';
+        if (type === 'checker') iconClass = 'fa-user-shield text-success';
+        
+        if (runVal.startsWith('data:image/')) {
+            return `<div class="e-signature-done" style="display: inline-flex; align-items: center; justify-content: center; gap: 4px;">
+                <img src="${runVal}" style="max-height: 45px; max-width: 130px; object-fit: contain; mix-blend-mode: multiply; vertical-align: middle;" />
+            </div>`;
+        }
+        return `<div class="e-signature-done"><i class="fas ${iconClass} me-1"></i>${runVal}</div>`;
+    }
+
+    /**
+     * H├ám ch├¡nh ─æß╗â vß║╜ to├án bß╗Ö giao diß╗çn dß╗▒a tr├¬n mß║úng dß╗» liß╗çu `items`.
+     * N├│ dß╗ìn dß║╣p nß╗Öi dung c┼⌐ v├á tß║ío mß╗¢i c├íc phß║ºn tß╗¡ HTML t╞░╞íng ß╗⌐ng vß╗¢i tß╗½ng loß║íi khß╗æi (bß║úng, v─ân bß║ún, ph├ón ─æoß║ín...).
+     */
+    function renderBlocks() {
+        const container = document.getElementById('editor-content');
+        const hint = document.getElementById('drop-hint');
+        if (!container) return;
+
+        // Reset trß║íng th├íi chß╗ìn nß║┐u ─æang ß╗ƒ chß║┐ ─æß╗Ö thß╗▒c thi (─æiß╗ün dß╗» liß╗çu)
+        if (window.isExecutionMode) {
+            selectedId = null;
+        }
+
+        // X├│a sß║ích nß╗Öi dung c┼⌐ tr╞░ß╗¢c khi vß║╜ lß║íi
+        container.innerHTML = '';
+
+        // Xß╗¡ l├╜ gß╗úi ├╜ k├⌐o thß║ú (chß╗ë hiß╗çn ß╗ƒ chß║┐ ─æß╗Ö thiß║┐t kß║┐)
+        if (hint) {
+            if (!window.isExecutionMode) container.appendChild(hint);
+            else hint.remove();
+        }
+
+        let lastSectionId = null;
+        let currentGroup = container;
+        let activeSectionIdTracker = window.activeSectionId || null;
+
+        // Duyß╗çt qua tß╗½ng phß║ºn tß╗¡ trong mß║úng items ─æß╗â tß║ío HTML t╞░╞íng ß╗⌐ng
+        items.forEach((item, idx) => {
+                // X├íc ─æß╗ïnh ph├ón ─æoß║ín (section) cho item hiß╗çn tß║íi nß║┐u n├│ ch╞░a c├│ hoß║╖c l├á khß╗æi section
+                if (item.type === 'section') {
+                    activeSectionIdTracker = item.section_id || item.id;
+                }
+                
+                // Chß╗ë tß╗▒ ─æß╗Öng g├ín section_id nß║┐u item ch╞░a c├│ section_id
+                if (!item.section_id) {
+                    item.section_id = activeSectionIdTracker || 'section_0';
+                }
+                
+                const itemSectionId = item.section_id;
+
+                const isHeader = item.isGfHeader || item.isBmrHeader || (item.type === 'section' && item.locked) || item.isAbbreviationTable;
+
+                // Logic lß╗ìc ph├ón ─æoß║ín: Nß║┐u ─æang xem 1 ph├ón ─æoß║ín cß╗Ñ thß╗â, chß╗ë hiß╗çn blocks cß╗ºa ph├ón ─æoß║ín ─æ├│ HOß║╢C c├íc khß╗æi Header
+                if (!window.isViewAllMode && window.activeSectionId) {
+                    if (itemSectionId !== window.activeSectionId && !isHeader) {
+                        return; // Bß╗Å qua nß║┐u kh├┤ng ─æ├║ng ph├ón ─æoß║ín v├á kh├┤ng phß║úi header
+                    }
+                }
+
+                // Bß╗Å qua c├íc khß╗æi chß╗» k├╜ c┼⌐ (─æang dß║ºn thay thß║┐ bß║▒ng badge chß╗» k├╜ linh hoß║ít h╞ín)
+                if (item.type === 'signature') return;
+
+                // Logic ph├ón trang v├á gom nh├│m theo ph├ón ─æoß║ín (Section)
+                if (window.isViewAllMode || !window.activeSectionId) {
+                    if (lastSectionId === null || itemSectionId !== lastSectionId) {
+                        // Tß║ío ─æ╞░ß╗¥ng ph├ón c├ích trang nß║┐u kh├┤ng phß║úi ph├ón ─æoß║ín ─æß║ºu ti├¬n
+                        if (lastSectionId !== null) {
+                            const pageBreak = document.createElement('div');
+                            pageBreak.className =
+                                'page-break-divider my-4 d-flex align-items-center justify-content-center';
+                            const parts = (itemSectionId || '').split('_');
+                            const labelText = parts.length > 1 ? `C├┤ng ─æoß║ín ${parts[parts.length-1]}` :
+                                'Ph├ón ─æoß║ín mß╗¢i';
+                            pageBreak.innerHTML =
+                                `<span class="bg-light px-3 py-1 rounded-pill small fw-bold text-muted border"><i class="fas fa-file-alt me-2"></i>${labelText}</span>`;
+                            container.appendChild(pageBreak);
+                        }
+
+                        // Tß║ío bao v├╣ng (Wrapper) cho mß╗Öt nh├│m c├íc khß╗æi thuß╗Öc c├╣ng mß╗Öt ph├ón ─æoß║ín
+                        currentGroup = document.createElement('div');
+                        currentGroup.className = 'section-group-wrapper' + (window.activeSectionId ===
+                            itemSectionId ? ' active' : '');
+                        currentGroup.onclick = (e) => {
+                            // K├¡ch hoß║ít ph├ón ─æoß║ín khi click v├áo v├╣ng nß╗ün cß╗ºa nh├│m (kh├┤ng click v├áo block con)
+                            if (!e.target.closest('.block-item')) {
+                                window.activeSectionId = itemSectionId;
+                                selectedId = null; 
+                                renderBlocks();
+                            }
+                        };
+
+                        // D-CLICK: Nß║┐u ─æang ß╗ƒ "Xem tß║Ñt cß║ú", d-click v├áo v├╣ng trß║»ng sß║╜ tß╗▒ chuyß╗ân sang "Xem 1 section"
+                        currentGroup.ondblclick = (e) => {
+                            // Nß║┐u click v├áo v├╣ng trß║»ng (kh├┤ng phß║úi block)
+                            if (!e.target.closest('.block-item') && window.isViewAllMode) {
+                                window.activeSectionId = itemSectionId;
+                                window.isViewAllMode = false; // Chuyß╗ân sang chß║┐ ─æß╗Ö xem 1 section
+                                selectedId = null;
+                                renderBlocks();
+                                
+                                // Cß║¡p nhß║¡t icon tr├¬n n├║t toggle view (nß║┐u c├│)
+                                const toggleBtn = document.getElementById('viewModeToggle');
+                                if (toggleBtn) {
+                                    toggleBtn.innerHTML = '<i class="fas fa-expand-arrows-alt"></i>';
+                                    toggleBtn.classList.remove('btn-info');
+                                    toggleBtn.classList.add('btn-outline-info');
+                                    toggleBtn.title = "Chuyß╗ân sang xem tß║Ñt cß║ú";
+                                }
+                            }
+                        };
+                        container.appendChild(currentGroup);
+
+                        lastSectionId = itemSectionId;
+                    }
+                } else {
+                    // Nß║┐u ─æang lß╗ìc xem mß╗Öt ph├ón ─æoß║ín cß╗Ñ thß╗â, kh├┤ng cß║ºn Wrapper nh├│m
+                    currentGroup = container;
+                }
+
+                // Th├¬m vß║ích ch├¿n (dß║Ñu cß╗Öng) giß╗»a c├íc khß╗æi ß╗ƒ chß║┐ ─æß╗Ö chß╗ënh sß╗¡a
+                if (!window.isReadOnly && !window.isExecutionMode) {
+                    addInsertionDivider(currentGroup, idx);
+                }
+
+                // Tß║ío thß║╗ bao ngo├ái cho khß╗æi (block-item)
+                const div = document.createElement('div');
+                div.className =
+                    `block-item type-${item.type} ${selectedId === item.id ? 'active' : ''} ${window.isExecutionMode ? 'execution-mode' : ''}`;
+                div.setAttribute('data-id', item.id);
+
+                // ├üp dß╗Ñng c├íc style t├╣y chß╗ënh (lß╗ü, m├áu nß╗ün) tß╗½ dß╗» liß╗çu
+                if (item.marginLeft) div.style.marginLeft = item.marginLeft;
+                if (item.marginRight) div.style.marginRight = item.marginRight;
+                if (item.backgroundColor) div.style.backgroundColor = item.backgroundColor;
+
+                // Xß╗¡ l├╜ sß╗▒ kiß╗çn click ─æß╗â chß╗ìn khß╗æi (chß╗ë ß╗ƒ chß║┐ ─æß╗Ö thiß║┐t kß║┐)
+                if (!window.isExecutionMode) {
+                    div.onclick = (e) => {
+                        e.stopPropagation();
+                        if (selectedId !== item.id) {
+                            // Chß╗ìn item v├á vß║╜ lß║íi thanh thuß╗Öc t├¡nh
+                            selectItem(item.id, true);
+                        }
+                    };
+                }
+
+                let content = `<div class="block-mock"></div>`;
+
+                // --- Xß╗¼ L├¥ KHß╗ÉI Bß║óNG (TABLE) ---
+                if (item.type === 'table') {
+                    const borderMode = item.borderMode || 'all';
+                    const borderClass = `border-mode-${borderMode}`;
+
+                    let thead = '';
+                    if (!item.hideHeader && item.columns) {
+                        thead = `<thead><tr>${item.columns.map((c, cIdx) => {
+                        const s = c.style || {};
+                        const bg = s.backgroundColor || '';
+                        const align = s.textAlign || '';
+                        const fw = s.fontWeight || '';
+                        const fs = s.fontStyle || '';
+                        const td = s.textDecoration || '';
+                        const fsz = s.fontSize || '';
+                        const tc = s.textColor || '';
+                        const wm = s.writingMode || '';
+                        const tf = s.transform || '';
+                        return `<th contenteditable="false"
+                        spellcheck="false"
+                        data-row="0"
+                        data-col="${cIdx}"
+                        class="table-header-cell"
+                        style="position: relative; width: ${c.width || 'auto'}; background-color: ${bg}; text-align: ${align}; font-weight: ${fw}; font-style: ${fs}; text-decoration: ${td}; font-size: ${fsz}; color: ${tc}; border-top: ${s.borderTop || ''}; border-bottom: ${s.borderBottom || ''}; border-left: ${s.borderLeft || ''}; border-right: ${s.borderRight || ''}; writing-mode: ${wm};">
+                            <div class="header-content" style="transform: ${tf}; transform-origin: center center; display: inline-block; width: 100%;">${c.label}</div>
+                            ${!window.isExecutionMode ? `
+                            <div class="col-actions">
+                                <button class="btn-col-add" onclick="event.stopPropagation(); tableAddColumn(${cIdx+1})" title="Th├¬m cß╗Öt b├¬n phß║úi"><i class="fas fa-plus"></i></button>
+                                <button class="btn-col-del" onclick="event.stopPropagation(); tableRemoveColumn(${cIdx})" title="X├│a cß╗Öt"><i class="fas fa-times"></i></button>
+                            </div>` : ''}
+                            ${!window.isExecutionMode ? `<div class="col-resizer" onmousedown="initResize(event, '${item.id}', 'col', ${cIdx})"></div>` : ''}
+                        </th>`;
+                    }).join('')}
+                    ${window.isExecutionMode && item.canAddRows ? '<th style="width: 30px; border: none; background: transparent;"></th>' : ''}
+                    </tr></thead>`;
+                }
+
+                let rowsHtml = '';
+                const blockKey = item.uuid || item.id;
+                const runDataForBlock = window.executionValues[blockKey] || {};
+
+                for (let r = 0; r < (item.rows || 0); r++) {
+                    let cellsHtml = '';
+                    const rowH = (item.rowHeights && item.rowHeights[r]) ? item.rowHeights[r] : 'auto';
+                    if (!item.data || !item.data[r]) continue;
+                    for (let c = 0; c < (item.cols || 0); c++) {
+                        if (!item.data[r][c] || typeof item.data[r][c] !== 'object') {
+                            item.data[r][c] = { content: '', rs: 1, cs: 1, hidden: false };
+                        }
+                        const cell = item.data[r][c];
+                        if (cell.hidden) continue;
+
+                        const cellWidth = (item.columns && item.columns[c] && item.columns[c].width) ? item.columns[c].width : 'auto';
+                        const cellBg = (cell.backgroundColor) ? cell.backgroundColor : '';
+
+                        let displayContent = decorateContent(cell.content);
+                        if (displayContent === null || displayContent === 'null' || displayContent === undefined) {
+                            displayContent = '';
+                        }
+                        
+                        let cellClass = "";
+                        let onclickAttr = "";
+                        let finalEditable = "false";
+
+                        if (window.isExecutionMode) {
+                            const runVal = runDataForBlock[`${r}_${c}`];
+                            if (displayContent.includes('[Nhß║¡p dß╗» liß╗çu]')) {
+                                cellClass = "execution-input-cell";
+                                onclickAttr = `onclick="openExecutionInputModal('${blockKey}', ${r}, ${c}, 'text')"`;
+                                displayContent = runVal ? runVal : `<span class="execution-badge input"><i class="fas fa-edit"></i> [Nhß║¡p dß╗» liß╗çu]</span>`;
+                            } else if (displayContent.includes('[K├╜ t├¬n]')) {
+                                cellClass = "execution-input-cell";
+                                onclickAttr = `onclick="openExecutionInputModal('${blockKey}', ${r}, ${c}, 'signature')"`;
+                                displayContent = runVal ? getSignatureDisplayHtml(runVal, 'signature') : `<span class="execution-badge signature"><i class="fas fa-pen"></i> [K├╜ t├¬n]</span>`;
+                            } else if (displayContent.includes('[Tß╗▒ ─æß╗Öng lß║Ñy thß╗¥i gian]')) {
+                                cellClass = "execution-input-cell";
+                                onclickAttr = `ondblclick="autoFillTime('${blockKey}', ${r}, ${c})" title="Nh├íy ─æ├║p chuß╗Öt (Double-click) ─æß╗â lß║Ñy giß╗¥ hß╗ç thß╗æng"`;
+                                displayContent = runVal ? runVal : `<span class="execution-badge time"><i class="fas fa-clock"></i> [Double-click lß║Ñy giß╗¥]</span>`;
+                            } else if (displayContent.includes('[Ng╞░ß╗¥i thß╗▒c hiß╗çn]')) {
+                                cellClass = "execution-input-cell";
+                                onclickAttr = `onclick="autoFillExecutor('${blockKey}', ${r}, ${c})" title="Click ─æß╗â x├íc nhß║¡n ng╞░ß╗¥i thß╗▒c hiß╗çn"`;
+                                displayContent = runVal ? getSignatureDisplayHtml(runVal, 'executor') : `<span class="execution-badge executor"><i class="fas fa-user-edit"></i> [Ng╞░ß╗¥i thß╗▒c hiß╗çn]</span>`;
+                            } else if (displayContent.includes('[Ng╞░ß╗¥i kiß╗âm tra]')) {
+                                cellClass = "execution-input-cell";
+                                onclickAttr = `onclick="openCheckerAuthModal('${blockKey}', ${r}, ${c})" title="Click ─æß╗â x├íc thß╗▒c ng╞░ß╗¥i kiß╗âm tra"`;
+                                displayContent = runVal ? getSignatureDisplayHtml(runVal, 'checker') : `<span class="execution-badge checker"><i class="fas fa-check-double"></i> [Ng╞░ß╗¥i kiß╗âm tra]</span>`;
+                            }
+                        } else {
+                            finalEditable = (item.locked || window.isReadOnly) ? 'false' : 'true';
+                        }
+
+                        let metaHtml = '';
+                        if (window.isExecutionMode && runDataForBlock._meta && runDataForBlock._meta[`${r}_${c}`]) {
+                            const meta = runDataForBlock._meta[`${r}_${c}`];
+                            if (meta.by || meta.at) {
+                                metaHtml = `<div class="execution-meta">${meta.by || ''} ${meta.at || ''}</div>`;
+                            }
+                        }
+
+                        cellsHtml += `<td contenteditable="${finalEditable}"
+                        spellcheck="false"
+                        data-row="${r+1}"
+                        data-col="${c}"
+                        rowspan="${cell.rs || 1}"
+                        colspan="${cell.cs || 1}"
+                        ${onclickAttr}
+                        class="${cellClass} ${item.locked ? 'locked-cell' : ''}"
+                        style="position: relative; width: ${cellWidth}; height: ${rowH}; background-color: ${cellBg}; text-align: ${cell.textAlign || ''}; font-weight: ${cell.fontWeight || ''}; font-style: ${cell.fontStyle || ''}; text-decoration: ${cell.textDecoration || ''}; font-size: ${cell.fontSize || ''}; color: ${cell.textColor || ''}; text-transform: ${cell.textTransform || ''}; border-top: ${cell.borderTop || ''}; border-bottom: ${cell.borderBottom || ''}; border-left: ${cell.borderLeft || ''}; border-right: ${cell.borderRight || ''}; writing-mode: ${cell.writingMode || ''};"
+                        oninput="updateTableInline('${item.id}', 'cell', ${r}, ${c}, this.innerHTML)"
+                        ${!window.isExecutionMode ? `
+                            ondragover="event.preventDefault(); this.classList.add('criteria-drag-over');"
+                            ondragleave="this.classList.remove('criteria-drag-over');"
+                            ondrop="window.handleCriteriaDrop(event, '${item.id}', ${r}, ${c})"` : ''}>
+                            <div class="cell-wrapper" style="transform: ${cell.transform || ''}; transform-origin: center center; display: inline-block; width: 100%;">${displayContent}</div>
+                            ${metaHtml}
+                            ${!window.isExecutionMode && c === 0 ? `
+                            <div class="row-actions">
+                                <button class="btn-row-add" onclick="event.stopPropagation(); tableAddRow(${r+1})" title="Th├¬m d├▓ng b├¬n d╞░ß╗¢i"><i class="fas fa-plus"></i></button>
+                                <button class="btn-row-del" onclick="event.stopPropagation(); tableRemoveRow(${r})" title="X├│a d├▓ng"><i class="fas fa-times"></i></button>
+                            </div>` : ''}
+                            ${!window.isExecutionMode ? `<div class="col-resizer" onmousedown="initResize(event, '${item.id}', 'col', ${c + (cell.cs || 1) - 1})"></div>
+                            <div class="row-resizer" onmousedown="initResize(event, '${item.id}', 'row', ${r + (cell.rs || 1) - 1})"></div>` : ''}
+                        </td>`;
+        }
+
+        let deleteCell = '';
+        if (window.isExecutionMode && item.canAddRows) {
+            const isDynamicRow = item.data[r] && item.data[r][0] && item.data[r][0].is_dynamic;
+            if (isDynamicRow) {
+                deleteCell = `<td class="execution-delete-cell" style="width: 30px; border: none; background: transparent; vertical-align: middle;">
+                                                        <button class="btn btn-link text-danger p-0" title="X├│a d├▓ng" onclick="executeDeleteTableRow('${item.id}', ${r})">
+                                                            <i class="fas fa-times-circle"></i>
+                                                        </button>
+                                                      </td>`;
+            } else {
+                deleteCell = `<td style="width: 30px; border: none; background: transparent;"></td>`;
+            }
+        }
+        rowsHtml += `<tr>${cellsHtml}${deleteCell}</tr>`;
+    }
+
+    let addRowBtn = '';
+    if (item.canAddRows) {
+        const btnLabel = window.isExecutionMode ? 'TH├èM D├ÆNG CUß╗ÉI' : 'THß╗¼ TH├èM D├ÆNG (Cß║ñP 2)';
+        addRowBtn = `
+                                    <div class="mt-2 text-start">
+                                        <button class="btn btn-xs btn-outline-primary py-0 px-2 fw-bold" style="font-size: 0.65rem; border-radius: 4px;" onclick="executeAddTableRow('${item.id}')">
+                                            <i class="fas fa-plus me-1"></i> ${btnLabel}
+                                        </button>
+                                    </div>
+                                `;
+    }
+
+    let titleHtml = '';
+    if (item.isAbbreviationTable) {
+        let titleText = 'Danh S├ích Viß║┐t Tß║»t';
+        const langMode = window.currentLangMode || 'vi';
+        if (langMode === 'en') {
+            titleText = 'List of Abbreviations';
+        } else if (langMode === 'dual') {
+            titleText = 'Danh S├ích Viß║┐t Tß║»t / List of Abbreviations';
+        }
+        titleHtml = `
+            <div class="ebmr-section-header d-flex align-items-center mb-3 mt-4">
+                <div class="section-icon bg-info text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px; min-width: 40px;">
+                    <i class="fas fa-list-ul"></i>
+                </div>
+                <div class="flex-grow-1">
+                    <div class="section-title fw-bold text-uppercase" style="font-size: 1.2rem; color: #164e63; letter-spacing: 1px;">
+                        ${titleText}
+                    </div>
+                    <div class="section-line mt-1" style="height: 3px; background: linear-gradient(to right, #0ea5e9, transparent); border-radius: 2px;"></div>
+                </div>
+            </div>
+        `;
+    }
+
+    let progressHtml = '';
+    if (window.isExecutionMode && item.freq_minutes) {
+        const countdownState = window._activeCountdowns && window._activeCountdowns[item.id];
+        const isRunning = !!countdownState;
+        
+        let initialWidth = '100%';
+        let initialText = '--:--';
+        let initialClass = 'bg-success';
+        
+        if (isRunning) {
+            const elapsed = Date.now() - countdownState.startTime;
+            const remaining = countdownState.freqMs - elapsed;
+            if (remaining > 0) {
+                const percent = (remaining / countdownState.freqMs) * 100;
+                initialWidth = `${percent}%`;
+                
+                if (percent > 50) {
+                    initialClass = 'bg-success';
+                } else if (percent > 20) {
+                    initialClass = 'bg-warning';
+                } else {
+                    initialClass = 'bg-danger';
+                }
+                
+                const totalSeconds = Math.ceil(remaining / 1000);
+                const mins = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+                const secs = (totalSeconds % 60).toString().padStart(2, '0');
+                initialText = `${mins}:${secs}`;
+            } else {
+                initialWidth = '0%';
+                initialText = '─É├ú ─æß║┐n giß╗¥ lß║Ñy mß║½u!';
+                initialClass = 'bg-danger';
+            }
+        }
+        
+        progressHtml = `
+            <div class="sampling-countdown-container my-3 px-1" id="countdown-container-${item.id}" style="display: ${isRunning ? 'block' : 'none'};">
+                <div class="d-flex justify-content-between align-items-center mb-1" style="font-size: 0.85rem; color: #475569; font-weight: 600;">
+                    <span><i class="fas fa-hourglass-half me-1 text-primary"></i> Thß╗¥i gian ─æß║┐n lß║ºn lß║Ñy mß║½u tiß║┐p theo:</span>
+                    <span id="countdown-text-${item.id}" style="font-family: monospace; font-size: 0.95rem; color: #1e293b;">${initialText}</span>
+                </div>
+                <div class="progress" style="height: 12px; background-color: #e2e8f0; border-radius: 6px; overflow: hidden; box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);">
+                    <div id="countdown-bar-${item.id}" class="progress-bar progress-bar-striped progress-bar-animated ${initialClass}" role="progressbar" style="width: ${initialWidth}; transition: width 1s linear, background-color 0.5s ease;"></div>
+                </div>
+            </div>
+        `;
+    }
+
+    content =
+        `${titleHtml}${progressHtml}<div class="table-responsive-wrapper"><table class="mini-table ${borderClass}" style="--table-border-width: ${item.borderWeight || '1px'}; --table-border-color: #dee2e6;">${thead}<tbody>${rowsHtml}</tbody></table></div>${addRowBtn}`;
+    }
+
+    // --- Xß╗¼ L├¥ KHß╗ÉI V─éN Bß║óN T─¿NH (STATIC TEXT) ---
+    else if (item.type === 'static-text') {
+        const displayContent = decorateContent(item.content || '');
+        const textEditable = (window.isReadOnly || window.isExecutionMode) ? 'false' : 'true';
+        const borderClass = item.borderMode === 'dashed' ? 'border-dashed' : (item.borderMode === 'visible' ?
+            'border-visible' : 'border-none');
+
+        let titleHtml = '';
+        if (item.isCalculationBlock && item.section_id === window.catId) {
+            let titleText = 'T├¡nh To├ín C├┤ng Thß╗⌐c';
+            const langMode = window.currentLangMode || 'vi';
+            if (langMode === 'en') {
+                titleText = 'Formula Calculation';
+            } else if (langMode === 'dual') {
+                titleText = 'T├¡nh To├ín C├┤ng Thß╗⌐c / Formula Calculation';
+            }
+            titleHtml = `
+                <div class="ebmr-section-header d-flex align-items-center mb-3 mt-4">
+                    <div class="section-icon bg-info text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px; min-width: 40px;">
+                        <i class="fas fa-calculator"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <div class="section-title fw-bold text-uppercase" style="font-size: 1.2rem; color: #164e63; letter-spacing: 1px;">
+                            ${titleText}
+                        </div>
+                        <div class="section-line mt-1" style="height: 3px; background: linear-gradient(to right, #0ea5e9, transparent); border-radius: 2px;"></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        content =
+            `${titleHtml}<div class="static-text-display ${borderClass}" contenteditable="${textEditable}" spellcheck="false" 
+                                            oninput="updateStaticTextInline('${item.id}', this.innerHTML); handleAutoCapitalize(this)">${displayContent}</div>`;
+    }
+
+    // --- Xß╗¼ L├¥ KHß╗ÉI BIß╗éU Mß║¬U NH├ÜNG (LINKED TEMPLATE) ---
+    else if (item.type === 'linked-template') {
+        // Tß╗▒ ─æß╗Öng mß╗ƒ xem tr╞░ß╗¢c nß║┐u ─æang ß╗ƒ chß║┐ ─æß╗Ö thß╗▒c thi hoß║╖c ng╞░ß╗¥i d├╣ng ─æ├ú chß╗ìn mß╗ƒ
+        const isPreviewing = window.isExecutionMode || item.showPreview || false;
+
+        // ß║¿n c├íc n├║t ─æiß╗üu khiß╗ân nß╗Öi bß╗Ö nß║┐u ß╗ƒ chß║┐ ─æß╗Ö thß╗▒c thi
+        const hideControls = window.isExecutionMode;
+
+        // V├╣ng chß╗⌐a nß╗Öi dung xem tr╞░ß╗¢c cß╗ºa biß╗âu mß║½u nh├║ng
+        const previewContent = isPreviewing ? `<div id="preview-${item.id}" class="mt-3 p-4 border rounded bg-white w-100 shadow-sm" style="${window.isExecutionMode ? '' : 'pointer-events: none; opacity: 0.9;'}">
+                                <div class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>
+                            </div>` : '';
+
+        content = `<div class="block-mock d-flex flex-column align-items-center justify-content-center py-4 px-3 position-relative" style="background-color: #f8f9fa; border: 2px dashed #0d6efd; border-radius: 12px; min-height: 120px;">
+                                         ${!hideControls ? `<div class="position-absolute" style="top: 10px; right: 10px; z-index: 100;">
+                                            <button class="btn btn-sm btn-primary shadow-sm px-3" onclick="event.stopPropagation(); toggleGfPreview('${item.id}')" style="border-radius: 20px;">
+                                                <i class="fas ${isPreviewing ? 'fa-eye-slash' : 'fa-eye'} me-1"></i> ${isPreviewing ? 'ß║¿n nß╗Öi dung' : 'Xem nß╗Öi dung'}
+                                            </button>
+                                         </div>` : ''}
+                                         <i class="fas fa-link fa-2x text-primary mb-2 ${isPreviewing ? 'd-none' : ''}"></i>
+                                         <div class="fw-bold text-navy ${isPreviewing ? 'mb-2 border-bottom pb-2 w-100' : ''}">Biß╗âu mß║½u chung: ${item.label || '─Éang tß║úi...'}</div>
+                                         ${!isPreviewing ? `<div class="small text-muted mt-1">Nß╗Öi dung sß║╜ ─æ╞░ß╗úc tß╗▒ ─æß╗Öng ch├¿n v├áo khi ban h├ánh/thß╗▒c thi</div>` : ''}
+                                         ${previewContent}
+                                       </div>`;
+
+        // Nß║┐u ─æang mß╗ƒ xem tr╞░ß╗¢c, gß╗ìi h├ám fetch dß╗» liß╗çu tß╗½ server
+        if (isPreviewing) {
+            setTimeout(() => fetchAndRenderGfPreview(item.id, item.template_id), 50);
+        }
+    }
+
+    // --- Xß╗¼ L├¥ KHß╗ÉI PH├éN ─ÉOß║áN (SECTION) ---
+    else if (item.type === 'section') {
+        const labelEditable = (window.isReadOnly || window.isExecutionMode) ? 'false' : 'true';
+        const isRecalc = (item.stage_code === 'recalc' || (item.label && item.label.toUpperCase().includes('T├ìNH TO├üN C├öNG THß╗¿C')));
+        const iconClass = isRecalc ? 'fas fa-calculator' : 'fas fa-layer-group';
+        content = `<div class="ebmr-section-header d-flex align-items-center" id="section-${item.id}">
+                                         <div class="section-icon bg-info text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px; min-width: 40px;">
+                                            <i class="${iconClass}"></i>
+                                         </div>
+                                         <div class="flex-grow-1">
+                                            <div class="section-title fw-bold text-uppercase" contenteditable="${labelEditable}" 
+                                                 onblur="updateItemProp('label', this.innerText)" 
+                                                 style="font-size: 1.2rem; color: #164e63; letter-spacing: 1px;">${item.label || 'T├¬n ph├ón ─æoß║ín'}</div>
+                                            <div class="section-line mt-1" style="height: 3px; background: linear-gradient(to right, #0ea5e9, transparent); border-radius: 2px;"></div>
+                                         </div>
+                                       </div>`;
+    }
+
+    // --- Xß╗¼ L├¥ KHß╗ÉI BIß╗éU ─Éß╗Æ (CHART) ---
+    else if (item.type === 'chart') {
+        const canvasId = 'chart_canvas_' + item.id;
+        content = `<div class="chart-container" style="position: relative; height:300px; width:100%; padding: 15px; background: #fff; border: 1px solid #eee; border-radius: 8px;">
+                                         <canvas id="${canvasId}"></canvas>
+                                       </div>`;
+        // ─É─âng k├╜ khß╗ƒi tß║ío Chart.js sau khi DOM ─æ├ú sß║╡n s├áng
+        setTimeout(() => {
+            if (typeof renderChart === 'function') {
+                renderChart(canvasId, item.chartConfig);
+            }
+        }, 50);
+    }
+
+    // --- THANH H├ÇNH ─Éß╗ÿNG (X├ôA, DI CHUYß╗éN) ---
+    const actions = (item.locked || window.isReadOnly || window.isExecutionMode) ? '' : `
+                            <div class="block-actions">
+                                <button class="btn btn-sm btn-light border shadow-sm text-danger" onclick="removeItem('${item.id}')"><i class="fas fa-trash"></i></button>
+                                <button class="btn btn-sm btn-light border shadow-sm" onclick="moveItem(${idx}, -1)"><i class="fas fa-chevron-up"></i></button>
+                                <button class="btn btn-sm btn-light border shadow-sm" onclick="moveItem(${idx}, 1)"><i class="fas fa-chevron-down"></i></button>
+                            </div>`;
+
+    // Tß╗òng hß╗úp HTML cß╗ºa khß╗æi
+    div.innerHTML = `
+                            ${actions}
+                            ${item.type !== 'static-text' && item.type !== 'section' && !window.isExecutionMode && item.label && item.label !== 'null' && !item.isGfHeader && !item.isBmrHeader && !item.isAbbreviationTable ? `<span class="block-label">${item.label} ${item.locked ? '<i class="fas fa-lock ms-1 small"></i>' : ''}</span>` : ''}
+                            ${content}
+                        `;
+    currentGroup.appendChild(div);
+    });
+
+    if (!window.isReadOnly && !window.isExecutionMode) {
+        if (window.isViewAllMode || !window.activeSectionId) {
+            // Chß║┐ ─æß╗Ö xem tß║Ñt cß║ú: Th├¬m dß║Ñu cß╗Öng ß╗ƒ cuß╗æi c├╣ng hß╗ô s╞í
+            addInsertionDivider(currentGroup, items.length);
+        } else {
+            // Chß║┐ ─æß╗Ö xem 1 ph├ón ─æoß║ín: T├¼m index cuß╗æi c├╣ng cß╗ºa ph├ón ─æoß║ín n├áy ─æß╗â ch├¿n v├áo cuß╗æi ph├ón ─æoß║ín
+            let lastIdxInSection = -1;
+            for (let i = items.length - 1; i >= 0; i--) {
+                if (items[i].section_id === window.activeSectionId || items[i].id === window.activeSectionId) {
+                    lastIdxInSection = i;
+                    break;
+                }
+            }
+            if (lastIdxInSection !== -1) {
+                addInsertionDivider(currentGroup, lastIdxInSection + 1);
+            }
+        }
+    }
+
+    // Rebuild Outline when DOM changes
+    if (typeof buildOutline === 'function') {
+        setTimeout(buildOutline, 100);
+    }
+
+    // Load dynamic options for any master data select fields
+    if (window.isExecutionMode) {
+        setTimeout(loadDynamicSelectOptions, 100);
+    }
+    }
+
+    window.dynamicOptionsCache = {};
+
+    /**
+     * Fetch and populate options for 'select' fields that use a 'database' data source.
+     */
+    async function loadDynamicSelectOptions() {
+        const selects = document.querySelectorAll('.dynamic-select:not(.loaded)');
+        if (selects.length === 0) return;
+
+        for (let sel of selects) {
+            sel.classList.add('loaded'); // prevent duplicate fetches
+            const table = sel.getAttribute('data-table');
+            const labelCol = sel.getAttribute('data-label');
+            const valueCol = sel.getAttribute('data-value');
+            const whereClause = sel.getAttribute('data-where');
+            const selectedVal = sel.getAttribute('data-selected');
+
+            if (!table || !labelCol) {
+                sel.innerHTML = '<option value="">-- Cß║Ñu h├¼nh lß╗ùi --</option>';
+                continue;
+            }
+
+            const cacheKey = `${table}_${labelCol}_${valueCol}_${whereClause}`;
+            let optionsData = window.dynamicOptionsCache[cacheKey];
+
+            if (!optionsData) {
+                try {
+                    const response = await fetch("{{ route('pages.ebmr.dynamicOptions') }}", {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ||
+                                '{{ csrf_token() }}'
+                        },
+                        body: JSON.stringify({
+                            table,
+                            labelCol,
+                            valueCol,
+                            where: whereClause
+                        })
+                    });
+
+                    const res = await response.json();
+                    if (res.success) {
+                        optionsData = res.options;
+                        window.dynamicOptionsCache[cacheKey] = optionsData;
+                    } else {
+                        sel.innerHTML = `<option value="">-- Lß╗ùi: ${res.message} --</option>`;
+                        continue;
+                    }
+                } catch (e) {
+                    sel.innerHTML = '<option value="">-- Lß╗ùi kß║┐t nß╗æi --</option>';
+                    continue;
+                }
+            }
+
+            if (optionsData) {
+                let html = '<option value="">-- Chß╗ìn --</option>';
+                optionsData.forEach(opt => {
+                    html +=
+                        `<option value="${opt.value}" ${selectedVal === String(opt.value) ? 'selected' : ''}>${opt.label}</option>`;
+                });
+                sel.innerHTML = html;
+            }
+        }
+    }
+
+    /**
+     * Th├¬m thanh c├┤ng cß╗Ñ ch├¿n nhanh (dß║Ñu cß╗Öng) giß╗»a c├íc khß╗æi.
+     * @param {HTMLElement} container - V├╣ng chß╗⌐a ─æß╗â ch├¿n thanh c├┤ng cß╗Ñ.
+     * @param {number} idx - Vß╗ï tr├¡ ch├¿n trong mß║úng items.
+     */
+    function addInsertionDivider(container, idx) {
+        const divider = document.createElement('div');
+        divider.className = 'insert-divider';
+        divider.innerHTML = `
+            <div class="insert-click-zone" title="Click ─æ├║p ─æß╗â g├╡ v─ân bß║ún tß║íi ─æ├óy" ondblclick="quickAddText(event, ${idx})"></div>
+            <button class="insert-btn" title="Ch├¿n v├áo ─æ├óy"><i class="fas fa-plus"></i></button>
+            <div class="insert-menu shadow-lg">
+                <div class="small fw-bold text-muted px-2 mb-1">TI├èU ─Éß╗Ç</div>
+                <button onclick="addItem('static-text', ${idx}, 'H1')"><i class="fas fa-heading me-2" style="width: 15px;"></i> Cß║Ñp 1</button>
+                <button onclick="addItem('static-text', ${idx}, 'H2')"><i class="fas fa-heading me-2" style="width: 15px; font-size: 0.9em;"></i> Cß║Ñp 2</button>
+                <button onclick="addItem('static-text', ${idx}, 'H3')"><i class="fas fa-heading me-2" style="width: 15px; font-size: 0.8em;"></i> Cß║Ñp 3</button>
+                <button onclick="addItem('static-text', ${idx}, 'H4')"><i class="fas fa-heading me-2" style="width: 15px; font-size: 0.7em;"></i> Cß║Ñp 4</button>
+                <hr class="my-1 mx-2">
+                <div class="small fw-bold text-muted px-2 mb-1">KH├üC</div>
+                <button onclick="addItem('static-text', ${idx})"><i class="fas fa-paragraph me-2" style="width: 15px;"></i> V─ân bß║ún</button>
+                <button onclick="showTableSelectorAt(${idx}, this)"><i class="fas fa-table me-2" style="width: 15px;"></i> Bß║úng</button>
+                <button onclick="openLinkGfModal(${idx})"><i class="fas fa-link me-2" style="width: 15px;"></i> BM Chung</button>
+                <hr class="my-1 mx-2">
+                <button onclick="pasteAt(${idx})"><i class="fas fa-paste me-2" style="width: 15px;"></i> D├ín nß╗Öi dung</button>
+            </div>
+        `;
+
+        divider.onclick = (e) => {
+            e.stopPropagation();
+            const menu = divider.querySelector('.insert-menu');
+            document.querySelectorAll('.insert-menu').forEach(m => {
+                if (m !== menu) m.classList.remove('show');
+            });
+            menu.classList.toggle('show');
+        };
+
+        container.appendChild(divider);
+    }
+
+    /**
+     * Mß╗ƒ bß╗Ö chß╗ìn ─æß╗â th├¬m bß║úng v├áo vß╗ï tr├¡ cß╗Ñ thß╗â (mß║╖c ─æß╗ïnh th├¬m bß║úng 3x2).
+     */
+    function showTableSelectorAt(idx, btn) {
+        addTable(3, 2, idx);
+    }
+
+    /**
+     * Ch├¿n nhanh mß╗Öt khß╗æi v─ân bß║ún khi ng╞░ß╗¥i d├╣ng click ─æ├║p v├áo v├╣ng trß╗æng giß╗»a c├íc khß╗æi.
+     */
+    window.quickAddText = function(e, idx) {
+        e.stopPropagation();
+        // Calculate sectionId for quick add
+        let sectionId = null;
+        if (idx > 0 && items[idx - 1]) {
+            sectionId = items[idx - 1].section_id || items[idx - 1].id;
+        } else if (items.length > 0 && items[idx]) {
+            sectionId = items[idx].section_id || items[idx].id;
+        }
+        if (!sectionId) sectionId = window.activeSectionId;
+
+        items.splice(idx, 0, {
+            id: newItemId,
+            type: 'static-text',
+            section_id: sectionId,
+            label: 'Nß╗Öi dung',
+            content: '',
+            borderMode: 'none'
+        });
+        saveStateDebounced();
+        renderBlocks();
+
+        setTimeout(() => {
+            const blocks = document.querySelectorAll('.block-item');
+            if (blocks[idx]) {
+                const textEl = blocks[idx].querySelector('.static-text-display');
+                if (textEl) {
+                    textEl.focus();
+                    // Optional: remove placeholder class if typing
+                }
+            }
+        }, 50);
+    };
+    /**
+     * D├ín nß╗Öi dung tß╗½ bß╗Ö nhß╗¢ tß║ím (Clipboard) v├áo mß╗Öt vß╗ï tr├¡ cß╗Ñ thß╗â trong t├ái liß╗çu.
+     */
+    window.pasteAt = async function(idx) {
+        try {
+            // ─Éß╗ìc dß╗» liß╗çu tß╗½ Clipboard
+            const clipboardItems = await navigator.clipboard.read();
+            let htmlData = "";
+            let plainText = "";
+
+            for (const item of clipboardItems) {
+                if (item.types.includes('text/html')) {
+                    const blob = await item.getType('text/html');
+                    htmlData = await blob.text();
+                }
+                if (item.types.includes('text/plain')) {
+                    const blob = await item.getType('text/plain');
+                    plainText = await blob.text();
+                }
+            }
+
+            if (!htmlData && !plainText) {
+                Swal.fire('Ch├║ ├╜', 'Bß╗Ö nhß╗¢ tß║ím trß╗æng hoß║╖c kh├┤ng c├│ nß╗Öi dung hß╗úp lß╗ç.', 'warning');
+                return;
+            }
+
+            // Tß║ío ─æß╗æi t╞░ß╗úng sß╗▒ kiß╗çn giß║ú lß║¡p ─æß╗â t├íi sß╗¡ dß╗Ñng h├ám handleGlobalPaste hiß╗çn c├│
+            const mockEvent = {
+                clipboardData: {
+                    getData: (type) => (type === 'text/html' ? htmlData : plainText)
+                },
+                preventDefault: () => {},
+                target: {
+                    closest: () => null
+                }
+            };
+
+            // Gß╗ìi logic xß╗¡ l├╜ d├ín dß╗» liß╗çu tß║íi vß╗ï tr├¡ idx ─æ├ú chß╗ìn
+            handleGlobalPaste(mockEvent, idx);
+
+        } catch (err) {
+            console.error(err);
+            Swal.fire('Quyß╗ün truy cß║¡p',
+                'Vui l├▓ng cho ph├⌐p tr├¼nh duyß╗çt truy cß║¡p bß╗Ö nhß╗¢ tß║ím (Clipboard) ─æß╗â d├ín nß╗Öi dung.', 'info');
+        }
+    };
+
+    /**
+     * Decorates variable badges with visual icons based on their data type
+     */
+    /**
+     * Xß╗¡ l├╜ nß╗Öi dung HTML ─æß╗â hiß╗ân thß╗ï c├íc "Thß║╗ biß║┐n sß╗æ" (Variable Badges).
+     * H├ám n├áy sß║╜ thay thß║┐ c├íc thß║╗ th├┤ bß║▒ng giao diß╗çn c├│ icon v├á m├áu sß║»c t├╣y theo loß║íi dß╗» liß╗çu (Ng├áy, Sß╗æ, Chß╗» k├╜...).
+     * @param {string} html - Nß╗Öi dung HTML gß╗æc chß╗⌐a thß║╗ biß║┐n.
+     */
+    function decorateContent(html, customConfig = null) {
+        if (!html) return '';
+        const div = document.createElement('div');
+        div.innerHTML = html;
+        const badges = div.querySelectorAll('.ebmr-field-badge');
+        
+        // Use customConfig if provided (for linked templates), otherwise use global fieldsConfig
+        const config = customConfig || fieldsConfig;
+
+        badges.forEach(badge => {
+            const fieldId = badge.getAttribute('data-field-id');
+            const field = config[fieldId];
+            if (field) {
+                // Apply style properties if they exist
+                if (field.style) {
+                    if (field.style.width) {
+                        badge.style.setProperty('width', field.style.width, 'important');
+                    } else {
+                        badge.style.removeProperty('width');
+                    }
+                    if (field.style.marginLeft) {
+                        badge.style.setProperty('margin-left', field.style.marginLeft, 'important');
+                    } else {
+                        badge.style.removeProperty('margin-left');
+                    }
+                } else {
+                    badge.style.removeProperty('width');
+                    badge.style.removeProperty('margin-left');
+                }
+
+                // TR╞»ß╗£NG Hß╗óP 1: Chß║┐ ─æß╗Ö THß╗░C THI (Cho ph├⌐p nhß║¡p thß╗¡ ─æß╗â xem kß║┐t quß║ú)
+                if (window.isExecutionMode) {
+                    // Nß║┐u l├á thß║╗ c├┤ng thß╗⌐c, thß╗▒c hiß╗çn t├¡nh to├ín ngay
+                    if (field.type === 'formula') {
+                        const dPlaces = (field.validation && field.validation.decimal_places !== null) ? field
+                            .validation.decimal_places : 2;
+                        const result = calculateFormula(field.formula || '', dPlaces, field.id);
+                        badge.innerHTML = result;
+                        badge.className = 'ebmr-field-value formula-result';
+                        badge.setAttribute('data-field-id', fieldId); // ─Éß╗â recalculate t├¼m ─æ╞░ß╗úc
+                        return;
+                    }
+
+                    let val = window.executionValues[fieldId] || '';
+                    // Handle nested structure from DB (cell_id = 'default')
+                    if (val && typeof val === 'object' && val.hasOwnProperty('default')) {
+                        val = val.default;
+                    } else if (val && typeof val === 'object' && !Array.isArray(val)) {
+                        // Fallback: if it's an object, try to get the first property value
+                        const keys = Object.keys(val);
+                        if (keys.length > 0) val = val[keys[0]];
+                    }
+
+                        let metaHtml = '';
+                        const fieldData = window.executionValues[fieldId];
+                        if (fieldData && fieldData._meta && fieldData._meta['default']) {
+                            const meta = fieldData._meta['default'];
+                            if (meta.by || meta.at) {
+                                metaHtml = `<div class="execution-meta" style="font-size: 7px; margin-top: 1px; text-align: center;">${meta.by || ''} ${meta.at || ''}</div>`;
+                            }
+                        }
+
+                        badge.setAttribute('data-field-id', fieldId);
+
+                        if (field.type === 'signature') {
+                            let clickAttr = '';
+                            if (!window.isReadOnly) {
+                                clickAttr = `onclick="openExecutionInputModal('${fieldId}', 'default', 'default', 'signature')"`;
+                            }
+                            
+                            let signatureHtml = '';
+                            if (val) {
+                                if (val.startsWith('data:image/')) {
+                                    signatureHtml = `<img src="${val}" style="max-height: 40px; max-width: 120px; object-fit: contain; mix-blend-mode: multiply; vertical-align: middle; cursor: ${window.isReadOnly ? 'default' : 'pointer'};" ${clickAttr} />`;
+                                } else {
+                                    signatureHtml = `<span class="badge bg-light text-success border" style="cursor: ${window.isReadOnly ? 'default' : 'pointer'}; font-weight: 600;" ${clickAttr}><i class="fas fa-check-circle me-1"></i>${val}</span>`;
+                                }
+                            } else {
+                                signatureHtml = `<span class="badge bg-light text-primary border" style="cursor: ${window.isReadOnly ? 'default' : 'pointer'};" ${clickAttr}><i class="fas fa-signature me-1"></i> [K├╜ t├¬n]</span>`;
+                            }
+                            badge.innerHTML = `${signatureHtml}${metaHtml}`;
+                            badge.className = 'ebmr-field-badge ebmr-field-value';
+                        } else if (field.type === 'checkbox') {
+                            badge.innerHTML =
+                                `<input type="checkbox" ${val ? 'checked' : ''} ${window.isReadOnly ? 'disabled' : ''} onchange="window.executionValues['${fieldId}'] = this.checked; if(typeof window.recalculateAllFormulas === 'function') window.recalculateAllFormulas()">`;
+                            badge.className = 'ebmr-field-badge ebmr-field-value';
+                        } else if (field.type === 'select') {
+                            const dsType = field.dataSource ? field.dataSource.type : 'manual';
+                            if (dsType === 'database') {
+                                const ds = field.dataSource;
+                                badge.innerHTML =
+                                    `<select class="form-select-sm border-0 border-bottom bg-transparent dynamic-select" data-field-id="${fieldId}" data-table="${ds.table || ''}" data-label="${ds.labelCol || ''}" data-value="${ds.valueCol || ''}" data-where="${ds.where || ''}" data-selected="${val}" ${window.isReadOnly ? 'disabled' : ''} onchange="window.executionValues['${fieldId}'] = this.value; if(typeof window.recalculateAllFormulas === 'function') window.recalculateAllFormulas()"><option value="">-- ─Éang tß║úi... --</option></select>${metaHtml}`;
+                            } else {
+                                let optionsArr = [];
+                                if (Array.isArray(field.options)) {
+                                    optionsArr = field.options;
+                                } else if (typeof field.options === 'string') {
+                                    optionsArr = field.options.split(/[,;\n]/).map(o => o.trim()).filter(o => o);
+                                }
+                                badge.innerHTML =
+                                    `<select class="form-select-sm border-0 border-bottom bg-transparent" ${window.isReadOnly ? 'disabled' : ''} onchange="window.executionValues['${fieldId}'] = this.value; if(typeof window.recalculateAllFormulas === 'function') window.recalculateAllFormulas()"><option value="">--</option>${optionsArr.map(o => `<option value="${o}" ${val === o ? 'selected' : ''}>${o}</option>`).join('')}</select>${metaHtml}`;
+                            }
+                            badge.className = 'ebmr-field-badge ebmr-field-value';
+                        } else if (field.type === 'date') {
+                            const placeholder = field.label || 'Chß╗ìn ng├áy...';
+                            const displayVal = val || '';
+                            const isNow = (field.defaultValue && field.defaultValue.toLowerCase() === 'now');
+                            const titleAttr = isNow ? 'title="Nhß║Ñp ─æ├║p chuß╗Öt (Double-click) ─æß╗â lß║Ñy ng├áy giß╗¥ hß╗ç thß╗æng"' : '';
+                            
+                            badge.innerHTML =
+                                `<span class="execution-input-test" ${!window.isReadOnly ? `onclick="handleDateVariableClick(event, '${fieldId}', ${isNow})"` : ''} style="cursor: ${window.isReadOnly ? 'default' : 'pointer'}; border-bottom: 1px dotted #1a73e8; min-width: 30px; display: inline-block; outline: none; position: relative;" ${titleAttr}>${displayVal || `<span style="color: #6c757d; font-style: italic;">${placeholder}</span>`}${metaHtml}</span>`;
+                            badge.className = 'ebmr-field-badge ebmr-field-value';
+                        } else {
+                            // C├íc loß║íi kh├íc: V─ân bß║ún, Sß╗æ
+                            const placeholder = field.label || '...';
+                            const displayVal = val || '';
+                            
+                            let extraStyle = '';
+                            if (field.type === 'number' && val !== null && val !== undefined && val !== '') {
+                                const numVal = Number(val);
+                                if (!isNaN(numVal) && field.validation) {
+                                    let isOutOfBounds = false;
+                                    const minVal = field.validation.min;
+                                    const maxVal = field.validation.max;
+                                    if (minVal !== null && minVal !== undefined && minVal !== '' && !isNaN(Number(minVal)) && numVal < Number(minVal)) {
+                                        isOutOfBounds = true;
+                                    }
+                                    if (maxVal !== null && maxVal !== undefined && maxVal !== '' && !isNaN(Number(maxVal)) && numVal > Number(maxVal)) {
+                                        isOutOfBounds = true;
+                                    }
+                                    if (isOutOfBounds) {
+                                        extraStyle = 'color: #d93025; font-weight: bold; background-color: #fce8e6; border: 1px solid #fad2cf; padding: 2px 4px; border-radius: 4px;';
+                                    }
+                                }
+                            }
+ 
+                            // N├║t ─æß╗ìc c├ón: chß╗ë hiß╗çn khi ng╞░ß╗¥i thiß║┐t kß║┐ bß║¡t "Lß║Ñy dß╗» liß╗çu tß╗½ c├ón" trong cß║Ñu h├¼nh biß║┐n sß╗æ
+                            const scaleEnabled = field.type === 'number'
+                                && !window.isReadOnly
+                                && field.scaleEnabled === true
+                                && ('serial' in navigator);
+                            const scaleBtnHtml = scaleEnabled
+                                ? `<button class="btn-read-scale" onclick="event.stopPropagation(); window.readScaleValueIntoField('${fieldId}')" title="ΓÜû∩╕Å ─Éß╗ìc gi├í trß╗ï tß╗½ C├ón ─æiß╗çn tß╗¡ (RS-232)"><i class="fas fa-balance-scale"></i></button>`
+                                : '';
+
+
+                            badge.innerHTML =
+                                `<span class="execution-input-test" ${!window.isReadOnly ? 'onclick="openVariableInputModal(\''+fieldId+'\')"' : ''} style="cursor: ${window.isReadOnly ? 'default' : 'pointer'}; border-bottom: 1px dotted #1a73e8; min-width: 30px; display: inline-block; outline: none; position: relative; ${extraStyle}">${displayVal || `<span style="color: #6c757d; font-style: italic;">${placeholder}</span>`}${metaHtml}</span>${scaleBtnHtml}`;
+                            badge.className = 'ebmr-field-badge ebmr-field-value';
+                        }
+
+                }
+                // TR╞»ß╗£NG Hß╗óP 2: Chß║┐ ─æß╗Ö THIß║╛T Kß║╛ (Hiß╗ân thß╗ï badge k├¿m icon loß║íi dß╗» liß╗çu)
+                else {
+                    let icon = 'fa-edit';
+                    let typeLabel = '';
+                    let extra = '';
+ 
+                    // X├íc ─æß╗ïnh Icon dß╗▒a theo loß║íi tr╞░ß╗¥ng (field type)
+                    if (field.type === 'signature') {
+                        icon = 'fa-signature';
+                        typeLabel = 'Chß╗» k├╜';
+                    } else if (field.type === 'date') {
+                        icon = 'fa-calendar-alt';
+                        typeLabel = 'Ng├áy';
+                    } else if (field.type === 'checkbox') {
+                        icon = 'fa-check-square';
+                        typeLabel = 'Tick';
+                    } else if (field.type === 'number') {
+                        icon = 'fa-calculator';
+                        typeLabel = 'Sß╗æ';
+                    } else if (field.type === 'formula') {
+                        icon = 'fa-square-root-alt';
+                        typeLabel = 'C├┤ng thß╗⌐c';
+                        const dPlaces = (field.validation && field.validation.decimal_places !== null) ? field
+                            .validation.decimal_places : 2;
+                        const testResult = calculateFormula(field.formula || '', dPlaces, field.id);
+ 
+                        // Resolve IDs to Labels for display
+                        const formulaDisplay = (field.formula || '').replace(/\(([^)]+)\)/g, (match, id) => {
+                            const targetField = Object.values(fieldsConfig).find(f => f.name === id || f
+                                .label === id);
+                            return targetField ? (targetField.label || id) : id;
+                        });
+ 
+                        extra =
+                            `<span class="ms-1 border-start ps-1 text-primary">${testResult}</span>${formulaDisplay ? `<span class="ms-2 small text-muted" style="font-size: 0.8em; font-style: italic;">(${formulaDisplay})</span>` : ''}`;
+                    } else if (field.type === 'select') {
+                        icon = 'fa-list-ul';
+                        typeLabel = 'Chß╗ìn';
+                    } else {
+                        typeLabel = 'Text';
+                    }
+ 
+                    const label = field.label || `[${typeLabel}]`;
+                    const scaleIndicator = (field.type === 'number' && field.scaleEnabled) 
+                        ? `<span class="ms-1 text-danger" title="ΓÜû∩╕Å ─É├ú bß║¡t kß║┐t nß╗æi C├ón ─æiß╗çn tß╗¡" style="cursor: pointer;" onclick="event.stopPropagation(); window.openScaleConnectionModal('${fieldId}')"><i class="fas fa-balance-scale"></i></span>` 
+                        : '';
+                    badge.className =
+                        `ebmr-field-badge ${selectedFieldId === fieldId ? 'active' : ''} ${field.type === 'formula' ? 'formula-preview' : ''}`;
+                    badge.innerHTML = `
+                        <span class="badge-drag-handle badge-left-handle" onmousedown="window.initBadgeResize(event, '${fieldId}', 'left')"></span>
+                        <i class="fas ${icon}"></i> ${label}${extra}${scaleIndicator}
+                        <span class="badge-drag-handle badge-right-handle" onmousedown="window.initBadgeResize(event, '${fieldId}', 'right')"></span>
+                    `;
+                }
+            }
+        });
+
+        // Populate and validate result-inputs in execution mode
+        const resultInputs = div.querySelectorAll('.result-input');
+        resultInputs.forEach(inp => {
+            const fieldId = inp.getAttribute('data-field-id');
+            if (fieldId && window.executionValues) {
+                let val = window.executionValues[fieldId] || '';
+                // Handle nested structure if any
+                if (val && typeof val === 'object' && val.hasOwnProperty('default')) {
+                    val = val.default;
+                } else if (val && typeof val === 'object' && !Array.isArray(val)) {
+                    const keys = Object.keys(val);
+                    if (keys.length > 0) val = val[keys[0]];
+                }
+                
+                inp.setAttribute('value', val); // populate value in DOM
+                
+                if (window.isExecutionMode) {
+                    // Activate execution class
+                    inp.classList.remove('criteria-design-mode');
+                    inp.classList.add('criteria-exec-mode');
+                    inp.style.pointerEvents = 'auto';
+                    inp.removeAttribute('readonly');
+
+                    // If value is set, do validation
+                    if (val !== '') {
+                        const op = inp.getAttribute('data-criteria-op') || '';
+                        const minAttr = inp.getAttribute('data-criteria-min') || '';
+                        const maxAttr = inp.getAttribute('data-criteria-max') || '';
+                        const min = parseFloat(minAttr);
+                        const max = parseFloat(maxAttr);
+                        const numVal = parseFloat(val);
+                        
+                        let pass = false;
+                        let isNumeric = !isNaN(numVal) && !isNaN(parseFloat(minAttr)) && op !== 'N/A';
+                        
+                        if (isNumeric) {
+                            if (op === 'range') {
+                                pass = (numVal >= min && numVal <= max);
+                            } else if (op === '┬▒') {
+                                pass = (numVal >= (min - max) && numVal <= (min + max));
+                            } else if (op === '<') {
+                                pass = (numVal < min);
+                            } else if (op === '<=') {
+                                pass = (numVal <= min);
+                            } else if (op === '>') {
+                                pass = (numVal > min);
+                            } else if (op === '>=') {
+                                pass = (numVal >= min);
+                            } else if (op === '=' || op === '') {
+                                pass = (numVal === min);
+                            } else {
+                                if (!isNaN(min) && !isNaN(max) && min !== max) {
+                                    pass = (numVal >= min && numVal <= max);
+                                } else if (!isNaN(min)) {
+                                    pass = (numVal === min);
+                                }
+                            }
+                        } else {
+                            // Text validation (case-insensitive string comparison)
+                            const minStr = minAttr.trim().toLowerCase();
+                            const valStr = String(val).trim().toLowerCase();
+                            if (minStr !== '') {
+                                pass = (valStr === minStr);
+                            } else {
+                                return; // Kh├┤ng ─æß╗º th├┤ng tin
+                            }
+                        }
+                        
+                        inp.classList.remove('criteria-pass', 'criteria-fail');
+                        if (pass) {
+                            inp.classList.add('criteria-pass');
+                            inp.style.backgroundColor = '#d4edda';
+                            inp.style.color = '#155724';
+                            inp.style.borderColor = '#28a745';
+                        } else {
+                            inp.classList.add('criteria-fail');
+                            inp.style.backgroundColor = '#f8d7da';
+                            inp.style.color = '#721c24';
+                            inp.style.borderColor = '#dc3545';
+                        }
+                    }
+                } else {
+                    // Design mode
+                    inp.classList.remove('criteria-exec-mode');
+                    inp.classList.add('criteria-design-mode');
+                    inp.style.pointerEvents = 'none';
+                    inp.setAttribute('readonly', 'true');
+                }
+            }
+        });
+
+        return div.innerHTML;
+    }
+
+    // Keep track of fields currently being calculated to prevent infinite loops (circular references)
+    let calculatingFields = new Set();
+
+    /**
+     * H├ám helper ─æß╗â chuyß╗ân ─æß╗òi chuß╗ùi gi├í trß╗ï (c├│ thß╗â chß╗⌐a dß║Ñu phß║⌐y ph├ón t├ích phß║ºn ngh├¼n) sang Float mß╗Öt c├ích an to├án
+     */
+    const parseNumberSafe = function(val) {
+        if (val === undefined || val === null || val === '') return 0;
+        if (typeof val === 'number') return val;
+        // Loß║íi bß╗Å thß║╗ HTML v├á dß║Ñu phß║⌐y ph├ón c├ích phß║ºn ngh├¼n
+        const clean = String(val).replace(/<[^>]*>/g, '').replace(/,/g, '').trim();
+        return parseFloat(clean) || 0;
+    };
+
+    /**
+     * T├¡nh to├ín gi├í trß╗ï cß╗ºa mß╗Öt c├┤ng thß╗⌐c to├ín hß╗ìc.
+     * N├│ tß╗▒ ─æß╗Öng t├¼m kiß║┐m c├íc gi├í trß╗ï tß╗½ c├íc ├┤ c├│ ID hoß║╖c c├íc biß║┐n sß╗æ ─æ╞░ß╗úc ─æß╗ïnh ngh─⌐a trong c├┤ng thß╗⌐c.
+     * @param {string} formula - Chuß╗ùi c├┤ng thß╗⌐c, v├¡ dß╗Ñ: "(kl_tong) - (kl_bao)".
+     */
+    window.calculateFormula = function(formula, decimalPlaces = 2, targetFieldId = null) {
+        if (!formula) return '0';
+
+        if (targetFieldId) {
+            if (calculatingFields.has(targetFieldId)) {
+                return '0'; // Tr├ính lß║╖p v├┤ hß║ín do tham chiß║┐u v├▓ng
+            }
+            calculatingFields.add(targetFieldId);
+        }
+
+        try {
+            const valMap = {};
+            const dPlaces = (decimalPlaces !== null && decimalPlaces !== '') ? parseInt(decimalPlaces) : 2;
+
+            // B╞»ß╗ÜC 1: Thu thß║¡p gi├í trß╗ï tß╗½ c├íc ├┤ bß║úng (Table Cells) c├│ ─æß║╖t ID (cellId)
+            items.forEach(item => {
+                if (item.type === 'table' && item.data) {
+                    item.data.forEach(row => {
+                        row.forEach(cell => {
+                            if (cell && cell.cellId) {
+                                // ╞»u ti├¬n gi├í trß╗ï mß║╖c ─æß╗ïnh nß║┐u c├│, nß║┐u kh├┤ng lß║Ñy nß╗Öi dung ├┤
+                                const raw = (cell.defaultValue !== undefined && cell
+                                    .defaultValue !== '') ? cell.defaultValue : (cell
+                                    .content || '0');
+                                valMap[cell.cellId] = parseNumberSafe(raw);
+                            }
+                        });
+                    });
+                }
+            });
+
+            // B╞»ß╗ÜC 2: Thu thß║¡p gi├í trß╗ï tß╗½ c├íc "Tr╞░ß╗¥ng ─æß╗Öng" (Dynamic Fields) theo T├¬n hoß║╖c Nh├ún
+            Object.values(fieldsConfig).forEach(field => {
+                if (field.label || field.name) {
+                    let val = 0;
+                    if (field.type === 'formula') {
+                        // Nß║┐u l├á tr╞░ß╗¥ng c├┤ng thß╗⌐c kh├íc, t├¡nh to├ín ─æß╗ç quy
+                        if (calculatingFields.has(field.id)) {
+                            val = 0; // Tr├ính lß║╖p v├┤ hß║ín
+                        } else {
+                            val = window.calculateFormula(field.formula || '', field.validation ? field.validation.decimal_places : 2, field.id);
+                        }
+                    } else if (window.isExecutionMode && window.executionValues && window.executionValues[field.id] !== undefined) {
+                        let raw = window.executionValues[field.id];
+                        if (raw && typeof raw === 'object' && raw.hasOwnProperty('default')) {
+                            val = raw.default;
+                        } else if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+                            const keys = Object.keys(raw);
+                            if (keys.length > 0) val = raw[keys[0]];
+                        } else {
+                            val = raw;
+                        }
+                    } else {
+                        val = (field.defaultValue !== undefined && field.defaultValue !== '') ? field.defaultValue : 0;
+                    }
+                    
+                    const parsedVal = parseNumberSafe(val);
+                    if (field.label) valMap[field.label] = parsedVal;
+                    if (field.name) valMap[field.name] = parsedVal;
+                }
+            });
+
+            // B╞»ß╗ÜC 3: Thay thß║┐ c├íc ─æß╗ïnh danh trong c├┤ng thß╗⌐c bß║▒ng gi├í trß╗ï thß╗▒c tß║┐
+            // V├¡ dß╗Ñ: "(kl_tong) - (kl_bao)" -> "100 - 5"
+            let processed = formula.replace(/\(([^)]+)\)/g, (match, id) => {
+                const trimmedId = id.trim();
+                return valMap[trimmedId] !== undefined ? valMap[trimmedId] : 0;
+            });
+
+            // B╞»ß╗ÜC 4: T├¡nh to├ín biß╗âu thß╗⌐c to├ín hß╗ìc c╞í bß║ún bß║▒ng h├ám Function (an to├án h╞ín eval mß╗Öt ch├║t)
+            const result = new Function(`return ${processed}`)();
+            // ─Éß╗ïnh dß║íng kß║┐t quß║ú hiß╗ân thß╗ï (ph├ón t├ích h├áng ngh├¼n, sß╗æ chß╗» sß╗æ thß║¡p ph├ón theo thiß║┐t lß║¡p)
+            return (typeof result === 'number') ? result.toLocaleString('en-US', {
+                minimumFractionDigits: dPlaces,
+                maximumFractionDigits: dPlaces
+            }) : result;
+        } catch (e) {
+            return '#ERR'; // Trß║ú vß╗ü lß╗ùi nß║┐u c├┤ng thß╗⌐c kh├┤ng hß╗úp lß╗ç
+        } finally {
+            if (targetFieldId) {
+                calculatingFields.delete(targetFieldId);
+            }
+        }
+    };
+
+    /**
+     * Qu├⌐t to├án bß╗Ö t├ái liß╗çu v├á cß║¡p nhß║¡t lß║íi tß║Ñt cß║ú c├íc kß║┐t quß║ú c├┤ng thß╗⌐c ─æang hiß╗ân thß╗ï.
+     * Th╞░ß╗¥ng ─æ╞░ß╗úc gß╗ìi sau khi ng╞░ß╗¥i d├╣ng thay ─æß╗òi mß╗Öt gi├í trß╗ï ─æß║ºu v├áo n├áo ─æ├│.
+     */
+    window.recalculateAllFormulas = function() {
+        // Find all formula result elements in the DOM and update them
+        document.querySelectorAll('.formula-result').forEach(el => {
+            const blockItem = el.closest('.block-item');
+            if (blockItem) {
+                const badge = el.closest('.ebmr-field-badge') || el;
+                const fieldId = badge.getAttribute('data-field-id');
+                const field = fieldsConfig[fieldId];
+                if (field && field.type === 'formula') {
+                    const dPlaces = (field.validation && field.validation.decimal_places !== null) ? field
+                        .validation.decimal_places : 2;
+                    badge.innerHTML = calculateFormula(field.formula || '', dPlaces, field.id);
+                }
+            }
+        });
+    };
+</script>

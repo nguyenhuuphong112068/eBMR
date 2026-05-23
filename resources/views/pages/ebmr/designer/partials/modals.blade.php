@@ -525,3 +525,27 @@
         </div>
     </div>
 </div>
+
+<!-- Modal: Cài đặt Lặp nhóm khối -->
+<div class="modal fade" id="blockLoopModal" tabindex="-1" aria-hidden="true" style="z-index: 1060;">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content shadow-lg border-0" style="border-radius: 12px;">
+            <div class="modal-header bg-warning text-dark border-0 py-2 px-3">
+                <h5 class="modal-title fw-bold small"><i class="fas fa-redo me-2"></i> LẶP LẠI NHÓM KHỐI</h5>
+                <button type="button" class="close text-dark border-0 bg-transparent" data-dismiss="modal" data-bs-dismiss="modal" aria-label="Close" style="font-size: 1.5rem; outline: none; opacity: 0.8;">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body py-3">
+                <div class="mb-3">
+                    <label class="small fw-bold text-muted mb-1">Số lượng bản sao (Lần lặp)</label>
+                    <input type="number" id="blockLoopCount" class="form-control form-control-sm" value="3" min="1" max="100">
+                </div>
+                <div class="d-grid gap-2 d-flex flex-column">
+                    <button class="btn btn-primary btn-sm fw-bold w-100 mb-2" onclick="applyBlockLoopGroup()">Lưu cấu hình</button>
+                    <button class="btn btn-outline-danger btn-sm fw-bold w-100" onclick="removeBlockLoopGroup()">Gỡ bỏ lặp nhóm</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

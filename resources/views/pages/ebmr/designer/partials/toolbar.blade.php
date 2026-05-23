@@ -12,6 +12,13 @@
                     class="fas fa-paint-roller"></i></button>
             <button class="btn btn-toolbar" onclick="clearFormatting()" title="Xóa định dạng"
                 {{ $isReadOnly ? 'disabled' : '' }}><i class="fas fa-remove-format"></i></button>
+            <div class="border-end mx-1" style="height: 18px;"></div>
+            <button class="btn btn-toolbar text-primary" onclick="copyBlock()" title="Sao chép Khối (Ctrl + C)"
+                {{ $isReadOnly ? 'disabled' : '' }}><i class="fas fa-copy"></i></button>
+            <button class="btn btn-toolbar text-warning" onclick="cutBlock()" title="Cắt Khối (Ctrl + X)"
+                {{ $isReadOnly ? 'disabled' : '' }}><i class="fas fa-cut"></i></button>
+            <button class="btn btn-toolbar text-success" onclick="pasteBlock()" title="Dán Khối (Ctrl + V)"
+                {{ $isReadOnly ? 'disabled' : '' }}><i class="fas fa-paste"></i></button>
             <button class="btn btn-toolbar" onclick="openTemplateModal()" title="Mở hồ sơ">
                 <i class="fas fa-folder-open"></i>
             </button>
@@ -69,6 +76,11 @@
             <button class="btn btn-toolbar-action text-info fw-bold" onmousedown="event.preventDefault();"
                 onclick="addSection()" title="Thêm Phân đoạn">
                 <i class="fas fa-layer-group"></i>
+            </button>
+
+            <button class="btn btn-toolbar-action text-warning fw-bold" onmousedown="event.preventDefault();"
+                onclick="openBlockLoopModal()" title="Cài đặt Lặp nhóm khối">
+                <i class="fas fa-redo"></i>
             </button>
 
             <div class="btn-group">

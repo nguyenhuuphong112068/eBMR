@@ -678,7 +678,14 @@ window.closeScalePopover = function() {
  * Hàm chung ghi giá trị từ cân vào ô biến số và tính toán lại công thức/charts
  */
 window.writeScaleValueToField = function(fieldId, value, unit) {
-    const field = fieldsConfig ? fieldsConfig[fieldId] : null;
+    let originalId = fieldId;
+    let loopSuffix = '';
+    const loopMatch = fieldId.match(/(.+)(_loop_\d+)$/);
+    if (loopMatch) {
+        originalId = loopMatch[1];
+        loopSuffix = loopMatch[2];
+    }
+    const field = fieldsConfig ? fieldsConfig[originalId] : null;
     if (!field) return;
 
     // Làm tròn theo decimal_places của biến số
@@ -704,7 +711,7 @@ window.writeScaleValueToField = function(fieldId, value, unit) {
         renderBlocks();
     }
     if (field.block_id && typeof syncLinkedCharts === 'function') {
-        syncLinkedCharts(field.block_id);
+        syncLinkedCharts(field.block_id + loopSuffix);
     }
 };
 
@@ -714,7 +721,14 @@ window.writeScaleValueToField = function(fieldId, value, unit) {
  * @param {string} fieldId
  */
 window.readScaleValueIntoField = async function(fieldId) {
-    const field = fieldsConfig ? fieldsConfig[fieldId] : null;
+    let originalId = fieldId;
+    let loopSuffix = '';
+    const loopMatch = fieldId.match(/(.+)(_loop_\d+)$/);
+    if (loopMatch) {
+        originalId = loopMatch[1];
+        loopSuffix = loopMatch[2];
+    }
+    const field = fieldsConfig ? fieldsConfig[originalId] : null;
     if (!field) return;
 
     // Luôn mở modal kết nối
@@ -728,9 +742,17 @@ window.openScaleConnectionModal = function(fieldId) {
     window._scaleTargetFieldId = fieldId;
     window.closeScalePopover(); // Đóng popover đang mở nếu có
 
+    let originalId = fieldId;
+    let loopSuffix = '';
+    const loopMatch = fieldId.match(/(.+)(_loop_\d+)$/);
+    if (loopMatch) {
+        originalId = loopMatch[1];
+        loopSuffix = loopMatch[2];
+    }
+
     // Cập nhật tiêu đề modal với tên biến số
-    const field = fieldsConfig ? fieldsConfig[fieldId] : null;
-    const fieldLabel = field ? (field.label || fieldId) : fieldId;
+    const field = fieldsConfig ? fieldsConfig[originalId] : null;
+    const fieldLabel = field ? (field.label || originalId) : originalId;
     const titleEl = document.getElementById('scale-modal-field-label');
     if (titleEl) titleEl.textContent = `→ "${fieldLabel}"`;
 

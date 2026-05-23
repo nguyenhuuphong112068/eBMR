@@ -311,6 +311,8 @@
                     </button>
                 </div>
             `;
+        } else if (item.type === 'section') {
+            // Section has no sidebar configuration
         }
         body.innerHTML = html;
 
@@ -1125,6 +1127,7 @@
      * @param {string} callbackName - Tên hàm callback sẽ được gọi khi chọn màu.
      */
     function getThemeColorsHTML(callbackName) {
+
         const colors = [
             '#000000', '#434343', '#666666', '#999999', '#b7b7b7', '#cccccc', '#d9d9d9', '#efefef', '#f3f3f3',
             '#ffffff',
@@ -1315,7 +1318,8 @@
         const selection = window.getSelection();
         const selectedCells = document.querySelectorAll('.selected-cell');
         const selectionNode = selection.anchorNode;
-        const activeCell = selectionNode ? (selectionNode.nodeType === 3 ? selectionNode.parentElement : selectionNode)
+        const activeCell = selectionNode ? (selectionNode.nodeType === 3 ? selectionNode.parentElement :
+                selectionNode)
             .closest('.mini-table td, .mini-table th') : null;
 
         let writingMode = '';
@@ -2465,7 +2469,19 @@
                         const tc = s.textColor || '';
                         const wm = s.writingMode || '';
                         const tf = s.transform || '';
-                        return `<th contenteditable="false" spellcheck="false" data-row="0" data-col="${cIdx}" class="table-header-cell" style="width: ${c.width || 'auto'}; background-color: ${bg}; text-align: ${align}; font-weight: ${fw}; font-style: ${fs}; text-decoration: ${td}; font-size: ${fsz}; color: ${tc}; writing-mode: ${wm};"><div class="header-content" style="transform: ${tf}; transform-origin: center center; display: inline-block; width: 100%;">${c.label || ''}</div></th>`;
+                        return ` < th contenteditable = "false"
+                    spellcheck = "false"
+                    data - row = "0"
+                    data - col = "${cIdx}"
+                    class = "table-header-cell"
+                    style =
+                        "width: ${c.width || 'auto'}; background-color: ${bg}; text-align: ${align}; font-weight: ${fw}; font-style: ${fs}; text-decoration: ${td}; font-size: ${fsz}; color: ${tc}; writing-mode: ${wm};" >
+                        < div class = "header-content"
+                    style =
+                        "transform: ${tf}; transform-origin: center center; display: inline-block; width: 100%;" >
+                        $ {
+                            c.label || ''
+                        } < /div></th > `;
                     }).join('')}</tr></thead>`;
                 }
 
@@ -2559,13 +2575,15 @@
 
         if (!window.isViewAllMode) {
             // Nếu chuyển sang xem 1 phân đoạn, đảm bảo activeSectionId trỏ vào 1 công đoạn thực tế (không phải virtual header)
-            if (!window.activeSectionId || window.activeSectionId === catId || window.activeSectionId === catId + '_0') {
+            if (!window.activeSectionId || window.activeSectionId === catId || window.activeSectionId === catId +
+                '_0') {
                 let lastSection = localStorage.getItem('ebmr_last_section_' + templateId);
                 // Kiểm tra nếu lastSection cũng trỏ vào header thì bỏ qua để tìm công đoạn thực
                 if (lastSection === catId || lastSection === catId + '_0') lastSection = null;
 
                 if (!lastSection && typeof items !== 'undefined' && items.length > 0) {
-                    const firstStageBlock = items.find(i => i.section_id && !i.isVirtual && i.type === 'section' && i.stage_code !== undefined);
+                    const firstStageBlock = items.find(i => i.section_id && !i.isVirtual && i.type === 'section' && i
+                        .stage_code !== undefined);
                     if (firstStageBlock) lastSection = firstStageBlock.section_id;
                 }
                 if (lastSection) window.activeSectionId = lastSection;
@@ -2846,7 +2864,15 @@
         if (!window.isExecutionMode) return;
         if (window.isReadOnly) return;
 
-        const field = fieldsConfig[fieldId];
+        let originalId = fieldId;
+        let loopSuffix = '';
+        const loopMatch = fieldId.match(/(.+)(_loop_\d+)$/);
+        if (loopMatch) {
+            originalId = loopMatch[1];
+            loopSuffix = loopMatch[2];
+        }
+
+        const field = fieldsConfig[originalId];
         if (!field) return;
 
         let currentVal = window.executionValues[fieldId] || '';
@@ -2867,8 +2893,10 @@
             inputType = 'number';
             if (field.validation) {
                 if (!field.validation.allow_out_of_bounds) {
-                    if (field.validation.min !== null && field.validation.min !== '') inputAttributes.min = field.validation.min;
-                    if (field.validation.max !== null && field.validation.max !== '') inputAttributes.max = field.validation.max;
+                    if (field.validation.min !== null && field.validation.min !== '') inputAttributes.min = field
+                        .validation.min;
+                    if (field.validation.max !== null && field.validation.max !== '') inputAttributes.max = field
+                        .validation.max;
                 }
                 if (field.validation.decimal_places && parseInt(field.validation.decimal_places) > 0) {
                     inputAttributes.step = '0.' + '0'.repeat(parseInt(field.validation.decimal_places) - 1) + '1';
@@ -2879,10 +2907,11 @@
         } else if (field.type === 'date') {
             inputType = 'text'; // Fallback for SweetAlert2 older versions
             inputAttributes.type = 'date';
-            
+
             // Luôn luôn hiển thị giá trị input là ngày hiện tại (now)
             const d = new Date();
-            currentVal = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            currentVal =
+                `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         } else if (field.type === 'text') {
             inputType = 'textarea';
             inputAttributes.rows = 4;
@@ -2981,10 +3010,10 @@
         }).then((result) => {
             // Hỗ trợ cả SweetAlert2 bản mới (isConfirmed) và bản cũ (value)
             const isConfirmed = result.isConfirmed || (result.value !== undefined && !result.dismiss);
-            
+
             if (isConfirmed) {
                 let finalValue = result.value;
-                
+
                 console.log("Modal confirmed with value:", finalValue);
                 console.log("fieldId:", fieldId);
 
@@ -2997,7 +3026,8 @@
                 }
 
                 // Đảm bảo cấu trúc đồng nhất với Server (cell_id = 'default' cho các biến đơn)
-                if (typeof window.executionValues[fieldId] !== 'object' || window.executionValues[fieldId] === null) {
+                if (typeof window.executionValues[fieldId] !== 'object' || window.executionValues[
+                    fieldId] === null) {
                     window.executionValues[fieldId] = {};
                 }
                 window.executionValues[fieldId]['default'] = finalValue;
@@ -3006,7 +3036,7 @@
                 if (field.type === 'date') {
                     if (!window.executionValues[fieldId]._meta) window.executionValues[fieldId]._meta = {};
                     window.executionValues[fieldId]._meta['default'] = {
-                        by: '{{ session("user.fullName") ?? session("user.username") ?? "" }}',
+                        by: '{{ session('user.fullName') ?? (session('user.username') ?? '') }}',
                         at: new Date().toISOString()
                     };
                 }
@@ -3016,7 +3046,7 @@
                 if (typeof window.recalculateAllFormulas === 'function') window.recalculateAllFormulas();
                 renderBlocks();
                 if (field.block_id && typeof syncLinkedCharts === 'function') {
-                    syncLinkedCharts(field.block_id);
+                    syncLinkedCharts(field.block_id + loopSuffix);
                 }
             }
         }).catch(err => {
@@ -3030,7 +3060,8 @@
     function addAbbreviation() {
         const selection = window.getSelection().toString().trim();
         if (!selection) {
-            Swal.fire('Lỗi', 'Vui lòng bôi đen (chọn) một từ viết tắt trong tài liệu trước khi bấm nút này.', 'warning');
+            Swal.fire('Lỗi', 'Vui lòng bôi đen (chọn) một từ viết tắt trong tài liệu trước khi bấm nút này.',
+            'warning');
             return;
         }
 
@@ -3069,21 +3100,47 @@
                 borderMode: 'visible',
                 hideHeader: false,
                 section_id: catId,
-                columns: [
-                    { label: 'STT', type: 'text', width: '10%' },
-                    { label: 'Chữ viết tắt', type: 'text', width: '30%' },
-                    { label: 'Ý nghĩa', type: 'text', width: '60%' }
+                columns: [{
+                        label: 'STT',
+                        type: 'text',
+                        width: '10%'
+                    },
+                    {
+                        label: 'Chữ viết tắt',
+                        type: 'text',
+                        width: '30%'
+                    },
+                    {
+                        label: 'Ý nghĩa',
+                        type: 'text',
+                        width: '60%'
+                    }
                 ],
                 data: [
-                    [
-                        { content: '1', rs: 1, cs: 1, textAlign: 'center' },
-                        { content: word, rs: 1, cs: 1, textAlign: 'center', fontWeight: 'bold' },
-                        { content: meaning, rs: 1, cs: 1, textAlign: 'left' }
+                    [{
+                            content: '1',
+                            rs: 1,
+                            cs: 1,
+                            textAlign: 'center'
+                        },
+                        {
+                            content: word,
+                            rs: 1,
+                            cs: 1,
+                            textAlign: 'center',
+                            fontWeight: 'bold'
+                        },
+                        {
+                            content: meaning,
+                            rs: 1,
+                            cs: 1,
+                            textAlign: 'left'
+                        }
                     ]
                 ],
                 dirty: true
             };
-            
+
             // Tìm vị trí cuối cùng của các block ảo (virtual blocks) để chèn ngay dưới đó
             let insertIdx = 0;
             for (let i = 0; i < items.length; i++) {
@@ -3097,7 +3154,7 @@
             // Nếu có rồi, thêm dòng mới
             abbrevTable.section_id = "{{ $template->caterogy_id ?? 0 }}";
             const stt = abbrevTable.data.length + 1;
-            
+
             // Kiểm tra xem từ viết tắt đã tồn tại chưa
             const exists = abbrevTable.data.some(row => {
                 if (row[1] && row[1].content) {
@@ -3112,10 +3169,25 @@
                 return;
             }
 
-            abbrevTable.data.push([
-                { content: stt.toString(), rs: 1, cs: 1, textAlign: 'center' },
-                { content: word, rs: 1, cs: 1, textAlign: 'center', fontWeight: 'bold' },
-                { content: meaning, rs: 1, cs: 1, textAlign: 'left' }
+            abbrevTable.data.push([{
+                    content: stt.toString(),
+                    rs: 1,
+                    cs: 1,
+                    textAlign: 'center'
+                },
+                {
+                    content: word,
+                    rs: 1,
+                    cs: 1,
+                    textAlign: 'center',
+                    fontWeight: 'bold'
+                },
+                {
+                    content: meaning,
+                    rs: 1,
+                    cs: 1,
+                    textAlign: 'left'
+                }
             ]);
             abbrevTable.rows = abbrevTable.data.length;
             abbrevTable.dirty = true;
@@ -3125,7 +3197,7 @@
         if (window.jQuery) {
             $('#abbreviationModal').modal('hide');
         }
-        
+
         renderBlocks();
         Swal.fire({
             title: 'Thành công',
@@ -3144,47 +3216,51 @@
             const AudioContext = window.AudioContext || window.webkitAudioContext;
             if (!AudioContext) return;
             const audioCtx = new AudioContext();
-            
+
             function playBeep() {
                 try {
                     // Còi hú đặc chủng phòng sản xuất (Dual Sawtooth + Frequency Sweep)
                     const now = audioCtx.currentTime;
-                    
+
                     // Tạo 2 bộ phát tần số cao để cộng hưởng giao thoa âm thanh (Acoustic Beating) cực kỳ chói tai
                     const osc1 = audioCtx.createOscillator();
                     const osc2 = audioCtx.createOscillator();
                     const gainNode = audioCtx.createGain();
-                    
+
                     osc1.connect(gainNode);
                     osc2.connect(gainNode);
                     gainNode.connect(audioCtx.destination);
-                    
+
                     osc1.type = 'sawtooth';
                     osc2.type = 'sawtooth';
-                    
+
                     // Tần số cơ bản 2000Hz & 2025Hz (dải tần tai người nhạy cảm nhất)
                     osc1.frequency.setValueAtTime(2000, now);
                     osc2.frequency.setValueAtTime(2025, now);
-                    
+
                     // Quét tần số cực nhanh lên 2800Hz (Hiệu ứng tiếng hú còi khẩn cấp)
                     osc1.frequency.exponentialRampToValueAtTime(2800, now + 0.25);
                     osc2.frequency.exponentialRampToValueAtTime(2825, now + 0.25);
-                    
+
                     // Tăng âm lượng tối đa (Gain = 0.45)
                     gainNode.gain.setValueAtTime(0.45, now);
                     gainNode.gain.linearRampToValueAtTime(0.45, now + 0.2);
                     gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
-                    
+
                     osc1.start(now);
                     osc2.start(now);
-                    
+
                     osc1.stop(now + 0.3);
                     osc2.stop(now + 0.3);
-                } catch(e) { console.log('Audio loop error', e); }
+                } catch (e) {
+                    console.log('Audio loop error', e);
+                }
             }
             playBeep();
             window._alertBeepInterval = setInterval(playBeep, 700); // Lặp liên tục dồn dập (mỗi 0.7 giây)
-        } catch(e) { console.log('Beeper init error', e); }
+        } catch (e) {
+            console.log('Beeper init error', e);
+        }
     };
 
     window.stopContinuousBeep = function() {
@@ -3199,16 +3275,24 @@
         if (event) event.stopPropagation();
         if (!window.isExecutionMode) return;
         if (window.isReadOnly) return;
-        
+
+        let originalId = fieldId;
+        let loopSuffix = '';
+        const loopMatch = fieldId.match(/(.+)(_loop_\d+)$/);
+        if (loopMatch) {
+            originalId = loopMatch[1];
+            loopSuffix = loopMatch[2];
+        }
+
         // Kiểm tra hasDefaultNow động từ fieldsConfig đề phòng trường hợp sidebar thiết lập giá trị mặc định "now" mà chưa re-render block
-        const field = fieldsConfig[fieldId];
+        const field = fieldsConfig[originalId];
         const isNow = hasDefaultNow || (field && field.defaultValue && field.defaultValue.toLowerCase() === 'now');
-        
+
         if (!isNow) {
             openVariableInputModal(fieldId);
             return;
         }
-        
+
         if (dateClickTimer) {
             clearTimeout(dateClickTimer);
             dateClickTimer = null;
@@ -3225,8 +3309,17 @@
         if (!window.isExecutionMode) return;
         if (window.isReadOnly) return;
 
+        let originalId = fieldId;
+        let loopSuffix = '';
+        const loopMatch = fieldId.match(/(.+)(_loop_\d+)$/);
+        if (loopMatch) {
+            originalId = loopMatch[1];
+            loopSuffix = loopMatch[2];
+        }
+
         const now = new Date();
-        const timeString = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')} ${now.getDate().toString().padStart(2, '0')}/${(now.getMonth()+1).toString().padStart(2, '0')}/${now.getFullYear()}`;
+        const timeString =
+            `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')} ${now.getDate().toString().padStart(2, '0')}/${(now.getMonth()+1).toString().padStart(2, '0')}/${now.getFullYear()}`;
 
         if (!window.executionValues) window.executionValues = {};
         if (typeof window.executionValues[fieldId] !== 'object' || window.executionValues[fieldId] === null) {
@@ -3236,37 +3329,46 @@
 
         if (!window.executionValues[fieldId]._meta) window.executionValues[fieldId]._meta = {};
         window.executionValues[fieldId]._meta['default'] = {
-            by: '{{ session("user.fullName") ?? session("user.username") ?? "" }}',
+            by: '{{ session('user.fullName') ?? (session('user.username') ?? '') }}',
             at: new Date().toISOString()
         };
 
         if (typeof window.recalculateAllFormulas === 'function') window.recalculateAllFormulas();
         if (typeof renderBlocks === 'function') renderBlocks();
-        const field = fieldsConfig[fieldId];
+        const field = fieldsConfig[originalId];
         if (field && field.block_id && typeof syncLinkedCharts === 'function') {
-            syncLinkedCharts(field.block_id);
+            syncLinkedCharts(field.block_id + loopSuffix);
         }
     };
 
     function autoFillTime(blockId, r, c) {
         if (!window.isExecutionMode) return;
-        
+
+        let originalId = blockId;
+        let loopSuffix = '';
+        const loopMatch = blockId.match(/(.+)(_loop_\d+)$/);
+        if (loopMatch) {
+            originalId = loopMatch[1];
+            loopSuffix = loopMatch[2];
+        }
+
         const now = new Date();
-        const timeString = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')} ${now.getDate().toString().padStart(2, '0')}/${(now.getMonth()+1).toString().padStart(2, '0')}/${now.getFullYear()}`;
-        
+        const timeString =
+            `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')} ${now.getDate().toString().padStart(2, '0')}/${(now.getMonth()+1).toString().padStart(2, '0')}/${now.getFullYear()}`;
+
         if (!window.executionValues) window.executionValues = {};
         if (!window.executionValues[blockId]) window.executionValues[blockId] = {};
-        
+
         window.executionValues[blockId][`${r}_${c}`] = timeString;
-        
+
         if (!window.executionValues[blockId]._meta) window.executionValues[blockId]._meta = {};
         window.executionValues[blockId]._meta[`${r}_${c}`] = {
-            by: '{{ session("user.fullName") ?? session("user.username") ?? "" }}',
+            by: '{{ session('user.fullName') ?? (session('user.username') ?? '') }}',
             at: new Date().toISOString()
         };
-        
+
         if (typeof renderBlocks === 'function') renderBlocks();
-        
+
         // Cập nhật biểu đồ nếu bảng này có liên kết
         if (typeof syncLinkedCharts === 'function') syncLinkedCharts(blockId);
 
@@ -3276,52 +3378,53 @@
             let itemFreq = null;
             // Lấy từ biến items (Chế độ Designer Preview)
             if (typeof items !== 'undefined') {
-                const itm = items.find(i => i.id === blockId || i.uuid === blockId);
+                const itm = items.find(i => i.id === originalId || i.uuid === originalId);
                 if (itm && itm.freq_minutes) itemFreq = parseInt(itm.freq_minutes);
             } else if (window.items) {
-                const itm = window.items.find(i => i.id === blockId || i.uuid === blockId);
+                const itm = window.items.find(i => i.id === originalId || i.uuid === originalId);
                 if (itm && itm.freq_minutes) itemFreq = parseInt(itm.freq_minutes);
             }
-            
+
             // Fallback: Tìm thẻ span trong table cell để lấy data-freq (Hỗ trợ chế độ Execute)
             if (!itemFreq) {
-                const cellBadge = document.querySelector(`td[data-row="${r+1}"][data-col="${c}"] .execution-badge.time`);
+                const cellBadge = document.querySelector(
+                `td[data-row="${r+1}"][data-col="${c}"] .execution-badge.time`);
                 if (cellBadge && cellBadge.getAttribute('data-freq')) {
                     itemFreq = parseInt(cellBadge.getAttribute('data-freq'));
                 }
             }
-            
+
             console.log("Timer debug: blockId=", blockId, "itemFreq=", itemFreq);
-            
+
             if (itemFreq) {
                 const freqMs = itemFreq * 60 * 1000;
-                
+
                 // Khởi tạo hoặc xóa đếm ngược cũ
                 if (!window._activeCountdowns) window._activeCountdowns = {};
                 window._activeCountdowns[blockId] = {
                     startTime: Date.now(),
                     freqMs: freqMs
                 };
-                
+
                 // Hiển thị thanh tiến trình
                 const container = document.getElementById(`countdown-container-${blockId}`);
                 if (container) container.style.display = 'block';
-                
+
                 if (!window._countdownIntervals) window._countdownIntervals = {};
                 if (window._countdownIntervals[blockId]) {
                     clearInterval(window._countdownIntervals[blockId]);
                 }
-                
+
                 const updateCountdown = () => {
                     const state = window._activeCountdowns[blockId];
                     if (!state) return;
-                    
+
                     const elapsed = Date.now() - state.startTime;
                     const remaining = state.freqMs - elapsed;
-                    
+
                     const bar = document.getElementById(`countdown-bar-${blockId}`);
                     const text = document.getElementById(`countdown-text-${blockId}`);
-                    
+
                     if (remaining <= 0) {
                         if (bar) {
                             bar.style.width = '0%';
@@ -3332,7 +3435,7 @@
                         delete window._activeCountdowns[blockId];
                         return;
                     }
-                    
+
                     const percent = (remaining / state.freqMs) * 100;
                     if (bar) {
                         bar.style.width = `${percent}%`;
@@ -3344,7 +3447,7 @@
                             bar.className = 'progress-bar progress-bar-striped progress-bar-animated bg-danger';
                         }
                     }
-                    
+
                     if (text) {
                         const totalSeconds = Math.ceil(remaining / 1000);
                         const mins = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
@@ -3352,20 +3455,20 @@
                         text.innerText = `${mins}:${secs}`;
                     }
                 };
-                
+
                 updateCountdown();
                 window._countdownIntervals[blockId] = setInterval(updateCountdown, 1000);
-                
+
                 // Xóa timer kêu cũ nếu có
                 if (window._sampleTimers && window._sampleTimers[blockId]) {
                     clearTimeout(window._sampleTimers[blockId]);
                 }
                 if (!window._sampleTimers) window._sampleTimers = {};
-                
+
                 window._sampleTimers[blockId] = setTimeout(() => {
                     // Bắt đầu còi hú liên tục
                     window.startContinuousBeep();
-                    
+
                     Swal.fire({
                         title: 'Đến giờ lấy mẫu!',
                         html: `Đã qua <b>${itemFreq} phút</b> kể từ lần ghi nhận trước.<br>Vui lòng tiến hành lấy mẫu và cân trọng lượng!`,
@@ -3377,10 +3480,12 @@
                         window.stopContinuousBeep();
                     });
                 }, freqMs); // Chờ freqMs
-                
+
                 alertMsg = `Đã lấy giờ. Hệ thống sẽ nhắc nhở sau ${itemFreq} phút.`;
             }
-        } catch(e) { console.error(e); }
+        } catch (e) {
+            console.error(e);
+        }
 
         Swal.fire({
             toast: true,
@@ -3394,38 +3499,38 @@
 
     function autoFillExecutor(blockId, r, c) {
         if (!window.isExecutionMode) return;
-        
-        const currentUserSignature = @json(session('user.signature_image') ?? session('user')['signature_image'] ?? null);
-        const currentUser = '{{ session("user.fullName") ?? session("user.username") ?? "Người thực hiện" }}';
+
+        const currentUserSignature = @json(session('user.signature_image') ?? (session('user')['signature_image'] ?? null));
+        const currentUser = '{{ session('user.fullName') ?? (session('user.username') ?? 'Người thực hiện') }}';
         const signatureVal = currentUserSignature ? currentUserSignature : currentUser;
-        
+
         if (!window.executionValues) window.executionValues = {};
         if (!window.executionValues[blockId]) window.executionValues[blockId] = {};
-        
+
         window.executionValues[blockId][`${r}_${c}`] = signatureVal;
-        
+
         if (!window.executionValues[blockId]._meta) window.executionValues[blockId]._meta = {};
         window.executionValues[blockId]._meta[`${r}_${c}`] = {
             by: currentUser,
             at: new Date().toISOString()
         };
-        
+
         if (typeof renderBlocks === 'function') renderBlocks();
     }
 
     function openCheckerAuthModal(blockId, r, c) {
         if (!window.isExecutionMode) return;
-        
+
         document.getElementById('checkerBlockId').value = blockId;
         document.getElementById('checkerRowIdx').value = r;
         document.getElementById('checkerColIdx').value = c;
-        
+
         document.getElementById('checkerUsername').value = '';
         document.getElementById('checkerPassword').value = '';
         document.getElementById('checkerAuthError').classList.add('d-none');
-        
+
         $('#checkerAuthModal').modal('show');
-        
+
         setTimeout(() => {
             document.getElementById('checkerUsername').focus();
         }, 500);
@@ -3435,11 +3540,11 @@
         const blockId = document.getElementById('checkerBlockId').value;
         const r = document.getElementById('checkerRowIdx').value;
         const c = document.getElementById('checkerColIdx').value;
-        
+
         const username = document.getElementById('checkerUsername').value.trim();
         const password = document.getElementById('checkerPassword').value;
         const errorEl = document.getElementById('checkerAuthError');
-        
+
         if (!username || !password) {
             errorEl.innerText = 'Vui lòng nhập tài khoản và mật khẩu.';
             errorEl.classList.remove('d-none');
@@ -3451,55 +3556,60 @@
         btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang xác thực...';
         btn.disabled = true;
 
-        fetch('{{ route("pages.ebmr.verifyChecker") }}', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]') ? document.querySelector('meta[name="csrf-token"]').content : ''
-            },
-            body: JSON.stringify({ username: username, password: password })
-        })
-        .then(res => res.json())
-        .then(data => {
-            btn.innerHTML = oldText;
-            btn.disabled = false;
-            
-            if (data.success) {
-                $('#checkerAuthModal').modal('hide');
-                
-                if (!window.executionValues) window.executionValues = {};
-                if (!window.executionValues[blockId]) window.executionValues[blockId] = {};
-                
-                window.executionValues[blockId][`${r}_${c}`] = data.signature_image ? data.signature_image : data.fullName;
-                
-                if (!window.executionValues[blockId]._meta) window.executionValues[blockId]._meta = {};
-                window.executionValues[blockId]._meta[`${r}_${c}`] = {
-                    by: data.fullName,
-                    at: new Date().toISOString()
-                };
-                
-                if (typeof renderBlocks === 'function') renderBlocks();
-                
-                Swal.fire({
-                    toast: true,
-                    position: 'top-end',
-                    icon: 'success',
-                    title: `Đã xác thực: ${data.fullName}`,
-                    showConfirmButton: false,
-                    timer: 2000
-                });
-            } else {
-                errorEl.innerText = data.message || 'Xác thực thất bại.';
+        fetch('{{ route('pages.ebmr.verifyChecker') }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]') ? document.querySelector(
+                        'meta[name="csrf-token"]').content : ''
+                },
+                body: JSON.stringify({
+                    username: username,
+                    password: password
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                btn.innerHTML = oldText;
+                btn.disabled = false;
+
+                if (data.success) {
+                    $('#checkerAuthModal').modal('hide');
+
+                    if (!window.executionValues) window.executionValues = {};
+                    if (!window.executionValues[blockId]) window.executionValues[blockId] = {};
+
+                    window.executionValues[blockId][`${r}_${c}`] = data.signature_image ? data.signature_image :
+                        data.fullName;
+
+                    if (!window.executionValues[blockId]._meta) window.executionValues[blockId]._meta = {};
+                    window.executionValues[blockId]._meta[`${r}_${c}`] = {
+                        by: data.fullName,
+                        at: new Date().toISOString()
+                    };
+
+                    if (typeof renderBlocks === 'function') renderBlocks();
+
+                    Swal.fire({
+                        toast: true,
+                        position: 'top-end',
+                        icon: 'success',
+                        title: `Đã xác thực: ${data.fullName}`,
+                        showConfirmButton: false,
+                        timer: 2000
+                    });
+                } else {
+                    errorEl.innerText = data.message || 'Xác thực thất bại.';
+                    errorEl.classList.remove('d-none');
+                }
+            })
+            .catch(err => {
+                console.error('Lỗi xác thực:', err);
+                btn.innerHTML = oldText;
+                btn.disabled = false;
+                errorEl.innerText = 'Có lỗi xảy ra, vui lòng thử lại.';
                 errorEl.classList.remove('d-none');
-            }
-        })
-        .catch(err => {
-            console.error('Lỗi xác thực:', err);
-            btn.innerHTML = oldText;
-            btn.disabled = false;
-            errorEl.innerText = 'Có lỗi xảy ra, vui lòng thử lại.';
-            errorEl.classList.remove('d-none');
-        });
+            });
     }
 
     /**
@@ -3508,7 +3618,7 @@
     function insertDocumentNetworkLink() {
         const selection = window.getSelection();
         if (selection.rangeCount === 0) return;
-        
+
         const range = selection.getRangeAt(0);
         const selectedText = range.toString().trim();
 
@@ -3524,7 +3634,7 @@
         // Lưu trữ vùng chọn để phục hồi sau khi gọi Ajax bất đồng bộ kết thúc
         const savedRange = range.cloneRange();
         const originalText = selectedText;
-        
+
         // Chuẩn bị URL kiểm tra sự tồn tại của tài liệu
         const docCode = encodeURIComponent(selectedText);
         const checkUrl = `/ebmr/document/check-exists/${docCode}`;
@@ -3548,33 +3658,43 @@
                     sel.addRange(savedRange);
 
                     // Tạo thẻ liên kết HTML trỏ tới route viewDocumentByCode
-                    const linkHtml = `<a href="/ebmr/document/view-by-code/${docCode}" class="ebmr-doc-link" target="_blank" data-doc-code="${originalText}">${originalText}</a>`;
+                    const linkHtml =
+                        `<a href="/ebmr/document/view-by-code/${docCode}" class="ebmr-doc-link" target="_blank" data-doc-code="${originalText}">${originalText}</a>`;
 
                     // Chèn thẻ liên kết HTML vào văn bản
                     document.execCommand('insertHTML', false, linkHtml);
 
                     // Kích hoạt đồng bộ hóa dữ liệu (trigger oninput)
                     const selectionNode = sel.anchorNode;
-                    const activeCell = selectionNode ? (selectionNode.nodeType === 3 ? selectionNode.parentElement : selectionNode).closest('.mini-table td') : null;
-                    const editable = activeCell || (selectionNode ? (selectionNode.nodeType === 3 ? selectionNode.parentElement : selectionNode).closest('[contenteditable="true"]') : null);
-                    
+                    const activeCell = selectionNode ? (selectionNode.nodeType === 3 ? selectionNode
+                        .parentElement : selectionNode).closest('.mini-table td') : null;
+                    const editable = activeCell || (selectionNode ? (selectionNode.nodeType === 3 ?
+                        selectionNode.parentElement : selectionNode).closest(
+                        '[contenteditable="true"]') : null);
+
                     if (editable && typeof editable.oninput === 'function') {
                         editable.oninput();
                     }
-                    
+
                     // Lưu trạng thái ngay lập tức
                     if (typeof saveStateDebounced === 'function') {
                         saveStateDebounced();
                     }
-                    
+
                     // Hiển thị Toast thông báo thành công nếu hệ thống có tích hợp toastr
                     if (typeof toastr !== 'undefined') {
-                        toastr.success(`Liên kết thành công tài liệu: ${response.fileName} (Version ${response.version})`);
+                        toastr.success(
+                            `Liên kết thành công tài liệu: ${response.fileName} (Version ${response.version})`
+                            );
                     }
                 } else {
-                    const errorMsg = (response && response.message) ? response.message : 'Không tìm thấy tài liệu thực tế trên máy chủ.';
+                    const errorMsg = (response && response.message) ? response.message :
+                        'Không tìm thấy tài liệu thực tế trên máy chủ.';
                     if (typeof toastr !== 'undefined') {
-                        toastr.error(errorMsg, 'Cảnh báo tài liệu không tồn tại', { timeOut: 8000, closeButton: true });
+                        toastr.error(errorMsg, 'Cảnh báo tài liệu không tồn tại', {
+                            timeOut: 8000,
+                            closeButton: true
+                        });
                     } else {
                         alert(`[Cảnh báo tài liệu không tồn tại]\n\n${errorMsg}`);
                     }
@@ -3583,13 +3703,16 @@
             error: function(xhr) {
                 // Khôi phục con trỏ chuột về mặc định
                 document.body.style.cursor = 'default';
-                
+
                 let errorMsg = 'Có lỗi xảy ra khi kết nối tới máy chủ.';
                 if (xhr.responseJSON && xhr.responseJSON.message) {
                     errorMsg = xhr.responseJSON.message;
                 }
                 if (typeof toastr !== 'undefined') {
-                    toastr.error(errorMsg, 'Lỗi kết nối hệ thống', { timeOut: 8000, closeButton: true });
+                    toastr.error(errorMsg, 'Lỗi kết nối hệ thống', {
+                        timeOut: 8000,
+                        closeButton: true
+                    });
                 } else {
                     alert(`[Lỗi kết nối]\n\n${errorMsg}`);
                 }
@@ -3603,17 +3726,19 @@
     function removeDocumentNetworkLink() {
         // Thực hiện lệnh hủy liên kết HTML trên vùng chọn hiện tại
         document.execCommand('unlink', false, null);
-        
+
         // Kích hoạt đồng bộ hóa dữ liệu (trigger oninput)
         const selection = window.getSelection();
         const selectionNode = selection.anchorNode;
-        const activeCell = selectionNode ? (selectionNode.nodeType === 3 ? selectionNode.parentElement : selectionNode).closest('.mini-table td') : null;
-        const editable = activeCell || (selectionNode ? (selectionNode.nodeType === 3 ? selectionNode.parentElement : selectionNode).closest('[contenteditable="true"]') : null);
-        
+        const activeCell = selectionNode ? (selectionNode.nodeType === 3 ? selectionNode.parentElement : selectionNode)
+            .closest('.mini-table td') : null;
+        const editable = activeCell || (selectionNode ? (selectionNode.nodeType === 3 ? selectionNode.parentElement :
+            selectionNode).closest('[contenteditable="true"]') : null);
+
         if (editable && typeof editable.oninput === 'function') {
             editable.oninput();
         }
-        
+
         // Lưu trạng thái ngay lập tức
         if (typeof saveStateDebounced === 'function') {
             saveStateDebounced();
@@ -3665,36 +3790,42 @@
                         const csrfMeta = document.querySelector('meta[name="csrf-token"]');
                         const csrfToken = csrfMeta ? csrfMeta.content : '';
 
-                        return fetch('{{ route("pages.ebmr.verifyPassword") }}', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Accept': 'application/json',
-                                'X-CSRF-TOKEN': csrfToken
-                            },
-                            body: JSON.stringify({ password: password, _token: csrfToken })
-                        })
-                        .then(res => {
-                            if (!res.ok) throw new Error('Lỗi kết nối máy chủ');
-                            return res.json();
-                        })
-                        .then(data => {
-                            if (!data.success) {
-                                Swal.showValidationMessage(data.message || 'Mật khẩu không chính xác');
+                        return fetch('{{ route('pages.ebmr.verifyPassword') }}', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json',
+                                    'X-CSRF-TOKEN': csrfToken
+                                },
+                                body: JSON.stringify({
+                                    password: password,
+                                    _token: csrfToken
+                                })
+                            })
+                            .then(res => {
+                                if (!res.ok) throw new Error('Lỗi kết nối máy chủ');
+                                return res.json();
+                            })
+                            .then(data => {
+                                if (!data.success) {
+                                    Swal.showValidationMessage(data.message ||
+                                        'Mật khẩu không chính xác');
+                                    return false;
+                                }
+                                return data;
+                            })
+                            .catch(err => {
+                                Swal.showValidationMessage('Không thể kết nối đến máy chủ: ' + err
+                                    .message);
                                 return false;
-                            }
-                            return data;
-                        })
-                        .catch(err => {
-                            Swal.showValidationMessage('Không thể kết nối đến máy chủ: ' + err.message);
-                            return false;
-                        });
+                            });
                     },
                     allowOutsideClick: () => !Swal.isLoading()
                 }).then(result => {
                     if (result.isConfirmed && result.value) {
                         const data = result.value;
-                        const signatureVal = data.signature_image ? data.signature_image : (data.fullName || 'Đã ký');
+                        const signatureVal = data.signature_image ? data.signature_image : (data.fullName ||
+                            'Đã ký');
 
                         if (!window.executionValues) window.executionValues = {};
                         if (!window.executionValues[blockId]) window.executionValues[blockId] = {};
@@ -3702,8 +3833,13 @@
 
                         // Gán metadata ngay lập tức
                         const now = new Date();
-                        const formattedTime = now.toLocaleDateString('vi-VN') + ' ' + now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-                        if (!window.executionValues[blockId]._meta) window.executionValues[blockId]._meta = {};
+                        const formattedTime = now.toLocaleDateString('vi-VN') + ' ' + now
+                            .toLocaleTimeString('vi-VN', {
+                                hour: '2-digit',
+                                minute: '2-digit'
+                            });
+                        if (!window.executionValues[blockId]._meta) window.executionValues[blockId]
+                        ._meta = {};
                         window.executionValues[blockId]._meta[cellKey] = {
                             by: data.fullName || '',
                             at: formattedTime
@@ -3725,15 +3861,18 @@
 
             } else {
                 // Chế độ nhập dữ liệu văn bản thông thường
-                const existingVal = (window.executionValues && window.executionValues[blockId])
-                    ? (window.executionValues[blockId][cellKey] || '')
-                    : '';
+                const existingVal = (window.executionValues && window.executionValues[blockId]) ?
+                    (window.executionValues[blockId][cellKey] || '') :
+                    '';
 
                 Swal.fire({
                     title: 'Nhập dữ liệu',
                     input: 'textarea',
                     inputValue: existingVal,
-                    inputAttributes: { rows: 3, placeholder: 'Nhập nội dung...' },
+                    inputAttributes: {
+                        rows: 3,
+                        placeholder: 'Nhập nội dung...'
+                    },
                     showCancelButton: true,
                     confirmButtonText: 'Xác nhận',
                     cancelButtonText: 'Hủy',
@@ -3749,4 +3888,343 @@
             }
         };
     }
+
+    // --- Block Range Selection & Loop Modal Control ---
+    window.selectedBlockRange = {
+        startId: null,
+        endId: null
+    };
+
+    window.handleBlockClick = function(e, item) {
+        if (window.isExecutionMode) return;
+        e.stopPropagation();
+
+        if (e.shiftKey) {
+            if (!window.selectedBlockRange) {
+                window.selectedBlockRange = {
+                    startId: null,
+                    endId: null
+                };
+            }
+            // Nếu chưa có startId nhưng đã có block đang active (selectedId), dùng nó làm startId
+            let startId = window.selectedBlockRange.startId || selectedId;
+
+            if (!startId) {
+                window.selectedBlockRange.startId = item.id;
+                window.selectedBlockRange.endId = null;
+                selectItem(item.id, true);
+            } else {
+                window.selectedBlockRange.startId = startId;
+                const startItem = items.find(i => i.id === startId);
+                if (!startItem) {
+                    window.selectedBlockRange.startId = item.id;
+                    window.selectedBlockRange.endId = null;
+                    selectItem(item.id, true);
+                    return;
+                }
+                const startSectionId = startItem.type === 'section' ? startItem.id : startItem.section_id;
+                const currentSectionId = item.type === 'section' ? item.id : item.section_id;
+                if (startSectionId !== currentSectionId) {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Không hợp lệ',
+                        text: 'Các khối được chọn để lặp phải nằm trong cùng một phân đoạn!',
+                        confirmButtonText: 'Đồng ý'
+                    });
+                    return;
+                }
+                window.selectedBlockRange.endId = item.id;
+                renderBlocks();
+            }
+        } else {
+            window.selectedBlockRange = {
+                startId: null,
+                endId: null
+            };
+            if (selectedId !== item.id) {
+                selectItem(item.id, true);
+            }
+        }
+    };
+
+    window.getSelectedBlockRangeIds = function() {
+        if (!window.selectedBlockRange || !window.selectedBlockRange.startId || !window.selectedBlockRange.endId) {
+            return [];
+        }
+        const startIdx = items.findIndex(i => i.id === window.selectedBlockRange.startId);
+        const endIdx = items.findIndex(i => i.id === window.selectedBlockRange.endId);
+        if (startIdx === -1 || endIdx === -1) return [];
+
+        const minIdx = Math.min(startIdx, endIdx);
+        const maxIdx = Math.max(startIdx, endIdx);
+
+        return items.slice(minIdx, maxIdx + 1).map(i => i.id);
+    };
+
+    window.openBlockLoopModal = function() {
+        if (!window.selectedBlockRange || !window.selectedBlockRange.startId || !window.selectedBlockRange.endId) {
+            Swal.fire({
+                icon: 'info',
+                title: 'Hướng dẫn chọn nhóm khối',
+                text: 'Vui lòng giữ phím Shift và Click chọn khối đầu tiên, sau đó tiếp tục giữ Shift và Click chọn khối cuối cùng để chọn nhóm khối cần cài đặt lặp.',
+                confirmButtonText: 'Đã hiểu'
+            });
+            return;
+        }
+
+        const rangeIds = window.getSelectedBlockRangeIds();
+        if (rangeIds.length === 0) return;
+
+        let existingLoopCount = 3;
+        for (let id of rangeIds) {
+            const block = items.find(i => i.id === id);
+            if (block && block.loop_count) {
+                existingLoopCount = block.loop_count;
+                break;
+            }
+        }
+
+        const input = document.getElementById('blockLoopCount');
+        if (input) {
+            input.value = existingLoopCount;
+        }
+
+        $('#blockLoopModal').modal('show');
+    };
+
+    window.applyBlockLoopGroup = function() {
+        const rangeIds = window.getSelectedBlockRangeIds();
+        if (rangeIds.length === 0) return;
+
+        const loopCountInput = document.getElementById('blockLoopCount');
+        const loopCount = parseInt(loopCountInput.value) || 3;
+
+        let groupId = 'group_' + Date.now();
+        for (let id of rangeIds) {
+            const block = items.find(i => i.id === id);
+            if (block && block.loop_group_id) {
+                groupId = block.loop_group_id;
+                break;
+            }
+        }
+
+        saveState();
+        rangeIds.forEach(id => {
+            const block = items.find(i => i.id === id);
+            if (block) {
+                block.loop_group_id = groupId;
+                block.loop_count = loopCount;
+                block.dirty = true;
+            }
+        });
+
+        window.selectedBlockRange = {
+            startId: null,
+            endId: null
+        };
+
+        $('#blockLoopModal').modal('hide');
+        renderBlocks();
+        saveStateDebounced();
+        toastr.success('Đã áp dụng lặp cho nhóm khối!');
+    };
+
+    window.removeBlockLoopGroup = function() {
+        const rangeIds = window.getSelectedBlockRangeIds();
+        if (rangeIds.length === 0) return;
+
+        saveState();
+        rangeIds.forEach(id => {
+            const block = items.find(i => i.id === id);
+            if (block) {
+                delete block.loop_group_id;
+                delete block.loop_count;
+                block.dirty = true;
+            }
+        });
+
+        window.selectedBlockRange = {
+            startId: null,
+            endId: null
+        };
+
+        $('#blockLoopModal').modal('hide');
+        renderBlocks();
+        saveStateDebounced();
+        toastr.info('Đã gỡ bỏ lặp nhóm khối!');
+    };
+
+    window.blockClipboard = null;
+
+    window.copyBlock = function() {
+        if (window.isExecutionMode) return;
+
+        let targetIds = [];
+        const rangeIds = (typeof getSelectedBlockRangeIds === 'function') ? getSelectedBlockRangeIds() : [];
+        if (rangeIds && rangeIds.length > 0) {
+            targetIds = [...rangeIds];
+        } else if (selectedId) {
+            targetIds = [selectedId];
+        }
+
+        if (targetIds.length === 0) {
+            toastr.warning('Vui lòng chọn ít nhất 1 khối để sao chép.');
+            return;
+        }
+
+        const blocksToCopy = [];
+        for (let id of targetIds) {
+            const block = items.find(i => i.id === id);
+            if (block) {
+                blocksToCopy.push(JSON.parse(JSON.stringify(block)));
+            }
+        }
+
+        if (blocksToCopy.length === 0) return;
+
+        window.blockClipboard = {
+            action: 'copy',
+            blocks: blocksToCopy
+        };
+
+        toastr.success(`Đã sao chép ${blocksToCopy.length} khối.`);
+    };
+
+    window.cutBlock = function() {
+        if (window.isExecutionMode) return;
+
+        let targetIds = [];
+        const rangeIds = (typeof getSelectedBlockRangeIds === 'function') ? getSelectedBlockRangeIds() : [];
+        if (rangeIds && rangeIds.length > 0) {
+            targetIds = [...rangeIds];
+        } else if (selectedId) {
+            targetIds = [selectedId];
+        }
+
+        if (targetIds.length === 0) {
+            toastr.warning('Vui lòng chọn ít nhất 1 khối để cắt.');
+            return;
+        }
+
+        const blocksToCut = [];
+        saveState();
+
+        for (let id of targetIds) {
+            const block = items.find(i => i.id === id);
+            if (block) {
+                if (block.locked) {
+                    toastr.warning(`Khối "${block.label || block.id}" đã bị khóa và không thể cắt.`);
+                    continue;
+                }
+                blocksToCut.push(JSON.parse(JSON.stringify(block)));
+
+                if (block.db_id) {
+                    window.deletedBlockIds.push(block.db_id);
+                }
+            }
+        }
+
+        if (blocksToCut.length === 0) return;
+
+        window.blockClipboard = {
+            action: 'cut',
+            blocks: blocksToCut
+        };
+
+        items = items.filter(i => !targetIds.includes(i.id));
+        selectedId = null;
+        window.selectedBlockRange = {
+            startId: null,
+            endId: null
+        };
+
+        const panel = document.getElementById('property-panel');
+        if (panel) panel.classList.add('d-none');
+
+        renderBlocks();
+        saveStateDebounced();
+        toastr.success(`Đã cắt ${blocksToCut.length} khối.`);
+    };
+
+    window.pasteBlock = function() {
+        if (window.isExecutionMode) return;
+        if (!window.blockClipboard || !window.blockClipboard.blocks || window.blockClipboard.blocks.length === 0) {
+            toastr.warning('Bộ nhớ tạm trống hoặc không chứa khối hợp lệ.');
+            return;
+        }
+
+        saveState();
+
+        let insertIndex = items.length;
+        let targetSectionId = window.activeSectionId || null;
+
+        if (selectedId) {
+            const currentIdx = items.findIndex(i => i.id === selectedId);
+            if (currentIdx !== -1) {
+                insertIndex = currentIdx + 1;
+                const currentItem = items[currentIdx];
+                targetSectionId = currentItem.section_id || (currentItem.type === 'section' ? currentItem.id :
+                null);
+            }
+        } else if (window.activeSectionId) {
+            const secIdx = items.findIndex(item => item.type === 'section' && item.id === window.activeSectionId);
+            if (secIdx !== -1) {
+                let lastIdxInSection = secIdx;
+                for (let i = secIdx + 1; i < items.length; i++) {
+                    if (items[i].type === 'section') {
+                        break;
+                    }
+                    lastIdxInSection = i;
+                }
+                insertIndex = lastIdxInSection + 1;
+            }
+        }
+
+        if (!targetSectionId && items.length > 0) {
+            targetSectionId = items[0].section_id || (items[0].type === 'section' ? items[0].id : null);
+        }
+
+        const clonedBlocks = window.blockClipboard.blocks.map(block => {
+            const newBlock = JSON.parse(JSON.stringify(block));
+            delete newBlock.db_id;
+
+            const newBlockId = 'blk_' + Date.now() + '_' + Math.floor(Math.random() * 1000) + '_' + Math
+                .random().toString(36).substr(2, 5);
+            newBlock.id = newBlockId;
+            newBlock.section_id = targetSectionId;
+            newBlock.dirty = true;
+
+            if (newBlock.type === 'static-text' && newBlock.content) {
+                newBlock.content = window.duplicateFieldBadgesInHtml(newBlock.content, newBlockId,
+                    targetSectionId);
+            } else if (newBlock.type === 'table' && newBlock.data) {
+                for (let r = 0; r < newBlock.data.length; r++) {
+                    for (let c = 0; c < newBlock.data[r].length; c++) {
+                        if (newBlock.data[r][c] && newBlock.data[r][c].content) {
+                            newBlock.data[r][c].content = window.duplicateFieldBadgesInHtml(newBlock.data[r]
+                                [c].content, newBlockId, targetSectionId);
+                        }
+                    }
+                }
+            }
+
+            return newBlock;
+        });
+
+        items.splice(insertIndex, 0, ...clonedBlocks);
+
+        if (clonedBlocks.length === 1) {
+            selectedId = clonedBlocks[0].id;
+        } else if (clonedBlocks.length > 1) {
+            window.selectedBlockRange = {
+                startId: clonedBlocks[0].id,
+                endId: clonedBlocks[clonedBlocks.length - 1].id
+            };
+            selectedId = null;
+        }
+
+        renderBlocks();
+        saveStateDebounced();
+        toastr.success(`Đã dán thành công ${clonedBlocks.length} khối.`);
+    };
 </script>

@@ -89,7 +89,9 @@
             section_id: i.section_id || null,
             isBmrHeader: i.isBmrHeader || false,
             isGfHeader: i.isGfHeader || false,
-            isAbbreviationTable: i.isAbbreviationTable || false
+            isAbbreviationTable: i.isAbbreviationTable || false,
+            loop_group_id: i.loop_group_id || null,
+            loop_count: i.loop_count || null
         }));
 
         // --- PRUNING & LOCATION SYNC: Only send fieldsConfig for variables that actually exist in the document ---

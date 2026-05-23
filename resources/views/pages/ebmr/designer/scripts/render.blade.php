@@ -136,6 +136,88 @@
             display: none !important;
         }
     }
+
+    /* Section Loop Style */
+    .section-loop-tabs-header {
+        border-bottom: 2px solid #e2e8f0;
+        padding-bottom: 8px;
+    }
+    .section-loop-tabs-header .btn {
+        font-weight: 600;
+        font-size: 0.8rem;
+        border-radius: 6px;
+        padding: 4px 12px;
+        transition: all 0.2s ease;
+    }
+    .section-loop-tabs-header .btn.active {
+        background-color: #0ea5e9;
+        border-color: #0ea5e9;
+        color: #ffffff;
+        box-shadow: 0 2px 4px rgba(14, 165, 233, 0.25);
+    }
+    .section-loop-tab-content {
+        animation: fadeInTab 0.3s ease-in-out;
+    }
+    @keyframes fadeInTab {
+        from { opacity: 0; transform: translateY(4px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media print {
+        .section-loop-tabs-header {
+            display: none !important;
+        }
+        .section-loop-tab-content {
+            display: block !important;
+            margin-bottom: 30px !important;
+            page-break-after: always;
+        }
+        .section-loop-tab-content:last-child {
+            page-break-after: avoid;
+        }
+        .section-loop-tab-content::before {
+            content: "Lần thực hiện thứ " attr(data-loop-idx);
+            display: block;
+            font-size: 0.95rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            color: #1e293b;
+            border-bottom: 1.5px dashed #cbd5e1;
+            padding-bottom: 4px;
+            margin-top: 20px;
+            margin-bottom: 15px;
+        }
+    }
+
+    /* Loop Group and Selection Highlighting in Designer */
+    .selected-range-member {
+        outline: 2px dashed #0284c7 !important;
+        background-color: rgba(14, 165, 233, 0.04) !important;
+        position: relative;
+        box-shadow: 0 0 8px rgba(14, 165, 233, 0.2);
+    }
+    .selected-range-member::after {
+        content: 'Đã chọn';
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        background-color: #0284c7;
+        color: #ffffff;
+        font-size: 0.65rem;
+        font-weight: bold;
+        padding: 2px 6px;
+        border-radius: 4px;
+        z-index: 100;
+        pointer-events: none;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .designer-loop-group-wrapper {
+        transition: all 0.2s ease;
+    }
+    .designer-loop-group-wrapper:hover {
+        border-color: #0ea5e9 !important;
+        box-shadow: 0 4px 12px rgba(14, 165, 233, 0.08);
+    }
 </style>
 <script>
     /**
@@ -156,487 +238,624 @@
     }
 
     /**
+     * Hàm helper vẽ từng block riêng lẻ (bảng, văn bản tĩnh, biểu đồ...)
+     */
+    function renderSingleBlock(item, idx, loopSuffix = '') {
+        const blockKey = (item.uuid || item.id) + loopSuffix;
+        const selectedRangeIds = (typeof window.getSelectedBlockRangeIds === 'function') ? window.getSelectedBlockRangeIds() : [];
+        const isRangeMember = selectedRangeIds.includes(item.id);
+        const div = document.createElement('div');
+        div.className = `block-item type-${item.type} ${selectedId === item.id ? 'active' : ''} ${isRangeMember ? 'selected-range-member' : ''} ${window.isExecutionMode ? 'execution-mode' : ''}`;
+        div.setAttribute('data-id', item.id);
+
+        if (item.marginLeft) div.style.marginLeft = item.marginLeft;
+        if (item.marginRight) div.style.marginRight = item.marginRight;
+        if (item.backgroundColor) div.style.backgroundColor = item.backgroundColor;
+
+        if (!window.isExecutionMode) {
+            div.onclick = (e) => {
+                window.handleBlockClick(e, item);
+            };
+        }
+
+        let content = `<div class="block-mock"></div>`;
+
+        // --- XỬ LÝ KHỐI BẢNG (TABLE) ---
+        if (item.type === 'table') {
+            const borderMode = item.borderMode || 'all';
+            const borderClass = `border-mode-${borderMode}`;
+
+            let thead = '';
+            if (!item.hideHeader && item.columns) {
+                thead = `<thead><tr>${item.columns.map((c, cIdx) => {
+                    const s = c.style || {};
+                    const bg = s.backgroundColor || '';
+                    const align = s.textAlign || '';
+                    const fw = s.fontWeight || '';
+                    const fs = s.fontStyle || '';
+                    const td = s.textDecoration || '';
+                    const fsz = s.fontSize || '';
+                    const tc = s.textColor || '';
+                    const wm = s.writingMode || '';
+                    const tf = s.transform || '';
+                    return `<th contenteditable="false"
+                    spellcheck="false"
+                    data-row="0"
+                    data-col="${cIdx}"
+                    class="table-header-cell"
+                    style="position: relative; width: ${c.width || 'auto'}; background-color: ${bg}; text-align: ${align}; font-weight: ${fw}; font-style: ${fs}; text-decoration: ${td}; font-size: ${fsz}; color: ${tc}; border-top: ${s.borderTop || ''}; border-bottom: ${s.borderBottom || ''}; border-left: ${s.borderLeft || ''}; border-right: ${s.borderRight || ''}; writing-mode: ${wm};">
+                        <div class="header-content" style="transform: ${tf}; transform-origin: center center; display: inline-block; width: 100%;">${c.label}</div>
+                        ${!window.isExecutionMode ? `
+                        <div class="col-actions">
+                            <button class="btn-col-add" onclick="event.stopPropagation(); tableAddColumn(${cIdx+1})" title="Thêm cột bên phải"><i class="fas fa-plus"></i></button>
+                            <button class="btn-col-del" onclick="event.stopPropagation(); tableRemoveColumn(${cIdx})" title="Xóa cột"><i class="fas fa-times"></i></button>
+                        </div>` : ''}
+                        ${!window.isExecutionMode ? `<div class="col-resizer" onmousedown="initResize(event, '${item.id}', 'col', ${cIdx})"></div>` : ''}
+                    </th>`;
+                }).join('')}
+                ${window.isExecutionMode && item.canAddRows ? '<th style="width: 30px; border: none; background: transparent;"></th>' : ''}
+                </tr></thead>`;
+            }
+
+            let rowsHtml = '';
+            const runDataForBlock = window.executionValues[blockKey] || {};
+
+            for (let r = 0; r < (item.rows || 0); r++) {
+                let cellsHtml = '';
+                const rowH = (item.rowHeights && item.rowHeights[r]) ? item.rowHeights[r] : 'auto';
+                if (!item.data || !item.data[r]) continue;
+                for (let c = 0; c < (item.cols || 0); c++) {
+                    if (!item.data[r][c] || typeof item.data[r][c] !== 'object') {
+                        item.data[r][c] = { content: '', rs: 1, cs: 1, hidden: false };
+                    }
+                    const cell = item.data[r][c];
+                    if (cell.hidden) continue;
+
+                    const cellWidth = (item.columns && item.columns[c] && item.columns[c].width) ? item.columns[c].width : 'auto';
+                    const cellBg = (cell.backgroundColor) ? cell.backgroundColor : '';
+
+                    let displayContent = decorateContent(cell.content, null, loopSuffix);
+                    if (displayContent === null || displayContent === 'null' || displayContent === undefined) {
+                        displayContent = '';
+                    }
+                    
+                    let cellClass = "";
+                    let onclickAttr = "";
+                    let finalEditable = "false";
+
+                    if (window.isExecutionMode) {
+                        const runVal = runDataForBlock[`${r}_${c}`];
+                        if (displayContent.includes('[Nhập dữ liệu]')) {
+                            cellClass = "execution-input-cell";
+                            onclickAttr = `onclick="openExecutionInputModal('${blockKey}', ${r}, ${c}, 'text')"`;
+                            displayContent = runVal ? runVal : `<span class="execution-badge input"><i class="fas fa-edit"></i> [Nhập dữ liệu]</span>`;
+                        } else if (displayContent.includes('[Ký tên]')) {
+                            cellClass = "execution-input-cell";
+                            onclickAttr = `onclick="openExecutionInputModal('${blockKey}', ${r}, ${c}, 'signature')"`;
+                            displayContent = runVal ? getSignatureDisplayHtml(runVal, 'signature') : `<span class="execution-badge signature"><i class="fas fa-pen"></i> [Ký tên]</span>`;
+                        } else if (displayContent.includes('[Tự động lấy thời gian]')) {
+                            cellClass = "execution-input-cell";
+                            onclickAttr = `ondblclick="autoFillTime('${blockKey}', ${r}, ${c})" title="Nháy đúp chuột (Double-click) để lấy ngày giờ hệ thống"`;
+                            displayContent = runVal ? runVal : `<span class="execution-badge time"><i class="fas fa-clock"></i> [Double-click lấy giờ]</span>`;
+                        } else if (displayContent.includes('[Người thực hiện]')) {
+                            cellClass = "execution-input-cell";
+                            onclickAttr = `onclick="autoFillExecutor('${blockKey}', ${r}, ${c})" title="Click để xác nhận người thực hiện"`;
+                            displayContent = runVal ? getSignatureDisplayHtml(runVal, 'executor') : `<span class="execution-badge executor"><i class="fas fa-user-edit"></i> [Người thực hiện]</span>`;
+                        } else if (displayContent.includes('[Người kiểm tra]')) {
+                            cellClass = "execution-input-cell";
+                            onclickAttr = `onclick="openCheckerAuthModal('${blockKey}', ${r}, ${c})" title="Click để xác thực người kiểm tra"`;
+                            displayContent = runVal ? getSignatureDisplayHtml(runVal, 'checker') : `<span class="execution-badge checker"><i class="fas fa-check-double"></i> [Người kiểm tra]</span>`;
+                        }
+                    } else {
+                        finalEditable = (item.locked || window.isReadOnly) ? 'false' : 'true';
+                    }
+
+                    let metaHtml = '';
+                    if (window.isExecutionMode && runDataForBlock._meta && runDataForBlock._meta[`${r}_${c}`]) {
+                        const meta = runDataForBlock._meta[`${r}_${c}`];
+                        if (meta.by || meta.at) {
+                            metaHtml = `<div class="execution-meta">${meta.by || ''} ${meta.at || ''}</div>`;
+                        }
+                    }
+
+                    cellsHtml += `<td contenteditable="${finalEditable}"
+                    spellcheck="false"
+                    data-row="${r+1}"
+                    data-col="${c}"
+                    rowspan="${cell.rs || 1}"
+                    colspan="${cell.cs || 1}"
+                    ${onclickAttr}
+                    class="${cellClass} ${item.locked ? 'locked-cell' : ''}"
+                    style="position: relative; width: ${cellWidth}; height: ${rowH}; background-color: ${cellBg}; text-align: ${cell.textAlign || ''}; font-weight: ${cell.fontWeight || ''}; font-style: ${cell.fontStyle || ''}; text-decoration: ${cell.textDecoration || ''}; font-size: ${cell.fontSize || ''}; color: ${cell.textColor || ''}; text-transform: ${cell.textTransform || ''}; border-top: ${cell.borderTop || ''}; border-bottom: ${cell.borderBottom || ''}; border-left: ${cell.borderLeft || ''}; border-right: ${cell.borderRight || ''}; writing-mode: ${cell.writingMode || ''};"
+                    oninput="updateTableInline('${blockKey}', 'cell', ${r}, ${c}, this.innerHTML)"
+                    ${!window.isExecutionMode ? `
+                        ondragover="event.preventDefault(); this.classList.add('criteria-drag-over');"
+                        ondragleave="this.classList.remove('criteria-drag-over');"
+                        ondrop="window.handleCriteriaDrop(event, '${item.id}', ${r}, ${c})"` : ''}>
+                        <div class="cell-wrapper" style="transform: ${cell.transform || ''}; transform-origin: center center; display: inline-block; width: 100%;">${displayContent}</div>
+                        ${metaHtml}
+                        ${!window.isExecutionMode && c === 0 ? `
+                        <div class="row-actions">
+                            <button class="btn-row-add" onclick="event.stopPropagation(); tableAddRow(${r+1})" title="Thêm dòng bên dưới"><i class="fas fa-plus"></i></button>
+                            <button class="btn-row-del" onclick="event.stopPropagation(); tableRemoveRow(${r})" title="Xóa dòng"><i class="fas fa-times"></i></button>
+                        </div>` : ''}
+                        ${!window.isExecutionMode ? `<div class="col-resizer" onmousedown="initResize(event, '${item.id}', 'col', ${c + (cell.cs || 1) - 1})"></div>
+                        <div class="row-resizer" onmousedown="initResize(event, '${item.id}', 'row', ${r + (cell.rs || 1) - 1})"></div>` : ''}
+                    </td>`;
+                }
+
+                let deleteCell = '';
+                if (window.isExecutionMode && item.canAddRows) {
+                    const isDynamicRow = item.data[r] && item.data[r][0] && item.data[r][0].is_dynamic;
+                    if (isDynamicRow) {
+                        deleteCell = `<td class="execution-delete-cell" style="width: 30px; border: none; background: transparent; vertical-align: middle;">
+                                                                <button class="btn btn-link text-danger p-0" title="Xóa dòng" onclick="executeDeleteTableRow('${item.id}', ${r})">
+                                                                    <i class="fas fa-times-circle"></i>
+                                                                </button>
+                                                              </td>`;
+                    } else {
+                        deleteCell = `<td style="width: 30px; border: none; background: transparent;"></td>`;
+                    }
+                }
+                rowsHtml += `<tr>${cellsHtml}${deleteCell}</tr>`;
+            }
+
+            let addRowBtn = '';
+            if (item.canAddRows) {
+                const btnLabel = window.isExecutionMode ? 'THÊM DÒNG CUỐI' : 'THỬ THÊM DÒNG (CẤP 2)';
+                addRowBtn = `
+                                            <div class="mt-2 text-start">
+                                                <button class="btn btn-xs btn-outline-primary py-0 px-2 fw-bold" style="font-size: 0.65rem; border-radius: 4px;" onclick="executeAddTableRow('${item.id}')">
+                                                    <i class="fas fa-plus me-1"></i> ${btnLabel}
+                                                </button>
+                                            </div>
+                                        `;
+            }
+
+            let titleHtml = '';
+            if (item.isAbbreviationTable) {
+                let titleText = 'Danh Sách Viết Tắt';
+                const langMode = window.currentLangMode || 'vi';
+                if (langMode === 'en') {
+                    titleText = 'List of Abbreviations';
+                } else if (langMode === 'dual') {
+                    titleText = 'Danh Sách Viết Tắt / List of Abbreviations';
+                }
+                titleHtml = `
+                    <div class="ebmr-section-header d-flex align-items-center mb-3 mt-4">
+                        <div class="section-icon bg-info text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px; min-width: 40px;">
+                            <i class="fas fa-list-ul"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="section-title fw-bold text-uppercase" style="font-size: 1.2rem; color: #164e63; letter-spacing: 1px;">
+                                ${titleText}
+                            </div>
+                            <div class="section-line mt-1" style="height: 3px; background: linear-gradient(to right, #0ea5e9, transparent); border-radius: 2px;"></div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            let progressHtml = '';
+            if (window.isExecutionMode && item.freq_minutes) {
+                const countdownState = window._activeCountdowns && window._activeCountdowns[blockKey];
+                const isRunning = !!countdownState;
+                
+                let initialWidth = '100%';
+                let initialText = '--:--';
+                let initialClass = 'bg-success';
+                
+                if (isRunning) {
+                    const elapsed = Date.now() - countdownState.startTime;
+                    const remaining = countdownState.freqMs - elapsed;
+                    if (remaining > 0) {
+                        const percent = (remaining / countdownState.freqMs) * 100;
+                        initialWidth = `${percent}%`;
+                        
+                        if (percent > 50) {
+                            initialClass = 'bg-success';
+                        } else if (percent > 20) {
+                            initialClass = 'bg-warning';
+                        } else {
+                            initialClass = 'bg-danger';
+                        }
+                        
+                        const totalSeconds = Math.ceil(remaining / 1000);
+                        const mins = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+                        const secs = (totalSeconds % 60).toString().padStart(2, '0');
+                        initialText = `${mins}:${secs}`;
+                    } else {
+                        initialWidth = '0%';
+                        initialText = 'Đã đến giờ lấy mẫu!';
+                        initialClass = 'bg-danger';
+                    }
+                }
+                
+                progressHtml = `
+                    <div class="sampling-countdown-container my-3 px-1" id="countdown-container-${blockKey}" style="display: ${isRunning ? 'block' : 'none'};">
+                        <div class="d-flex justify-content-between align-items-center mb-1" style="font-size: 0.85rem; color: #475569; font-weight: 600;">
+                            <span><i class="fas fa-hourglass-half me-1 text-primary"></i> Thời gian đến lần lấy mẫu tiếp theo:</span>
+                            <span id="countdown-text-${blockKey}" style="font-family: monospace; font-size: 0.95rem; color: #1e293b;">${initialText}</span>
+                        </div>
+                        <div class="progress" style="height: 12px; background-color: #e2e8f0; border-radius: 6px; overflow: hidden; box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);">
+                            <div id="countdown-bar-${blockKey}" class="progress-bar progress-bar-striped progress-bar-animated ${initialClass}" role="progressbar" style="width: ${initialWidth}; transition: width 1s linear, background-color 0.5s ease;"></div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            content = `${titleHtml}${progressHtml}<div class="table-responsive-wrapper"><table class="mini-table ${borderClass}" style="--table-border-width: ${item.borderWeight || '1px'}; --table-border-color: #dee2e6;">${thead}<tbody>${rowsHtml}</tbody></table></div>${addRowBtn}`;
+        }
+
+        // --- XỬ LÝ KHỐI VĂN BẢN TĨNH (STATIC TEXT) ---
+        else if (item.type === 'static-text') {
+            const displayContent = decorateContent(item.content || '', null, loopSuffix);
+            const textEditable = (window.isReadOnly || window.isExecutionMode) ? 'false' : 'true';
+            const borderClass = item.borderMode === 'dashed' ? 'border-dashed' : (item.borderMode === 'visible' ?
+                'border-visible' : 'border-none');
+
+            let titleHtml = '';
+            if (item.isCalculationBlock && item.section_id === window.catId) {
+                let titleText = 'Tính Toán Công Thức';
+                const langMode = window.currentLangMode || 'vi';
+                if (langMode === 'en') {
+                    titleText = 'Formula Calculation';
+                } else if (langMode === 'dual') {
+                    titleText = 'Tính Toán Công Thức / Formula Calculation';
+                }
+                titleHtml = `
+                    <div class="ebmr-section-header d-flex align-items-center mb-3 mt-4">
+                        <div class="section-icon bg-info text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px; min-width: 40px;">
+                            <i class="fas fa-calculator"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="section-title fw-bold text-uppercase" style="font-size: 1.2rem; color: #164e63; letter-spacing: 1px;">
+                                ${titleText}
+                            </div>
+                            <div class="section-line mt-1" style="height: 3px; background: linear-gradient(to right, #0ea5e9, transparent); border-radius: 2px;"></div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            content = `${titleHtml}<div class="static-text-display ${borderClass}" contenteditable="${textEditable}" spellcheck="false" 
+                                                oninput="updateStaticTextInline('${item.id}', this.innerHTML); handleAutoCapitalize(this)">${displayContent}</div>`;
+        }
+
+        // --- XỬ LÝ KHỐI BIỂU MẪU NHÚNG (LINKED TEMPLATE) ---
+        else if (item.type === 'linked-template') {
+            const isPreviewing = window.isExecutionMode || item.showPreview || false;
+            const hideControls = window.isExecutionMode;
+            const previewContent = isPreviewing ? `<div id="preview-${item.id}" class="mt-3 p-4 border rounded bg-white w-100 shadow-sm" style="${window.isExecutionMode ? '' : 'pointer-events: none; opacity: 0.9;'}">
+                                    <div class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>
+                                </div>` : '';
+
+            content = `<div class="block-mock d-flex flex-column align-items-center justify-content-center py-4 px-3 position-relative" style="background-color: #f8f9fa; border: 2px dashed #0d6efd; border-radius: 12px; min-height: 120px;">
+                                             ${!hideControls ? `<div class="position-absolute" style="top: 10px; right: 10px; z-index: 100;">
+                                                <button class="btn btn-sm btn-primary shadow-sm px-3" onclick="event.stopPropagation(); toggleGfPreview('${item.id}')" style="border-radius: 20px;">
+                                                    <i class="fas ${isPreviewing ? 'fa-eye-slash' : 'fa-eye'} me-1"></i> ${isPreviewing ? 'Ẩn nội dung' : 'Xem nội dung'}
+                                                </button>
+                                             </div>` : ''}
+                                             <i class="fas fa-link fa-2x text-primary mb-2 ${isPreviewing ? 'd-none' : ''}"></i>
+                                             <div class="fw-bold text-navy ${isPreviewing ? 'mb-2 border-bottom pb-2 w-100' : ''}">Biểu mẫu chung: ${item.label || 'Đang tải...'}</div>
+                                             ${!isPreviewing ? `<div class="small text-muted mt-1">Nội dung sẽ được tự động chèn vào khi ban hành/thực thi</div>` : ''}
+                                             ${previewContent}
+                                           </div>`;
+
+            if (isPreviewing) {
+                setTimeout(() => fetchAndRenderGfPreview(item.id, item.template_id), 50);
+            }
+        }
+
+        // --- XỬ LÝ KHỐI PHÂN ĐOẠN (SECTION) ---
+        else if (item.type === 'section') {
+            const labelEditable = (window.isReadOnly || window.isExecutionMode) ? 'false' : 'true';
+            const isRecalc = (item.stage_code === 'recalc' || (item.label && item.label.toUpperCase().includes('TÍNH TOÁN CÔNG THỨC')));
+            const iconClass = isRecalc ? 'fas fa-calculator' : 'fas fa-layer-group';
+            content = `<div class="ebmr-section-header d-flex align-items-center" id="section-${item.id}">
+                                             <div class="section-icon bg-info text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px; min-width: 40px;">
+                                                <i class="${iconClass}"></i>
+                                             </div>
+                                             <div class="flex-grow-1">
+                                                <div class="section-title fw-bold text-uppercase" contenteditable="${labelEditable}" 
+                                                     onblur="updateItemProp('label', this.innerText)" 
+                                                     style="font-size: 1.2rem; color: #164e63; letter-spacing: 1px;">${item.label || 'Tên phân đoạn'}</div>
+                                                <div class="section-line mt-1" style="height: 3px; background: linear-gradient(to right, #0ea5e9, transparent); border-radius: 2px;"></div>
+                                             </div>
+                                           </div>`;
+        }
+
+        // --- XỬ LÝ KHỐI BIỂU ĐỒ (CHART) ---
+        else if (item.type === 'chart') {
+            const canvasId = 'chart_canvas_' + blockKey;
+            content = `<div class="chart-container" style="position: relative; height:300px; width:100%; padding: 15px; background: #fff; border: 1px solid #eee; border-radius: 8px;">
+                                             <canvas id="${canvasId}"></canvas>
+                                           </div>`;
+            setTimeout(() => {
+                if (typeof renderChart === 'function') {
+                    renderChart(canvasId, item.chartConfig);
+                }
+            }, 50);
+        }
+
+        // --- THANH HÀNH ĐỘNG (XÓA, DI CHUYỂN) ---
+        const actions = (item.locked || window.isReadOnly || window.isExecutionMode) ? '' : `
+                                <div class="block-actions">
+                                    <button class="btn btn-sm btn-light border shadow-sm text-danger" onclick="removeItem('${item.id}')"><i class="fas fa-trash"></i></button>
+                                    <button class="btn btn-sm btn-light border shadow-sm" onclick="moveItem(${idx}, -1)"><i class="fas fa-chevron-up"></i></button>
+                                    <button class="btn btn-sm btn-light border shadow-sm" onclick="moveItem(${idx}, 1)"><i class="fas fa-chevron-down"></i></button>
+                                </div>`;
+
+        div.innerHTML = `
+                                ${actions}
+                                ${item.type !== 'static-text' && item.type !== 'section' && !window.isExecutionMode && item.label && item.label !== 'null' && !item.isGfHeader && !item.isBmrHeader && !item.isAbbreviationTable ? `<span class="block-label">${item.label} ${item.locked ? '<i class="fas fa-lock ms-1 small"></i>' : ''}</span>` : ''}
+                                ${content}
+                            `;
+        return div;
+    }
+
+    /**
      * Hàm chính để vẽ toàn bộ giao diện dựa trên mảng dữ liệu `items`.
-     * Nó dọn dẹp nội dung cũ và tạo mới các phần tử HTML tương ứng với từng loại khối (bảng, văn bản, phân đoạn...).
      */
     function renderBlocks() {
         const container = document.getElementById('editor-content');
         const hint = document.getElementById('drop-hint');
         if (!container) return;
 
-        // Reset trạng thái chọn nếu đang ở chế độ thực thi (điền dữ liệu)
         if (window.isExecutionMode) {
             selectedId = null;
         }
 
-        // Xóa sạch nội dung cũ trước khi vẽ lại
         container.innerHTML = '';
 
-        // Xử lý gợi ý kéo thả (chỉ hiện ở chế độ thiết kế)
         if (hint) {
             if (!window.isExecutionMode) container.appendChild(hint);
             else hint.remove();
         }
 
-        let lastSectionId = null;
-        let currentGroup = container;
+        // Group items into sections
+        let sections = [];
+        let currentSection = null;
         let activeSectionIdTracker = window.activeSectionId || null;
 
-        // Duyệt qua từng phần tử trong mảng items để tạo HTML tương ứng
-        items.forEach((item, idx) => {
-                // Xác định phân đoạn (section) cho item hiện tại nếu nó chưa có hoặc là khối section
-                if (item.type === 'section') {
-                    activeSectionIdTracker = item.section_id || item.id;
+        items.forEach((item) => {
+            if (item.type === 'section') {
+                activeSectionIdTracker = item.section_id || item.id;
+            }
+            if (!item.section_id) {
+                item.section_id = activeSectionIdTracker || 'section_0';
+            }
+            
+            if (item.type === 'section') {
+                currentSection = {
+                    sectionBlock: item,
+                    blocks: []
+                };
+                sections.push(currentSection);
+            } else {
+                if (!currentSection) {
+                    currentSection = {
+                        sectionBlock: { id: 'section_0', type: 'section', label: 'PHÂN ĐOẠN MẶC ĐỊNH', locked: true },
+                        blocks: []
+                    };
+                    sections.push(currentSection);
                 }
-                
-                // Chỉ tự động gán section_id nếu item chưa có section_id
-                if (!item.section_id) {
-                    item.section_id = activeSectionIdTracker || 'section_0';
+                currentSection.blocks.push(item);
+            }
+        });
+
+        let lastSectionId = null;
+        let currentGroup = container;
+
+        sections.forEach((sec) => {
+            const sectionBlock = sec.sectionBlock;
+            const blocks = sec.blocks;
+            const itemSectionId = sectionBlock.id;
+
+            const isHeader = sectionBlock.isGfHeader || sectionBlock.isBmrHeader || (sectionBlock.type === 'section' && sectionBlock.locked) || sectionBlock.isAbbreviationTable;
+
+            if (!window.isViewAllMode && window.activeSectionId) {
+                if (itemSectionId !== window.activeSectionId && !isHeader) {
+                    return;
                 }
-                
-                const itemSectionId = item.section_id;
+            }
 
-                const isHeader = item.isGfHeader || item.isBmrHeader || (item.type === 'section' && item.locked) || item.isAbbreviationTable;
-
-                // Logic lọc phân đoạn: Nếu đang xem 1 phân đoạn cụ thể, chỉ hiện blocks của phân đoạn đó HOẶC các khối Header
-                if (!window.isViewAllMode && window.activeSectionId) {
-                    if (itemSectionId !== window.activeSectionId && !isHeader) {
-                        return; // Bỏ qua nếu không đúng phân đoạn và không phải header
+            if (window.isViewAllMode || !window.activeSectionId) {
+                if (lastSectionId === null || itemSectionId !== lastSectionId) {
+                    if (lastSectionId !== null) {
+                        const pageBreak = document.createElement('div');
+                        pageBreak.className = 'page-break-divider my-4 d-flex align-items-center justify-content-center';
+                        const parts = (itemSectionId || '').split('_');
+                        const labelText = parts.length > 1 ? `Công đoạn ${parts[parts.length-1]}` : 'Phân đoạn mới';
+                        pageBreak.innerHTML = `<span class="bg-light px-3 py-1 rounded-pill small fw-bold text-muted border"><i class="fas fa-file-alt me-2"></i>${labelText}</span>`;
+                        container.appendChild(pageBreak);
                     }
-                }
 
-                // Bỏ qua các khối chữ ký cũ (đang dần thay thế bằng badge chữ ký linh hoạt hơn)
-                if (item.type === 'signature') return;
-
-                // Logic phân trang và gom nhóm theo phân đoạn (Section)
-                if (window.isViewAllMode || !window.activeSectionId) {
-                    if (lastSectionId === null || itemSectionId !== lastSectionId) {
-                        // Tạo đường phân cách trang nếu không phải phân đoạn đầu tiên
-                        if (lastSectionId !== null) {
-                            const pageBreak = document.createElement('div');
-                            pageBreak.className =
-                                'page-break-divider my-4 d-flex align-items-center justify-content-center';
-                            const parts = (itemSectionId || '').split('_');
-                            const labelText = parts.length > 1 ? `Công đoạn ${parts[parts.length-1]}` :
-                                'Phân đoạn mới';
-                            pageBreak.innerHTML =
-                                `<span class="bg-light px-3 py-1 rounded-pill small fw-bold text-muted border"><i class="fas fa-file-alt me-2"></i>${labelText}</span>`;
-                            container.appendChild(pageBreak);
-                        }
-
-                        // Tạo bao vùng (Wrapper) cho một nhóm các khối thuộc cùng một phân đoạn
-                        currentGroup = document.createElement('div');
-                        currentGroup.className = 'section-group-wrapper' + (window.activeSectionId ===
-                            itemSectionId ? ' active' : '');
-                        currentGroup.onclick = (e) => {
-                            // Kích hoạt phân đoạn khi click vào vùng nền của nhóm (không click vào block con)
-                            if (!e.target.closest('.block-item')) {
-                                window.activeSectionId = itemSectionId;
-                                selectedId = null; 
-                                renderBlocks();
-                            }
-                        };
-
-                        // D-CLICK: Nếu đang ở "Xem tất cả", d-click vào vùng trắng sẽ tự chuyển sang "Xem 1 section"
-                        currentGroup.ondblclick = (e) => {
-                            // Nếu click vào vùng trắng (không phải block)
-                            if (!e.target.closest('.block-item') && window.isViewAllMode) {
-                                window.activeSectionId = itemSectionId;
-                                window.isViewAllMode = false; // Chuyển sang chế độ xem 1 section
-                                selectedId = null;
-                                renderBlocks();
-                                
-                                // Cập nhật icon trên nút toggle view (nếu có)
-                                const toggleBtn = document.getElementById('viewModeToggle');
-                                if (toggleBtn) {
-                                    toggleBtn.innerHTML = '<i class="fas fa-expand-arrows-alt"></i>';
-                                    toggleBtn.classList.remove('btn-info');
-                                    toggleBtn.classList.add('btn-outline-info');
-                                    toggleBtn.title = "Chuyển sang xem tất cả";
-                                }
-                            }
-                        };
-                        container.appendChild(currentGroup);
-
-                        lastSectionId = itemSectionId;
-                    }
-                } else {
-                    // Nếu đang lọc xem một phân đoạn cụ thể, không cần Wrapper nhóm
-                    currentGroup = container;
-                }
-
-                // Thêm vạch chèn (dấu cộng) giữa các khối ở chế độ chỉnh sửa
-                if (!window.isReadOnly && !window.isExecutionMode) {
-                    addInsertionDivider(currentGroup, idx);
-                }
-
-                // Tạo thẻ bao ngoài cho khối (block-item)
-                const div = document.createElement('div');
-                div.className =
-                    `block-item type-${item.type} ${selectedId === item.id ? 'active' : ''} ${window.isExecutionMode ? 'execution-mode' : ''}`;
-                div.setAttribute('data-id', item.id);
-
-                // Áp dụng các style tùy chỉnh (lề, màu nền) từ dữ liệu
-                if (item.marginLeft) div.style.marginLeft = item.marginLeft;
-                if (item.marginRight) div.style.marginRight = item.marginRight;
-                if (item.backgroundColor) div.style.backgroundColor = item.backgroundColor;
-
-                // Xử lý sự kiện click để chọn khối (chỉ ở chế độ thiết kế)
-                if (!window.isExecutionMode) {
-                    div.onclick = (e) => {
-                        e.stopPropagation();
-                        if (selectedId !== item.id) {
-                            // Chọn item và vẽ lại thanh thuộc tính
-                            selectItem(item.id, true);
+                    currentGroup = document.createElement('div');
+                    currentGroup.className = 'section-group-wrapper' + (window.activeSectionId === itemSectionId ? ' active' : '');
+                    currentGroup.onclick = (e) => {
+                        if (!e.target.closest('.block-item')) {
+                            window.activeSectionId = itemSectionId;
+                            selectedId = null; 
+                            renderBlocks();
                         }
                     };
-                }
-
-                let content = `<div class="block-mock"></div>`;
-
-                // --- XỬ LÝ KHỐI BẢNG (TABLE) ---
-                if (item.type === 'table') {
-                    const borderMode = item.borderMode || 'all';
-                    const borderClass = `border-mode-${borderMode}`;
-
-                    let thead = '';
-                    if (!item.hideHeader && item.columns) {
-                        thead = `<thead><tr>${item.columns.map((c, cIdx) => {
-                        const s = c.style || {};
-                        const bg = s.backgroundColor || '';
-                        const align = s.textAlign || '';
-                        const fw = s.fontWeight || '';
-                        const fs = s.fontStyle || '';
-                        const td = s.textDecoration || '';
-                        const fsz = s.fontSize || '';
-                        const tc = s.textColor || '';
-                        const wm = s.writingMode || '';
-                        const tf = s.transform || '';
-                        return `<th contenteditable="false"
-                        spellcheck="false"
-                        data-row="0"
-                        data-col="${cIdx}"
-                        class="table-header-cell"
-                        style="position: relative; width: ${c.width || 'auto'}; background-color: ${bg}; text-align: ${align}; font-weight: ${fw}; font-style: ${fs}; text-decoration: ${td}; font-size: ${fsz}; color: ${tc}; border-top: ${s.borderTop || ''}; border-bottom: ${s.borderBottom || ''}; border-left: ${s.borderLeft || ''}; border-right: ${s.borderRight || ''}; writing-mode: ${wm};">
-                            <div class="header-content" style="transform: ${tf}; transform-origin: center center; display: inline-block; width: 100%;">${c.label}</div>
-                            ${!window.isExecutionMode ? `
-                            <div class="col-actions">
-                                <button class="btn-col-add" onclick="event.stopPropagation(); tableAddColumn(${cIdx+1})" title="Thêm cột bên phải"><i class="fas fa-plus"></i></button>
-                                <button class="btn-col-del" onclick="event.stopPropagation(); tableRemoveColumn(${cIdx})" title="Xóa cột"><i class="fas fa-times"></i></button>
-                            </div>` : ''}
-                            ${!window.isExecutionMode ? `<div class="col-resizer" onmousedown="initResize(event, '${item.id}', 'col', ${cIdx})"></div>` : ''}
-                        </th>`;
-                    }).join('')}
-                    ${window.isExecutionMode && item.canAddRows ? '<th style="width: 30px; border: none; background: transparent;"></th>' : ''}
-                    </tr></thead>`;
-                }
-
-                let rowsHtml = '';
-                const blockKey = item.uuid || item.id;
-                const runDataForBlock = window.executionValues[blockKey] || {};
-
-                for (let r = 0; r < (item.rows || 0); r++) {
-                    let cellsHtml = '';
-                    const rowH = (item.rowHeights && item.rowHeights[r]) ? item.rowHeights[r] : 'auto';
-                    if (!item.data || !item.data[r]) continue;
-                    for (let c = 0; c < (item.cols || 0); c++) {
-                        if (!item.data[r][c] || typeof item.data[r][c] !== 'object') {
-                            item.data[r][c] = { content: '', rs: 1, cs: 1, hidden: false };
-                        }
-                        const cell = item.data[r][c];
-                        if (cell.hidden) continue;
-
-                        const cellWidth = (item.columns && item.columns[c] && item.columns[c].width) ? item.columns[c].width : 'auto';
-                        const cellBg = (cell.backgroundColor) ? cell.backgroundColor : '';
-
-                        let displayContent = decorateContent(cell.content);
-                        if (displayContent === null || displayContent === 'null' || displayContent === undefined) {
-                            displayContent = '';
-                        }
-                        
-                        let cellClass = "";
-                        let onclickAttr = "";
-                        let finalEditable = "false";
-
-                        if (window.isExecutionMode) {
-                            const runVal = runDataForBlock[`${r}_${c}`];
-                            if (displayContent.includes('[Nhập dữ liệu]')) {
-                                cellClass = "execution-input-cell";
-                                onclickAttr = `onclick="openExecutionInputModal('${blockKey}', ${r}, ${c}, 'text')"`;
-                                displayContent = runVal ? runVal : `<span class="execution-badge input"><i class="fas fa-edit"></i> [Nhập dữ liệu]</span>`;
-                            } else if (displayContent.includes('[Ký tên]')) {
-                                cellClass = "execution-input-cell";
-                                onclickAttr = `onclick="openExecutionInputModal('${blockKey}', ${r}, ${c}, 'signature')"`;
-                                displayContent = runVal ? getSignatureDisplayHtml(runVal, 'signature') : `<span class="execution-badge signature"><i class="fas fa-pen"></i> [Ký tên]</span>`;
-                            } else if (displayContent.includes('[Tự động lấy thời gian]')) {
-                                cellClass = "execution-input-cell";
-                                onclickAttr = `ondblclick="autoFillTime('${blockKey}', ${r}, ${c})" title="Nháy đúp chuột (Double-click) để lấy giờ hệ thống"`;
-                                displayContent = runVal ? runVal : `<span class="execution-badge time"><i class="fas fa-clock"></i> [Double-click lấy giờ]</span>`;
-                            } else if (displayContent.includes('[Người thực hiện]')) {
-                                cellClass = "execution-input-cell";
-                                onclickAttr = `onclick="autoFillExecutor('${blockKey}', ${r}, ${c})" title="Click để xác nhận người thực hiện"`;
-                                displayContent = runVal ? getSignatureDisplayHtml(runVal, 'executor') : `<span class="execution-badge executor"><i class="fas fa-user-edit"></i> [Người thực hiện]</span>`;
-                            } else if (displayContent.includes('[Người kiểm tra]')) {
-                                cellClass = "execution-input-cell";
-                                onclickAttr = `onclick="openCheckerAuthModal('${blockKey}', ${r}, ${c})" title="Click để xác thực người kiểm tra"`;
-                                displayContent = runVal ? getSignatureDisplayHtml(runVal, 'checker') : `<span class="execution-badge checker"><i class="fas fa-check-double"></i> [Người kiểm tra]</span>`;
-                            }
-                        } else {
-                            finalEditable = (item.locked || window.isReadOnly) ? 'false' : 'true';
-                        }
-
-                        let metaHtml = '';
-                        if (window.isExecutionMode && runDataForBlock._meta && runDataForBlock._meta[`${r}_${c}`]) {
-                            const meta = runDataForBlock._meta[`${r}_${c}`];
-                            if (meta.by || meta.at) {
-                                metaHtml = `<div class="execution-meta">${meta.by || ''} ${meta.at || ''}</div>`;
+                    currentGroup.ondblclick = (e) => {
+                        if (!e.target.closest('.block-item') && window.isViewAllMode) {
+                            window.activeSectionId = itemSectionId;
+                            window.isViewAllMode = false;
+                            selectedId = null;
+                            renderBlocks();
+                            const toggleBtn = document.getElementById('viewModeToggle');
+                            if (toggleBtn) {
+                                toggleBtn.innerHTML = '<i class="fas fa-expand-arrows-alt"></i>';
+                                toggleBtn.classList.remove('btn-info');
+                                toggleBtn.classList.add('btn-outline-info');
+                                toggleBtn.title = "Chuyển sang xem tất cả";
                             }
                         }
-
-                        cellsHtml += `<td contenteditable="${finalEditable}"
-                        spellcheck="false"
-                        data-row="${r+1}"
-                        data-col="${c}"
-                        rowspan="${cell.rs || 1}"
-                        colspan="${cell.cs || 1}"
-                        ${onclickAttr}
-                        class="${cellClass} ${item.locked ? 'locked-cell' : ''}"
-                        style="position: relative; width: ${cellWidth}; height: ${rowH}; background-color: ${cellBg}; text-align: ${cell.textAlign || ''}; font-weight: ${cell.fontWeight || ''}; font-style: ${cell.fontStyle || ''}; text-decoration: ${cell.textDecoration || ''}; font-size: ${cell.fontSize || ''}; color: ${cell.textColor || ''}; text-transform: ${cell.textTransform || ''}; border-top: ${cell.borderTop || ''}; border-bottom: ${cell.borderBottom || ''}; border-left: ${cell.borderLeft || ''}; border-right: ${cell.borderRight || ''}; writing-mode: ${cell.writingMode || ''};"
-                        oninput="updateTableInline('${item.id}', 'cell', ${r}, ${c}, this.innerHTML)"
-                        ${!window.isExecutionMode ? `
-                            ondragover="event.preventDefault(); this.classList.add('criteria-drag-over');"
-                            ondragleave="this.classList.remove('criteria-drag-over');"
-                            ondrop="window.handleCriteriaDrop(event, '${item.id}', ${r}, ${c})"` : ''}>
-                            <div class="cell-wrapper" style="transform: ${cell.transform || ''}; transform-origin: center center; display: inline-block; width: 100%;">${displayContent}</div>
-                            ${metaHtml}
-                            ${!window.isExecutionMode && c === 0 ? `
-                            <div class="row-actions">
-                                <button class="btn-row-add" onclick="event.stopPropagation(); tableAddRow(${r+1})" title="Thêm dòng bên dưới"><i class="fas fa-plus"></i></button>
-                                <button class="btn-row-del" onclick="event.stopPropagation(); tableRemoveRow(${r})" title="Xóa dòng"><i class="fas fa-times"></i></button>
-                            </div>` : ''}
-                            ${!window.isExecutionMode ? `<div class="col-resizer" onmousedown="initResize(event, '${item.id}', 'col', ${c + (cell.cs || 1) - 1})"></div>
-                            <div class="row-resizer" onmousedown="initResize(event, '${item.id}', 'row', ${r + (cell.rs || 1) - 1})"></div>` : ''}
-                        </td>`;
-        }
-
-        let deleteCell = '';
-        if (window.isExecutionMode && item.canAddRows) {
-            const isDynamicRow = item.data[r] && item.data[r][0] && item.data[r][0].is_dynamic;
-            if (isDynamicRow) {
-                deleteCell = `<td class="execution-delete-cell" style="width: 30px; border: none; background: transparent; vertical-align: middle;">
-                                                        <button class="btn btn-link text-danger p-0" title="Xóa dòng" onclick="executeDeleteTableRow('${item.id}', ${r})">
-                                                            <i class="fas fa-times-circle"></i>
-                                                        </button>
-                                                      </td>`;
-            } else {
-                deleteCell = `<td style="width: 30px; border: none; background: transparent;"></td>`;
-            }
-        }
-        rowsHtml += `<tr>${cellsHtml}${deleteCell}</tr>`;
-    }
-
-    let addRowBtn = '';
-    if (item.canAddRows) {
-        const btnLabel = window.isExecutionMode ? 'THÊM DÒNG CUỐI' : 'THỬ THÊM DÒNG (CẤP 2)';
-        addRowBtn = `
-                                    <div class="mt-2 text-start">
-                                        <button class="btn btn-xs btn-outline-primary py-0 px-2 fw-bold" style="font-size: 0.65rem; border-radius: 4px;" onclick="executeAddTableRow('${item.id}')">
-                                            <i class="fas fa-plus me-1"></i> ${btnLabel}
-                                        </button>
-                                    </div>
-                                `;
-    }
-
-    let titleHtml = '';
-    if (item.isAbbreviationTable) {
-        let titleText = 'Danh Sách Viết Tắt';
-        const langMode = window.currentLangMode || 'vi';
-        if (langMode === 'en') {
-            titleText = 'List of Abbreviations';
-        } else if (langMode === 'dual') {
-            titleText = 'Danh Sách Viết Tắt / List of Abbreviations';
-        }
-        titleHtml = `
-            <div class="ebmr-section-header d-flex align-items-center mb-3 mt-4">
-                <div class="section-icon bg-info text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px; min-width: 40px;">
-                    <i class="fas fa-list-ul"></i>
-                </div>
-                <div class="flex-grow-1">
-                    <div class="section-title fw-bold text-uppercase" style="font-size: 1.2rem; color: #164e63; letter-spacing: 1px;">
-                        ${titleText}
-                    </div>
-                    <div class="section-line mt-1" style="height: 3px; background: linear-gradient(to right, #0ea5e9, transparent); border-radius: 2px;"></div>
-                </div>
-            </div>
-        `;
-    }
-
-    let progressHtml = '';
-    if (window.isExecutionMode && item.freq_minutes) {
-        const countdownState = window._activeCountdowns && window._activeCountdowns[item.id];
-        const isRunning = !!countdownState;
-        
-        let initialWidth = '100%';
-        let initialText = '--:--';
-        let initialClass = 'bg-success';
-        
-        if (isRunning) {
-            const elapsed = Date.now() - countdownState.startTime;
-            const remaining = countdownState.freqMs - elapsed;
-            if (remaining > 0) {
-                const percent = (remaining / countdownState.freqMs) * 100;
-                initialWidth = `${percent}%`;
-                
-                if (percent > 50) {
-                    initialClass = 'bg-success';
-                } else if (percent > 20) {
-                    initialClass = 'bg-warning';
-                } else {
-                    initialClass = 'bg-danger';
+                    };
+                    container.appendChild(currentGroup);
+                    lastSectionId = itemSectionId;
                 }
-                
-                const totalSeconds = Math.ceil(remaining / 1000);
-                const mins = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
-                const secs = (totalSeconds % 60).toString().padStart(2, '0');
-                initialText = `${mins}:${secs}`;
             } else {
-                initialWidth = '0%';
-                initialText = 'Đã đến giờ lấy mẫu!';
-                initialClass = 'bg-danger';
+                currentGroup = container;
             }
-        }
-        
-        progressHtml = `
-            <div class="sampling-countdown-container my-3 px-1" id="countdown-container-${item.id}" style="display: ${isRunning ? 'block' : 'none'};">
-                <div class="d-flex justify-content-between align-items-center mb-1" style="font-size: 0.85rem; color: #475569; font-weight: 600;">
-                    <span><i class="fas fa-hourglass-half me-1 text-primary"></i> Thời gian đến lần lấy mẫu tiếp theo:</span>
-                    <span id="countdown-text-${item.id}" style="font-family: monospace; font-size: 0.95rem; color: #1e293b;">${initialText}</span>
-                </div>
-                <div class="progress" style="height: 12px; background-color: #e2e8f0; border-radius: 6px; overflow: hidden; box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);">
-                    <div id="countdown-bar-${item.id}" class="progress-bar progress-bar-striped progress-bar-animated ${initialClass}" role="progressbar" style="width: ${initialWidth}; transition: width 1s linear, background-color 0.5s ease;"></div>
-                </div>
-            </div>
-        `;
-    }
 
-    content =
-        `${titleHtml}${progressHtml}<div class="table-responsive-wrapper"><table class="mini-table ${borderClass}" style="--table-border-width: ${item.borderWeight || '1px'}; --table-border-color: #dee2e6;">${thead}<tbody>${rowsHtml}</tbody></table></div>${addRowBtn}`;
-    }
-
-    // --- XỬ LÝ KHỐI VĂN BẢN TĨNH (STATIC TEXT) ---
-    else if (item.type === 'static-text') {
-        const displayContent = decorateContent(item.content || '');
-        const textEditable = (window.isReadOnly || window.isExecutionMode) ? 'false' : 'true';
-        const borderClass = item.borderMode === 'dashed' ? 'border-dashed' : (item.borderMode === 'visible' ?
-            'border-visible' : 'border-none');
-
-        let titleHtml = '';
-        if (item.isCalculationBlock && item.section_id === window.catId) {
-            let titleText = 'Tính Toán Công Thức';
-            const langMode = window.currentLangMode || 'vi';
-            if (langMode === 'en') {
-                titleText = 'Formula Calculation';
-            } else if (langMode === 'dual') {
-                titleText = 'Tính Toán Công Thức / Formula Calculation';
+            // Draw section block itself
+            const secIdxInItems = items.indexOf(sectionBlock);
+            if (!window.isReadOnly && !window.isExecutionMode) {
+                addInsertionDivider(currentGroup, secIdxInItems);
             }
-            titleHtml = `
-                <div class="ebmr-section-header d-flex align-items-center mb-3 mt-4">
+
+            const secDiv = document.createElement('div');
+            secDiv.className = `block-item type-section ${selectedId === sectionBlock.id ? 'active' : ''} ${window.isExecutionMode ? 'execution-mode' : ''}`;
+            secDiv.setAttribute('data-id', sectionBlock.id);
+            if (sectionBlock.backgroundColor) secDiv.style.backgroundColor = sectionBlock.backgroundColor;
+            if (!window.isExecutionMode) {
+                secDiv.onclick = (e) => {
+                    window.handleBlockClick(e, sectionBlock);
+                };
+            }
+
+            const labelEditable = (window.isReadOnly || window.isExecutionMode) ? 'false' : 'true';
+            const isRecalc = (sectionBlock.stage_code === 'recalc' || (sectionBlock.label && sectionBlock.label.toUpperCase().includes('TÍNH TOÁN CÔNG THỨC')));
+            const iconClass = isRecalc ? 'fas fa-calculator' : 'fas fa-layer-group';
+            
+            let sectionBlockContent = `
+                <div class="ebmr-section-header d-flex align-items-center" id="section-${sectionBlock.id}">
                     <div class="section-icon bg-info text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px; min-width: 40px;">
-                        <i class="fas fa-calculator"></i>
+                        <i class="${iconClass}"></i>
                     </div>
                     <div class="flex-grow-1">
-                        <div class="section-title fw-bold text-uppercase" style="font-size: 1.2rem; color: #164e63; letter-spacing: 1px;">
-                            ${titleText}
-                        </div>
+                        <div class="section-title fw-bold text-uppercase" contenteditable="${labelEditable}" 
+                             onblur="updateItemProp('label', this.innerText)" 
+                             style="font-size: 1.2rem; color: #164e63; letter-spacing: 1px;">${sectionBlock.label || 'Tên phân đoạn'}</div>
                         <div class="section-line mt-1" style="height: 3px; background: linear-gradient(to right, #0ea5e9, transparent); border-radius: 2px;"></div>
                     </div>
                 </div>
             `;
-        }
+            const secActions = (sectionBlock.locked || window.isReadOnly || window.isExecutionMode) ? '' : `
+                                <div class="block-actions">
+                                    <button class="btn btn-sm btn-light border shadow-sm text-danger" onclick="removeItem('${sectionBlock.id}')"><i class="fas fa-trash"></i></button>
+                                    <button class="btn btn-sm btn-light border shadow-sm" onclick="moveItem(${secIdxInItems}, -1)"><i class="fas fa-chevron-up"></i></button>
+                                    <button class="btn btn-sm btn-light border shadow-sm" onclick="moveItem(${secIdxInItems}, 1)"><i class="fas fa-chevron-down"></i></button>
+                                </div>`;
 
-        content =
-            `${titleHtml}<div class="static-text-display ${borderClass}" contenteditable="${textEditable}" spellcheck="false" 
-                                            oninput="updateStaticTextInline('${item.id}', this.innerHTML); handleAutoCapitalize(this)">${displayContent}</div>`;
-    }
+            secDiv.innerHTML = `
+                ${secActions}
+                ${sectionBlockContent}
+            `;
+            currentGroup.appendChild(secDiv);
 
-    // --- XỬ LÝ KHỐI BIỂU MẪU NHÚNG (LINKED TEMPLATE) ---
-    else if (item.type === 'linked-template') {
-        // Tự động mở xem trước nếu đang ở chế độ thực thi hoặc người dùng đã chọn mở
-        const isPreviewing = window.isExecutionMode || item.showPreview || false;
+            // Group blocks by loop_group_id
+            let groupedBlocks = [];
+            let currentRun = null;
 
-        // Ẩn các nút điều khiển nội bộ nếu ở chế độ thực thi
-        const hideControls = window.isExecutionMode;
+            blocks.forEach((block) => {
+                const loopGroupId = block.loop_group_id || null;
+                const loopCount = block.loop_count || null;
 
-        // Vùng chứa nội dung xem trước của biểu mẫu nhúng
-        const previewContent = isPreviewing ? `<div id="preview-${item.id}" class="mt-3 p-4 border rounded bg-white w-100 shadow-sm" style="${window.isExecutionMode ? '' : 'pointer-events: none; opacity: 0.9;'}">
-                                <div class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>
-                            </div>` : '';
+                if (loopGroupId) {
+                    if (currentRun && currentRun.isLoopGroup && currentRun.loop_group_id === loopGroupId) {
+                        currentRun.blocks.push(block);
+                    } else {
+                        currentRun = {
+                            isLoopGroup: true,
+                            loop_group_id: loopGroupId,
+                            loop_count: parseInt(loopCount) || 1,
+                            blocks: [block]
+                        };
+                        groupedBlocks.push(currentRun);
+                    }
+                } else {
+                    currentRun = null;
+                    groupedBlocks.push({
+                        isLoopGroup: false,
+                        blocks: [block]
+                    });
+                }
+            });
 
-        content = `<div class="block-mock d-flex flex-column align-items-center justify-content-center py-4 px-3 position-relative" style="background-color: #f8f9fa; border: 2px dashed #0d6efd; border-radius: 12px; min-height: 120px;">
-                                         ${!hideControls ? `<div class="position-absolute" style="top: 10px; right: 10px; z-index: 100;">
-                                            <button class="btn btn-sm btn-primary shadow-sm px-3" onclick="event.stopPropagation(); toggleGfPreview('${item.id}')" style="border-radius: 20px;">
-                                                <i class="fas ${isPreviewing ? 'fa-eye-slash' : 'fa-eye'} me-1"></i> ${isPreviewing ? 'Ẩn nội dung' : 'Xem nội dung'}
-                                            </button>
-                                         </div>` : ''}
-                                         <i class="fas fa-link fa-2x text-primary mb-2 ${isPreviewing ? 'd-none' : ''}"></i>
-                                         <div class="fw-bold text-navy ${isPreviewing ? 'mb-2 border-bottom pb-2 w-100' : ''}">Biểu mẫu chung: ${item.label || 'Đang tải...'}</div>
-                                         ${!isPreviewing ? `<div class="small text-muted mt-1">Nội dung sẽ được tự động chèn vào khi ban hành/thực thi</div>` : ''}
-                                         ${previewContent}
-                                       </div>`;
+            // Render groups
+            groupedBlocks.forEach((group) => {
+                if (group.isLoopGroup) {
+                    if (window.isExecutionMode) {
+                        const loopCount = group.loop_count;
+                        let activeLoopIdx = window.activeBlockLoopIndices ? window.activeBlockLoopIndices[group.loop_group_id] : 1;
+                        if (activeLoopIdx === undefined || activeLoopIdx > loopCount) {
+                            activeLoopIdx = 1;
+                        }
+                        if (!window.activeBlockLoopIndices) window.activeBlockLoopIndices = {};
+                        window.activeBlockLoopIndices[group.loop_group_id] = activeLoopIdx;
 
-        // Nếu đang mở xem trước, gọi hàm fetch dữ liệu từ server
-        if (isPreviewing) {
-            setTimeout(() => fetchAndRenderGfPreview(item.id, item.template_id), 50);
-        }
-    }
+                        // Render Tab headers
+                        const headerDiv = document.createElement('div');
+                        headerDiv.className = `section-loop-tabs-header block-loop-tabs-header-${group.loop_group_id} d-flex align-items-center gap-2 mt-2 mb-3`;
+                        for (let i = 1; i <= loopCount; i++) {
+                            const isActive = (i === activeLoopIdx) ? 'active' : '';
+                            const btn = document.createElement('button');
+                            btn.className = `btn btn-sm btn-outline-primary ${isActive}`;
+                            btn.setAttribute('data-loop-idx', i);
+                            btn.innerText = `Lần ${i}`;
+                            btn.onclick = () => switchBlockLoopTab(group.loop_group_id, i);
+                            headerDiv.appendChild(btn);
+                        }
+                        currentGroup.appendChild(headerDiv);
 
-    // --- XỬ LÝ KHỐI PHÂN ĐOẠN (SECTION) ---
-    else if (item.type === 'section') {
-        const labelEditable = (window.isReadOnly || window.isExecutionMode) ? 'false' : 'true';
-        const isRecalc = (item.stage_code === 'recalc' || (item.label && item.label.toUpperCase().includes('TÍNH TOÁN CÔNG THỨC')));
-        const iconClass = isRecalc ? 'fas fa-calculator' : 'fas fa-layer-group';
-        content = `<div class="ebmr-section-header d-flex align-items-center" id="section-${item.id}">
-                                         <div class="section-icon bg-info text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px; min-width: 40px;">
-                                            <i class="${iconClass}"></i>
-                                         </div>
-                                         <div class="flex-grow-1">
-                                            <div class="section-title fw-bold text-uppercase" contenteditable="${labelEditable}" 
-                                                 onblur="updateItemProp('label', this.innerText)" 
-                                                 style="font-size: 1.2rem; color: #164e63; letter-spacing: 1px;">${item.label || 'Tên phân đoạn'}</div>
-                                            <div class="section-line mt-1" style="height: 3px; background: linear-gradient(to right, #0ea5e9, transparent); border-radius: 2px;"></div>
-                                         </div>
-                                       </div>`;
-    }
+                        // Render tab contents
+                        for (let i = 1; i <= loopCount; i++) {
+                            const tabContentDiv = document.createElement('div');
+                            tabContentDiv.className = `section-loop-tab-content block-loop-tab-content-${group.loop_group_id}`;
+                            tabContentDiv.setAttribute('data-loop-idx', i);
+                            tabContentDiv.style.display = (i === activeLoopIdx) ? 'block' : 'none';
 
-    // --- XỬ LÝ KHỐI BIỂU ĐỒ (CHART) ---
-    else if (item.type === 'chart') {
-        const canvasId = 'chart_canvas_' + item.id;
-        content = `<div class="chart-container" style="position: relative; height:300px; width:100%; padding: 15px; background: #fff; border: 1px solid #eee; border-radius: 8px;">
-                                         <canvas id="${canvasId}"></canvas>
-                                       </div>`;
-        // Đăng ký khởi tạo Chart.js sau khi DOM đã sẵn sàng
-        setTimeout(() => {
-            if (typeof renderChart === 'function') {
-                renderChart(canvasId, item.chartConfig);
-            }
-        }, 50);
-    }
+                            group.blocks.forEach((block) => {
+                                const blockIdx = items.indexOf(block);
+                                const blockDiv = renderSingleBlock(block, blockIdx, `_loop_${i}`);
+                                tabContentDiv.appendChild(blockDiv);
+                            });
 
-    // --- THANH HÀNH ĐỘNG (XÓA, DI CHUYỂN) ---
-    const actions = (item.locked || window.isReadOnly || window.isExecutionMode) ? '' : `
-                            <div class="block-actions">
-                                <button class="btn btn-sm btn-light border shadow-sm text-danger" onclick="removeItem('${item.id}')"><i class="fas fa-trash"></i></button>
-                                <button class="btn btn-sm btn-light border shadow-sm" onclick="moveItem(${idx}, -1)"><i class="fas fa-chevron-up"></i></button>
-                                <button class="btn btn-sm btn-light border shadow-sm" onclick="moveItem(${idx}, 1)"><i class="fas fa-chevron-down"></i></button>
-                            </div>`;
+                            currentGroup.appendChild(tabContentDiv);
+                        }
+                    } else {
+                        // Designer mode: Draw loop group boundary wrapper
+                        const loopGroupWrapper = document.createElement('div');
+                        loopGroupWrapper.className = 'designer-loop-group-wrapper border border-dashed border-primary rounded p-3 my-3 position-relative';
+                        loopGroupWrapper.style.backgroundColor = 'rgba(14, 165, 233, 0.03)';
+                        
+                        const badge = document.createElement('div');
+                        badge.className = 'position-absolute bg-primary text-white px-2 py-1 rounded-bottom small fw-bold';
+                        badge.style.top = '0';
+                        badge.style.left = '15px';
+                        badge.style.zIndex = '5';
+                        badge.innerHTML = `<i class="fas fa-redo me-1"></i> Lặp nhóm: ${group.loop_count} lần`;
+                        loopGroupWrapper.appendChild(badge);
 
-    // Tổng hợp HTML của khối
-    div.innerHTML = `
-                            ${actions}
-                            ${item.type !== 'static-text' && item.type !== 'section' && !window.isExecutionMode && item.label && item.label !== 'null' && !item.isGfHeader && !item.isBmrHeader && !item.isAbbreviationTable ? `<span class="block-label">${item.label} ${item.locked ? '<i class="fas fa-lock ms-1 small"></i>' : ''}</span>` : ''}
-                            ${content}
-                        `;
-    currentGroup.appendChild(div);
+                        group.blocks.forEach((block) => {
+                            const blockIdx = items.indexOf(block);
+                            if (!window.isReadOnly) {
+                                addInsertionDivider(loopGroupWrapper, blockIdx);
+                            }
+                            const blockDiv = renderSingleBlock(block, blockIdx);
+                            blockDiv.classList.add('loop-group-member');
+                            loopGroupWrapper.appendChild(blockDiv);
+                        });
+
+                        currentGroup.appendChild(loopGroupWrapper);
+                    }
+                } else {
+                    // Not a loop group
+                    group.blocks.forEach((block) => {
+                        const blockIdx = items.indexOf(block);
+                        if (!window.isReadOnly && !window.isExecutionMode) {
+                            addInsertionDivider(currentGroup, blockIdx);
+                        }
+                        const blockDiv = renderSingleBlock(block, blockIdx);
+                        currentGroup.appendChild(blockDiv);
+                    });
+                }
+            });
     });
 
     if (!window.isReadOnly && !window.isExecutionMode) {
@@ -855,7 +1074,7 @@
                 }
             };
 
-            // Gọi logic xử lý dán dữ liệu tại vị trí idx đã chọn
+            // Gợi ý logic xử lý dán dữ liệu tại vị trí idx đã chọn
             handleGlobalPaste(mockEvent, idx);
 
         } catch (err) {
@@ -866,14 +1085,11 @@
     };
 
     /**
-     * Decorates variable badges with visual icons based on their data type
-     */
-    /**
      * Xử lý nội dung HTML để hiển thị các "Thẻ biến số" (Variable Badges).
      * Hàm này sẽ thay thế các thẻ thô bằng giao diện có icon và màu sắc tùy theo loại dữ liệu (Ngày, Số, Chữ ký...).
      * @param {string} html - Nội dung HTML gốc chứa thẻ biến.
      */
-    function decorateContent(html, customConfig = null) {
+    function decorateContent(html, customConfig = null, loopSuffix = '') {
         if (!html) return '';
         const div = document.createElement('div');
         div.innerHTML = html;
@@ -909,14 +1125,14 @@
                     if (field.type === 'formula') {
                         const dPlaces = (field.validation && field.validation.decimal_places !== null) ? field
                             .validation.decimal_places : 2;
-                        const result = calculateFormula(field.formula || '', dPlaces, field.id);
+                        const result = calculateFormula(field.formula || '', dPlaces, field.id, loopSuffix);
                         badge.innerHTML = result;
                         badge.className = 'ebmr-field-value formula-result';
-                        badge.setAttribute('data-field-id', fieldId); // Để recalculate tìm được
+                        badge.setAttribute('data-field-id', fieldId + loopSuffix); // Để recalculate tìm được
                         return;
                     }
 
-                    let val = window.executionValues[fieldId] || '';
+                    let val = window.executionValues[fieldId + loopSuffix] || '';
                     // Handle nested structure from DB (cell_id = 'default')
                     if (val && typeof val === 'object' && val.hasOwnProperty('default')) {
                         val = val.default;
@@ -926,104 +1142,102 @@
                         if (keys.length > 0) val = val[keys[0]];
                     }
 
-                        let metaHtml = '';
-                        const fieldData = window.executionValues[fieldId];
-                        if (fieldData && fieldData._meta && fieldData._meta['default']) {
-                            const meta = fieldData._meta['default'];
-                            if (meta.by || meta.at) {
-                                metaHtml = `<div class="execution-meta" style="font-size: 7px; margin-top: 1px; text-align: center;">${meta.by || ''} ${meta.at || ''}</div>`;
-                            }
+                    let metaHtml = '';
+                    const fieldData = window.executionValues[fieldId + loopSuffix];
+                    if (fieldData && fieldData._meta && fieldData._meta['default']) {
+                        const meta = fieldData._meta['default'];
+                        if (meta.by || meta.at) {
+                            metaHtml = `<div class="execution-meta" style="font-size: 7px; margin-top: 1px; text-align: center;">${meta.by || ''} ${meta.at || ''}</div>`;
                         }
+                    }
 
-                        badge.setAttribute('data-field-id', fieldId);
+                    badge.setAttribute('data-field-id', fieldId + loopSuffix);
 
-                        if (field.type === 'signature') {
-                            let clickAttr = '';
-                            if (!window.isReadOnly) {
-                                clickAttr = `onclick="openExecutionInputModal('${fieldId}', 'default', 'default', 'signature')"`;
-                            }
-                            
-                            let signatureHtml = '';
-                            if (val) {
-                                if (val.startsWith('data:image/')) {
-                                    signatureHtml = `<img src="${val}" style="max-height: 40px; max-width: 120px; object-fit: contain; mix-blend-mode: multiply; vertical-align: middle; cursor: ${window.isReadOnly ? 'default' : 'pointer'};" ${clickAttr} />`;
-                                } else {
-                                    signatureHtml = `<span class="badge bg-light text-success border" style="cursor: ${window.isReadOnly ? 'default' : 'pointer'}; font-weight: 600;" ${clickAttr}><i class="fas fa-check-circle me-1"></i>${val}</span>`;
-                                }
+                    if (field.type === 'signature') {
+                        let clickAttr = '';
+                        if (!window.isReadOnly) {
+                            clickAttr = `onclick="openExecutionInputModal('${fieldId + loopSuffix}', 'default', 'default', 'signature')"`;
+                        }
+                        
+                        let signatureHtml = '';
+                        if (val) {
+                            if (val.startsWith('data:image/')) {
+                                signatureHtml = `<img src="${val}" style="max-height: 40px; max-width: 120px; object-fit: contain; mix-blend-mode: multiply; vertical-align: middle; cursor: ${window.isReadOnly ? 'default' : 'pointer'};" ${clickAttr} />`;
                             } else {
-                                signatureHtml = `<span class="badge bg-light text-primary border" style="cursor: ${window.isReadOnly ? 'default' : 'pointer'};" ${clickAttr}><i class="fas fa-signature me-1"></i> [Ký tên]</span>`;
+                                signatureHtml = `<span class="badge bg-light text-success border" style="cursor: ${window.isReadOnly ? 'default' : 'pointer'}; font-weight: 600;" ${clickAttr}><i class="fas fa-check-circle me-1"></i>${val}</span>`;
                             }
-                            badge.innerHTML = `${signatureHtml}${metaHtml}`;
-                            badge.className = 'ebmr-field-badge ebmr-field-value';
-                        } else if (field.type === 'checkbox') {
-                            badge.innerHTML =
-                                `<input type="checkbox" ${val ? 'checked' : ''} ${window.isReadOnly ? 'disabled' : ''} onchange="window.executionValues['${fieldId}'] = this.checked; if(typeof window.recalculateAllFormulas === 'function') window.recalculateAllFormulas()">`;
-                            badge.className = 'ebmr-field-badge ebmr-field-value';
-                        } else if (field.type === 'select') {
-                            const dsType = field.dataSource ? field.dataSource.type : 'manual';
-                            if (dsType === 'database') {
-                                const ds = field.dataSource;
-                                badge.innerHTML =
-                                    `<select class="form-select-sm border-0 border-bottom bg-transparent dynamic-select" data-field-id="${fieldId}" data-table="${ds.table || ''}" data-label="${ds.labelCol || ''}" data-value="${ds.valueCol || ''}" data-where="${ds.where || ''}" data-selected="${val}" ${window.isReadOnly ? 'disabled' : ''} onchange="window.executionValues['${fieldId}'] = this.value; if(typeof window.recalculateAllFormulas === 'function') window.recalculateAllFormulas()"><option value="">-- Đang tải... --</option></select>${metaHtml}`;
-                            } else {
-                                let optionsArr = [];
-                                if (Array.isArray(field.options)) {
-                                    optionsArr = field.options;
-                                } else if (typeof field.options === 'string') {
-                                    optionsArr = field.options.split(/[,;\n]/).map(o => o.trim()).filter(o => o);
-                                }
-                                badge.innerHTML =
-                                    `<select class="form-select-sm border-0 border-bottom bg-transparent" ${window.isReadOnly ? 'disabled' : ''} onchange="window.executionValues['${fieldId}'] = this.value; if(typeof window.recalculateAllFormulas === 'function') window.recalculateAllFormulas()"><option value="">--</option>${optionsArr.map(o => `<option value="${o}" ${val === o ? 'selected' : ''}>${o}</option>`).join('')}</select>${metaHtml}`;
-                            }
-                            badge.className = 'ebmr-field-badge ebmr-field-value';
-                        } else if (field.type === 'date') {
-                            const placeholder = field.label || 'Chọn ngày...';
-                            const displayVal = val || '';
-                            const isNow = (field.defaultValue && field.defaultValue.toLowerCase() === 'now');
-                            const titleAttr = isNow ? 'title="Nhấp đúp chuột (Double-click) để lấy ngày giờ hệ thống"' : '';
-                            
-                            badge.innerHTML =
-                                `<span class="execution-input-test" ${!window.isReadOnly ? `onclick="handleDateVariableClick(event, '${fieldId}', ${isNow})"` : ''} style="cursor: ${window.isReadOnly ? 'default' : 'pointer'}; border-bottom: 1px dotted #1a73e8; min-width: 30px; display: inline-block; outline: none; position: relative;" ${titleAttr}>${displayVal || `<span style="color: #6c757d; font-style: italic;">${placeholder}</span>`}${metaHtml}</span>`;
-                            badge.className = 'ebmr-field-badge ebmr-field-value';
                         } else {
-                            // Các loại khác: Văn bản, Số
-                            const placeholder = field.label || '...';
-                            const displayVal = val || '';
-                            
-                            let extraStyle = '';
-                            if (field.type === 'number' && val !== null && val !== undefined && val !== '') {
-                                const numVal = Number(val);
-                                if (!isNaN(numVal) && field.validation) {
-                                    let isOutOfBounds = false;
-                                    const minVal = field.validation.min;
-                                    const maxVal = field.validation.max;
-                                    if (minVal !== null && minVal !== undefined && minVal !== '' && !isNaN(Number(minVal)) && numVal < Number(minVal)) {
-                                        isOutOfBounds = true;
-                                    }
-                                    if (maxVal !== null && maxVal !== undefined && maxVal !== '' && !isNaN(Number(maxVal)) && numVal > Number(maxVal)) {
-                                        isOutOfBounds = true;
-                                    }
-                                    if (isOutOfBounds) {
-                                        extraStyle = 'color: #d93025; font-weight: bold; background-color: #fce8e6; border: 1px solid #fad2cf; padding: 2px 4px; border-radius: 4px;';
-                                    }
+                            signatureHtml = `<span class="badge bg-light text-primary border" style="cursor: ${window.isReadOnly ? 'default' : 'pointer'};" ${clickAttr}><i class="fas fa-signature me-1"></i> [Ký tên]</span>`;
+                        }
+                        badge.innerHTML = `${signatureHtml}${metaHtml}`;
+                        badge.className = 'ebmr-field-badge ebmr-field-value';
+                    } else if (field.type === 'checkbox') {
+                        badge.innerHTML =
+                            `<input type="checkbox" ${val ? 'checked' : ''} ${window.isReadOnly ? 'disabled' : ''} onchange="window.executionValues['${fieldId + loopSuffix}'] = this.checked; if(typeof window.recalculateAllFormulas === 'function') window.recalculateAllFormulas()">`;
+                        badge.className = 'ebmr-field-badge ebmr-field-value';
+                    } else if (field.type === 'select') {
+                        const dsType = field.dataSource ? field.dataSource.type : 'manual';
+                        if (dsType === 'database') {
+                            const ds = field.dataSource;
+                            badge.innerHTML =
+                                `<select class="form-select-sm border-0 border-bottom bg-transparent dynamic-select" data-field-id="${fieldId + loopSuffix}" data-table="${ds.table || ''}" data-label="${ds.labelCol || ''}" data-value="${ds.valueCol || ''}" data-where="${ds.where || ''}" data-selected="${val}" ${window.isReadOnly ? 'disabled' : ''} onchange="window.executionValues['${fieldId + loopSuffix}'] = this.value; if(typeof window.recalculateAllFormulas === 'function') window.recalculateAllFormulas()"><option value="">-- Đang tải... --</option></select>${metaHtml}`;
+                        } else {
+                            let optionsArr = [];
+                            if (Array.isArray(field.options)) {
+                                optionsArr = field.options;
+                            } else if (typeof field.options === 'string') {
+                                optionsArr = field.options.split(/[,;\n]/).map(o => o.trim()).filter(o => o);
+                            }
+                            badge.innerHTML =
+                                `<select class="form-select-sm border-0 border-bottom bg-transparent" ${window.isReadOnly ? 'disabled' : ''} onchange="window.executionValues['${fieldId + loopSuffix}'] = this.value; if(typeof window.recalculateAllFormulas === 'function') window.recalculateAllFormulas()"><option value="">--</option>${optionsArr.map(o => `<option value="${o}" ${val === o ? 'selected' : ''}>${o}</option>`).join('')}</select>${metaHtml}`;
+                        }
+                        badge.className = 'ebmr-field-badge ebmr-field-value';
+                    } else if (field.type === 'date') {
+                        const placeholder = field.label || 'Chọn ngày...';
+                        const displayVal = val || '';
+                        const isNow = (field.defaultValue && field.defaultValue.toLowerCase() === 'now');
+                        const titleAttr = isNow ? 'title="Nhấp đúp chuột (Double-click) để lấy ngày giờ hệ thống"' : '';
+                        
+                        badge.innerHTML =
+                            `<span class="execution-input-test" ${!window.isReadOnly ? `onclick="handleDateVariableClick(event, '${fieldId + loopSuffix}', ${isNow})"` : ''} style="cursor: ${window.isReadOnly ? 'default' : 'pointer'}; border-bottom: 1px dotted #1a73e8; min-width: 30px; display: inline-block; outline: none; position: relative;" ${titleAttr}>${displayVal || `<span style="color: #6c757d; font-style: italic;">${placeholder}</span>`}${metaHtml}</span>`;
+                        badge.className = 'ebmr-field-badge ebmr-field-value';
+                    } else {
+                        // Các loại khác: Văn bản, Số
+                        const placeholder = field.label || '...';
+                        const displayVal = val || '';
+                        
+                        let extraStyle = '';
+                        if (field.type === 'number' && val !== null && val !== undefined && val !== '') {
+                            const numVal = Number(val);
+                            if (!isNaN(numVal) && field.validation) {
+                                let isOutOfBounds = false;
+                                const minVal = field.validation.min;
+                                const maxVal = field.validation.max;
+                                if (minVal !== null && minVal !== undefined && minVal !== '' && !isNaN(Number(minVal)) && numVal < Number(minVal)) {
+                                    isOutOfBounds = true;
+                                }
+                                if (maxVal !== null && maxVal !== undefined && maxVal !== '' && !isNaN(Number(maxVal)) && numVal > Number(maxVal)) {
+                                    isOutOfBounds = true;
+                                }
+                                if (isOutOfBounds) {
+                                    extraStyle = 'color: #d93025; font-weight: bold; background-color: #fce8e6; border: 1px solid #fad2cf; padding: 2px 4px; border-radius: 4px;';
                                 }
                             }
- 
-                            // Nút đọc cân: chỉ hiện khi người thiết kế bật "Lấy dữ liệu từ cân" trong cấu hình biến số
-                            const scaleEnabled = field.type === 'number'
-                                && !window.isReadOnly
-                                && field.scaleEnabled === true
-                                && ('serial' in navigator);
-                            const scaleBtnHtml = scaleEnabled
-                                ? `<button class="btn-read-scale" onclick="event.stopPropagation(); window.readScaleValueIntoField('${fieldId}')" title="⚖️ Đọc giá trị từ Cân điện tử (RS-232)"><i class="fas fa-balance-scale"></i></button>`
-                                : '';
-
-
-                            badge.innerHTML =
-                                `<span class="execution-input-test" ${!window.isReadOnly ? 'onclick="openVariableInputModal(\''+fieldId+'\')"' : ''} style="cursor: ${window.isReadOnly ? 'default' : 'pointer'}; border-bottom: 1px dotted #1a73e8; min-width: 30px; display: inline-block; outline: none; position: relative; ${extraStyle}">${displayVal || `<span style="color: #6c757d; font-style: italic;">${placeholder}</span>`}${metaHtml}</span>${scaleBtnHtml}`;
-                            badge.className = 'ebmr-field-badge ebmr-field-value';
                         }
+     
+                        // Nút đọc cân: chỉ hiện khi người thiết kế bật "Lấy dữ liệu từ cân" trong cấu hình biến số
+                        const scaleEnabled = field.type === 'number'
+                            && !window.isReadOnly
+                            && field.scaleEnabled === true
+                            && ('serial' in navigator);
+                        const scaleBtnHtml = scaleEnabled
+                            ? `<button class="btn-read-scale" onclick="event.stopPropagation(); window.readScaleValueIntoField('${fieldId + loopSuffix}')" title="⚖️ Đọc giá trị từ Cân điện tử (RS-232)"><i class="fas fa-balance-scale"></i></button>`
+                            : '';
 
+                        badge.innerHTML =
+                            `<span class="execution-input-test" ${!window.isReadOnly ? 'onclick="openVariableInputModal(\''+(fieldId + loopSuffix)+'\')"' : ''} style="cursor: ${window.isReadOnly ? 'default' : 'pointer'}; border-bottom: 1px dotted #1a73e8; min-width: 30px; display: inline-block; outline: none; position: relative; ${extraStyle}">${displayVal || `<span style="color: #6c757d; font-style: italic;">${placeholder}</span>`}${metaHtml}</span>${scaleBtnHtml}`;
+                        badge.className = 'ebmr-field-badge ebmr-field-value';
+                    }
                 }
                 // TRƯỜNG HỢP 2: Chế độ THIẾT KẾ (Hiển thị badge kèm icon loại dữ liệu)
                 else {
@@ -1195,7 +1409,7 @@
      * Nó tự động tìm kiếm các giá trị từ các ô có ID hoặc các biến số được định nghĩa trong công thức.
      * @param {string} formula - Chuỗi công thức, ví dụ: "(kl_tong) - (kl_bao)".
      */
-    window.calculateFormula = function(formula, decimalPlaces = 2, targetFieldId = null) {
+    window.calculateFormula = function(formula, decimalPlaces = 2, targetFieldId = null, loopSuffix = '') {
         if (!formula) return '0';
 
         if (targetFieldId) {
@@ -1212,14 +1426,21 @@
             // BƯỚC 1: Thu thập giá trị từ các ô bảng (Table Cells) có đặt ID (cellId)
             items.forEach(item => {
                 if (item.type === 'table' && item.data) {
-                    item.data.forEach(row => {
-                        row.forEach(cell => {
+                    const blockKey = (item.uuid || item.id) + loopSuffix;
+                    const runDataForBlock = window.executionValues[blockKey] || {};
+                    item.data.forEach((row, r) => {
+                        row.forEach((cell, c) => {
                             if (cell && cell.cellId) {
-                                // Ưu tiên giá trị mặc định nếu có, nếu không lấy nội dung ô
-                                const raw = (cell.defaultValue !== undefined && cell
-                                    .defaultValue !== '') ? cell.defaultValue : (cell
-                                    .content || '0');
+                                // If in execution mode, prefer execution values from the looped block
+                                let raw = undefined;
+                                if (window.isExecutionMode) {
+                                    raw = runDataForBlock[`${r}_${c}`];
+                                }
+                                if (raw === undefined || raw === null || raw === '') {
+                                    raw = (cell.defaultValue !== undefined && cell.defaultValue !== '') ? cell.defaultValue : (cell.content || '0');
+                                }
                                 valMap[cell.cellId] = parseNumberSafe(raw);
+                                valMap[cell.cellId + loopSuffix] = parseNumberSafe(raw);
                             }
                         });
                     });
@@ -1230,15 +1451,16 @@
             Object.values(fieldsConfig).forEach(field => {
                 if (field.label || field.name) {
                     let val = 0;
+                    const loopedFieldId = field.id + loopSuffix;
                     if (field.type === 'formula') {
                         // Nếu là trường công thức khác, tính toán đệ quy
-                        if (calculatingFields.has(field.id)) {
+                        if (calculatingFields.has(loopedFieldId)) {
                             val = 0; // Tránh lặp vô hạn
                         } else {
-                            val = window.calculateFormula(field.formula || '', field.validation ? field.validation.decimal_places : 2, field.id);
+                            val = window.calculateFormula(field.formula || '', field.validation ? field.validation.decimal_places : 2, loopedFieldId, loopSuffix);
                         }
-                    } else if (window.isExecutionMode && window.executionValues && window.executionValues[field.id] !== undefined) {
-                        let raw = window.executionValues[field.id];
+                    } else if (window.isExecutionMode && window.executionValues && window.executionValues[loopedFieldId] !== undefined) {
+                        let raw = window.executionValues[loopedFieldId];
                         if (raw && typeof raw === 'object' && raw.hasOwnProperty('default')) {
                             val = raw.default;
                         } else if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
@@ -1252,8 +1474,14 @@
                     }
                     
                     const parsedVal = parseNumberSafe(val);
-                    if (field.label) valMap[field.label] = parsedVal;
-                    if (field.name) valMap[field.name] = parsedVal;
+                    if (field.label) {
+                        valMap[field.label] = parsedVal;
+                        valMap[field.label + loopSuffix] = parsedVal;
+                    }
+                    if (field.name) {
+                        valMap[field.name] = parsedVal;
+                        valMap[field.name + loopSuffix] = parsedVal;
+                    }
                 }
             });
 
@@ -1261,6 +1489,10 @@
             // Ví dụ: "(kl_tong) - (kl_bao)" -> "100 - 5"
             let processed = formula.replace(/\(([^)]+)\)/g, (match, id) => {
                 const trimmedId = id.trim();
+                const loopedKey = trimmedId + loopSuffix;
+                if (valMap[loopedKey] !== undefined) {
+                    return valMap[loopedKey];
+                }
                 return valMap[trimmedId] !== undefined ? valMap[trimmedId] : 0;
             });
 
@@ -1290,14 +1522,79 @@
             const blockItem = el.closest('.block-item');
             if (blockItem) {
                 const badge = el.closest('.ebmr-field-badge') || el;
-                const fieldId = badge.getAttribute('data-field-id');
+                const loopedFieldId = badge.getAttribute('data-field-id'); // e.g. field_xxx_loop_1
+                // Extract original field ID and loop suffix
+                let fieldId = loopedFieldId;
+                let loopSuffix = '';
+                const loopMatch = loopedFieldId.match(/(.+)(_loop_\d+)$/);
+                if (loopMatch) {
+                    fieldId = loopMatch[1];
+                    loopSuffix = loopMatch[2];
+                }
                 const field = fieldsConfig[fieldId];
                 if (field && field.type === 'formula') {
                     const dPlaces = (field.validation && field.validation.decimal_places !== null) ? field
                         .validation.decimal_places : 2;
-                    badge.innerHTML = calculateFormula(field.formula || '', dPlaces, field.id);
+                    badge.innerHTML = calculateFormula(field.formula || '', dPlaces, loopedFieldId, loopSuffix);
                 }
             }
         });
+    };
+
+    window.activeSectionLoopIndices = {};
+    window.switchSectionLoopTab = function(sectionId, loopIdx) {
+        window.activeSectionLoopIndices[sectionId] = loopIdx;
+        
+        // Hide all tab contents for this section
+        const contents = document.querySelectorAll(`.section-loop-tab-content-${sectionId}`);
+        contents.forEach(content => {
+            if (parseInt(content.getAttribute('data-loop-idx')) === loopIdx) {
+                content.style.display = 'block';
+            } else {
+                content.style.display = 'none';
+            }
+        });
+        
+        // Update active class on tab buttons
+        const header = document.querySelector(`.section-loop-tabs-header-${sectionId}`);
+        if (header) {
+            const buttons = header.querySelectorAll('.btn');
+            buttons.forEach(btn => {
+                if (parseInt(btn.getAttribute('data-loop-idx')) === loopIdx) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+        }
+    };
+
+    window.activeBlockLoopIndices = {};
+    window.switchBlockLoopTab = function(loopGroupId, loopIdx) {
+        if (!window.activeBlockLoopIndices) window.activeBlockLoopIndices = {};
+        window.activeBlockLoopIndices[loopGroupId] = loopIdx;
+        
+        // Hide all tab contents for this group
+        const contents = document.querySelectorAll(`.block-loop-tab-content-${loopGroupId}`);
+        contents.forEach(content => {
+            if (parseInt(content.getAttribute('data-loop-idx')) === loopIdx) {
+                content.style.display = 'block';
+            } else {
+                content.style.display = 'none';
+            }
+        });
+        
+        // Update active class on tab buttons
+        const header = document.querySelector(`.block-loop-tabs-header-${loopGroupId}`);
+        if (header) {
+            const buttons = header.querySelectorAll('.btn');
+            buttons.forEach(btn => {
+                if (parseInt(btn.getAttribute('data-loop-idx')) === loopIdx) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+        }
     };
 </script>
