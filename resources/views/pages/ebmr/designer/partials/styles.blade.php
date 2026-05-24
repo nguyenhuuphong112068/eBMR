@@ -951,9 +951,17 @@
         border-top: 1.5px dashed #4285f4;
         width: 40px;
         left: -40px;
-        opacity: 0.3;
+        opacity: 0.5;
         pointer-events: none;
         z-index: -1;
+        transition: all 0.2s ease;
+    }
+
+    .comment-item:hover .comment-connector-line,
+    .comment-item.active .comment-connector-line {
+        opacity: 0.9;
+        border-top-style: solid;
+        border-top-color: #1a73e8;
     }
 
     .comment-avatar {
@@ -988,16 +996,31 @@
     }
 
     .ebmr-comment-highlight {
-        background-color: rgba(255, 244, 163, 0.4);
-        border-bottom: 2px solid #f29900;
+        background-color: #fef08a !important;
+        color: #1e293b !important;
+        border-bottom: 2px solid #eab308 !important;
         cursor: pointer;
-        padding: 2px 0;
+        padding: 2px 2px !important;
+        border-radius: 2px !important;
+        transition: all 0.2s ease !important;
+        display: inline !important;
     }
 
     .ebmr-comment-highlight.active,
     .ebmr-comment-highlight:hover {
-        background-color: rgba(255, 235, 59, 1);
-        box-shadow: 0 0 0 2px rgba(255, 235, 59, 0.3);
+        background-color: #fde047 !important;
+        box-shadow: 0 0 0 2px rgba(234, 179, 8, 0.3) !important;
+    }
+
+    /* Override when comment highlights are hidden */
+    .hide-comment-highlights .ebmr-comment-highlight {
+        background-color: transparent !important;
+        color: inherit !important;
+        border-bottom: none !important;
+        padding: 0 !important;
+        border-radius: 0 !important;
+        cursor: text !important;
+        box-shadow: none !important;
     }
 
     .page-break-divider {
@@ -1461,6 +1484,20 @@
             background: transparent !important;
             color: #000 !important;
         }
+        .ebmr-property-badge {
+            background-color: transparent !important;
+            color: inherit !important;
+            border: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            border-radius: 0 !important;
+            font-family: inherit !important;
+            font-weight: inherit !important;
+            cursor: text !important;
+            display: inline !important;
+            text-decoration: none !important;
+            box-shadow: none !important;
+        }
     }
 
     /* Criteria Sidebar Panel (Drawer style) */
@@ -1482,6 +1519,71 @@
     .criteria-sidebar.d-none {
         transform: translateX(100%);
         display: none !important;
+    }
+
+    /* Properties Sidebar Panel (Drawer style) */
+    .properties-sidebar {
+        position: fixed;
+        top: 57px; /* Below AdminLTE header height */
+        right: 0;
+        width: 380px;
+        height: calc(100vh - 57px);
+        z-index: 1045;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        display: flex;
+        flex-direction: column;
+        background: #ffffff;
+        box-shadow: -10px 0 25px rgba(0, 0, 0, 0.15) !important;
+        border-left: 1px solid #e2e8f0;
+    }
+    
+    .properties-sidebar.d-none {
+        transform: translateX(100%);
+        display: none !important;
+    }
+
+    /* Document Properties Badge in editor - unstyled by default (inherits parent styling) */
+    .ebmr-property-badge {
+        background-color: transparent !important;
+        color: inherit !important;
+        border: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        border-radius: 0 !important;
+        font-family: inherit !important;
+        font-weight: inherit !important;
+        cursor: text !important;
+        display: inline !important;
+        transition: none !important;
+        box-shadow: none !important;
+        text-decoration: none !important;
+    }
+
+    /* Highlight style: active only when show-property-highlight is enabled on mainContent and we are NOT in execution/preview mode */
+    #mainContent.show-property-highlight:not(.execution-mode-active) .ebmr-property-badge,
+    .show-property-highlight:not(.execution-mode-active) .ebmr-property-badge {
+        background-color: #f0fdf4 !important;
+        color: #166534 !important;
+        border-bottom: 2px dashed #15803d !important;
+        padding: 2px 6px !important;
+        margin: 0 2px !important;
+        border-radius: 4px !important;
+        font-family: inherit !important;
+        font-weight: 600 !important;
+        cursor: text !important;
+        display: inline-block !important;
+        transition: all 0.2s ease !important;
+    }
+
+    #mainContent.show-property-highlight:not(.execution-mode-active) .ebmr-property-badge:hover,
+    .show-property-highlight:not(.execution-mode-active) .ebmr-property-badge:hover {
+        background-color: #dcfce7 !important;
+    }
+
+    #mainContent.show-property-highlight:not(.execution-mode-active) .ebmr-property-badge:focus,
+    .show-property-highlight:not(.execution-mode-active) .ebmr-property-badge:focus {
+        outline: 2px solid #16a34a !important;
+        background-color: #ffffff !important;
     }
 
     /* Draggable Pills Styling */

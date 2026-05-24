@@ -1306,6 +1306,7 @@
 
                     // Retrieve images from our global map
                     const images = testingRowImages[rowId] || [];
+                    const dbId = row.attr('data-id');
 
                     // Only save rows that have at least some data
                     const isSpecEmpty = (specification === '<p><br></p>' || specification.trim() === '');
@@ -1313,6 +1314,7 @@
 
                     if (name || !isSpecEmpty || val || valHigh || !isNoteEmpty || images.length > 0) {
                         rows.push({
+                            id: dbId ? parseInt(dbId) : null,
                             stage: activeStageId,
                             stt: parseInt(stt) || 1,
                             name: name,
@@ -1406,7 +1408,7 @@
                 const valHighDisplay = isTwoInputs ? 'block' : 'none';
 
                 const rowHtml = `
-                    <tr class="testing-row-tr" data-row-id="${rowId}">
+                    <tr class="testing-row-tr" data-row-id="${rowId}" data-id="${data && data.id ? data.id : ''}">
                         <td class="text-center">
                             <input type="number" class="form-control text-center px-1" name="stt" value="${stt}" style="width: 60px;">
                         </td>

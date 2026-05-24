@@ -886,6 +886,11 @@
     if (window.isExecutionMode) {
         setTimeout(loadDynamicSelectOptions, 100);
     }
+
+    // Refresh comments positioning after rendering blocks
+    if (typeof window.renderComments === 'function') {
+        window.renderComments();
+    }
     }
 
     window.dynamicOptionsCache = {};

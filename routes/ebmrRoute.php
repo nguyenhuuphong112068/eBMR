@@ -27,6 +27,7 @@ Route::group(['prefix' => 'ebmr', 'as' => 'pages.ebmr.'], function () {
     Route::post('/store-template', [EbmrDesignerController::class, 'save'])->name('storeTemplate');
     Route::post('/store-comment', [EbmrDesignerController::class, 'storeComment'])->name('storeComment');
     Route::post('/delete-comment', [EbmrDesignerController::class, 'deleteComment'])->name('deleteComment');
+    Route::post('/reply-comment', [EbmrDesignerController::class, 'replyComment'])->name('replyComment');
     Route::post('/translate', [EbmrDesignerController::class, 'aiTranslate'])->name('aiTranslate');
     Route::post('/translate-single', [EbmrDesignerController::class, 'aiTranslateSingle'])->name('aiTranslateSingle');
 
@@ -52,4 +53,9 @@ Route::group(['prefix' => 'ebmr', 'as' => 'pages.ebmr.'], function () {
     Route::post('/dynamic-options', [EbmrDesignerController::class, 'getDynamicOptions'])->name('dynamicOptions');
     Route::get('/document/view-by-code/{code}', [EbmrExecutionController::class, 'viewDocumentByCode'])->name('viewDocumentByCode');
     Route::get('/document/check-exists/{code}', [EbmrExecutionController::class, 'checkDocumentExists'])->name('checkDocumentExists');
+
+    // 6. Document Properties
+    Route::get('/templates/{id}/properties', [EbmrTemplateController::class, 'getProperties'])->name('getProperties');
+    Route::post('/templates/{id}/properties', [EbmrTemplateController::class, 'saveProperty'])->name('saveProperty');
+    Route::delete('/templates/{id}/properties/{propId}', [EbmrTemplateController::class, 'deleteProperty'])->name('deleteProperty');
 });

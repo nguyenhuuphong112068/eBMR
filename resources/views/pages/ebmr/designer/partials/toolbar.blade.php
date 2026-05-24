@@ -119,6 +119,10 @@
                 onclick="toggleCriteriaSidebar()" title="Liên kết Tiêu chuẩn (Data-Binding)">
                 <i class="fas fa-vial"></i>
             </button>
+            <button class="btn btn-toolbar-action text-info fw-bold ms-1" onmousedown="event.preventDefault();"
+                onclick="togglePropertiesSidebar()" title="Thuộc tính tài liệu (Document Properties)">
+                <i class="fas fa-file-alt"></i>
+            </button>
             <button class="btn btn-toolbar-action text-muted ms-1" onmousedown="event.preventDefault();"
                 onclick="openSymbolModal()" title="Ký hiệu đặc biệt">
                 <i class="fas fa-omega"></i>
@@ -333,6 +337,9 @@
                 class="fas fa-list-ol"></i></button>
         <button class="btn btn-toolbar ms-1" onclick="addComment()" title="Thêm bình luận">
             <i class="far fa-comment-dots"></i>
+        </button>
+        <button class="btn btn-toolbar ms-1 text-danger" id="btn-toggle-comments" onclick="toggleCommentsVisibility()" title="Hiện bình luận trong văn bản">
+            <i class="fas fa-eye-slash"></i>
         </button>
         <div class="border-end mx-1" style="height: 18px;"></div>
 

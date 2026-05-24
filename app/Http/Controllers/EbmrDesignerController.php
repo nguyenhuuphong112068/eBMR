@@ -171,6 +171,20 @@ class EbmrDesignerController extends Controller
 
                     $blocks = DB::table('ebmr_template_blocks')->where('template_id', $id)->orderBy('order')->get();
 
+                    // Fetch all testing criteria and properties for dynamic reference replacement
+                    $templateIds = [$id];
+                    foreach ($blocks as $block) {
+                        $f = json_decode($block->properties, true);
+                        if (isset($f['type']) && $f['type'] === 'linked-template') {
+                            $ltId = $f['template_id'] ?? null;
+                            if ($ltId) {
+                                $templateIds[] = $ltId;
+                            }
+                        }
+                    }
+                    $testingCriteria = DB::table('testing')->whereIn('ebmr_templace_id', $templateIds)->get()->keyBy('id');
+                    $properties = DB::table('ebmr_properties')->whereIn('ebmr_templace_id', $templateIds)->get()->keyBy('name');
+
                     // Fetch all content blocks for this template's blocks to minimize queries
                     $blockIds = $blocks->pluck('id')->toArray();
                     $contentBlocks = DB::table('ebmr_content_blocks')
@@ -201,6 +215,11 @@ class EbmrDesignerController extends Controller
                         $fieldsConfig = json_decode($blocks->first()->fields_config);
                     }
 
+                    // Override fieldsConfig with testing criteria dynamically
+                    $fieldsConfigArr = (array)$fieldsConfig;
+                    $fieldsConfigArr = $this->overrideFieldsConfigWithTesting($fieldsConfigArr, $testingCriteria);
+                    $fieldsConfig = (object)$fieldsConfigArr;
+
                     if ($blocks->isNotEmpty()) {
                         $allFields = [];
                         $categoryId = $template->caterogy_id ?? 0;
@@ -210,7 +229,7 @@ class EbmrDesignerController extends Controller
                             $f = json_decode($block->properties, true); // Decode as array to modify easily
 
                             // Inject content back from ebmr_content_blocks
-                            $this->injectContent($f, $block, $contentBlocks->get($block->id), $lang);
+                            $this->injectContent($f, $block, $contentBlocks->get($block->id), $lang, $testingCriteria, $properties);
 
                             // Ensure block has a unique ID for frontend tracking
                             if (! isset($f['id'])) {
@@ -787,7 +806,51 @@ class EbmrDesignerController extends Controller
         return response()->json(['success' => true]);
     }
 
-    private function injectContent(&$field, $block, $contentBlocks, $lang = 'vi')
+    public function replyComment(Request $request)
+    {
+        $validated = $request->validate([
+            'id' => 'required|integer',
+            'content' => 'required|string',
+        ]);
+
+        $comment = DB::table('ebmr_template_comments')->where('id', $validated['id'])->first();
+        if (!$comment) {
+            return response()->json(['success' => false, 'message' => 'Bình luận không tồn tại.']);
+        }
+
+        $user = DB::table('user_management')->where('id', session('user')['userId'])->first();
+        $userName = $user ? $user->fullName : 'Unknown User';
+
+        // Parse existing content
+        $contentData = json_decode($comment->content, true);
+        if (json_last_error() !== JSON_ERROR_NONE || !is_array($contentData)) {
+            $contentData = [
+                'text' => $comment->content,
+                'replies' => []
+            ];
+        }
+
+        // Add new reply
+        $reply = [
+            'user_name' => $userName,
+            'content' => $validated['content'],
+            'created_at' => now()->format('Y-m-d H:i:s'),
+        ];
+
+        $contentData['replies'][] = $reply;
+
+        DB::table('ebmr_template_comments')->where('id', $validated['id'])->update([
+            'content' => json_encode($contentData),
+            'updated_at' => now(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'reply' => $reply
+        ]);
+    }
+
+    private function injectContent(&$field, $block, $contentBlocks, $lang = 'vi', $testingCriteria = null, $properties = null)
     {
         if (! $contentBlocks || empty($block->content)) {
             return;
@@ -828,6 +891,16 @@ class EbmrDesignerController extends Controller
                 $content = $matches[2];
             } else {
                 $content = $fullHtml;
+            }
+
+            // --- DYNAMIC PROPERTIES REPLACEMENT ---
+            if ($properties) {
+                $content = $this->replacePropertySpans($content, $properties);
+            }
+
+            // --- DYNAMIC CRITERIA REPLACEMENT ---
+            if ($testingCriteria) {
+                $content = $this->replaceCriteriaSpans($content, $testingCriteria);
             }
 
             // --- VARIABLE INJECTION ---
@@ -871,6 +944,16 @@ class EbmrDesignerController extends Controller
                             $text = $cb->vi_contents ?? '';
                         }
 
+                        // --- DYNAMIC PROPERTIES REPLACEMENT ---
+                        if ($properties) {
+                            $text = $this->replacePropertySpans($text, $properties);
+                        }
+
+                        // --- DYNAMIC CRITERIA REPLACEMENT ---
+                        if ($testingCriteria) {
+                            $text = $this->replaceCriteriaSpans($text, $testingCriteria);
+                        }
+
                         // --- VARIABLE INJECTION ---
                         $text = preg_replace_callback('/\{\{(field_[a-zA-Z0-9_]+)\}\}/', function ($m) {
                             return '<span contenteditable="false" class="ebmr-field-badge" data-field-id="'.$m[1].'" onclick="selectField(event, \''.$m[1].'\')"></span>';
@@ -881,6 +964,130 @@ class EbmrDesignerController extends Controller
                 }
             }
         }
+    }
+
+    private function replacePropertySpans($html, $properties)
+    {
+        if (empty($html) || !is_string($html)) {
+            return $html;
+        }
+
+        return preg_replace_callback('/<span\s+([^>]*data-property-name="([^"]+)"[^>]*)>(.*?)<\/span>/is', function ($matches) use ($properties) {
+            $attributes = $matches[1];
+            $name = $matches[2];
+            $content = $matches[3];
+
+            if (isset($properties[$name])) {
+                $propVal = $properties[$name]->value ?? '';
+                return "<span {$attributes}>{$propVal}</span>";
+            }
+            return $matches[0];
+        }, $html);
+    }
+
+    private function replaceCriteriaSpans($html, $testingCriteria)
+    {
+        if (empty($html) || !is_string($html)) {
+            return $html;
+        }
+
+        return preg_replace_callback('/<span\s+([^>]*data-criteria-id="(\d+)"[^>]*)>(.*?)<\/span>/is', function ($matches) use ($testingCriteria) {
+            $attributes = $matches[1];
+            $id = $matches[2];
+            $content = $matches[3];
+
+            if (preg_match('/data-criteria-bind="(NAME|SPEC)"/i', $attributes, $bindMatches)) {
+                $bind = strtoupper($bindMatches[1]);
+                if (isset($testingCriteria[$id])) {
+                    $criterion = $testingCriteria[$id];
+                    if ($bind === 'NAME') {
+                        $newContent = $criterion->name;
+                        $attributes = preg_replace('/title="[^"]*"/i', 'title="Chỉ tiêu: ' . e($criterion->name) . '"', $attributes);
+                    } else {
+                        $newContent = $criterion->specifictions;
+                        $attributes = preg_replace('/title="[^"]*"/i', 'title="Tiêu chuẩn: ' . e($criterion->name) . '"', $attributes);
+                    }
+                    return "<span {$attributes}>{$newContent}</span>";
+                }
+            }
+            return $matches[0];
+        }, $html);
+    }
+
+    private function overrideFieldsConfigWithTesting($fieldsConfig, $testingCriteria)
+    {
+        foreach ($fieldsConfig as $fieldKey => &$field) {
+            if (strpos($fieldKey, 'field_crit_') === 0) {
+                $testingId = substr($fieldKey, strlen('field_crit_'));
+                if (isset($testingCriteria[$testingId])) {
+                    $criterion = $testingCriteria[$testingId];
+                    
+                    // Parse limits
+                    $limits = null;
+                    if ($criterion->limits) {
+                        $limits = is_string($criterion->limits) ? json_decode($criterion->limits, true) : (array)$criterion->limits;
+                    }
+                    
+                    $op = $limits['operator'] ?? '=';
+                    $min = $limits['value'] ?? '';
+                    $max = $limits['value_high'] ?? '';
+                    $unit = $limits['unit'] ?? '';
+                    
+                    // Determine type (numeric vs select/checkbox)
+                    $isNumeric = true;
+                    if ($op === 'N/A' || $op === '') {
+                        if ($min === '' || !is_numeric($min)) {
+                            $isNumeric = false;
+                        }
+                    } else if ($op === 'range' || $op === '±') {
+                        if ($min === '' || !is_numeric($min) || $max === '' || !is_numeric($max)) {
+                            $isNumeric = false;
+                        }
+                    } else {
+                        if ($min === '' || !is_numeric($min)) {
+                            $isNumeric = false;
+                        }
+                    }
+                    
+                    $varMin = null;
+                    $varMax = null;
+                    
+                    if ($isNumeric) {
+                        $parsedMin = ($min !== '' && is_numeric($min)) ? floatval($min) : null;
+                        $parsedMax = ($max !== '' && is_numeric($max)) ? floatval($max) : null;
+                        
+                        if ($op === '<' || $op === '<=') {
+                            $varMax = $parsedMin;
+                        } else if ($op === '>' || $op === '>=') {
+                            $varMin = $parsedMin;
+                        } else if ($op === 'range') {
+                            $varMin = $parsedMin;
+                            $varMax = $parsedMax;
+                        } else if ($op === '±') {
+                            if ($parsedMin !== null && $parsedMax !== null) {
+                                $varMin = $parsedMin - $parsedMax;
+                                $varMax = $parsedMin + $parsedMax;
+                            }
+                        } else if ($op === '=' || $op === '') {
+                            $varMin = $parsedMin;
+                            $varMax = $parsedMin;
+                        }
+                    }
+                    
+                    $field['label'] = $criterion->name;
+                    $field['type'] = $isNumeric ? 'number' : 'select';
+                    $field['validation'] = [
+                        'required' => true,
+                        'min' => $varMin,
+                        'max' => $varMax,
+                        'decimal_places' => $field['validation']['decimal_places'] ?? null,
+                    ];
+                    $field['options'] = $isNumeric ? [] : ['Đạt', 'Không đạt'];
+                    $field['instruction'] = 'Giới hạn tiêu chuẩn: ' . $op . ' ' . $min . ' ' . ($max ? 'đến ' . $max : '') . ' ' . $unit;
+                }
+            }
+        }
+        return $fieldsConfig;
     }
 
     private function generateTableHtmlStructure($field, $blockId, $templateId, $sectionId, $lang, $existingContent = null)

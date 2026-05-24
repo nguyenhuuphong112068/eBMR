@@ -498,9 +498,23 @@ class EbmrTemplateController extends Controller
             ->get()
             ->groupBy('ebmr_template_blocks_id');
 
-        $resultBlocks = $blocks->map(function ($b) use ($contentBlocks) {
+        // Fetch testing criteria and properties for dynamic reference replacement
+        $templateIds = [$id];
+        foreach ($blocks as $block) {
+            $f = json_decode($block->properties, true);
+            if (isset($f['type']) && $f['type'] === 'linked-template') {
+                $ltId = $f['template_id'] ?? null;
+                if ($ltId) {
+                    $templateIds[] = $ltId;
+                }
+            }
+        }
+        $testingCriteria = DB::table('testing')->whereIn('ebmr_templace_id', $templateIds)->get()->keyBy('id');
+        $properties = DB::table('ebmr_properties')->whereIn('ebmr_templace_id', $templateIds)->get()->keyBy('name');
+
+        $resultBlocks = $blocks->map(function ($b) use ($contentBlocks, $testingCriteria, $properties) {
             $prop = json_decode($b->properties, true);
-            $this->injectContent($prop, $b, $contentBlocks->get($b->id));
+            $this->injectContent($prop, $b, $contentBlocks->get($b->id), $testingCriteria, $properties);
             $prop['db_type'] = $b->type;
 
             return (object) $prop;
@@ -521,13 +535,16 @@ class EbmrTemplateController extends Controller
             ], $config);
         }
 
+        // Dynamically override fieldsConfig from testing criteria
+        $fieldsConfig = $this->overrideFieldsConfigWithTesting($fieldsConfig, $testingCriteria);
+
         return response()->json([
             'blocks' => $resultBlocks,
             'fields' => $fieldsConfig,
         ]);
     }
 
-    private function injectContent(&$field, $block, $contentBlocks)
+    private function injectContent(&$field, $block, $contentBlocks, $testingCriteria = null, $properties = null)
     {
         if (! $contentBlocks || empty($block->content)) {
             return;
@@ -546,6 +563,16 @@ class EbmrTemplateController extends Controller
                 $content = $matches[1];
             } else {
                 $content = $fullHtml;
+            }
+
+            // --- DYNAMIC PROPERTIES REPLACEMENT ---
+            if ($properties) {
+                $content = $this->replacePropertySpans($content, $properties);
+            }
+
+            // --- DYNAMIC CRITERIA REPLACEMENT ---
+            if ($testingCriteria) {
+                $content = $this->replaceCriteriaSpans($content, $testingCriteria);
             }
 
             // --- VARIABLE INJECTION ---
@@ -573,6 +600,16 @@ class EbmrTemplateController extends Controller
                         if ($dbId && $cbMap->has($dbId)) {
                             $cb = $cbMap->get($dbId);
                             $content = $cb->vi_contents ?? '';
+
+                            // --- DYNAMIC PROPERTIES REPLACEMENT ---
+                            if ($properties) {
+                                $content = $this->replacePropertySpans($content, $properties);
+                            }
+
+                            // --- DYNAMIC CRITERIA REPLACEMENT ---
+                            if ($testingCriteria) {
+                                $content = $this->replaceCriteriaSpans($content, $testingCriteria);
+                            }
                             
                             // --- VARIABLE INJECTION ---
                             $content = preg_replace_callback('/\{\{(field_[a-zA-Z0-9_]+)\}\}/', function ($m) {
@@ -587,6 +624,130 @@ class EbmrTemplateController extends Controller
                 }
             }
         }
+    }
+
+    private function replacePropertySpans($html, $properties)
+    {
+        if (empty($html) || !is_string($html)) {
+            return $html;
+        }
+
+        return preg_replace_callback('/<span\s+([^>]*data-property-name="([^"]+)"[^>]*)>(.*?)<\/span>/is', function ($matches) use ($properties) {
+            $attributes = $matches[1];
+            $name = $matches[2];
+            $content = $matches[3];
+
+            if (isset($properties[$name])) {
+                $propVal = $properties[$name]->value ?? '';
+                return "<span {$attributes}>{$propVal}</span>";
+            }
+            return $matches[0];
+        }, $html);
+    }
+
+    private function replaceCriteriaSpans($html, $testingCriteria)
+    {
+        if (empty($html) || !is_string($html)) {
+            return $html;
+        }
+
+        return preg_replace_callback('/<span\s+([^>]*data-criteria-id="(\d+)"[^>]*)>(.*?)<\/span>/is', function ($matches) use ($testingCriteria) {
+            $attributes = $matches[1];
+            $id = $matches[2];
+            $content = $matches[3];
+
+            if (preg_match('/data-criteria-bind="(NAME|SPEC)"/i', $attributes, $bindMatches)) {
+                $bind = strtoupper($bindMatches[1]);
+                if (isset($testingCriteria[$id])) {
+                    $criterion = $testingCriteria[$id];
+                    if ($bind === 'NAME') {
+                        $newContent = $criterion->name;
+                        $attributes = preg_replace('/title="[^"]*"/i', 'title="Chỉ tiêu: ' . e($criterion->name) . '"', $attributes);
+                    } else {
+                        $newContent = $criterion->specifictions;
+                        $attributes = preg_replace('/title="[^"]*"/i', 'title="Tiêu chuẩn: ' . e($criterion->name) . '"', $attributes);
+                    }
+                    return "<span {$attributes}>{$newContent}</span>";
+                }
+            }
+            return $matches[0];
+        }, $html);
+    }
+
+    private function overrideFieldsConfigWithTesting($fieldsConfig, $testingCriteria)
+    {
+        foreach ($fieldsConfig as $fieldKey => &$field) {
+            if (strpos($fieldKey, 'field_crit_') === 0) {
+                $testingId = substr($fieldKey, strlen('field_crit_'));
+                if (isset($testingCriteria[$testingId])) {
+                    $criterion = $testingCriteria[$testingId];
+                    
+                    // Parse limits
+                    $limits = null;
+                    if ($criterion->limits) {
+                        $limits = is_string($criterion->limits) ? json_decode($criterion->limits, true) : (array)$criterion->limits;
+                    }
+                    
+                    $op = $limits['operator'] ?? '=';
+                    $min = $limits['value'] ?? '';
+                    $max = $limits['value_high'] ?? '';
+                    $unit = $limits['unit'] ?? '';
+                    
+                    // Determine type (numeric vs select/checkbox)
+                    $isNumeric = true;
+                    if ($op === 'N/A' || $op === '') {
+                        if ($min === '' || !is_numeric($min)) {
+                            $isNumeric = false;
+                        }
+                    } else if ($op === 'range' || $op === '±') {
+                        if ($min === '' || !is_numeric($min) || $max === '' || !is_numeric($max)) {
+                            $isNumeric = false;
+                        }
+                    } else {
+                        if ($min === '' || !is_numeric($min)) {
+                            $isNumeric = false;
+                        }
+                    }
+                    
+                    $varMin = null;
+                    $varMax = null;
+                    
+                    if ($isNumeric) {
+                        $parsedMin = ($min !== '' && is_numeric($min)) ? floatval($min) : null;
+                        $parsedMax = ($max !== '' && is_numeric($max)) ? floatval($max) : null;
+                        
+                        if ($op === '<' || $op === '<=') {
+                            $varMax = $parsedMin;
+                        } else if ($op === '>' || $op === '>=') {
+                            $varMin = $parsedMin;
+                        } else if ($op === 'range') {
+                            $varMin = $parsedMin;
+                            $varMax = $parsedMax;
+                        } else if ($op === '±') {
+                            if ($parsedMin !== null && $parsedMax !== null) {
+                                $varMin = $parsedMin - $parsedMax;
+                                $varMax = $parsedMin + $parsedMax;
+                            }
+                        } else if ($op === '=' || $op === '') {
+                            $varMin = $parsedMin;
+                            $varMax = $parsedMin;
+                        }
+                    }
+                    
+                    $field['label'] = $criterion->name;
+                    $field['type'] = $isNumeric ? 'number' : 'select';
+                    $field['validation'] = [
+                        'required' => true,
+                        'min' => $varMin,
+                        'max' => $varMax,
+                        'decimal_places' => $field['validation']['decimal_places'] ?? null,
+                    ];
+                    $field['options'] = $isNumeric ? [] : ['Đạt', 'Không đạt'];
+                    $field['instruction'] = 'Giới hạn tiêu chuẩn: ' . $op . ' ' . $min . ' ' . ($max ? 'đến ' . $max : '') . ' ' . $unit;
+                }
+            }
+        }
+        return $fieldsConfig;
     }
 
     public function getMaterialInfo(Request $request)
@@ -816,15 +977,10 @@ class EbmrTemplateController extends Controller
 
         DB::beginTransaction();
         try {
-            // Delete previous testing criteria and images for this template
-            $oldTestingIds = DB::table('testing')
-                ->where('ebmr_templace_id', $id)
-                ->pluck('id');
-            
-            DB::table('testing_images')->whereIn('testing_id', $oldTestingIds)->delete();
-            DB::table('testing')->where('ebmr_templace_id', $id)->delete();
+            // Track active/valid testing IDs to keep
+            $keepTestingIds = [];
 
-            // Insert new testing criteria
+            // Process each criterion
             foreach ($criteria as $item) {
                 $specs = $item['specifictions'] ?? '';
                 if (is_array($specs)) {
@@ -833,7 +989,8 @@ class EbmrTemplateController extends Controller
 
                 $limitsJson = isset($item['limits']) ? json_encode($item['limits'], JSON_UNESCAPED_UNICODE) : json_encode(null);
 
-                $testingId = DB::table('testing')->insertGetId([
+                $criteriaId = $item['id'] ?? null;
+                $testingData = [
                     'ebmr_templace_id' => $id,
                     'stage' => $item['stage'] ?? '',
                     'stt' => (int)($item['stt'] ?? 1),
@@ -841,11 +998,22 @@ class EbmrTemplateController extends Controller
                     'specifictions' => $specs,
                     'limits' => $limitsJson,
                     'note' => $item['note'] ?? null,
-                    'created_at' => now(),
                     'updated_at' => now(),
-                ]);
+                ];
 
-                // Save associated images and rename them according to ebmr_templates_id + testing_id + index
+                if ($criteriaId && DB::table('testing')->where('id', $criteriaId)->where('ebmr_templace_id', $id)->exists()) {
+                    DB::table('testing')->where('id', $criteriaId)->update($testingData);
+                    $testingId = $criteriaId;
+                } else {
+                    $testingData['created_at'] = now();
+                    $testingId = DB::table('testing')->insertGetId($testingData);
+                }
+
+                $keepTestingIds[] = $testingId;
+
+                // For images, clear and re-insert for this testing ID
+                DB::table('testing_images')->where('testing_id', $testingId)->delete();
+
                 $images = $item['images'] ?? [];
                 foreach ($images as $idx => $img) {
                     $originalPath = $img['image_path'] ?? '';
@@ -881,6 +1049,15 @@ class EbmrTemplateController extends Controller
                     ]);
                 }
             }
+
+            // Delete any testing criteria (and their images) that were removed from this template
+            $removedTestingQuery = DB::table('testing')
+                ->where('ebmr_templace_id', $id)
+                ->whereNotIn('id', $keepTestingIds);
+            
+            $removedTestingIds = $removedTestingQuery->pluck('id');
+            DB::table('testing_images')->whereIn('testing_id', $removedTestingIds)->delete();
+            $removedTestingQuery->delete();
 
             DB::commit();
 
@@ -922,6 +1099,110 @@ class EbmrTemplateController extends Controller
             ]);
         }
         return response()->json(['success' => false, 'message' => 'Không tìm thấy file hình ảnh'], 400);
+    }
+
+    /**
+     * Get BMR template properties
+     */
+    public function getProperties($id)
+    {
+        $properties = DB::table('ebmr_properties')
+            ->where('ebmr_templace_id', $id)
+            ->orderBy('name', 'asc')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'properties' => $properties
+        ]);
+    }
+
+    /**
+     * Save/update property
+     */
+    public function saveProperty(Request $request, $id)
+    {
+        $name = trim($request->input('name'));
+        $value = $request->input('value');
+        $propId = $request->input('prop_id');
+        
+        $userSession = session('user');
+        // Let's also check Auth or other session helpers if user session isn't populated
+        $userName = 'System';
+        if (is_array($userSession)) {
+            $userName = $userSession['fullName'] ?? $userSession['username'] ?? $userSession['user_name'] ?? 'System';
+        } else if (is_object($userSession)) {
+            $userName = $userSession->fullName ?? $userSession->username ?? $userSession->user_name ?? 'System';
+        } else if (auth()->check()) {
+            $userName = auth()->user()->fullName ?? auth()->user()->userName ?? auth()->user()->name ?? 'System';
+        }
+
+        if (empty($name)) {
+            return response()->json(['success' => false, 'message' => 'Tên thuộc tính không được để trống'], 400);
+        }
+
+        try {
+            if (!empty($propId)) {
+                DB::table('ebmr_properties')
+                    ->where('ebmr_templace_id', $id)
+                    ->where('id', $propId)
+                    ->update([
+                        'name' => $name,
+                        'value' => $value,
+                        'created_by' => $userName,
+                        'updated_at' => now()
+                    ]);
+            } else {
+                DB::table('ebmr_properties')->updateOrInsert(
+                    ['ebmr_templace_id' => $id, 'name' => $name],
+                    [
+                        'value' => $value,
+                        'created_by' => $userName,
+                        'created_at' => now(),
+                        'updated_at' => now()
+                    ]
+                );
+            }
+
+            $property = DB::table('ebmr_properties')
+                ->where('ebmr_templace_id', $id)
+                ->where('name', $name)
+                ->first();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Lưu thuộc tính thành công',
+                'property' => $property
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Lỗi khi lưu thuộc tính: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Delete property
+     */
+    public function deleteProperty($id, $propId)
+    {
+        try {
+            DB::table('ebmr_properties')
+                ->where('ebmr_templace_id', $id)
+                ->where('id', $propId)
+                ->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Xóa thuộc tính thành công'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Lỗi khi xóa thuộc tính: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }
 
