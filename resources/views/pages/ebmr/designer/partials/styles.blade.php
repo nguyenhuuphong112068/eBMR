@@ -2057,6 +2057,10 @@
         overflow: hidden !important;
     }
 
+    body.workspace-split-active #editor-ruler {
+        display: none !important;
+    }
+
     body.workspace-split-active #mainContent {
         height: 100vh !important;
         max-height: 100vh !important;
