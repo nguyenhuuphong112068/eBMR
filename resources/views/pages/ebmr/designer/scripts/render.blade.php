@@ -891,6 +891,11 @@
     if (typeof window.renderComments === 'function') {
         window.renderComments();
     }
+
+    // Sync split screen preview if active
+    if (typeof window.syncPreviewContent === 'function') {
+        window.syncPreviewContent();
+    }
     }
 
     window.dynamicOptionsCache = {};

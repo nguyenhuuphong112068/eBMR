@@ -341,6 +341,9 @@
         <button class="btn btn-toolbar ms-1 text-danger" id="btn-toggle-comments" onclick="toggleCommentsVisibility()" title="Hiện bình luận trong văn bản">
             <i class="fas fa-eye-slash"></i>
         </button>
+        <button class="btn btn-toolbar ms-1" id="btn-split-workspace" onclick="toggleWorkspaceSplit()" title="Chia đôi màn hình (Split View)">
+            <i class="fas fa-columns fa-rotate-90"></i>
+        </button>
         <div class="border-end mx-1" style="height: 18px;"></div>
 
         <div class="dropdown d-inline-block">

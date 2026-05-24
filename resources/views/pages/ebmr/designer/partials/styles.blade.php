@@ -2049,5 +2049,111 @@
         box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25);
         animation: scale-blink 1s ease-in-out infinite;
     }
+
+    /* ============================================================
+     SPLIT WORKSPACE LAYOUT STYLES
+     ============================================================ */
+    body.workspace-split-active {
+        overflow: hidden !important;
+    }
+
+    body.workspace-split-active #mainContent {
+        height: 100vh !important;
+        max-height: 100vh !important;
+        overflow: hidden !important;
+        display: flex;
+        flex-direction: column;
+    }
+
+    body.workspace-split-active #mainContent > .container-fluid {
+        flex-grow: 1;
+        height: calc(100vh - 60px - 50px) !important; /* Subtract topNAV & toolbar heights */
+        overflow: hidden !important;
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+    }
+
+    body.workspace-split-active #mainContent > .container-fluid > .row {
+        height: 100% !important;
+        overflow: hidden !important;
+    }
+
+    body.workspace-split-active #canvas-col {
+        height: 100% !important;
+        display: flex !important;
+        flex-direction: column !important;
+        overflow: hidden !important;
+    }
+
+    body.workspace-split-active #outline-col,
+    body.workspace-split-active #sidebar-col {
+        height: 100% !important;
+        overflow-y: auto !important;
+    }
+
+    .split-workspace-container {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        flex-grow: 1;
+        overflow: hidden;
+        border: 2px solid #cbd5e1;
+        border-radius: 8px;
+        background: #f1f3f4;
+    }
+
+    .split-pane {
+        height: 50%;
+        overflow-y: auto;
+        position: relative;
+        padding: 15px;
+        background: #f1f3f4;
+        transition: height 0.3s ease;
+    }
+
+    .split-pane:first-child {
+        border-bottom: 3px solid #cbd5e1;
+    }
+
+    .split-pane-header {
+        position: sticky;
+        top: 0;
+        left: 0;
+        right: 0;
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+        z-index: 1000;
+        padding: 8px 16px;
+        border-bottom: 1px solid #e2e8f0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 15px;
+        border-radius: 6px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+
+    /* Hide interactive elements in preview workspace */
+    #preview-workspace .block-actions,
+    #preview-workspace .insert-divider,
+    #preview-workspace .col-actions,
+    #preview-workspace .row-actions,
+    #preview-workspace .drag-handle,
+    #preview-workspace .designer-loop-group-wrapper .position-absolute {
+        display: none !important;
+    }
+
+    #preview-workspace .page-a4 {
+        margin-top: 0 !important;
+        pointer-events: none;
+        user-select: none;
+    }
+
+    #preview-workspace .designer-loop-group-wrapper {
+        border: 1px solid #cbd5e1 !important;
+        background-color: #fafafa !important;
+        padding: 10px !important;
+    }
 </style>
 

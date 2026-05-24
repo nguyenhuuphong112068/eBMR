@@ -51,4 +51,5 @@
     @include('pages.ebmr.designer.scripts.import_word') {{-- Xử lý import file Word (.docx) --}}
     @include('pages.ebmr.designer.scripts.scale_reader') {{-- Tích hợp đọc dữ liệu từ Cân Điện Tử qua RS-232 --}}
     @include('pages.ebmr.designer.scripts.properties') {{-- Xử lý Document Properties đồng bộ --}}
+    @include('pages.ebmr.designer.scripts.split_view') {{-- Tính năng chia đôi màn hình (Split View) so sánh tài liệu --}}
 @endsection
