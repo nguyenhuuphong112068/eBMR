@@ -264,7 +264,7 @@
                     <div class="mb-3 row align-items-center">
                         <label class="col-sm-3 small fw-normal text-muted mb-0">Find what:</label>
                         <div class="col-sm-9">
-                            <input type="text" id="findInput" class="form-control form-control-sm rounded-0 shadow-sm" style="font-family: inherit;" onkeydown="if(event.key==='Enter') executeSearch(false)">
+                            <input type="text" id="findInput" class="form-control form-control-sm rounded-0 shadow-sm" style="font-family: inherit;" onkeydown="if(event.key==='Enter') { event.preventDefault(); executeSearch(false, event.shiftKey); }">
                         </div>
                     </div>
 
@@ -285,7 +285,8 @@
                     <!-- Actions Footer Area -->
                     <div class="d-flex justify-content-end align-items-center mt-4 pt-3 border-top gap-2">
                         <div class="gap-2" id="actionButtonsFind" style="display: flex;">
-                             <button class="btn btn-light border btn-sm px-4" onclick="executeSearch(false)" style="font-size: 0.75rem; border-radius: 4px;">Find Next</button>
+                             <button class="btn btn-light border btn-sm px-4" onclick="executeSearch(false, true)" style="font-size: 0.75rem; border-radius: 4px;" title="Tìm kết quả trước (Shift+Enter)">◀ Prev</button>
+                             <button class="btn btn-light border btn-sm px-4" onclick="executeSearch(false, false)" style="font-size: 0.75rem; border-radius: 4px;" title="Tìm kết quả tiếp theo (Enter)">Next ▶</button>
                              <button class="btn btn-light border btn-sm px-4" data-dismiss="modal" style="font-size: 0.75rem; border-radius: 4px;">Cancel</button>
                         </div>
                         

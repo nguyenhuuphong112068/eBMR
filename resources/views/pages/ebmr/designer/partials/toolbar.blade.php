@@ -252,6 +252,21 @@
         <button class="btn btn-toolbar" onclick="formatDoc('subscript')" title="Chỉ số dưới"><i
                 class="fas fa-subscript"></i></button>
 
+        <!-- Change Case Dropdown -->
+        <div class="dropdown d-inline-block" title="Thay đổi kiểu chữ (Change case)">
+            <button class="btn btn-toolbar dropdown-toggle px-2" type="button" id="changeCaseDropdown"
+                data-toggle="dropdown" aria-expanded="false">
+                <span class="fw-bold">Aa</span>
+            </button>
+            <div class="dropdown-menu shadow-lg p-2" aria-labelledby="changeCaseDropdown" style="min-width: 180px; z-index: 2000;">
+                <button class="dropdown-item rounded mb-1" onclick="applyTextChangeCase('sentence')">Sentence case.</button>
+                <button class="dropdown-item rounded mb-1" onclick="applyTextChangeCase('lower')">lowercase</button>
+                <button class="dropdown-item rounded mb-1" onclick="applyTextChangeCase('upper')">UPPERCASE</button>
+                <button class="dropdown-item rounded mb-1" onclick="applyTextChangeCase('title')">Capitalize Each Word</button>
+                <button class="dropdown-item rounded mb-1" onclick="applyTextChangeCase('toggle')">tOGGLE cASE</button>
+            </div>
+        </div>
+
         <!-- Text Color (Dual Action) -->
         <div class="btn-group" role="group">
             <button type="button" class="btn btn-toolbar px-2" onclick="applyCurrentTextColor()"
@@ -331,10 +346,46 @@
         </div>
         <div class="border-end mx-1" style="height: 18px;"></div>
 
-        <button class="btn btn-toolbar" onclick="formatDoc('insertUnorderedList')" title="Danh sách dạng dấu chấm"><i
-                class="fas fa-list-ul"></i></button>
-        <button class="btn btn-toolbar" onclick="formatDoc('insertOrderedList')" title="Danh sách đánh số"><i
-                class="fas fa-list-ol"></i></button>
+        <!-- Bullet List Dropdown (Word-style) -->
+        <div class="dropdown d-inline-block" title="Danh sách gạch đầu dòng">
+            <button class="btn btn-toolbar dropdown-toggle px-2" type="button" id="bulletDropdown"
+                data-toggle="dropdown" aria-expanded="false">
+                <i class="fas fa-list-ul"></i>
+            </button>
+            <div class="dropdown-menu p-2 shadow-lg" aria-labelledby="bulletDropdown"
+                style="min-width: 260px; z-index: 2000;" onclick="event.stopPropagation()">
+                <div class="small fw-bold text-muted mb-2 px-1">Ký tự đầu dòng</div>
+                <div class="d-flex flex-wrap gap-1 mb-2">
+                    <button class="btn btn-sm btn-outline-secondary" style="min-width:44px;font-size:1rem;"
+                        onclick="applyLineBullet('none')" title="Không có">
+                        <span class="text-muted small">None</span>
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" style="min-width:44px;font-size:1rem;"
+                        onclick="applyLineBullet('•')" title="Chấm tròn đặc">•</button>
+                    <button class="btn btn-sm btn-outline-secondary" style="min-width:44px;font-size:1rem;"
+                        onclick="applyLineBullet('○')" title="Chấm tròn rỗng">○</button>
+                    <button class="btn btn-sm btn-outline-secondary" style="min-width:44px;font-size:1rem;"
+                        onclick="applyLineBullet('■')" title="Hình vuông đặc">■</button>
+                    <button class="btn btn-sm btn-outline-secondary" style="min-width:44px;font-size:1rem;"
+                        onclick="applyLineBullet('□')" title="Hình vuông rỗng">□</button>
+                    <button class="btn btn-sm btn-outline-secondary" style="min-width:44px;font-size:1rem;"
+                        onclick="applyLineBullet('➤')" title="Mũi tên">➤</button>
+                    <button class="btn btn-sm btn-outline-secondary" style="min-width:44px;font-size:1rem;"
+                        onclick="applyLineBullet('✓')" title="Dấu tick">✓</button>
+                    <button class="btn btn-sm btn-outline-secondary" style="min-width:44px;font-size:1rem;"
+                        onclick="applyLineBullet('✗')" title="Dấu X">✗</button>
+                    <button class="btn btn-sm btn-outline-secondary" style="min-width:44px;font-size:1rem;"
+                        onclick="applyLineBullet('◆')" title="Hình thoi">◆</button>
+                    <button class="btn btn-sm btn-outline-secondary" style="min-width:44px;font-size:1rem;"
+                        onclick="applyLineBullet('–')" title="Gạch ngang">–</button>
+                </div>
+                <hr class="my-1">
+                <div class="small fw-bold text-muted mb-1 px-1">Danh sách có số</div>
+                <button class="dropdown-item rounded" onclick="applyLineBullet('ordered')">
+                    <i class="fas fa-list-ol me-2"></i>1. 2. 3. &nbsp;<span class="text-muted small">(tự đánh số)</span>
+                </button>
+            </div>
+        </div>
         <button class="btn btn-toolbar ms-1" onclick="addComment()" title="Thêm bình luận">
             <i class="far fa-comment-dots"></i>
         </button>

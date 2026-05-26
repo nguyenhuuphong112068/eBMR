@@ -1442,93 +1442,270 @@
         $('#searchStats').text('');
     };
 
+    // ============================================================
+    // SEARCH & REPLACE ENGINE (CSS Custom Highlight API)
+    // Không modify DOM — tô màu hoàn toàn qua CSS pseudo-elements
+    // Chrome 105+, Edge 105+, Firefox 117+, Safari 17.2+
+    // ============================================================
+
+    /** State nội bộ */
+    const _srState = { matches: [], currentIndex: -1 };
+
+    /** Kiểm tra trình duyệt hỗ trợ CSS Highlight API không */
+    const _hasCssHighlight = (typeof CSS !== 'undefined' && CSS.highlights);
+
     /**
-     * Thực hiện lệnh tìm kiếm nội dung trong văn bản.
-     * Cách hoạt động: Sử dụng hàm `window.find()` mặc định của trình duyệt để tìm và bôi đen cụm từ. 
-     * Nếu không tìm thấy, nó sẽ xóa vùng chọn và thử tìm lại từ đầu trang.
-     * @param {boolean} silent - Nếu true sẽ không hiện thông báo khi không tìm thấy.
+     * Thu thập tất cả text node bên trong root (dùng TreeWalker).
      */
-    window.executeSearch = function(silent = false) {
+    function _collectTextNodes(root) {
+        const nodes = [];
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
+        let node;
+        while ((node = walker.nextNode())) {
+            if (node.nodeValue && node.nodeValue.trim().length > 0) {
+                nodes.push(node);
+            }
+        }
+        return nodes;
+    }
+
+    /**
+     * Tìm tất cả vị trí khớp với `term` trong editor.
+     * Trả về mảng Range[]. Case-insensitive.
+     */
+    function _findAllMatches(term) {
+        const editor = document.getElementById('editor-content');
+        if (!editor || !term) return [];
+
+        const ranges = [];
+        const lowerTerm = term.toLowerCase();
+        const termLen = term.length;
+
+        _collectTextNodes(editor).forEach(node => {
+            const lowerText = node.nodeValue.toLowerCase();
+            let startIdx = 0;
+            while (true) {
+                const idx = lowerText.indexOf(lowerTerm, startIdx);
+                if (idx === -1) break;
+                const range = document.createRange();
+                range.setStart(node, idx);
+                range.setEnd(node, idx + termLen);
+                ranges.push(range);
+                startIdx = idx + termLen;
+            }
+        });
+        return ranges;
+    }
+
+    /**
+     * Xóa tất cả highlight (CSS Highlight API hoặc span fallback).
+     */
+    function _clearHighlights() {
+        if (_hasCssHighlight) {
+            CSS.highlights.delete('sr-all');
+            CSS.highlights.delete('sr-current');
+        }
+        // Xóa span fallback nếu có
+        document.querySelectorAll('span.sr-hl').forEach(span => {
+            const parent = span.parentNode;
+            if (parent) {
+                parent.replaceChild(document.createTextNode(span.textContent), span);
+                parent.normalize();
+            }
+        });
+        document.querySelectorAll('.has-search-match').forEach(el => el.classList.remove('has-search-match'));
+    }
+
+    /**
+     * Render highlight: dùng CSS Custom Highlight API nếu có,
+     * fallback sang border-only (không modify text node).
+     */
+    function _renderHighlights(currentIdx) {
+        const matches = _srState.matches;
+        if (!matches.length) return;
+
+        if (_hasCssHighlight) {
+            // === CSS Custom Highlight API (không modify DOM) ===
+            // Tất cả matches — vàng nhạt
+            const allHighlight = new Highlight(...matches);
+            CSS.highlights.set('sr-all', allHighlight);
+
+            // Match hiện tại — cam đậm (override sr-all)
+            if (currentIdx >= 0 && matches[currentIdx]) {
+                const currentHighlight = new Highlight(matches[currentIdx]);
+                CSS.highlights.set('sr-current', currentHighlight);
+            }
+        }
+        // Dù có CSS Highlight API hay không, vẫn thêm viền cho container hiện tại
+        _highlightContainer(currentIdx);
+    }
+
+    /**
+     * Thêm viền cam cho container chứa match hiện tại và scroll tới.
+     */
+    function _highlightContainer(currentIdx) {
+        document.querySelectorAll('.has-search-match').forEach(el => el.classList.remove('has-search-match'));
+        const matches = _srState.matches;
+        if (currentIdx < 0 || !matches[currentIdx]) return;
+
+        const range = matches[currentIdx];
+        let node = range.startContainer;
+        if (node.nodeType === Node.TEXT_NODE) node = node.parentElement;
+
+        const container = node ? node.closest('.mini-table td, .mini-table th, .static-text-display, [contenteditable="true"], .block-item') : null;
+        if (container) {
+            container.classList.add('has-search-match');
+            container.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+        }
+    }
+
+    /**
+     * Thực hiện tìm kiếm.
+     * @param {boolean} silent - Không hiện toast khi không tìm thấy.
+     * @param {boolean} backwards - Tìm ngược.
+     */
+    window.executeSearch = function(silent = false, backwards = false) {
         const term = document.getElementById('findInput').value;
         if (!term) return;
 
-        // Use window.find(aString, aCaseSensitive, aBackwards, aWrapAround, aWholeWord, aSearchInFrames, aShowDialog);
-        const found = window.find(term, false, false, true, false, true, false);
+        _clearHighlights();
+        _srState.matches = _findAllMatches(term);
+        const total = _srState.matches.length;
 
-        if (!found) {
-            // Reset to top and search again
-            window.getSelection().removeAllRanges();
-            const foundAgain = window.find(term, false, false, true, false, true, false);
-            if (!foundAgain && !silent) {
-                toastr.warning('Không tìm thấy nội dung: "' + term + '"');
-                $('#searchStats').text('Không tìm thấy kết quả nào.');
-            } else if (foundAgain) {
-                $('#searchStats').text('Đã quay lại đầu trang.');
-            }
-        } else {
-            $('#searchStats').text('Đã tìm thấy.');
+        if (total === 0) {
+            _srState.currentIndex = -1;
+            if (!silent) toastr.warning('Không tìm thấy nội dung: "' + term + '"');
+            $('#searchStats').text('Không tìm thấy kết quả nào.');
+            return;
         }
+
+        // Điều hướng
+        if (_srState.currentIndex === -1) {
+            _srState.currentIndex = 0;
+        } else if (backwards) {
+            _srState.currentIndex = (_srState.currentIndex - 1 + total) % total;
+        } else {
+            _srState.currentIndex = (_srState.currentIndex + 1) % total;
+        }
+
+        _renderHighlights(_srState.currentIndex);
+        $('#searchStats').text(`${_srState.currentIndex + 1} / ${total} kết quả`);
     };
 
     /**
-     * Thực hiện thay thế kết quả tìm kiếm hiện tại bằng nội dung mới.
+     * Thay thế kết quả hiện tại.
+     * Dùng trực tiếp Range object — không cần tìm DOM span.
      */
     window.executeReplace = function() {
         const findTerm = document.getElementById('findInput').value;
         const replaceTerm = document.getElementById('replaceInput').value;
         if (!findTerm) return;
 
-        const sel = window.getSelection();
-        const selectedText = sel.toString().trim().toLowerCase();
-
-        if (selectedText === findTerm.trim().toLowerCase()) {
-            document.execCommand('insertText', false, replaceTerm);
-            saveStateDebounced();
-            executeSearch(true); // Find next
-        } else {
-            executeSearch(false); // Find current/first
+        const total = _srState.matches.length;
+        if (total === 0 || _srState.currentIndex === -1) {
+            executeSearch(false);
+            return;
         }
+
+        saveState();
+
+        const range = _srState.matches[_srState.currentIndex];
+        if (!range || range.collapsed) {
+            executeSearch(false);
+            return;
+        }
+
+        // Xác định container để sync lại data
+        let targetEl = range.startContainer;
+        if (targetEl.nodeType === Node.TEXT_NODE) targetEl = targetEl.parentElement;
+        const container = targetEl ? targetEl.closest('[contenteditable="true"]') : null;
+
+        // Xóa highlight trước khi modify DOM
+        _clearHighlights();
+
+        // Thay thế nội dung range
+        range.deleteContents();
+        range.insertNode(document.createTextNode(replaceTerm));
+        if (container) container.normalize();
+
+        // Sync data
+        if (container) {
+            if (container.oninput) container.oninput();
+            const blockItem = container.closest('.block-item');
+            if (blockItem) {
+                const item = items.find(i => i.id === blockItem.getAttribute('data-id'));
+                if (item) item.dirty = true;
+            }
+        }
+
+        saveStateDebounced();
+
+        // Re-search
+        _srState.currentIndex = -1;
+        executeSearch(true);
     };
 
     /**
-     * Thực hiện thay thế tất cả các cụm từ tìm thấy trong toàn bộ tài liệu.
-     * Cách hoạt động: Sử dụng vòng lặp `while` kết hợp với `window.find()`. Mỗi khi tìm thấy 1 từ, 
-     * nó dùng `execCommand('insertText')` để thay thế, sau đó tiếp tục tìm từ tiếp theo cho đến hết.
+     * Thay thế tất cả.
      */
     window.executeReplaceAll = function() {
         const findTerm = document.getElementById('findInput').value;
         const replaceTerm = document.getElementById('replaceInput').value;
         if (!findTerm) return;
 
-        saveState();
-        let count = 0;
+        _clearHighlights();
+        const matches = _findAllMatches(findTerm);
+        const count = matches.length;
 
-        // Move to start of the editor to begin a clean forward search
-        const editor = document.getElementById('editor-content');
-        window.getSelection().removeAllRanges();
-        const range = document.createRange();
-        range.setStart(editor, 0);
-        range.collapse(true);
-        window.getSelection().addRange(range);
-
-        // IMPORTANT: aWrapAround MUST be false here to prevent finding the search term inside 
-        // the newly replaced text and causing an infinite loop.
-        while (window.find(findTerm, false, false, false, false, true, false)) {
-            document.execCommand('insertText', false, replaceTerm);
-            count++;
-            // Safety break
-            if (count > 5000) break;
-        }
-
-        if (count > 0) {
-            saveStateDebounced();
-            toastr.success(`Đã thay thế ${count} vị trí`);
-            $('#searchStats').text(`Đã thay thế ${count} vị trí.`);
-        } else {
+        if (count === 0) {
             toastr.info('Không tìm thấy nội dung để thay thế.');
             $('#searchStats').text('Không tìm thấy kết quả nào.');
+            return;
         }
+
+        saveState();
+        const dirtyContainers = new Set();
+
+        // Thay thế ngược từ cuối để không làm lệch vị trí các Range trước đó
+        for (let i = count - 1; i >= 0; i--) {
+            const range = matches[i];
+            try {
+                let targetEl = range.startContainer;
+                if (targetEl.nodeType === Node.TEXT_NODE) targetEl = targetEl.parentElement;
+                const container = targetEl ? targetEl.closest('[contenteditable="true"]') : null;
+                if (container) dirtyContainers.add(container);
+
+                range.deleteContents();
+                range.insertNode(document.createTextNode(replaceTerm));
+            } catch (e) { /* bỏ qua range không hợp lệ */ }
+        }
+
+        dirtyContainers.forEach(container => {
+            container.normalize();
+            if (container.oninput) container.oninput();
+            const blockItem = container.closest('.block-item');
+            if (blockItem) {
+                const item = items.find(i => i.id === blockItem.getAttribute('data-id'));
+                if (item) item.dirty = true;
+            }
+        });
+
+        _srState.matches = [];
+        _srState.currentIndex = -1;
+
+        saveStateDebounced();
+        toastr.success(`Đã thay thế ${count} vị trí`);
+        $('#searchStats').text(`Đã thay thế ${count} vị trí.`);
     };
+
+    // Xóa highlight khi đóng modal
+    document.addEventListener('DOMContentLoaded', () => {
+        $('#searchReplaceModal').on('hidden.bs.modal', function () {
+            _clearHighlights();
+            _srState.matches = [];
+            _srState.currentIndex = -1;
+        });
+    });
 
 
     /**
@@ -4226,5 +4403,220 @@
         renderBlocks();
         saveStateDebounced();
         toastr.success(`Đã dán thành công ${clonedBlocks.length} khối.`);
+    };
+
+    /**
+     * Chuyển đổi kiểu chữ cho một chuỗi văn bản thô (Unicode-safe và tương thích ngược cao).
+     */
+    function transformStringCase(str, caseType) {
+        if (!str) return '';
+        const letterRegex = /[a-zA-ZáàảãạăắằẳẵặâấầẩẫậéèẻẽẹêếềểễệíìỉĩịóòỏõọôốồổỗộơớờởỡợúùủũụưứừửữựýỳỷỹỵđĐ]/;
+        switch (caseType) {
+            case 'lower':
+                return str.toLowerCase();
+            case 'upper':
+                return str.toUpperCase();
+            case 'title':
+                // Viết hoa chữ cái đầu tiên của mỗi từ
+                return str.toLowerCase().split(' ').map(word => {
+                    if (!word) return '';
+                    const letterIdx = word.search(letterRegex);
+                    if (letterIdx !== -1) {
+                        return word.substring(0, letterIdx) + word.charAt(letterIdx).toUpperCase() + word.substring(letterIdx + 1);
+                    }
+                    return word;
+                }).join(' ');
+            case 'sentence':
+                // Viết hoa chữ cái đầu tiên của câu (sau dấu chấm, hỏi chấm, chấm than và khoảng trắng)
+                let lower = str.toLowerCase();
+                let parts = lower.split(/([\.\?\!]\s+)/);
+                for (let i = 0; i < parts.length; i += 2) {
+                    let s = parts[i];
+                    if (s) {
+                        const letterIdx = s.search(letterRegex);
+                        if (letterIdx !== -1) {
+                            parts[i] = s.substring(0, letterIdx) + s.charAt(letterIdx).toUpperCase() + s.substring(letterIdx + 1);
+                        } else if (s.length > 0) {
+                            parts[i] = s.charAt(0).toUpperCase() + s.slice(1);
+                        }
+                    }
+                }
+                return parts.join('');
+            case 'toggle':
+                // Đảo ngược chữ hoa/chữ thường
+                return str.split('').map(c => {
+                    const u = c.toUpperCase();
+                    const l = c.toLowerCase();
+                    return c === u ? l : u;
+                }).join('');
+            default:
+                return str;
+        }
+    }
+
+    /**
+     * Duyệt qua toàn bộ các node văn bản trong một DOM Fragment/Node và thay đổi kiểu chữ của chúng.
+     * Thuật toán này bảo toàn toàn bộ cấu trúc HTML bên trong (không làm thay đổi thẻ HTML).
+     */
+    function modifyTextNodesInFragment(fragment, caseType) {
+        const textNodes = [];
+        function traverse(node) {
+            if (node.nodeType === Node.TEXT_NODE) {
+                textNodes.push(node);
+            } else {
+                for (let i = 0; i < node.childNodes.length; i++) {
+                    traverse(node.childNodes[i]);
+                }
+            }
+        }
+        traverse(fragment);
+
+        if (textNodes.length === 0) return;
+
+        // Nối các chuỗi text lại với nhau
+        let fullText = textNodes.map(node => node.nodeValue).join('');
+
+        // Thực hiện chuyển đổi
+        let transformedText = transformStringCase(fullText, caseType);
+
+        // Ánh xạ lại các ký tự đã được chuyển đổi về từng text node ban đầu
+        let charOffset = 0;
+        for (const node of textNodes) {
+            const len = node.nodeValue.length;
+            node.nodeValue = transformedText.substring(charOffset, charOffset + len);
+            charOffset += len;
+        }
+    }
+
+    /**
+     * Chuyển đổi nội dung của một chuỗi HTML mà không làm hư hại các thẻ HTML tag.
+     */
+    function changeHtmlStringCase(html, caseType) {
+        if (!html) return '';
+        const temp = document.createElement('div');
+        temp.innerHTML = html;
+        modifyTextNodesInFragment(temp, caseType);
+        return temp.innerHTML;
+    }
+
+    /**
+     * Áp dụng chuyển đổi kiểu chữ tự động dựa trên trạng thái selection của người dùng.
+     */
+    window.applyTextChangeCase = function(caseType) {
+        const selection = window.getSelection();
+        const selectedText = selection.toString().trim();
+        const selectedCells = document.querySelectorAll('.selected-cell');
+
+        // TH 1: Có vùng văn bản đang được bôi đen
+        if (selectedText.length > 0) {
+            saveState();
+            let range = selection.getRangeAt(0);
+            let fragment = range.extractContents();
+            
+            modifyTextNodesInFragment(fragment, caseType);
+            
+            let firstChild = fragment.firstChild;
+            let lastChild = fragment.lastChild;
+            
+            range.insertNode(fragment);
+            
+            // Chọn lại vùng văn bản đã thay đổi để giữ selection cho người dùng
+            if (firstChild && lastChild) {
+                let newRange = document.createRange();
+                newRange.setStartBefore(firstChild);
+                newRange.setEndAfter(lastChild);
+                selection.removeAllRanges();
+                selection.addRange(newRange);
+            }
+
+            // Đồng bộ ngược lại dữ liệu JSON
+            const activeEditable = range.startContainer.parentElement.closest('[contenteditable="true"]');
+            if (activeEditable) {
+                if (activeEditable.oninput) {
+                    activeEditable.oninput();
+                }
+                const blockItem = activeEditable.closest('.block-item');
+                if (blockItem) {
+                    const item = items.find(i => i.id === blockItem.getAttribute('data-id'));
+                    if (item) item.dirty = true;
+                }
+            }
+            saveStateDebounced();
+            return;
+        }
+
+        // TH 2: Nhiều ô bảng được chọn (selected cells)
+        if (selectedCells.length > 0) {
+            saveState();
+            selectedCells.forEach(cell => {
+                const r = parseInt(cell.dataset.row);
+                const c = parseInt(cell.dataset.col);
+                const table = cell.closest('.mini-table');
+                const blockItem = table ? table.closest('.block-item') : null;
+                const itemId = blockItem ? blockItem.getAttribute('data-id') : null;
+                const item = items.find(i => i.id === itemId);
+
+                if (item) {
+                    if (r === 0) {
+                        item.columns[c].label = changeHtmlStringCase(item.columns[c].label, caseType);
+                    } else {
+                        const rIdx = r - 1;
+                        if (item.data && item.data[rIdx] && item.data[rIdx][c] !== undefined) {
+                            if (typeof item.data[rIdx][c] !== 'object') {
+                                item.data[rIdx][c] = {
+                                    content: changeHtmlStringCase(item.data[rIdx][c], caseType),
+                                    rs: 1,
+                                    cs: 1,
+                                    hidden: false
+                                };
+                            } else {
+                                item.data[rIdx][c].content = changeHtmlStringCase(item.data[rIdx][c].content, caseType);
+                            }
+                        }
+                    }
+                }
+            });
+            renderBlocks();
+            saveStateDebounced();
+            return;
+        }
+
+        // TH 3: Một khối (block) được chọn
+        if (selectedId) {
+            const item = items.find(i => i.id === selectedId);
+            if (item) {
+                if (item.type === 'static-text') {
+                    saveState();
+                    item.content = changeHtmlStringCase(item.content, caseType);
+                    item.dirty = true;
+                    renderBlocks();
+                    saveStateDebounced();
+                } else if (item.type === 'table') {
+                    saveState();
+                    if (item.columns) {
+                        item.columns.forEach(col => {
+                            col.label = changeHtmlStringCase(col.label, caseType);
+                        });
+                    }
+                    if (item.data) {
+                        for (let r = 0; r < item.data.length; r++) {
+                            for (let c = 0; c < item.data[r].length; c++) {
+                                let cell = item.data[r][c];
+                                if (cell !== undefined && cell !== null) {
+                                    if (typeof cell === 'object') {
+                                        cell.content = changeHtmlStringCase(cell.content, caseType);
+                                    } else {
+                                        item.data[r][c] = changeHtmlStringCase(cell, caseType);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    item.dirty = true;
+                    renderBlocks();
+                    saveStateDebounced();
+                }
+            }
+        }
     };
 </script>

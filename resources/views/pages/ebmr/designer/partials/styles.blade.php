@@ -2159,5 +2159,25 @@
         background-color: #fafafa !important;
         padding: 10px !important;
     }
+
+    /* Highlight active search container */
+    .has-search-match {
+        outline: 3px solid #f59e0b !important;
+        outline-offset: -3px;
+    }
+    .has-search-match .cell-wrapper {
+        background-color: transparent !important;
+    }
+
+    /* CSS Custom Highlight API — không modify DOM */
+    ::highlight(sr-all) {
+        background-color: #fde68a;
+        color: #000;
+    }
+    ::highlight(sr-current) {
+        background-color: #f97316;
+        color: #fff;
+        text-decoration: underline;
+    }
 </style>
 
