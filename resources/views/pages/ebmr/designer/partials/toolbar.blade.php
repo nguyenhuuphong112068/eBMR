@@ -386,6 +386,9 @@
                 </button>
             </div>
         </div>
+        <button class="btn btn-toolbar ms-1" onmousedown="event.preventDefault();" onclick="addNote()" title="Thêm ghi chú">
+            <i class="fas fa-sticky-note text-warning"></i>
+        </button>
         <button class="btn btn-toolbar ms-1" onclick="addComment()" title="Thêm bình luận">
             <i class="far fa-comment-dots"></i>
         </button>

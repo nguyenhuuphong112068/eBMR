@@ -1449,7 +1449,10 @@
     // ============================================================
 
     /** State nội bộ */
-    const _srState = { matches: [], currentIndex: -1 };
+    const _srState = {
+        matches: [],
+        currentIndex: -1
+    };
 
     /** Kiểm tra trình duyệt hỗ trợ CSS Highlight API không */
     const _hasCssHighlight = (typeof CSS !== 'undefined' && CSS.highlights);
@@ -1552,10 +1555,15 @@
         let node = range.startContainer;
         if (node.nodeType === Node.TEXT_NODE) node = node.parentElement;
 
-        const container = node ? node.closest('.mini-table td, .mini-table th, .static-text-display, [contenteditable="true"], .block-item') : null;
+        const container = node ? node.closest(
+            '.mini-table td, .mini-table th, .static-text-display, [contenteditable="true"], .block-item') : null;
         if (container) {
             container.classList.add('has-search-match');
-            container.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+            container.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center',
+                inline: 'nearest'
+            });
         }
     }
 
@@ -1677,7 +1685,9 @@
 
                 range.deleteContents();
                 range.insertNode(document.createTextNode(replaceTerm));
-            } catch (e) { /* bỏ qua range không hợp lệ */ }
+            } catch (e) {
+                /* bỏ qua range không hợp lệ */
+            }
         }
 
         dirtyContainers.forEach(container => {
@@ -1700,7 +1710,7 @@
 
     // Xóa highlight khi đóng modal
     document.addEventListener('DOMContentLoaded', () => {
-        $('#searchReplaceModal').on('hidden.bs.modal', function () {
+        $('#searchReplaceModal').on('hidden.bs.modal', function() {
             _clearHighlights();
             _srState.matches = [];
             _srState.currentIndex = -1;
@@ -2653,7 +2663,8 @@
                     class = "table-header-cell"
                     style =
                         "width: ${c.width || 'auto'}; background-color: ${bg}; text-align: ${align}; font-weight: ${fw}; font-style: ${fs}; text-decoration: ${td}; font-size: ${fsz}; color: ${tc}; writing-mode: ${wm};" >
-                        < div class = "header-content"
+                        <
+                        div class = "header-content"
                     style =
                         "transform: ${tf}; transform-origin: center center; display: inline-block; width: 100%;" >
                         $ {
@@ -3204,7 +3215,7 @@
 
                 // Đảm bảo cấu trúc đồng nhất với Server (cell_id = 'default' cho các biến đơn)
                 if (typeof window.executionValues[fieldId] !== 'object' || window.executionValues[
-                    fieldId] === null) {
+                        fieldId] === null) {
                     window.executionValues[fieldId] = {};
                 }
                 window.executionValues[fieldId]['default'] = finalValue;
@@ -3238,7 +3249,7 @@
         const selection = window.getSelection().toString().trim();
         if (!selection) {
             Swal.fire('Lỗi', 'Vui lòng bôi đen (chọn) một từ viết tắt trong tài liệu trước khi bấm nút này.',
-            'warning');
+                'warning');
             return;
         }
 
@@ -3565,7 +3576,7 @@
             // Fallback: Tìm thẻ span trong table cell để lấy data-freq (Hỗ trợ chế độ Execute)
             if (!itemFreq) {
                 const cellBadge = document.querySelector(
-                `td[data-row="${r+1}"][data-col="${c}"] .execution-badge.time`);
+                    `td[data-row="${r+1}"][data-col="${c}"] .execution-badge.time`);
                 if (cellBadge && cellBadge.getAttribute('data-freq')) {
                     itemFreq = parseInt(cellBadge.getAttribute('data-freq'));
                 }
@@ -3862,7 +3873,7 @@
                     if (typeof toastr !== 'undefined') {
                         toastr.success(
                             `Liên kết thành công tài liệu: ${response.fileName} (Version ${response.version})`
-                            );
+                        );
                     }
                 } else {
                     const errorMsg = (response && response.message) ? response.message :
@@ -4016,7 +4027,7 @@
                                 minute: '2-digit'
                             });
                         if (!window.executionValues[blockId]._meta) window.executionValues[blockId]
-                        ._meta = {};
+                            ._meta = {};
                         window.executionValues[blockId]._meta[cellKey] = {
                             by: data.fullName || '',
                             at: formattedTime
@@ -4341,7 +4352,7 @@
                 insertIndex = currentIdx + 1;
                 const currentItem = items[currentIdx];
                 targetSectionId = currentItem.section_id || (currentItem.type === 'section' ? currentItem.id :
-                null);
+                    null);
             }
         } else if (window.activeSectionId) {
             const secIdx = items.findIndex(item => item.type === 'section' && item.id === window.activeSectionId);
@@ -4422,7 +4433,8 @@
                     if (!word) return '';
                     const letterIdx = word.search(letterRegex);
                     if (letterIdx !== -1) {
-                        return word.substring(0, letterIdx) + word.charAt(letterIdx).toUpperCase() + word.substring(letterIdx + 1);
+                        return word.substring(0, letterIdx) + word.charAt(letterIdx).toUpperCase() + word
+                            .substring(letterIdx + 1);
                     }
                     return word;
                 }).join(' ');
@@ -4435,7 +4447,8 @@
                     if (s) {
                         const letterIdx = s.search(letterRegex);
                         if (letterIdx !== -1) {
-                            parts[i] = s.substring(0, letterIdx) + s.charAt(letterIdx).toUpperCase() + s.substring(letterIdx + 1);
+                            parts[i] = s.substring(0, letterIdx) + s.charAt(letterIdx).toUpperCase() + s.substring(
+                                letterIdx + 1);
                         } else if (s.length > 0) {
                             parts[i] = s.charAt(0).toUpperCase() + s.slice(1);
                         }
@@ -4460,6 +4473,7 @@
      */
     function modifyTextNodesInFragment(fragment, caseType) {
         const textNodes = [];
+
         function traverse(node) {
             if (node.nodeType === Node.TEXT_NODE) {
                 textNodes.push(node);
@@ -4512,14 +4526,14 @@
             saveState();
             let range = selection.getRangeAt(0);
             let fragment = range.extractContents();
-            
+
             modifyTextNodesInFragment(fragment, caseType);
-            
+
             let firstChild = fragment.firstChild;
             let lastChild = fragment.lastChild;
-            
+
             range.insertNode(fragment);
-            
+
             // Chọn lại vùng văn bản đã thay đổi để giữ selection cho người dùng
             if (firstChild && lastChild) {
                 let newRange = document.createRange();
@@ -4570,7 +4584,8 @@
                                     hidden: false
                                 };
                             } else {
-                                item.data[rIdx][c].content = changeHtmlStringCase(item.data[rIdx][c].content, caseType);
+                                item.data[rIdx][c].content = changeHtmlStringCase(item.data[rIdx][c]
+                                    .content, caseType);
                             }
                         }
                     }
@@ -4619,4 +4634,465 @@
             }
         }
     };
+
+    // ============================================================
+    // BULLET / LINE PREFIX ENGINE
+    // Chèn hoặc xóa ký tự đầu dòng cho từng dòng HTML.
+    // Không dùng <ul>/<li> để đảm bảo in đúng định dạng.
+    // ============================================================
+
+    /** Danh sách các ký tự bullet đã biết (để nhận dạng và xóa). */
+    const _KNOWN_BULLETS = ['•', '○', '■', '□', '➤', '✓', '✗', '◆', '–'];
+    /** Regex nhận dạng bullet đầu dòng (bullet ký tự HOẶC số thứ tự "1. ") */
+    const _BULLET_PREFIX_RE = /^(\s*)(•|○|■|□|➤|✓|✗|◆|–|\d+\.\s)/;
+
+    /**
+     * Xóa prefix bullet/số khỏi một chuỗi text (plain text, không phải HTML).
+     */
+    function _stripBulletFromText(text) {
+        return text.replace(_BULLET_PREFIX_RE, '$1');
+    }
+
+    /**
+     * Xóa prefix bullet/số khỏi nội dung HTML của một dòng.
+     * Chỉ xử lý text node đầu tiên, giữ nguyên các thẻ HTML khác.
+     */
+    function _stripBulletFromLineHtml(html) {
+        const div = document.createElement('div');
+        div.innerHTML = html;
+        // Tìm text node đầu tiên có nội dung
+        const walker = document.createTreeWalker(div, NodeFilter.SHOW_TEXT);
+        let node;
+        while ((node = walker.nextNode())) {
+            if (node.nodeValue && node.nodeValue.trim()) {
+                node.nodeValue = _stripBulletFromText(node.nodeValue);
+                break;
+            }
+        }
+        return div.innerHTML;
+    }
+
+    /**
+     * Thêm prefix bullet/số vào đầu nội dung HTML của một dòng.
+     * @param {string} html - HTML của dòng
+     * @param {string} bullet - Ký tự bullet hoặc 'none'/'ordered'
+     * @param {number} orderNum - Số thứ tự (dùng khi bullet === 'ordered')
+     */
+    function _addBulletToLineHtml(html, bullet, orderNum = 1) {
+        if (bullet === 'none') return _stripBulletFromLineHtml(html);
+
+        const prefix = bullet === 'ordered' ? `${orderNum}. ` : `${bullet} `;
+        const stripped = _stripBulletFromLineHtml(html);
+
+        const div = document.createElement('div');
+        div.innerHTML = stripped;
+        // Tìm và prefix text node đầu tiên
+        const walker = document.createTreeWalker(div, NodeFilter.SHOW_TEXT);
+        let node;
+        while ((node = walker.nextNode())) {
+            if (node.nodeValue && node.nodeValue.trim()) {
+                node.nodeValue = prefix + node.nodeValue;
+                break;
+            }
+        }
+        // Nếu không có text node (dòng trống), chèn text node mới
+        if (!walker.currentNode || !div.textContent.startsWith(prefix)) {
+            div.insertBefore(document.createTextNode(prefix), div.firstChild);
+        }
+        return div.innerHTML;
+    }
+
+    /**
+     * Xử lý bullet cho một chuỗi HTML nhiều dòng (nội dung của static-text block).
+     * Mỗi "dòng" là một thẻ <div>, <p>, <br>, hoặc text node trực tiếp.
+     * @param {string} html
+     * @param {string} bullet
+     * @returns {string} HTML đã được xử lý
+     */
+    function _applyBulletToHtmlContent(html, bullet) {
+        const container = document.createElement('div');
+        container.innerHTML = html || '';
+
+        // Thu thập các "dòng" — mỗi child trực tiếp là một dòng
+        const children = Array.from(container.childNodes);
+
+        // Nếu toàn bộ nội dung là text node phẳng (không có div/p con)
+        // → bọc thành div trước
+        const hasBlockChildren = children.some(n =>
+            n.nodeType === Node.ELEMENT_NODE && /^(div|p|h[1-6]|li)$/i.test(n.tagName)
+        );
+
+        if (!hasBlockChildren) {
+            // Nội dung phẳng: xử lý toàn bộ như 1 dòng
+            container.innerHTML = _addBulletToLineHtml(container.innerHTML, bullet, 1);
+            return container.innerHTML;
+        }
+
+        // Có các block children: xử lý từng block
+        let orderedCounter = 1;
+        children.forEach(child => {
+            if (child.nodeType === Node.ELEMENT_NODE) {
+                const outerTag = child.tagName.toLowerCase();
+                const inner = child.innerHTML;
+                child.innerHTML = _addBulletToLineHtml(inner, bullet, orderedCounter);
+                if (bullet === 'ordered') orderedCounter++;
+            }
+            // Text node trực tiếp: bỏ qua (thường là whitespace)
+        });
+        return container.innerHTML;
+    }
+
+    /**
+     * Hàm chính: Áp dụng bullet/prefix đầu dòng dựa trên trạng thái selection.
+     * Hỗ trợ toggle: nếu đã có cùng bullet → xóa đi.
+     * @param {string} bullet - Ký tự bullet, 'ordered', hoặc 'none'
+     */
+    window.applyLineBullet = function(bullet) {
+        // Đóng dropdown
+        if (window.jQuery) $('.dropdown-menu.show').removeClass('show');
+
+        const selectedCells = document.querySelectorAll('.selected-cell');
+
+        // --- TH 1: Có contenteditable đang focus với text selection hoặc cursor ---
+        const activeEl = document.activeElement;
+        const editableEl = activeEl && activeEl.closest('[contenteditable="true"]') ? activeEl : null;
+        const focusedEditable = editableEl || document.querySelector('[contenteditable="true"]:focus');
+
+        if (focusedEditable && selectedCells.length === 0) {
+            saveState();
+
+            // Lấy tất cả các dòng (div/p) trong editable
+            const lines = Array.from(focusedEditable.querySelectorAll('div, p'));
+
+            // Nếu không có dòng block, xử lý toàn bộ innerHTML
+            if (lines.length === 0) {
+                focusedEditable.innerHTML = _applyBulletToHtmlContent(focusedEditable.innerHTML, bullet);
+            } else {
+                let orderedCounter = 1;
+                lines.forEach(line => {
+                    line.innerHTML = _addBulletToLineHtml(line.innerHTML, bullet, orderedCounter);
+                    if (bullet === 'ordered') orderedCounter++;
+                });
+            }
+
+            // Sync data
+            if (focusedEditable.oninput) focusedEditable.oninput();
+            const blockItem = focusedEditable.closest('.block-item');
+            if (blockItem) {
+                const item = items.find(i => i.id === blockItem.getAttribute('data-id'));
+                if (item) item.dirty = true;
+            }
+            saveStateDebounced();
+            return;
+        }
+
+        // --- TH 2: Các ô bảng đang được chọn ---
+        if (selectedCells.length > 0) {
+            saveState();
+            selectedCells.forEach(cell => {
+                const r = parseInt(cell.dataset.row);
+                const c = parseInt(cell.dataset.col);
+                const table = cell.closest('.mini-table');
+                const blockItem = table ? table.closest('.block-item') : null;
+                const itemId = blockItem ? blockItem.getAttribute('data-id') : null;
+                const item = items.find(i => i.id === itemId);
+                if (!item) return;
+
+                if (r === 0) {
+                    item.columns[c].label = _applyBulletToHtmlContent(item.columns[c].label, bullet);
+                } else {
+                    const rIdx = r - 1;
+                    if (item.data && item.data[rIdx] && item.data[rIdx][c] !== undefined) {
+                        if (typeof item.data[rIdx][c] !== 'object') {
+                            item.data[rIdx][c] = {
+                                content: _applyBulletToHtmlContent(item.data[rIdx][c], bullet),
+                                rs: 1,
+                                cs: 1,
+                                hidden: false
+                            };
+                        } else {
+                            item.data[rIdx][c].content = _applyBulletToHtmlContent(
+                                item.data[rIdx][c].content, bullet
+                            );
+                        }
+                    }
+                }
+            });
+            renderBlocks();
+            saveStateDebounced();
+            return;
+        }
+
+        // --- TH 3: Một khối (block) đang được chọn ---
+        if (selectedId) {
+            const item = items.find(i => i.id === selectedId);
+            if (!item) return;
+            saveState();
+
+            if (item.type === 'static-text') {
+                item.content = _applyBulletToHtmlContent(item.content, bullet);
+                item.dirty = true;
+                renderBlocks();
+                saveStateDebounced();
+            } else if (item.type === 'table') {
+                if (item.columns) {
+                    item.columns.forEach(col => {
+                        col.label = _applyBulletToHtmlContent(col.label, bullet);
+                    });
+                }
+                if (item.data) {
+                    for (let r = 0; r < item.data.length; r++) {
+                        let orderedCounter = 1;
+                        for (let c = 0; c < item.data[r].length; c++) {
+                            let cell = item.data[r][c];
+                            if (cell !== undefined && cell !== null) {
+                                if (typeof cell === 'object') {
+                                    cell.content = _applyBulletToHtmlContent(cell.content, bullet);
+                                } else {
+                                    item.data[r][c] = _applyBulletToHtmlContent(cell, bullet);
+                                }
+                            }
+                            if (bullet === 'ordered') orderedCounter++;
+                        }
+                    }
+                }
+                item.dirty = true;
+                renderBlocks();
+            }
+            return;
+        }
+
+        toastr.info('Vui lòng chọn một khối, ô bảng hoặc đặt con trỏ vào vùng văn bản trước.');
+    };
+
+    /**
+     * CHỨC NĂNG THÊM GHI CHÚ (ADD NOTE)
+     */
+    function escapeHtml(text) {
+        if (!text) return '';
+        return text.toString()
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    function syncBlockContent(node) {
+        if (!node) return;
+        const blockEl = node.closest('.block-item');
+        if (!blockEl) return;
+
+        const blockId = blockEl.getAttribute('data-id');
+        const item = items.find(i => i.id === blockId);
+        if (!item) return;
+
+        item.dirty = true;
+
+        if (item.type === 'static-text') {
+            const displayEl = blockEl.querySelector('.static-text-display');
+            if (displayEl) {
+                item.content = displayEl.innerHTML;
+            }
+        } else if (item.type === 'table') {
+            const tdEl = node.closest('td, th');
+            if (tdEl) {
+                const rStr = tdEl.getAttribute('data-row');
+                const cStr = tdEl.getAttribute('data-col');
+                if (rStr !== null && cStr !== null) {
+                    const r = parseInt(rStr) - 1;
+                    const c = parseInt(cStr);
+                    if (item.data && item.data[r] && item.data[r][c] !== undefined) {
+                        if (typeof item.data[r][c] === 'object' && item.data[r][c] !== null) {
+                            item.data[r][c].content = tdEl.innerHTML;
+                        } else {
+                            item.data[r][c] = {
+                                content: tdEl.innerHTML,
+                                rs: 1,
+                                cs: 1,
+                                hidden: false
+                            };
+                        }
+                    }
+                }
+            }
+        }
+
+        if (typeof saveStateDebounced === 'function') {
+            saveStateDebounced();
+        }
+    }
+
+    window.addNote = function() {
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) {
+            toastr.warning('Vui lòng đặt con trỏ ở vị trí bất kỳ trong vùng soạn thảo');
+            return;
+        }
+
+        const range = sel.getRangeAt(0);
+        let node = sel.anchorNode;
+        if (!node) {
+            toastr.warning('Vui lòng đặt con trỏ ở vị trí bất kỳ trong vùng soạn thảo');
+            return;
+        }
+        if (node.nodeType === 3) node = node.parentNode;
+
+        const editorContent = document.getElementById('editor-content');
+        if (!editorContent || !editorContent.contains(node)) {
+            toastr.warning('Vui lòng đặt con trỏ ở vị trí bất kỳ trong vùng soạn thảo');
+            return;
+        }
+
+        const editableContainer = node.closest('[contenteditable="true"]');
+        if (!editableContainer) {
+            toastr.warning('Vui lòng đặt con trỏ ở vị trí bất kỳ trong vùng soạn thảo');
+            return;
+        }
+
+        const savedRange = range.cloneRange();
+
+        Swal.fire({
+            title: 'Thêm ghi chú',
+            input: 'textarea',
+            inputPlaceholder: 'Nhập nội dung ghi chú...',
+            showCancelButton: true,
+            confirmButtonText: 'Lưu',
+            cancelButtonText: 'Hủy',
+            confirmButtonColor: '#f59e0b',
+            cancelButtonColor: '#6c757d',
+            inputValidator: (value) => {
+                if (!value.trim()) {
+                    return 'Nội dung ghi chú không được để trống!';
+                }
+            }
+        }).then((result) => {
+            if (result.value) {
+                const noteText = result.value.trim();
+
+                // Restore range
+                sel.removeAllRanges();
+                sel.addRange(savedRange);
+
+                // Create badge
+                const badge = document.createElement('span');
+                badge.contentEditable = "false";
+                badge.className = "ebmr-note-badge";
+                badge.setAttribute('data-note', noteText);
+                badge.setAttribute('onclick', 'window.viewNoteBadge(event, this)');
+                badge.title = `Ghi chú: ${noteText}`;
+                badge.innerHTML = `<i class="fas fa-sticky-note"></i>`;
+
+                const zeroWidthSpace = document.createTextNode('\u200B');
+
+                savedRange.deleteContents();
+                savedRange.insertNode(zeroWidthSpace);
+                savedRange.insertNode(badge);
+                savedRange.setStartAfter(zeroWidthSpace);
+                savedRange.collapse(true);
+
+                sel.removeAllRanges();
+                sel.addRange(savedRange);
+
+                // Sync content
+                syncBlockContent(badge);
+
+                toastr.success('Đã thêm ghi chú thành công');
+            }
+        });
+    };
+
+    window.viewNoteBadge = function(event, badgeEl) {
+        event.stopPropagation();
+        event.preventDefault();
+
+        const noteText = badgeEl.getAttribute('data-note') || '';
+
+        if (window.isExecutionMode) {
+            Swal.fire({
+                title: 'Nội dung ghi chú',
+                html: `<div style="border: 1px solid #f59e0b; padding: 12px; border-radius: 6px; background-color: #fffbeb; font-size: 0.95rem; line-height: 1.5; white-space: pre-wrap; text-align: left;">${escapeHtml(noteText)}</div>`,
+                showConfirmButton: false,
+                allowOutsideClick: true
+            });
+            return;
+        }
+
+        Swal.fire({
+            title: 'Chi tiết ghi chú',
+            html: `<div style="border: 1px solid #f59e0b; padding: 12px; border-radius: 6px; background-color: #fffbeb; font-size: 0.95rem; line-height: 1.5; white-space: pre-wrap; text-align: left; margin-bottom: 10px;">${escapeHtml(noteText)}</div>`,
+            showConfirmButton: true,
+            showDenyButton: true,
+            showCancelButton: false,
+            confirmButtonText: 'Điều chỉnh ghi chú',
+            denyButtonText: 'Xóa ghi chú',
+            confirmButtonColor: '#3085d6',
+            denyButtonColor: '#d33',
+            allowOutsideClick: true
+        }).then((result) => {
+            if (result.isConfirmed) {
+                Swal.fire({
+                    title: 'Điều chỉnh ghi chú',
+                    input: 'textarea',
+                    inputValue: noteText,
+                    inputPlaceholder: 'Nhập nội dung ghi chú...',
+                    showCancelButton: true,
+                    confirmButtonText: 'Lưu',
+                    cancelButtonText: 'Hủy',
+                    confirmButtonColor: '#f59e0b',
+                    cancelButtonColor: '#6c757d',
+                    inputValidator: (value) => {
+                        if (!value.trim()) {
+                            return 'Nội dung ghi chú không được để trống!';
+                        }
+                    }
+                }).then((editResult) => {
+                    if (editResult.value) {
+                        const newContent = editResult.value.trim();
+                        badgeEl.setAttribute('data-note', newContent);
+                        badgeEl.title = `Ghi chú: ${newContent}`;
+
+                        syncBlockContent(badgeEl);
+                        toastr.success('Đã cập nhật ghi chú');
+                    }
+                });
+            } else if (result.isDenied) {
+                Swal.fire({
+                    title: 'Xóa ghi chú này?',
+                    text: 'Hành động này sẽ gỡ bỏ ghi chú tại vị trí này.',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#d33',
+                    confirmButtonText: 'Xóa',
+                    cancelButtonText: 'Hủy'
+                }).then((deleteConfirm) => {
+                    if (deleteConfirm.value) {
+                        const parent = badgeEl.parentNode;
+                        badgeEl.remove();
+                        if (parent) {
+                            syncBlockContent(parent);
+                        }
+                        toastr.success('Đã xóa ghi chú');
+                    }
+                });
+            }
+        });
+    };
+
+    // Chặn mousedown trên badge ghi chú để tránh kích hoạt chọn khối/ô trong editor
+    document.addEventListener('mousedown', function(e) {
+        if (e.target.closest('.ebmr-note-badge')) {
+            e.stopPropagation();
+        }
+    }, true);
+
+    // Lắng nghe sự kiện click vào badge ghi chú (sử dụng Capture Phase để bỏ qua stopPropagation của block)
+    document.addEventListener('click', function(e) {
+        const badge = e.target.closest('.ebmr-note-badge');
+        if (badge) {
+            e.stopPropagation();
+            e.preventDefault();
+            window.viewNoteBadge(e, badge);
+        }
+    }, true);
 </script>

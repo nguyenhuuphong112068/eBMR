@@ -1023,6 +1023,47 @@
         box-shadow: none !important;
     }
 
+    /* Note Badge Styling */
+    .ebmr-note-badge {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        background-color: #f59e0b !important; /* Màu vàng cam */
+        color: #ffffff !important;
+        border-radius: 4px !important;
+        font-size: 10px !important;
+        padding: 1px 4px !important;
+        margin: 0 2px !important;
+        cursor: pointer !important;
+        vertical-align: super !important;
+        user-select: none !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.15) !important;
+        transition: background-color 0.2s, transform 0.2s !important;
+        line-height: 1 !important;
+    }
+    .ebmr-note-badge:hover {
+        background-color: #d97706 !important;
+        transform: scale(1.1) !important;
+        text-decoration: none !important;
+    }
+    @media print {
+        .ebmr-note-badge {
+            display: inline-flex !important;
+            background-color: transparent !important;
+            color: #d97706 !important;
+            border: 1px dashed #d97706 !important;
+            padding: 1px 2px !important;
+            font-size: 9px !important;
+            box-shadow: none !important;
+        }
+        .ebmr-note-badge::after {
+            content: " [" attr(data-note) "] " !important;
+            font-size: 9px !important;
+            color: #475569 !important;
+            font-weight: normal !important;
+        }
+    }
+
     .page-break-divider {
         height: 25px;
         background: #f1f3f4 !important;
