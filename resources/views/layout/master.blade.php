@@ -2063,7 +2063,7 @@
         })();
     </script>
     <script src="{{ asset('js/tribute.min.js') }}"></script>
-    @include('pages.user.user.signature_setup')
+    @include('pages.User.user.signature_setup')
 </body>
 
 </html>
