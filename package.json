@@ -43,6 +43,7 @@
         "react-selecto": "^1.26.3",
         "react-transition-group": "^4.4.5",
         "sweetalert2": "^11.26.3",
-        "sweetalert2-react-content": "^5.1.0"
+        "sweetalert2-react-content": "^5.1.0",
+        "ws": "^8.21.0"
     }
 }

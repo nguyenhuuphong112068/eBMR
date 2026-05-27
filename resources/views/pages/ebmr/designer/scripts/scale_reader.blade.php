@@ -412,7 +412,10 @@ window.ScaleManager = (function () {
             if (connType === 'websocket') {
                 const ip = config.ip;
                 const port = config.port;
-                const wsUrl = `ws://${ip}:${port}`;
+                const bridgeIp = window.location.hostname;
+                const wsUrl = (ip !== 'localhost' && ip !== '127.0.0.1' && ip !== bridgeIp)
+                    ? `ws://${bridgeIp}:8090/?targetIp=${ip}&targetPort=${port || 4001}`
+                    : `ws://${ip}:${port}`;
 
                 if (_socket) {
                     _log('Đã kết nối WebSocket rồi! Vui lòng ngắt kết nối trước.', 'error');
@@ -846,7 +849,7 @@ window.openScaleConnectionModal = function(fieldId) {
                 // Đóng modal
                 const modalEl = document.getElementById('scaleConnectionModal');
                 if (modalEl) {
-                    if (typeof bootstrap !== 'undefined') {
+                    if (typeof bootstrap !== 'undefined' && typeof bootstrap.Modal !== 'undefined' && typeof bootstrap.Modal.getInstance === 'function') {
                         const inst = bootstrap.Modal.getInstance(modalEl) || (bootstrap.Modal.getOrCreateInstance ? bootstrap.Modal.getOrCreateInstance(modalEl) : null);
                         if (inst) inst.hide();
                         else if (typeof $ !== 'undefined') {
@@ -873,10 +876,10 @@ window.openScaleConnectionModal = function(fieldId) {
                     window._scaleModalUnsubscribe = null;
                 }
             };
-            if (typeof bootstrap !== 'undefined') {
-                modalEl.addEventListener('hidden.bs.modal', cleanup);
-            } else if (typeof $ !== 'undefined') {
+            if (typeof $ !== 'undefined') {
                 $(modalEl).on('hidden.bs.modal', cleanup);
+            } else if (typeof bootstrap !== 'undefined' && typeof bootstrap.Modal !== 'undefined') {
+                modalEl.addEventListener('hidden.bs.modal', cleanup);
             }
         }
     }
@@ -888,7 +891,7 @@ window.openScaleConnectionModal = function(fieldId) {
         isModalVisible = modalEl.classList.contains('show');
     }
     if (!isModalVisible) {
-        if (typeof bootstrap !== 'undefined') {
+        if (typeof bootstrap !== 'undefined' && typeof bootstrap.Modal !== 'undefined') {
             const modal = bootstrap.Modal.getOrCreateInstance ? bootstrap.Modal.getOrCreateInstance(modalEl) : new bootstrap.Modal(modalEl);
             modal.show();
         } else if (typeof $ !== 'undefined') {
@@ -1006,7 +1009,7 @@ window.readScaleFromModal = function() {
             // Đóng modal
             const modalEl = document.getElementById('scaleConnectionModal');
             if (modalEl) {
-                if (typeof bootstrap !== 'undefined') {
+                if (typeof bootstrap !== 'undefined' && typeof bootstrap.Modal !== 'undefined' && typeof bootstrap.Modal.getInstance === 'function') {
                     const inst = bootstrap.Modal.getInstance(modalEl);
                     if (inst) inst.hide();
                     else {
