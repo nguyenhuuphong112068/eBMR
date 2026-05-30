@@ -21,6 +21,8 @@ Route::group(['prefix' => 'ebmr', 'as' => 'pages.ebmr.'], function () {
     Route::get('/templates/{id}/testing-data', [EbmrTemplateController::class, 'getTestingData'])->name('getTestingData');
     Route::post('/templates/{id}/testing-data', [EbmrTemplateController::class, 'saveTestingData'])->name('saveTestingData');
     Route::post('/templates/testing-data/upload-image', [EbmrTemplateController::class, 'uploadTestingImage'])->name('uploadTestingImage');
+    Route::get('/templates/{id}/rooms', [EbmrTemplateController::class, 'getRoomsConfig'])->name('getRoomsConfig');
+    Route::post('/templates/{id}/rooms', [EbmrTemplateController::class, 'saveRoomsConfig'])->name('saveRoomsConfig');
 
     // 2. Designer & Content
     Route::get('/designer/{id?}', [EbmrDesignerController::class, 'designer'])->name('designer');

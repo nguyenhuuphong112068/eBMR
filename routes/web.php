@@ -11,6 +11,7 @@ require_once(__DIR__ . '/ChatRoute.php');
 require_once(__DIR__ . '/ebmrRoute.php');
 
 require_once(__DIR__ . '/categoryRoute.php');
+require_once(__DIR__ . '/manuEnvRoute.php');
 
 // require_once(__DIR__ . '/ImportRoute.php');
 // require_once(__DIR__ . '/SchedualRoute.php');

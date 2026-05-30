@@ -40,6 +40,9 @@
                         <th>Tên Thiết Bị</th>
                         <th>Loại & Kết Nối</th>
                         <th>Công Đoạn</th>
+                        <th>SOP Vận Hành</th>
+                        <th>SOP Vệ Sinh</th>
+                        <th>Phân Loại</th>
                         <th>Người Tạo</th>
                         <th>Ngày Tạo</th>
                         <th class="text-center" style="width: 150px;">Thao Tác</th>
@@ -72,6 +75,15 @@
                                     <span class="text-muted">-</span>
                                 @endif
                             </td>
+                            <td>{{ $data->operation_SOP_code ?? '-' }}</td>
+                            <td>{{ $data->clearing_SOP_code ?? '-' }}</td>
+                            <td>
+                                @if($data->is_Portable_equipment)
+                                    <span class="badge bg-warning text-dark px-2 py-1 small fw-bold">Di Động</span>
+                                @else
+                                    <span class="badge bg-light text-dark border px-2 py-1 small fw-bold">Cố Định</span>
+                                @endif
+                            </td>
                             <td><span class="small fw-bold">{{ $data->created_by ?? '-' }}</span></td>
                             <td><span class="text-muted small">{{ \Carbon\Carbon::parse($data->created_at)->format('d/m/Y') }}</span></td>
                             <td class="text-center align-middle">
@@ -90,12 +102,15 @@
                                         data-data_bits="{{ $data->data_bits }}"
                                         data-parity="{{ $data->parity }}"
                                         data-stop_bits="{{ $data->stop_bits }}"
+                                        data-operation_sop_code="{{ $data->operation_SOP_code }}"
+                                        data-clearing_sop_code="{{ $data->clearing_SOP_code }}"
+                                        data-is_portable_equipment="{{ $data->is_Portable_equipment }}"
                                         data-toggle="modal" 
                                         data-target="#updateModal" title="Sửa">
                                         <i class="fas fa-pen"></i>
                                     </button>
 
-                                    <form class="form-delete d-inline" action="{{ route('pages.materData.instrument.delete') }}" method="POST">
+                                    <form class="form-delete d-inline" action="{{ route('pages.manu_env.equipment.delete') }}" method="POST">
                                         @csrf
                                         <input type="hidden" name="id" value="{{ $data->id }}">
                                         <button type="submit" class="btn btn-sm btn-icon btn-light-danger border shadow-sm btn-delete-confirm" 
@@ -170,6 +185,11 @@
                 modal.find('#update_data_bits').val(button.data('data_bits') || 8);
                 modal.find('#update_parity').val(button.data('parity') || 'none');
                 modal.find('#update_stop_bits').val(button.data('stop_bits') || 1);
+                
+                // Populate SOP and portable fields
+                modal.find('#update_operation_SOP_code').val(button.data('operation_sop_code') || '');
+                modal.find('#update_clearing_SOP_code').val(button.data('clearing_sop_code') || '');
+                modal.find('#update_is_Portable_equipment').prop('checked', button.data('is_portable_equipment') == 1);
                 
                 // Trigger visibility updates in update modal
                 if (window.initUpdateModalScaleFields) {

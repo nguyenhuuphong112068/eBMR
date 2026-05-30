@@ -12,12 +12,4 @@
         <input type="hidden" name="storage_conditions" id="create_storage_conditions_input"
             value="{{ old('storage_conditions') }}">
     </div>
-    <div class="form-group mb-3 border-top pt-3">
-        <div class="custom-control custom-switch custom-switch-lg">
-            <input type="checkbox" class="custom-control-input" id="enable_recalculation" name="is_recalculation" value="1">
-            <label class="custom-control-label fw-bold text-navy" for="enable_recalculation" style="cursor: pointer;">
-                <i class="fas fa-calculator text-info me-1"></i> Thiết lập tính toán lại công thức
-            </label>
-        </div>
-    </div>
 </div>

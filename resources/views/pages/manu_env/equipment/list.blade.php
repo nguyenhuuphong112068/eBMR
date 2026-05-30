@@ -9,10 +9,10 @@
 @endsection
 
 @section('mainContent')
-    @include('pages.materData.Instrument.dataTable')
+    @include('pages.manu_env.equipment.dataTable')
 @endsection
 
 @section('model')
-    @include('pages.materData.Instrument.create')
-    @include('pages.materData.Instrument.update')
+    @include('pages.manu_env.equipment.create')
+    @include('pages.manu_env.equipment.update')
 @endsection

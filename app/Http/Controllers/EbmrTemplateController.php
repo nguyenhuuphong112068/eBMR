@@ -1204,5 +1204,147 @@ class EbmrTemplateController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Get rooms configuration for BMR template
+     */
+    public function getRoomsConfig($id)
+    {
+        try {
+            $template = DB::table('ebmr_templates')->where('id', $id)->first();
+            if (!$template) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Không tìm thấy hồ sơ mẫu.'
+                ], 404);
+            }
+
+            // Get present sections
+            $presentSectionIds = DB::table('ebmr_template_blocks')
+                ->where('template_id', $id)
+                ->whereNotNull('section_id')
+                ->distinct()
+                ->pluck('section_id');
+
+            $sectionsMaster = DB::table('sections')->get()->keyBy('code');
+            $sections = [];
+            foreach ($presentSectionIds as $sid) {
+                $parts = explode('_', $sid);
+                $code = end($parts);
+
+                // Only allow manufacturing stages 1 to 7
+                if (!is_numeric($code) || (int) $code < 1 || (int) $code > 7) {
+                    continue;
+                }
+
+                $sectionBlock = DB::table('ebmr_template_blocks')
+                    ->where('template_id', $id)
+                    ->where('section_id', $sid)
+                    ->where('type', 'section')
+                    ->first();
+
+                $label = 'N/A';
+                if ($sectionBlock) {
+                    $prop = json_decode($sectionBlock->properties);
+                    $label = $prop->label ?? 'N/A';
+                } else {
+                    $label = $sectionsMaster[$code]->name ?? ('Phân đoạn '.$code);
+                }
+
+                $sections[] = [
+                    'id' => $sid,
+                    'label' => $label,
+                    'code' => (int) $code,
+                ];
+            }
+
+            usort($sections, function ($a, $b) {
+                return $a['code'] <=> $b['code'];
+            });
+
+            // Get all rooms from pms connection
+            $rooms = DB::connection('pms')->table('room')
+                ->where('active', 1)
+                ->orderBy('code')
+                ->get();
+
+            // Get all conditions from local ebr database
+            $conditions = DB::table('manu_condition')
+                ->orderBy('name')
+                ->get();
+
+            // Get currently assigned rooms
+            $assignments = DB::table('ebmr_template_rooms')
+                ->where('template_id', $id)
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'template' => $template,
+                'sections' => $sections,
+                'rooms' => $rooms,
+                'conditions' => $conditions,
+                'assignments' => $assignments
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Lỗi khi tải cấu hình phòng: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Save rooms configuration for BMR template
+     */
+    public function saveRoomsConfig(Request $request, $id)
+    {
+        try {
+            $template = DB::table('ebmr_templates')->where('id', $id)->first();
+            if (!$template) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Không tìm thấy hồ sơ mẫu.'
+                ], 404);
+            }
+
+            $mappings = $request->input('mappings', []);
+
+            DB::transaction(function () use ($id, $mappings) {
+                // Delete old mappings
+                DB::table('ebmr_template_rooms')->where('template_id', $id)->delete();
+
+                // Insert new mappings
+                $toInsert = [];
+                foreach ($mappings as $map) {
+                    if (empty($map['section_id']) || empty($map['room_id'])) {
+                        continue;
+                    }
+                    $toInsert[] = [
+                        'template_id' => $id,
+                        'section_id' => $map['section_id'],
+                        'room_id' => $map['room_id'],
+                        'condition_id' => !empty($map['condition_id']) ? $map['condition_id'] : null,
+                        'created_at' => now(),
+                        'updated_at' => now()
+                    ];
+                }
+
+                if (!empty($toInsert)) {
+                    DB::table('ebmr_template_rooms')->insert($toInsert);
+                }
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Lưu khai báo phòng sản xuất thành công!'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Lỗi khi lưu cấu hình phòng: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }
 

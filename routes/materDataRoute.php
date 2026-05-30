@@ -4,7 +4,6 @@ use App\Http\Controllers\Pages\MaterData\UnitController;
 use App\Http\Controllers\Pages\MaterData\MarketController;
 use App\Http\Controllers\Pages\MaterData\ProductNameController;
 use App\Http\Controllers\Pages\MaterData\SpecificationController;
-use App\Http\Controllers\Pages\MaterData\InstrumentController;
 use App\Http\Controllers\UploadDataController;
 use App\Http\Middleware\CheckLogin;
 use Illuminate\Support\Facades\Route;
@@ -60,10 +59,5 @@ Route::prefix('/materData')
             Route::post('update', 'update')->name('update');
             Route::post('delete', 'delete')->name('delete');
         });
-        Route::prefix('/instrument')->name('instrument.')->controller(InstrumentController::class)->group(function () {
-            Route::get('', 'index')->name('list');
-            Route::post('store', 'store')->name('store');
-            Route::post('update', 'update')->name('update');
-            Route::post('delete', 'delete')->name('delete');
-        });
+        
     });

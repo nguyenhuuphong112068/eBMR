@@ -1,13 +1,13 @@
 <?php
 
-namespace App\Http\Controllers\Pages\MaterData;
+namespace App\Http\Controllers\Pages\ManuEnv;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
-class InstrumentController extends Controller
+class EquipmentController extends Controller
 {
     public static $stages = [
         1 => 'Cân',
@@ -22,8 +22,8 @@ class InstrumentController extends Controller
     public function index()
     {
         $datas = DB::table('instrument')->orderBy('code', 'asc')->get();
-        session()->put(['title' => 'DỮ LIỆU GỐC - THIẾT BỊ SẢN XUẤT']);
-        return view('pages.materData.Instrument.list', [
+        session()->put(['title' => 'MÔI TRƯỜNG SẢN XUẤT - THIẾT BỊ SẢN XUẤT']);
+        return view('pages.manu_env.equipment.list', [
             'datas' => $datas,
             'stages' => self::$stages
         ]);
@@ -44,6 +44,9 @@ class InstrumentController extends Controller
             'data_bits' => 'nullable|integer',
             'parity' => 'nullable|in:none,even,odd',
             'stop_bits' => 'nullable|integer',
+            'operation_SOP_code' => 'nullable|string|max:50',
+            'clearing_SOP_code' => 'nullable|string|max:50',
+            'is_Portable_equipment' => 'nullable|boolean',
         ], [
             'code.required' => 'Vui lòng nhập Mã Thiết Bị',
             'code.unique' => 'Mã Thiết Bị đã tồn tại.',
@@ -76,6 +79,9 @@ class InstrumentController extends Controller
             'data_bits' => ($request->type === 'scale' && $request->connection_type === 'serial') ? $request->data_bits : null,
             'parity' => ($request->type === 'scale' && $request->connection_type === 'serial') ? $request->parity : null,
             'stop_bits' => ($request->type === 'scale' && $request->connection_type === 'serial') ? $request->stop_bits : null,
+            'operation_SOP_code' => $request->operation_SOP_code,
+            'clearing_SOP_code' => $request->clearing_SOP_code,
+            'is_Portable_equipment' => $request->has('is_Portable_equipment') ? 1 : 0,
             'created_by' => session('user')['fullName'] ?? 'Admin',
             'created_at' => now(),
             'updated_at' => now(),
@@ -98,6 +104,9 @@ class InstrumentController extends Controller
             'data_bits' => 'nullable|integer',
             'parity' => 'nullable|in:none,even,odd',
             'stop_bits' => 'nullable|integer',
+            'operation_SOP_code' => 'nullable|string|max:50',
+            'clearing_SOP_code' => 'nullable|string|max:50',
+            'is_Portable_equipment' => 'nullable|boolean',
         ], [
             'code.required' => 'Vui lòng nhập Mã Thiết Bị',
             'code.unique' => 'Mã Thiết Bị đã tồn tại.',
@@ -130,6 +139,9 @@ class InstrumentController extends Controller
             'data_bits' => ($request->type === 'scale' && $request->connection_type === 'serial') ? $request->data_bits : null,
             'parity' => ($request->type === 'scale' && $request->connection_type === 'serial') ? $request->parity : null,
             'stop_bits' => ($request->type === 'scale' && $request->connection_type === 'serial') ? $request->stop_bits : null,
+            'operation_SOP_code' => $request->operation_SOP_code,
+            'clearing_SOP_code' => $request->clearing_SOP_code,
+            'is_Portable_equipment' => $request->has('is_Portable_equipment') ? 1 : 0,
             'updated_at' => now(),
         ]);
 

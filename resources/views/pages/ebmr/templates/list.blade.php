@@ -95,48 +95,48 @@
                                                 <td>{{ $t->effective_date ? \Carbon\Carbon::parse($t->effective_date)->format('d/m/Y') : '-' }}
                                                 </td>
                                                 <td class="text-center">
-                                                    <div class="btn-group shadow-sm rounded-pill overflow-hidden">
-                                                        @if ($t->status === 'draft')
-                                                            <a href="{{ route('pages.ebmr.designer', $t->id) }}"
-                                                                class="btn btn-sm btn-white text-navy"
-                                                                title="Thiết kế nội dung">
-                                                                <i class="fas fa-pencil-ruler"></i> Thiết kế
-                                                            </a>
-                                                            <button class="btn btn-sm btn-white text-success"
-                                                                onclick="openWorkflowModal({{ $t->id }})"
-                                                                title="Trình ký">
-                                                                <i class="fas fa-paper-plane"></i> Gửi duyệt
-                                                            </button>
-                                                        @else
-                                                            <a href="{{ route('pages.ebmr.designer', $t->id) }}?mode=review"
-                                                                class="btn btn-sm btn-white text-primary"
-                                                                title="Xem nội dung">
-                                                                <i class="fas fa-eye"></i> Xem hồ sơ
-                                                            </a>
-                                                        @endif
+                                                     <div class="btn-group shadow-sm rounded-pill overflow-hidden">
+                                                         @if ($current_type === 'BMR')
+                                                             <button class="btn btn-sm btn-white text-info fw-bold"
+                                                                 onclick="openConfigSXModal({{ $t->id }}, '{{ addslashes($t->category_name) }}')"
+                                                                 title="Cấu hình sản xuất">
+                                                                 <i class="fas fa-cogs text-info me-1"></i> Cấu hình SX
+                                                             </button>
+                                                         @else
+                                                             <button class="btn btn-sm btn-white text-info"
+                                                                 onclick="openEditModal({{ $t->id }})"
+                                                                 title="Cập nhật thông tin gốc">
+                                                                 <i class="fas fa-edit"></i> Sửa
+                                                             </button>
+                                                         @endif
 
-                                                        @if ($t->issued_date && !$t->effective_date && $t->owner_id == session('user')['userId'])
-                                                            <button class="btn btn-sm btn-white text-warning"
-                                                                onclick="openEffectiveDateModal({{ $t->id }})"
-                                                                title="Xác định ngày hiệu lực">
-                                                                <i class="fas fa-calendar-check"></i> Hiệu lực
-                                                            </button>
-                                                        @endif
+                                                         @if ($t->status === 'draft')
+                                                             <a href="{{ route('pages.ebmr.designer', $t->id) }}"
+                                                                 class="btn btn-sm btn-white text-navy"
+                                                                 title="Thiết kế nội dung">
+                                                                 <i class="fas fa-pencil-ruler"></i> Thiết kế
+                                                             </a>
+                                                             <button class="btn btn-sm btn-white text-success"
+                                                                 onclick="openWorkflowModal({{ $t->id }})"
+                                                                 title="Trình ký">
+                                                                 <i class="fas fa-paper-plane"></i> Gửi duyệt
+                                                             </button>
+                                                         @else
+                                                             <a href="{{ route('pages.ebmr.designer', $t->id) }}?mode=review"
+                                                                 class="btn btn-sm btn-white text-primary"
+                                                                 title="Xem nội dung">
+                                                                 <i class="fas fa-eye"></i> Xem hồ sơ
+                                                             </a>
+                                                         @endif
 
-                                                        <button class="btn btn-sm btn-white text-info"
-                                                            onclick="openEditModal({{ $t->id }})"
-                                                            title="Cập nhật thông tin gốc">
-                                                            <i class="fas fa-edit"></i> Sửa
-                                                        </button>
-
-                                                        @if ($current_type === 'BMR')
-                                                            <button class="btn btn-sm btn-white text-warning fw-bold"
-                                                                onclick="openTestingModal({{ $t->id }}, '{{ addslashes($t->category_name) }}')"
-                                                                title="Tiêu chuẩn kiểm nghiệm">
-                                                                <i class="fas fa-clipboard-check text-warning me-1"></i> Tiêu chuẩn
-                                                            </button>
-                                                        @endif
-                                                    </div>
+                                                         @if ($t->issued_date && !$t->effective_date && $t->owner_id == session('user')['userId'])
+                                                             <button class="btn btn-sm btn-white text-warning"
+                                                                 onclick="openEffectiveDateModal({{ $t->id }})"
+                                                                 title="Xác định ngày hiệu lực">
+                                                                 <i class="fas fa-calendar-check"></i> Hiệu lực
+                                                             </button>
+                                                         @endif
+                                                     </div>
                                                 </td>
                                             </tr>
                                         @endforeach
@@ -268,88 +268,126 @@
             </div>
         </div>
 
-        <!-- Modal 2: Soạn mới / Cập nhật Hồ Sơ -->
-        <div class="modal fade" id="templateMetadataModal" tabindex="-1" role="dialog" aria-hidden="true">
-            <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" role="document" style="max-width: 95%;">
-                <form id="metadataForm" class="modal-content border-0 shadow-lg">
-                        @csrf
-                        <input type="hidden" id="templateId" name="id">
-                        <input type="hidden" id="caterogyId" name="caterogy_id">
-                        <input type="hidden" id="templateType" name="type" value="{{ request('type', 'BMR') }}">
+        <form id="metadataForm" class="m-0">
+            @csrf
+            <input type="hidden" id="templateId" name="id">
+            <input type="hidden" id="caterogyId" name="caterogy_id">
+            <input type="hidden" id="templateType" name="type" value="{{ request('type', 'BMR') }}">
+
+            <div class="modal fade" id="templateMetadataModal" tabindex="-1" role="dialog" aria-hidden="true">
+                @if ((isset($current_type) && $current_type === 'BMR') || request('type', 'BMR') === 'BMR')
+                    <button type="button" class="modal-nav-btn modal-nav-left" onclick="navigateConfigSX('left', '#templateMetadataModal', this)" title="Khai báo phòng sản xuất">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <button type="button" class="modal-nav-btn modal-nav-right" onclick="navigateConfigSX('right', '#templateMetadataModal', this)" title="Công thức">
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                @endif
+                <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" role="document" style="max-width: 95%;">
+                    <div class="modal-content border-0 shadow-lg">
+                            <div class="modal-header">
+                                <h5 class="modal-title font-weight-bold text-info" id="modalTitle">
+                                    <i class="fas fa-file-medical me-2"></i>
+                                    {{ request('type') == 'GF' ? 'Tạo Biểu Mẫu Dùng Chung' : (request('type') == 'BPR' ? 'Tạo Hồ Sơ Đóng Gói' : (request('type') == 'MF' ? 'Tạo Biểu Mẫu Gốc' : 'Tạo Hồ Sơ Lô Sản Xuất')) }}
+                                </h5>
+                                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                    <span aria-hidden="true">&times;</span>
+                                </button>
+                            </div>
+                            <div class="modal-body p-4">
+                                <div class="row align-items-center mb-3">
+                                    <div class="col-md-6">
+                                        <div class="alert alert-cyan border-0 shadow-none mb-0 p-3">
+                                            <div class="d-flex align-items-center">
+                                                <i class="fas fa-info-circle fa-2x me-3 text-primary"></i>
+                                                <div class="w-100" style="min-width: 0;">
+                                                    <h6 class="mb-1 fw-bold text-navy small">Sản phẩm đang chọn:</h6>
+                                                    <div id="selectedBtpName"
+                                                        class="fs-6 text-primary fw-bold text-truncate">Chưa chọn sản phẩm</div>
+                                                    <div id="selectedBtpInfo" class="small text-muted mt-1"
+                                                        style="font-size: 0.75rem;">Cỡ lô: - | Dạng bào chế: -</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="form-group mb-0">
+                                            <label class="form-label fw-bold small">{{ request('type') == 'BMR' ? 'Số BMR' : (request('type') == 'BPR' ? 'Số BPR' : 'Số BM gốc') }}</label>
+                                            <input type="text"
+                                                class="form-control rounded-pill text-center fw-bold" name="doc_code"
+                                                id="docCode" placeholder="Nhập số...">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="form-group mb-0">
+                                            <label class="form-label fw-bold small">Phiên Bản <span
+                                                    class="text-danger">*</span></label>
+                                            <input type="number"
+                                                class="form-control rounded-pill text-center fw-bold" name="version"
+                                                id="version" required value="1" min="1">
+                                            <small class="text-muted d-block mt-1 text-center"
+                                                style="font-size: 0.7rem;"><i class="fas fa-magic me-1"></i> Tự động</small>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                @include('pages.ebmr.templates.partials.bmr_metadata')
+
+                            </div>
+                            <div class="modal-footer bg-light p-3">
+                                <button type="button" class="btn btn-white rounded-pill px-4" data-dismiss="modal">Hủy bỏ</button>
+                                <button type="submit" class="btn btn-primary rounded-pill px-4 shadow-sm text-white">
+                                    <i class="fas fa-save me-2 text-white"></i> Lưu hồ sơ
+                                </button>
+                            </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal Công thức -->
+            <div class="modal fade" id="modalFormula" tabindex="-1" role="dialog" aria-hidden="true">
+                @if ((isset($current_type) && $current_type === 'BMR') || request('type', 'BMR') === 'BMR')
+                    <button type="button" class="modal-nav-btn modal-nav-left" onclick="navigateConfigSX('left', '#modalFormula', this)" title="Thông tin sản phẩm">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <button type="button" class="modal-nav-btn modal-nav-right" onclick="navigateConfigSX('right', '#modalFormula', this)" title="Tiêu chuẩn kiểm nghiệm">
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                @endif
+                <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" role="document" style="max-width: 95%;">
+                    <div class="modal-content border-0 shadow-lg">
                         <div class="modal-header">
-                            <h5 class="modal-title font-weight-bold text-info" id="modalTitle">
-                                <i class="fas fa-file-medical me-2"></i>
-                                {{ request('type') == 'GF' ? 'Tạo Biểu Mẫu Dùng Chung' : (request('type') == 'BPR' ? 'Tạo Hồ Sơ Đóng Gói' : (request('type') == 'MF' ? 'Tạo Biểu Mẫu Gốc' : 'Tạo Hồ Sơ Lô Sản Xuất')) }}
+                            <h5 class="modal-title font-weight-bold text-info" id="modalFormulaTitle">
+                                <i class="fas fa-flask me-2"></i>
+                                Cập Nhật Công Thức Thiết Kế
                             </h5>
                             <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                                 <span aria-hidden="true">&times;</span>
                             </button>
                         </div>
                         <div class="modal-body p-4">
-                            <div class="row">
-                                <!-- Left Column (30% / col-lg-4) -->
-                                <div class="{{ request('type') == 'BMR' ? 'col-lg-3 border-right pr-4' : 'col-lg-12' }}">
-                                    <div class="row align-items-center mb-3">
-                                        <div class="col-md-6">
-                                            <div class="alert alert-cyan border-0 shadow-none mb-0 p-3">
-                                                <div class="d-flex align-items-center">
-                                                    <i class="fas fa-info-circle fa-2x me-3 text-primary"></i>
-                                                    <div class="w-100" style="min-width: 0;">
-                                                        <h6 class="mb-1 fw-bold text-navy small">Sản phẩm đang chọn:</h6>
-                                                        <div id="selectedBtpName"
-                                                            class="fs-6 text-primary fw-bold text-truncate">Chưa chọn sản
-                                                            phẩm</div>
-                                                        <div id="selectedBtpInfo" class="small text-muted mt-1"
-                                                            style="font-size: 0.75rem;">Cỡ lô: - | Dạng bào chế: -</div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-3">
-                                            <div class="form-group mb-0">
-                                                <label class="form-label fw-bold small">{{ request('type') == 'BMR' ? 'Số BMR' : (request('type') == 'BPR' ? 'Số BPR' : 'Số BM gốc') }}</label>
-                                                <input type="text"
-                                                    class="form-control rounded-pill text-center fw-bold" name="doc_code"
-                                                    id="docCode" placeholder="Nhập số...">
-                                            </div>
-                                        </div>
-                                        <div class="col-md-3">
-                                            <div class="form-group mb-0">
-                                                <label class="form-label fw-bold small">Phiên Bản <span
-                                                        class="text-danger">*</span></label>
-                                                <input type="number"
-                                                    class="form-control rounded-pill text-center fw-bold" name="version"
-                                                    id="version" required value="1" min="1">
-                                                <small class="text-muted d-block mt-1 text-center"
-                                                    style="font-size: 0.7rem;"><i class="fas fa-magic me-1"></i> Tự
-                                                    động</small>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    @include('pages.ebmr.templates.partials.bmr_metadata')
-
+                            <!-- Thiết lập tính toán lại công thức -->
+                            <div class="form-group mb-3 pb-3 border-bottom" id="recalculation_container" style="display: {{ request('type') == 'BMR' ? 'block' : 'none' }};">
+                                <div class="custom-control custom-switch custom-switch-lg">
+                                    <input type="checkbox" class="custom-control-input" id="enable_recalculation" name="is_recalculation" value="1">
+                                    <label class="custom-control-label fw-bold text-navy" for="enable_recalculation" style="cursor: pointer;">
+                                        <i class="fas fa-calculator text-info me-1"></i> Thiết lập tính toán lại công thức
+                                    </label>
                                 </div>
-                                <!-- End Left Column -->
-
-                                <!-- Right Column (70% / col-lg-8): BOM Tables -->
-                                <div class="col-lg-9 pl-4" id="bmr_bom_tables_container"
-                                    style="display: {{ request('type') == 'BMR' ? 'block' : 'none' }};">
-                                    @include('pages.ebmr.templates.partials.bmr_bom_tables')
-                                </div>
-                                <!-- End Right Column -->
                             </div>
+
+                            @include('pages.ebmr.templates.partials.bmr_bom_tables')
                         </div>
                         <div class="modal-footer bg-light p-3">
-                            <button type="button" class="btn btn-white rounded-pill px-4" data-dismiss="modal">Hủy
-                                bỏ</button>
+                            <button type="button" class="btn btn-white rounded-pill px-4" data-dismiss="modal">Hủy bỏ</button>
                             <button type="submit" class="btn btn-primary rounded-pill px-4 shadow-sm text-white">
                                 <i class="fas fa-save me-2 text-white"></i> Lưu hồ sơ
                             </button>
                         </div>
-                    </form>
+                    </div>
+                </div>
             </div>
-        </div>
+        </form>
 
         <!-- Modal Trình Ký (Workflow) -->
         <div class="modal fade" id="workflowModal" tabindex="-1" role="dialog" aria-hidden="true">
@@ -473,11 +511,109 @@
                 background: #f8f9fa !important;
             }
 
-            /* Tăng kích thước Modal */
-            @media (min-width: 1200px) {
-                .modal-xl {
-                    max-width: 95% !important;
-                }
+            /* Tăng kích thước các modal cấu hình lên 90% chiều rộng và 100% chiều cao viewport, lệch top 20px */
+            #templateMetadataModal .modal-dialog,
+            #modalFormula .modal-dialog,
+            #modalTesting .modal-dialog,
+            #modalRooms .modal-dialog {
+                max-width: 90% !important;
+                width: 90% !important;
+                height: calc(100vh - 20px) !important;
+                margin: 20px auto 0 auto !important;
+                padding: 0 !important;
+                display: flex;
+                align-items: stretch;
+            }
+
+            #templateMetadataModal .modal-content,
+            #modalFormula .modal-content,
+            #modalTesting .modal-content,
+            #modalRooms .modal-content {
+                height: calc(100vh - 20px) !important;
+                border-top-left-radius: 16px !important;
+                border-top-right-radius: 16px !important;
+                border-bottom-left-radius: 0 !important;
+                border-bottom-right-radius: 0 !important;
+                overflow: hidden !important;
+                display: flex;
+                flex-direction: column;
+                border: none !important;
+            }
+
+            #templateMetadataModal .modal-body,
+            #modalFormula .modal-body,
+            #modalTesting .modal-body,
+            #modalRooms .modal-body {
+                flex: 1 1 auto !important;
+                overflow-y: auto !important;
+                height: auto !important;
+                min-height: 0 !important;
+            }
+
+            .modal-nav-btn {
+                position: fixed;
+                top: 50%;
+                transform: translateY(-50%);
+                width: 54px;
+                height: 54px;
+                border-radius: 50%;
+                background-color: var(--primary-navy);
+                color: white !important;
+                border: 3px solid white;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 2000; /* Phao nổi trên tất cả các lớp của modal */
+                transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+                cursor: pointer;
+                outline: none !important;
+                pointer-events: auto; /* Đảm bảo click được */
+            }
+            .modal-nav-btn:hover {
+                background-color: #002a3a;
+                transform: translateY(-50%) scale(1.1);
+                box-shadow: 0 6px 20px rgba(0,0,0,0.45);
+            }
+            .modal-nav-btn i {
+                font-size: 1.5rem;
+            }
+            .modal-nav-left {
+                left: 20px;
+            }
+            .modal-nav-right {
+                right: 20px;
+            }
+
+            /* Hiệu ứng chuyển cảnh mượt mà giữa các modal */
+            .modal-content.slide-out-left-content {
+                animation: slideOutLeftKey 0.25s forwards cubic-bezier(0.4, 0, 0.2, 1);
+            }
+            .modal-content.slide-in-right-content {
+                animation: slideInRightKey 0.25s forwards cubic-bezier(0.4, 0, 0.2, 1);
+            }
+            .modal-content.slide-out-right-content {
+                animation: slideOutRightKey 0.25s forwards cubic-bezier(0.4, 0, 0.2, 1);
+            }
+            .modal-content.slide-in-left-content {
+                animation: slideInLeftKey 0.25s forwards cubic-bezier(0.4, 0, 0.2, 1);
+            }
+
+            @keyframes slideOutLeftKey {
+                from { transform: translateX(0); opacity: 1; }
+                to { transform: translateX(-150px); opacity: 0; }
+            }
+            @keyframes slideInRightKey {
+                from { transform: translateX(150px); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+            @keyframes slideOutRightKey {
+                from { transform: translateX(0); opacity: 1; }
+                to { transform: translateX(150px); opacity: 0; }
+            }
+            @keyframes slideInLeftKey {
+                from { transform: translateX(-150px); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
             }
         </style>
 
@@ -556,26 +692,111 @@
             </div>
         </div>
 
-        <!-- Modal 3: Thiết lập Tiêu chuẩn kiểm nghiệm (Testing Criteria) -->
-        <div class="modal fade" id="modalTesting" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal fade" id="modalRooms" tabindex="-1" role="dialog" aria-hidden="true">
+            @if ((isset($current_type) && $current_type === 'BMR') || request('type', 'BMR') === 'BMR')
+                <button type="button" class="modal-nav-btn modal-nav-left" onclick="navigateConfigSX('left', '#modalRooms', this)" title="Tiêu chuẩn kiểm nghiệm">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+                <button type="button" class="modal-nav-btn modal-nav-right" onclick="navigateConfigSX('right', '#modalRooms', this)" title="Thông tin hồ sơ gốc">
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+            @endif
             <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" role="document" style="max-width: 95%;">
                 <div class="modal-content border-0 shadow-lg" style="border-radius: 16px; overflow: hidden;">
-                    <div class="modal-header bg-navy text-white py-3">
-                        <h5 class="modal-title font-weight-bold text-white d-flex align-items-center">
-                            <i class="fas fa-clipboard-check me-2 text-warning fs-4"></i>
+                    <div class="modal-header">
+                        <h5 class="modal-title font-weight-bold text-info d-flex align-items-center" id="modalRoomsTitle">
+                            <i class="fas fa-door-open me-2 text-info fs-4"></i>
                             <div>
-                                <span>Thiết Lập Tiêu Chuẩn Kiểm Nghiệm</span>
-                                <span class="d-block small text-light fw-normal mt-1" id="testingTemplateNameDisplay" style="font-size: 0.85rem; opacity: 0.85;">Hồ sơ: ...</span>
+                                <span>Khai Báo Phòng Sản Xuất & Điều Kiện</span>
+                                <span class="d-block small text-muted fw-normal mt-1" id="roomsTemplateNameDisplay" style="font-size: 0.85rem; opacity: 0.85;">Hồ sơ: ...</span>
                             </div>
                         </h5>
-                        <button type="button" class="close text-white border-0 bg-transparent fs-4" data-dismiss="modal" aria-label="Close" style="outline: none;">
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <div class="modal-body p-0 d-flex" style="height: 70vh; min-height: 500px;">
+                        <!-- Left Sidebar for Sections/Stages -->
+                        <div class="border-end bg-light p-3" style="width: 280px; overflow-y: auto;">
+                            <h6 class="text-uppercase text-muted fw-bold mb-3 small" style="letter-spacing: 1px;">Công đoạn quy trình</h6>
+                            <div class="list-group list-group-flush rooms-stage-list" id="roomsStageList">
+                                <!-- Dynamic section tabs -->
+                            </div>
+                        </div>
+
+                        <!-- Right Panel for Room Assignment -->
+                        <div class="flex-grow-1 p-4 d-flex flex-column" style="overflow-y: auto;">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5 class="fw-bold text-navy mb-0 d-flex align-items-center">
+                                    <i class="fas fa-door-closed me-2 text-info"></i>
+                                    <span id="activeRoomsStageTitle">Chọn công đoạn</span>
+                                </h5>
+                                <div class="text-muted small">
+                                    Cấu hình các phòng sản xuất có thể thực hiện công đoạn này và điều kiện sản xuất tương ứng.
+                                </div>
+                            </div>
+
+                            <!-- Table container -->
+                            <div class="table-responsive flex-grow-1 border rounded" style="background-color: #fff;">
+                                <table class="table align-middle mb-0 rooms-table">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th style="width: 60px;" class="text-center">STT</th>
+                                            <th>Phòng sản xuất <span class="text-danger">*</span></th>
+                                            <th>Điều kiện sản xuất</th>
+                                            <th style="width: 80px;" class="text-center">Hành động</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="roomsTableBody">
+                                        <!-- Dynamic room rows for active stage -->
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div class="mt-3">
+                                <button type="button" class="btn btn-outline-primary rounded-pill px-4 shadow-sm fw-bold btn-add-room-row">
+                                    <i class="fas fa-plus me-1"></i> Thêm phòng sản xuất
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light p-3 border-top">
+                        <button type="button" class="btn btn-white rounded-pill px-4" data-dismiss="modal">Hủy bỏ</button>
+                        <button type="button" class="btn btn-navy rounded-pill px-4 shadow-sm" id="btnSaveRooms">
+                            <i class="fas fa-save me-2 text-white"></i> Lưu Cấu Hình
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="modalTesting" tabindex="-1" role="dialog" aria-hidden="true">
+            @if ((isset($current_type) && $current_type === 'BMR') || request('type', 'BMR') === 'BMR')
+                <button type="button" class="modal-nav-btn modal-nav-left" onclick="navigateConfigSX('left', '#modalTesting', this)" title="Thông tin hồ sơ gốc">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+                <button type="button" class="modal-nav-btn modal-nav-right" onclick="navigateConfigSX('right', '#modalTesting', this)" title="Khai báo phòng sản xuất">
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+            @endif
+            <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" role="document" style="max-width: 95%;">
+                <div class="modal-content border-0 shadow-lg" style="border-radius: 16px; overflow: hidden;">
+                    <div class="modal-header">
+                        <h5 class="modal-title font-weight-bold text-info d-flex align-items-center" id="modalTestingTitle">
+                            <i class="fas fa-clipboard-check me-2 text-info fs-4"></i>
+                            <div>
+                                <span>Thiết Lập Tiêu Chuẩn Kiểm Nghiệm</span>
+                                <span class="d-block small text-muted fw-normal mt-1" id="testingTemplateNameDisplay" style="font-size: 0.85rem; opacity: 0.85;">Hồ sơ: ...</span>
+                            </div>
+                        </h5>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                             <span aria-hidden="true">&times;</span>
                         </button>
                     </div>
                     <div class="modal-body p-0 d-flex" style="height: 70vh; min-height: 500px;">
                         <!-- Left Stage Sidebar -->
                         <div class="border-end bg-light p-3" style="width: 280px; overflow-y: auto;">
-                            <h6 class="text-uppercase text-muted fw-bold mb-3 small" style="letter-spacing: 1px;">Công đoạn qui trình</h6>
+                            <h6 class="text-uppercase text-muted fw-bold mb-3 small" style="letter-spacing: 1px;">Công đoạn quy trình</h6>
                             <div class="list-group list-group-flush testing-stage-list" id="testingStageList">
                                 <!-- Dynamic stage tabs -->
                             </div>
@@ -819,7 +1040,8 @@
                 border-style: dashed !important;
             }
 
-            .testing-stage-list .list-group-item {
+            .testing-stage-list .list-group-item,
+            .rooms-stage-list .list-group-item {
                 border: none;
                 border-radius: 10px !important;
                 margin-bottom: 6px;
@@ -829,16 +1051,19 @@
                 cursor: pointer;
                 padding: 10px 15px;
             }
-            .testing-stage-list .list-group-item:hover {
+            .testing-stage-list .list-group-item:hover,
+            .rooms-stage-list .list-group-item:hover {
                 background-color: #e9ecef;
                 color: #003A4F;
             }
-            .testing-stage-list .list-group-item.active {
+            .testing-stage-list .list-group-item.active,
+            .rooms-stage-list .list-group-item.active {
                 background-color: #003A4F !important;
                 color: #fff !important;
                 box-shadow: 0 4px 8px rgba(0, 58, 79, 0.15);
             }
-            .testing-stage-list .list-group-item .badge {
+            .testing-stage-list .list-group-item .badge,
+            .rooms-stage-list .list-group-item .badge {
                 font-size: 0.75rem;
                 padding: 4px 8px;
             }
@@ -1023,7 +1248,7 @@
                 $('#templateMetadataModal').modal('show');
             }
 
-            function openEditModal(id) {
+            function openEditModal(id, onReadyCallback = null) {
                 $('#metadataForm')[0].reset();
                 $('#modalTitle').html('<i class="fas fa-cog me-2"></i> Cập Nhật Thông Tin Hồ Sơ Gốc');
 
@@ -1062,7 +1287,11 @@
                         $('#bmr_specific_fields').hide();
                     }
 
-                    $('#templateMetadataModal').modal('show');
+                    if (onReadyCallback) {
+                        onReadyCallback();
+                    } else {
+                        $('#templateMetadataModal').modal('show');
+                    }
                 });
             }
 
@@ -1162,21 +1391,25 @@
             let testingRowImages = {}; // Format: { row_xxxx: [ { image_path, image_name, image_description } ] }
             let currentManagingRowId = null;
 
-            function openTestingModal(templateId, templateName) {
+            function openTestingModal(templateId, templateName, onReadyCallback = null) {
                 currentTestingTemplateId = templateId;
                 $('#testingTemplateNameDisplay').text('Hồ sơ BMR: ' + templateName);
                 
-                // Show loading overlay
-                Swal.fire({
-                    title: 'Đang tải dữ liệu...',
-                    allowOutsideClick: false,
-                    didOpen: () => {
-                        Swal.showLoading();
-                    }
-                });
+                if (!onReadyCallback) {
+                    // Show loading overlay
+                    Swal.fire({
+                        title: 'Đang tải dữ liệu...',
+                        allowOutsideClick: false,
+                        didOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+                }
 
                 $.get(`/ebmr/templates/${templateId}/testing-data`, function(res) {
-                    Swal.close();
+                    if (!onReadyCallback) {
+                        Swal.close();
+                    }
                     if (res.success) {
                         testingStages = res.sections;
                         testingData = res.testing;
@@ -1215,12 +1448,18 @@
                         // Select the first stage by default
                         selectTestingStage(testingStages[0].id, testingStages[0].label);
 
-                        $('#modalTesting').modal('show');
+                        if (onReadyCallback) {
+                            onReadyCallback();
+                        } else {
+                            $('#modalTesting').modal('show');
+                        }
                     } else {
                         Swal.fire('Lỗi', res.message || 'Không thể tải dữ liệu tiêu chuẩn', 'error');
                     }
                 }).fail(function() {
-                    Swal.close();
+                    if (!onReadyCallback) {
+                        Swal.close();
+                    }
                     Swal.fire('Lỗi', 'Không thể kết nối đến máy chủ', 'error');
                 });
             }
@@ -1821,6 +2060,430 @@
                 this.style.height = 'auto';
                 this.style.height = (this.scrollHeight) + 'px';
             });
+
+            // --- BMR ROOM & CONDITIONS INTEGRATION ---
+            let currentRoomsTemplateId = null;
+            let roomsData = [];
+            let roomsList = [];
+            let conditionsList = [];
+            let assignmentsList = [];
+            let activeRoomsSectionId = null;
+
+            window.openRoomsModal = function(templateId, templateName, onReadyCallback = null) {
+                currentRoomsTemplateId = templateId;
+                $('#roomsTemplateNameDisplay').text('Hồ sơ: ' + templateName);
+                
+                // Clear UI
+                $('#roomsStageList').empty();
+                $('#roomsTableBody').empty();
+                $('#activeRoomsStageTitle').text('Chọn công đoạn');
+
+                // Load config from server
+                $.ajax({
+                    url: `/ebmr/templates/${templateId}/rooms`,
+                    method: 'GET',
+                    success: function(res) {
+                        if (res.success) {
+                            roomsData = res.sections;
+                            roomsList = res.rooms;
+                            conditionsList = res.conditions;
+                            assignmentsList = res.assignments;
+
+                            if (roomsData.length === 0) {
+                                $('#roomsStageList').html('<div class="p-3 text-muted small text-center">Hồ sơ không có công đoạn nào</div>');
+                                return;
+                            }
+
+                            // Render sidebar section list
+                            roomsData.forEach(function(sec, idx) {
+                                const activeClass = idx === 0 ? 'active' : '';
+                                $('#roomsStageList').append(`
+                                    <button type="button" class="list-group-item list-group-item-action rooms-stage-tab ${activeClass} d-flex justify-content-between align-items-center" 
+                                        data-section-id="${sec.id}">
+                                        <span>${sec.label}</span>
+                                        <span class="badge bg-soft-info rooms-count-badge" id="badge_${sec.id}">0</span>
+                                    </button>
+                                `);
+                            });
+
+                            // Update count badges
+                            updateAllRoomsCountBadges();
+
+                            if (onReadyCallback) {
+                                onReadyCallback();
+                            } else {
+                                $('#modalRooms').modal('show');
+                            }
+
+                            // Load first stage
+                            selectRoomsStage(roomsData[0].id);
+                        } else {
+                            Swal.fire('Lỗi', res.message || 'Không thể tải cấu hình phòng', 'error');
+                        }
+                    },
+                    error: function(err) {
+                        let msg = 'Không thể kết nối đến máy chủ';
+                        if (err.responseJSON && err.responseJSON.message) msg = err.responseJSON.message;
+                        Swal.fire('Lỗi', msg, 'error');
+                    }
+                });
+            };
+
+            function updateAllRoomsCountBadges() {
+                roomsData.forEach(function(sec) {
+                    const count = assignmentsList.filter(a => a.section_id === sec.id).length;
+                    $(`#badge_${sec.id}`).text(count);
+                });
+            }
+
+            function selectRoomsStage(sectionId) {
+                // Save current active stage rows before switching
+                saveCurrentRoomsStageToMemory();
+
+                activeRoomsSectionId = sectionId;
+                $('.rooms-stage-tab').removeClass('active');
+                $(`.rooms-stage-tab[data-section-id="${sectionId}"]`).addClass('active');
+
+                const sec = roomsData.find(s => s.id === sectionId);
+                if (!sec) return;
+
+                $('#activeRoomsStageTitle').html(`<i class="fas fa-door-open me-2 text-primary"></i>${sec.label}`);
+
+                // Fetch eligible rooms for this section code
+                const eligibleRooms = getEligibleRooms(sec.code);
+
+                // Render current assignments for this section
+                $('#roomsTableBody').empty();
+                const activeAssignments = assignmentsList.filter(a => a.section_id === sectionId);
+
+                if (activeAssignments.length === 0) {
+                    addRoomsRow(sectionId, null, null, eligibleRooms);
+                } else {
+                    activeAssignments.forEach(function(assign) {
+                        addRoomsRow(sectionId, assign.room_id, assign.condition_id, eligibleRooms);
+                    });
+                }
+            }
+
+            function getEligibleRooms(sectionCode) {
+                let targetStageCode = sectionCode;
+                if (sectionCode === 1 || sectionCode === 2) {
+                    targetStageCode = 1;
+                } else if (sectionCode === 7 || sectionCode === 8) {
+                    targetStageCode = 7;
+                }
+                return roomsList.filter(r => parseInt(r.stage_code) === parseInt(targetStageCode));
+            }
+
+            function addRoomsRow(sectionId, selectedRoomId, selectedCondId, eligibleRooms) {
+                const trCount = $('#roomsTableBody tr').length;
+                const index = trCount + 1;
+
+                // Build room dropdown options
+                let roomOptionsHtml = `<option value="">-- Chọn phòng sản xuất --</option>`;
+                eligibleRooms.forEach(function(r) {
+                    const selected = (selectedRoomId !== null && parseInt(r.id) === parseInt(selectedRoomId)) ? 'selected' : '';
+                    roomOptionsHtml += `<option value="${r.id}" ${selected}>${r.code} - ${r.name}</option>`;
+                });
+
+                // Build row HTML
+                const rowHtml = `
+                    <tr class="room-assign-row" data-section-id="${sectionId}">
+                        <td class="text-center align-middle fw-bold row-stt">${index}</td>
+                        <td>
+                            <select class="form-select select-assigned-room shadow-sm" style="border-radius: 8px; height: 38px;">
+                                ${roomOptionsHtml}
+                            </select>
+                        </td>
+                        <td>
+                            <select class="form-select select-assigned-condition shadow-sm" style="border-radius: 8px; height: 38px;" disabled>
+                                <option value="">Mặc định (Không có bộ điều kiện)</option>
+                            </select>
+                        </td>
+                        <td class="text-center align-middle">
+                            <button type="button" class="btn btn-sm btn-icon btn-light-danger border shadow-sm btn-delete-room-row" title="Xóa">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+
+                const $row = $(rowHtml);
+                $('#roomsTableBody').append($row);
+
+                // Bind select change handler for room to load conditions
+                const $roomSelect = $row.find('.select-assigned-room');
+                const $condSelect = $row.find('.select-assigned-condition');
+
+                $roomSelect.on('change', function() {
+                    const roomId = $(this).val();
+                    loadConditionsForRoomSelect(roomId, $condSelect, selectedCondId);
+                });
+
+                // Trigger initial conditions load if room was selected
+                if (selectedRoomId) {
+                    $roomSelect.trigger('change');
+                }
+            }
+
+            function loadConditionsForRoomSelect(roomId, $condSelect, selectedCondId) {
+                $condSelect.empty();
+                $condSelect.append(`<option value="">Mặc định (Không có bộ điều kiện)</option>`);
+
+                if (!roomId) {
+                    $condSelect.prop('disabled', true);
+                    return;
+                }
+
+                const roomConditions = conditionsList.filter(c => parseInt(c.room_id) === parseInt(roomId));
+
+                if (roomConditions.length === 0) {
+                    $condSelect.prop('disabled', true);
+                } else {
+                    $condSelect.prop('disabled', false);
+                    roomConditions.forEach(function(c) {
+                        const selected = (selectedCondId !== null && parseInt(c.id) === parseInt(selectedCondId)) ? 'selected' : '';
+                        $condSelect.append(`<option value="${c.id}" ${selected}>${c.name}</option>`);
+                    });
+                }
+            }
+
+            function saveCurrentRoomsStageToMemory() {
+                if (activeRoomsSectionId === null) return;
+
+                // Read all row values
+                const currentRows = [];
+                $('#roomsTableBody tr.room-assign-row').each(function() {
+                    const roomId = $(this).find('.select-assigned-room').val();
+                    const condId = $(this).find('.select-assigned-condition').val();
+
+                    if (roomId) {
+                        currentRows.push({
+                            section_id: activeRoomsSectionId,
+                            room_id: parseInt(roomId),
+                            condition_id: condId ? parseInt(condId) : null
+                        });
+                    }
+                });
+
+                // Remove old assignments for activeRoomsSectionId
+                assignmentsList = assignmentsList.filter(a => a.section_id !== activeRoomsSectionId);
+
+                // Append new ones
+                assignmentsList = assignmentsList.concat(currentRows);
+
+                // Update tab badge count
+                $(`#badge_${activeRoomsSectionId}`).text(currentRows.length);
+            }
+
+            // Click sidebar tab handler
+            $(document).on('click', '.rooms-stage-tab', function() {
+                const sectionId = $(this).data('section-id');
+                if (sectionId === activeRoomsSectionId) return;
+                selectRoomsStage(sectionId);
+            });
+
+            // Add room row click handler
+            $('.btn-add-room-row').on('click', function() {
+                if (activeRoomsSectionId === null) return;
+                const sec = roomsData.find(s => s.id === activeRoomsSectionId);
+                if (!sec) return;
+                const eligibleRooms = getEligibleRooms(sec.code);
+                addRoomsRow(activeRoomsSectionId, null, null, eligibleRooms);
+            });
+
+            // Delete room row click handler
+            $(document).on('click', '.btn-delete-room-row', function() {
+                const tr = $(this).closest('tr');
+                tr.remove();
+                
+                // Re-number STT
+                $('#roomsTableBody tr').each(function(idx) {
+                    $(this).find('.row-stt').text(idx + 1);
+                });
+            });
+
+            // Save rooms click handler
+            $('#btnSaveRooms').on('click', function() {
+                // Save current stage rows first
+                saveCurrentRoomsStageToMemory();
+
+                if (currentRoomsTemplateId === null) return;
+
+                const btn = $(this);
+                const originalHtml = btn.html();
+                btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-2 text-white"></i> Đang lưu...');
+
+                $.ajax({
+                    url: `/ebmr/templates/${currentRoomsTemplateId}/rooms`,
+                    method: 'POST',
+                    data: {
+                        _token: '{{ csrf_token() }}',
+                        mappings: assignmentsList
+                    },
+                    success: function(res) {
+                        btn.prop('disabled', false).html(originalHtml);
+                        if (res.success) {
+                            Swal.fire({
+                                title: 'Thành công!',
+                                text: res.message,
+                                icon: 'success',
+                                confirmButtonColor: '#003A4F'
+                            }).then(() => {
+                                $('#modalRooms').modal('hide');
+                            });
+                        } else {
+                            Swal.fire('Lỗi', res.message || 'Không thể lưu cấu hình phòng', 'error');
+                        }
+                    },
+                    error: function(err) {
+                        btn.prop('disabled', false).html(originalHtml);
+                        let msg = 'Không thể kết nối đến máy chủ';
+                        if (err.responseJSON && err.responseJSON.message) msg = err.responseJSON.message;
+                        Swal.fire('Lỗi', msg, 'error');
+                    }
+                });
+            });
+
+            $('#modalRooms').on('hidden.bs.modal', function () {
+                currentRoomsTemplateId = null;
+                roomsData = [];
+                roomsList = [];
+                conditionsList = [];
+                assignmentsList = [];
+                activeRoomsSectionId = null;
+                $('#roomsStageList').empty();
+                $('#roomsTableBody').empty();
+            });
+
+            // --- CAROUSEL MODAL NAVIGATION FOR CẤU HÌNH SX ---
+            let currentConfigTemplateName = '';
+
+            window.openConfigSXModal = function(id, name) {
+                currentConfigTemplateName = name;
+                openEditModal(id);
+            };
+
+            function transitionModal(fromSelector, toSelector, direction, callback, onComplete) {
+                const $fromModal = $(fromSelector);
+                const $toModal = $(toSelector);
+                const $fromContent = $fromModal.find('.modal-content');
+
+                // Lấy các class hiệu ứng dựa vào hướng chuyển
+                const outClass = direction === 'right' ? 'slide-out-left-content' : 'slide-out-right-content';
+                const inClass = direction === 'right' ? 'slide-in-right-content' : 'slide-in-left-content';
+
+                // Bắt đầu hiệu ứng trượt ra cho modal hiện tại
+                $fromContent.addClass(outClass);
+
+                // Chờ hiệu ứng trượt ra hoàn tất (250ms)
+                setTimeout(function() {
+                    // Tạm thời bỏ class fade của cả 2 modal để triệt tiêu hiện tượng nháy backdrop
+                    $fromModal.removeClass('fade');
+                    $toModal.removeClass('fade');
+
+                    // Ẩn modal cũ và hiển thị modal mới đồng thời
+                    $fromModal.modal('hide');
+                    
+                    if (callback) {
+                        callback(); // Hiển thị modal mới lên
+                    }
+
+                    // Áp dụng hiệu ứng trượt vào cho modal mới
+                    const $toContent = $toModal.find('.modal-content');
+                    $toContent.addClass(inClass);
+
+                    // Phục hồi lại class fade và gỡ bỏ class hiệu ứng sau khi hoàn tất trượt vào
+                    setTimeout(function() {
+                        $fromModal.addClass('fade');
+                        $toModal.addClass('fade');
+                        $fromContent.removeClass(outClass);
+                        $toContent.removeClass(inClass);
+                        if (onComplete) onComplete();
+                    }, 250); // Chờ hiệu ứng trượt vào
+                }, 250); // Chờ hiệu ứng trượt ra
+            }
+
+            window.navigateConfigSX = function(direction, currentModalSelector, btnElement) {
+                const id = $('#templateId').val() || currentTestingTemplateId || currentRoomsTemplateId;
+                const name = currentConfigTemplateName || $('#selectedBtpName').text();
+
+                if (!id) {
+                    Swal.fire('Lỗi', 'Không xác định được ID hồ sơ mẫu', 'error');
+                    return;
+                }
+
+                const $btn = $(btnElement);
+                let originalHtml = '';
+                if (btnElement) {
+                    originalHtml = $btn.html();
+                    $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i>');
+                }
+
+                function restoreBtn() {
+                    if (btnElement) {
+                        $btn.prop('disabled', false).html(originalHtml);
+                    }
+                }
+
+                if (direction === 'right') {
+                    if (currentModalSelector === '#templateMetadataModal') {
+                        openEditModal(id, function() {
+                            transitionModal('#templateMetadataModal', '#modalFormula', 'right', function() {
+                                $('#modalFormula').modal('show');
+                            }, restoreBtn);
+                        });
+                    } else if (currentModalSelector === '#modalFormula') {
+                        openTestingModal(id, name, function() {
+                            transitionModal('#modalFormula', '#modalTesting', 'right', function() {
+                                $('#modalTesting').modal('show');
+                            }, restoreBtn);
+                        });
+                    } else if (currentModalSelector === '#modalTesting') {
+                        saveActiveStageToLocalMemory();
+                        openRoomsModal(id, name, function() {
+                            transitionModal('#modalTesting', '#modalRooms', 'right', function() {
+                                $('#modalRooms').modal('show');
+                            }, restoreBtn);
+                        });
+                    } else if (currentModalSelector === '#modalRooms') {
+                        saveCurrentRoomsStageToMemory();
+                        openEditModal(id, function() {
+                            transitionModal('#modalRooms', '#templateMetadataModal', 'right', function() {
+                                $('#templateMetadataModal').modal('show');
+                            }, restoreBtn);
+                        });
+                    }
+                } else if (direction === 'left') {
+                    if (currentModalSelector === '#templateMetadataModal') {
+                        openRoomsModal(id, name, function() {
+                            transitionModal('#templateMetadataModal', '#modalRooms', 'left', function() {
+                                $('#modalRooms').modal('show');
+                            }, restoreBtn);
+                        });
+                    } else if (currentModalSelector === '#modalFormula') {
+                        openEditModal(id, function() {
+                            transitionModal('#modalFormula', '#templateMetadataModal', 'left', function() {
+                                $('#templateMetadataModal').modal('show');
+                            }, restoreBtn);
+                        });
+                    } else if (currentModalSelector === '#modalTesting') {
+                        saveActiveStageToLocalMemory();
+                        openEditModal(id, function() {
+                            transitionModal('#modalTesting', '#modalFormula', 'left', function() {
+                                $('#modalFormula').modal('show');
+                            }, restoreBtn);
+                        });
+                    } else if (currentModalSelector === '#modalRooms') {
+                        saveCurrentRoomsStageToMemory();
+                        openTestingModal(id, name, function() {
+                            transitionModal('#modalRooms', '#modalTesting', 'left', function() {
+                                $('#modalTesting').modal('show');
+                            }, restoreBtn);
+                        });
+                    }
+                }
+            };
         </script>
         @include('pages.ebmr.templates.partials.bmr_scripts')
     @endsection

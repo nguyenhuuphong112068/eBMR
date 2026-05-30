@@ -25,5 +25,8 @@ class InstrumentModel extends Model
         'parity',
         'stop_bits',
         'created_by',
+        'operation_SOP_code',
+        'clearing_SOP_code',
+        'is_Portable_equipment',
     ];
 }

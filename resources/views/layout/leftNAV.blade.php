@@ -146,10 +146,34 @@
                                 class="nav-link"><i class="far fa-circle nav-icon text-success"></i>
                                 <p>Tiêu chuẩn NL</p>
                             </a></li>
-                        <li class="nav-item"><a href="{{ route('pages.materData.instrument.list') }}"
-                                class="nav-link"><i class="far fa-circle nav-icon text-primary"></i>
+                    </ul>
+                </li>
+
+                <!-- Droplist Menu Môi Trường Sản Xuất  -->
+                <li class="nav-item has-treeview {{ str_contains(url()->current(), 'manu_env') ? 'menu-open' : '' }}">
+                    <a href="#"
+                        class="nav-link {{ str_contains(url()->current(), 'manu_env') ? 'active' : '' }}">
+                        <i class="fas fa-cloud"></i>
+                        <p>
+                            Môi Trường
+                            <i class="right fas fa-angle-left"></i>
+                        </p>
+                    </a>
+                    <ul class="nav nav-treeview">
+                        <li class="nav-item">
+                            <a href="{{ route('pages.manu_env.equipment.list') }}"
+                                class="nav-link {{ str_contains(url()->current(), 'equipment') ? 'active' : '' }}">
+                                <i class="far fa-circle nav-icon text-primary"></i>
                                 <p>Thiết bị sản xuất</p>
-                            </a></li>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="{{ route('pages.manu_env.room.list') }}"
+                                class="nav-link {{ str_contains(url()->current(), 'room') ? 'active' : '' }}">
+                                <i class="far fa-circle nav-icon text-success"></i>
+                                <p>Phòng Sản Xuất</p>
+                            </a>
+                        </li>
                     </ul>
                 </li>
 

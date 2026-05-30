@@ -287,7 +287,11 @@ class UploadDataController extends Controller
             }
 
             try {
-                DB::table($table)->insert($insertData);
+                if ($table === 'room') {
+                    DB::connection('pms')->table($table)->insert($insertData);
+                } else {
+                    DB::table($table)->insert($insertData);
+                }
                 $inserted += count($insertData);
             } catch (\Exception $e) {
                 return back()->with('error', "❌ Lỗi tại batch thứ " . ($chunkIndex + 1) . ": " . $e->getMessage());
