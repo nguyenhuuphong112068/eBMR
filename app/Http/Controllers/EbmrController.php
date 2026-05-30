@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use App\Services\RunDataEncryptionService;
 
 class EbmrController extends Controller
 {
@@ -758,7 +759,8 @@ class EbmrController extends Controller
         $runDataRaw = DB::table('ebmr_run_data')->where('record_id', $id)->get();
         $executionValues = [];
         foreach ($runDataRaw as $rd) {
-            $executionValues[$rd->block_uuid] = json_decode($rd->value, true);
+            // Giải mã value (data cũ chưa mã hoá sẽ tự fallback về JSON thuần)
+            $executionValues[$rd->block_uuid] = RunDataEncryptionService::decryptJson($rd->value);
         }
 
         $template->schema = (object)['fields' => $fields, 'fieldsConfig' => $fieldsConfig];
@@ -804,7 +806,7 @@ class EbmrController extends Controller
                     [
                         'filled_by' => $userId,
                         'filled_at' => $now,
-                        'value' => json_encode($value),
+                        'value'     => RunDataEncryptionService::encryptJson($value),
                         'updated_at' => $now
                     ]
                 );

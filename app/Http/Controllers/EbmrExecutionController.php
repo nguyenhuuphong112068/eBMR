@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use App\Services\RunDataEncryptionService;
 
 class EbmrExecutionController extends Controller
 {
@@ -327,7 +328,8 @@ class EbmrExecutionController extends Controller
             }
 
             $cellId = ($rd->cell_id && $rd->cell_id !== 'default') ? $rd->cell_id : 'default';
-            $executionValues->$blockUuid->$cellId = $rd->raw_value;
+            // Giải mã raw_value (data cũ chưa mã hoá sẽ tự fallback)
+            $executionValues->$blockUuid->$cellId = RunDataEncryptionService::decrypt($rd->raw_value);
             
             // Lưu metadata
             $executionValues->$blockUuid->_meta->$cellId = (object)[
@@ -396,8 +398,8 @@ class EbmrExecutionController extends Controller
                             [
                                 'filled_by' => $userId,
                                 'filled_at' => $now,
-                                'value' => json_encode([$cellId => $rawValue]),
-                                'raw_value' => $rawValue,
+                                'value'     => RunDataEncryptionService::encryptJson([$cellId => $rawValue]),
+                                'raw_value' => RunDataEncryptionService::encrypt((string)$rawValue),
                                 'updated_at' => $now,
                                 'updated_by' => $userName,
                             ]
@@ -415,8 +417,8 @@ class EbmrExecutionController extends Controller
                         [
                             'filled_by' => $userId,
                             'filled_at' => $now,
-                            'value' => json_encode(['text' => $value]),
-                            'raw_value' => $value,
+                            'value'     => RunDataEncryptionService::encryptJson(['text' => $value]),
+                            'raw_value' => RunDataEncryptionService::encrypt((string)$value),
                             'updated_at' => $now,
                             'updated_by' => $userName,
                         ]

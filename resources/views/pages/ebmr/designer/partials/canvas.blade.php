@@ -103,28 +103,30 @@
                             <i class="fas fa-balance-scale fa-lg"></i>
                         </div>
                         <div>
-                            <h5 class="modal-title mb-0 fw-bold" id="scaleConnectionModalLabel" style="color: inherit;">Kết nối Cân Điện Tử</h5>
+                            <h5 class="modal-title mb-0 fw-bold" id="scaleConnectionModalLabel" style="color: inherit;">
+                                Kết nối Cân Điện Tử</h5>
                             <div class="small opacity-75" style="color: inherit;">
-                                Đọc dữ liệu trực tiếp vào biến số <span id="scale-modal-field-label" class="fw-bold"></span>
+                                Đọc dữ liệu trực tiếp vào biến số <span id="scale-modal-field-label"
+                                    class="fw-bold"></span>
                                 <span class="mx-2">|</span>
-                                <span id="scale-status-dot" class="scale-status-dot disconnected" style="display: inline-block; vertical-align: middle;"></span>
-                                <span id="scale-status-text" class="small fw-bold ms-1" style="color: inherit;">Chưa kết nối</span>
+                                <span id="scale-status-dot" class="scale-status-dot disconnected"
+                                    style="display: inline-block; vertical-align: middle;"></span>
+                                <span id="scale-status-text" class="small fw-bold ms-1" style="color: inherit;">Chưa kết
+                                    nối</span>
                             </div>
                         </div>
                     </div>
                     <div class="ms-auto d-flex align-items-center gap-2">
                         <button id="scale-connect-btn" class="btn btn-sm px-3 fw-bold border-0 shadow-sm"
-                            style="background: #16a34a; color: white;"
-                            onclick="window.connectScaleFromModal()">
+                            style="background: #16a34a; color: white;" onclick="window.connectScaleFromModal()">
                             <i class="fas fa-plug me-1"></i> Kết nối
                         </button>
                         <button id="scale-disconnect-btn" class="btn btn-sm px-3 fw-bold border-0 shadow-sm d-none"
-                            style="background: #dc2626; color: white;"
-                            onclick="window.ScaleManager.disconnect()">
+                            style="background: #dc2626; color: white;" onclick="window.ScaleManager.disconnect()">
                             <i class="fas fa-times me-1"></i> Ngắt kết nối
                         </button>
-                        <button type="button" class="btn-close ms-2" id="scale-modal-close-btn" data-bs-dismiss="modal"
-                            data-dismiss="modal" aria-label="Đóng"></button>
+                        <button type="button" class="btn-close ms-2" id="scale-modal-close-btn"
+                            data-bs-dismiss="modal" data-dismiss="modal" aria-label="Đóng"></button>
                     </div>
                 </div>
 
@@ -135,7 +137,8 @@
                         <div class="col-12 mb-2">
                             <div class="text-center p-4 rounded-4 shadow-sm" id="scale-live-card"
                                 style="background: #fff; border: 2px solid #e2e8f0; transition: all 0.3s ease;">
-                                <div class="small text-muted mb-1 fw-bold text-uppercase" style="font-size: 0.8rem; letter-spacing: 0.08em;">
+                                <div class="small text-muted mb-1 fw-bold text-uppercase"
+                                    style="font-size: 0.8rem; letter-spacing: 0.08em;">
                                     <i class="fas fa-satellite-dish me-2 text-primary"></i> Dữ liệu cân (Live)
                                 </div>
                                 <span id="scale-live-value" class="scale-live-value stable my-2 d-inline-block"
@@ -155,14 +158,19 @@
                                 <label class="small fw-bold mb-2 text-muted text-uppercase">
                                     <i class="fas fa-balance-scale me-1"></i> Thiết bị cân (Dữ liệu gốc)
                                 </label>
-                                <select class="form-select form-select-sm fw-semibold" id="scale-device-select" onchange="window.onScaleDeviceSelected(this.value)" style="border-radius: 8px; padding: 0.45rem 0.75rem;">
+                                <select class="form-select form-select-sm fw-semibold" id="scale-device-select"
+                                    onchange="window.onScaleDeviceSelected(this.value)"
+                                    style="border-radius: 8px; padding: 0.45rem 0.75rem;">
                                     @if (session('user') && session('user')['userGroup'] == 'Admin')
                                         <option value="">-- Tự nhập cấu hình / Chọn hãng cân --</option>
                                     @endif
                                     @php
-                                        $dbScales = \DB::table('instrument')->where('type', 'scale')->orderBy('code', 'asc')->get();
+                                        $dbScales = \DB::table('instrument')
+                                            ->where('type', 'scale')
+                                            ->orderBy('code', 'asc')
+                                            ->get();
                                     @endphp
-                                    @foreach($dbScales as $dbScale)
+                                    @foreach ($dbScales as $dbScale)
                                         <option value="{{ $dbScale->id }}">
                                             {{ $dbScale->name }} ({{ $dbScale->code }})
                                         </option>
@@ -173,27 +181,37 @@
                             @if (session('user') && session('user')['userGroup'] == 'Admin')
                                 <!-- Nút toggle cấu hình chỉ cho Admin -->
                                 <div class="mb-3 text-start">
-                                    <button type="button" class="btn btn-link btn-sm text-decoration-none p-0 text-success fw-semibold" id="toggle-scale-details-btn" onclick="window.toggleScaleDetails()">
-                                        <i class="fas fa-cog me-1"></i> Cấu hình chi tiết <i class="fas fa-chevron-down ms-1" id="scale-details-icon"></i>
+                                    <button type="button"
+                                        class="btn btn-link btn-sm text-decoration-none p-0 text-success fw-semibold"
+                                        id="toggle-scale-details-btn" onclick="window.toggleScaleDetails()">
+                                        <i class="fas fa-cog me-1"></i> Cấu hình chi tiết <i
+                                            class="fas fa-chevron-down ms-1" id="scale-details-icon"></i>
                                     </button>
                                 </div>
                             @endif
 
                             <!-- Phân vùng cấu hình chi tiết (Ẩn mặc định, luôn có trong DOM để JS hoạt động nhưng chỉ hiển thị khi Admin click toggle) -->
-                            <div id="scale-hardware-details-container" style="display: none;" class="p-3 bg-white border rounded-3 mb-3">
+                            <div id="scale-hardware-details-container" style="display: none;"
+                                class="p-3 bg-white border rounded-3 mb-3">
                                 <!-- Phương thức kết nối -->
                                 <div class="mb-3">
                                     <label class="small fw-bold mb-2 text-muted text-uppercase">
                                         <i class="fas fa-network-wired me-1"></i> Phương thức kết nối
                                     </label>
                                     <div class="btn-group w-100" role="group" aria-label="Phương thức kết nối">
-                                        <input type="radio" class="btn-check" name="scale-connection-type" id="scale-conn-type-serial" value="serial" checked onchange="window.onChangeScaleConnectionType('serial')">
-                                        <label class="btn btn-outline-success btn-sm w-50 py-2 fw-semibold" for="scale-conn-type-serial">
+                                        <input type="radio" class="btn-check" name="scale-connection-type"
+                                            id="scale-conn-type-serial" value="serial" checked
+                                            onchange="window.onChangeScaleConnectionType('serial')">
+                                        <label class="btn btn-outline-success btn-sm w-50 py-2 fw-semibold"
+                                            for="scale-conn-type-serial">
                                             <i class="fas fa-plug me-1"></i> Cáp vật lý
                                         </label>
 
-                                        <input type="radio" class="btn-check" name="scale-connection-type" id="scale-conn-type-websocket" value="websocket" onchange="window.onChangeScaleConnectionType('websocket')">
-                                        <label class="btn btn-outline-success btn-sm w-50 py-2 fw-semibold" for="scale-conn-type-websocket">
+                                        <input type="radio" class="btn-check" name="scale-connection-type"
+                                            id="scale-conn-type-websocket" value="websocket"
+                                            onchange="window.onChangeScaleConnectionType('websocket')">
+                                        <label class="btn btn-outline-success btn-sm w-50 py-2 fw-semibold"
+                                            for="scale-conn-type-websocket">
                                             <i class="fas fa-wifi me-1"></i> WebSocket (Wifi)
                                         </label>
                                     </div>
@@ -216,17 +234,22 @@
                                 <!-- Thiết lập WebSocket (Wifi) -->
                                 <div id="scale-websocket-fields" class="d-none mb-3 p-3 rounded-3"
                                     style="background: #f0fdf4; border: 1px solid #bbf7d0;">
-                                    <label class="small fw-bold mb-2 text-success-emphasis" style="color: #15803d !important;">
+                                    <label class="small fw-bold mb-2 text-success-emphasis"
+                                        style="color: #15803d !important;">
                                         <i class="fas fa-wifi me-1"></i> Thiết lập WebSocket (Wifi)
                                     </label>
                                     <div class="row g-2">
                                         <div class="col-8">
                                             <label class="x-small text-muted fw-semibold">Địa chỉ IP</label>
-                                            <input type="text" class="form-control form-control-sm" id="scale-websocket-ip" placeholder="Ví dụ: 192.168.1.100" style="border-radius: 6px;">
+                                            <input type="text" class="form-control form-control-sm"
+                                                id="scale-websocket-ip" placeholder="Ví dụ: 192.168.1.100"
+                                                style="border-radius: 6px;">
                                         </div>
                                         <div class="col-4">
                                             <label class="x-small text-muted fw-semibold">Cổng (Port)</label>
-                                            <input type="number" class="form-control form-control-sm" id="scale-websocket-port" placeholder="8080" style="border-radius: 6px;">
+                                            <input type="number" class="form-control form-control-sm"
+                                                id="scale-websocket-port" placeholder="8080"
+                                                style="border-radius: 6px;">
                                         </div>
                                     </div>
                                 </div>
@@ -289,7 +312,8 @@
                                 <div class="alert alert-success py-2 px-3 small mb-0 d-none" id="scale-websocket-info"
                                     style="font-size: 0.78rem; border-left: 3px solid #16a34a; background: #f0fdf4; border-color: #bbf7d0;">
                                     <i class="fas fa-info-circle me-1"></i>
-                                    <strong>Yêu cầu:</strong> Bộ chuyển đổi Serial-to-Wi-Fi đã bật WebSocket Server. Nhập chính xác IP và Cổng để kết nối.
+                                    <strong>Yêu cầu:</strong> Bộ chuyển đổi Serial-to-Wi-Fi đã bật WebSocket Server.
+                                    Nhập chính xác IP và Cổng để kết nối.
                                 </div>
                             </div>
                         </div>

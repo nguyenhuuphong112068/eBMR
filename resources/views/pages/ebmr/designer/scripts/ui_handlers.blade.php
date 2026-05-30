@@ -1943,7 +1943,7 @@
             }
             updateCanvasWidth();
         } else {
-            if (col) col.className = 'col-lg-3 transition-all';
+            if (col) col.className = 'col-lg-2 transition-all';
             if (full) full.classList.remove('d-none');
             if (minimized) minimized.classList.add('d-none');
             if (panel) {
@@ -1958,7 +1958,7 @@
 
     /**
      * Tự động tính toán và cập nhật chiều rộng của vùng làm việc (Canvas) dựa trên trạng thái của 2 thanh bên.
-     * Cách hoạt động: Sử dụng các điều kiện logic để gán class Bootstrap (col-lg-7/8/9/10) sao cho 
+     * Cách hoạt động: Sử dụng các điều kiện logic để gán class Bootstrap (col-lg-8/9/10/12) sao cho 
      * tổng số cột luôn là 12, giúp trang giấy luôn nằm ở trung tâm và có kích thước phù hợp nhất.
      */
     function updateCanvasWidth() {
@@ -1977,11 +1977,11 @@
         if (isOutlineMinimized && isSidebarMinimized) {
             canvas.className = 'col-lg-10 transition-all';
         } else if (isOutlineMinimized) {
-            canvas.className = 'col-lg-8 transition-all';
+            canvas.className = 'col-lg-9 transition-all';
         } else if (isSidebarMinimized) {
             canvas.className = 'col-lg-9 transition-all';
         } else {
-            canvas.className = 'col-lg-7 transition-all';
+            canvas.className = 'col-lg-8 transition-all';
         }
     }
 

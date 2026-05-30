@@ -220,6 +220,44 @@ case 'mybrand': return this.parseMyBrand(rawLine);
 
 4. **Cập nhật** select trong `canvas.blade.php` (Modal) và `ui_handlers.blade.php` (Property Panel).
 
+## Vận hành và cấu hình WebSocket Bridge (Chạy ngầm với PM2)
+
+Khi triển khai hệ thống eBMR trên máy chủ Linux/Ubuntu với quy mô nhiều máy trạm
+kết nối tới nhiều cân qua Nport, hệ thống sử dụng một script trung gian
+**WebSocket Bridge** (`scale-bridge.js`) chạy tập trung trên Server để chuyển
+tiếp kết nối WebSocket từ trình duyệt tới giao thức TCP của thiết bị NPort mà
+không cần map COM ảo trên các máy con.
+
+### 1. Cấu hình file `scale-bridge.js`
+File proxy nằm tại thư mục gốc của dự án eBMR (`/var/www/eBMR/scale-bridge.js`)
+hoạt động ở cổng `8090`.
+
+### 2. Triển khai chạy ngầm bằng PM2 trên Server Ubuntu
+Để duy trì tiến trình chạy ngầm liên tục, tự động restart khi crash và tự chạy
+khi reboot server, sử dụng công cụ quản lý tiến trình **PM2**:
+
+1. Cài đặt PM2 toàn cục:
+   ```bash
+   sudo npm install -g pm2
+   ```
+2. Khởi chạy WebSocket Bridge với tên tiến trình cụ thể:
+   ```bash
+   cd /var/www/eBMR
+   pm2 start scale-bridge.js --name "ebmr-scale-bridge"
+   ```
+3. Lưu cấu hình khởi động để tự chạy khi khởi động lại Server:
+   ```bash
+   pm2 save
+   pm2 startup
+   ```
+   *(Nhớ copy và chạy dòng lệnh sinh ra bởi `pm2 startup` nếu có).*
+
+### 3. Các lệnh quản lý PM2 thường dùng
+- **Xem danh sách tiến trình:** `pm2 list` (hoặc `pm2 status`)
+- **Xem log/nhật ký hoạt động thời gian thực:** `pm2 logs ebmr-scale-bridge`
+- **Dừng tiến trình:** `pm2 stop ebmr-scale-bridge`
+- **Khởi động lại:** `pm2 restart ebmr-scale-bridge`
+
 ---
 
 ## Lưu ý quan trọng

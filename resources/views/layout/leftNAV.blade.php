@@ -346,14 +346,14 @@
                     </ul>
                 </li> --}}
 
-                <li
+                {{-- <li
                     class="nav-item has-treeview {{ str_contains(url()->current(), 'ai-training') ? 'menu-open' : '' }}">
                     <a href="{{ route('ai_training.index') }}"
                         class="nav-link {{ str_contains(url()->current(), 'ai-training') ? 'active' : '' }}">
                         <i class="fas fa-brain"></i>
                         <p>Huấn Luyện AI</p>
                     </a>
-                </li>
+                </li> --}}
 
                 <li class="nav-item has-treeview">
                     <a href="#" class="nav-link">
