@@ -17,7 +17,7 @@ class AIService
 
         // 1. Phản hồi chào hỏi cơ bản
         if (preg_match('/(chào|hello|hi|bạn là ai)/u', $message)) {
-            return "Xin chào! Tôi là **AI Agent eBMR**. Tôi được tạo ra để giúp bạn tìm kiếm thông tin nhanh trong hệ thống quản lý sản xuất (PMS) và hỗ trợ soạn thảo hồ sơ lô điện tử (eBMR).\n\nBạn có thể hỏi tôi về:\n- Danh mục bảo trì/hiệu chuẩn\n- Thông tin máy móc\n- Kế hoạch sản xuất\n- Hoặc chat bất kỳ điều gì!";
+            return "Xin chào! Tôi là **AI Agent eR**. Tôi được tạo ra để giúp bạn tìm kiếm thông tin nhanh trong hệ thống quản lý sản xuất (PMS) và hỗ trợ soạn thảo hồ sơ điện tử (eR).\n\nBạn có thể hỏi tôi về:\n- Danh mục bảo trì/hiệu chuẩn\n- Thông tin máy móc\n- Kế hoạch sản xuất\n- Hoặc chat bất kỳ điều gì!";
         }
 
         // 2. Tra cứu Kế hoạch sản xuất
@@ -55,7 +55,7 @@ class AIService
                     "type" => "function",
                     "function" => [
                         "name" => "search_ebmr_records",
-                        "description" => "Tìm kiếm danh sách hồ sơ lô (eBMR) dựa trên mã lô hoặc trạng thái.",
+                        "description" => "Tìm kiếm danh sách hồ sơ (eR) dựa trên mã lô hoặc trạng thái.",
                         "parameters" => [
                             "type" => "object",
                             "properties" => [
@@ -69,7 +69,7 @@ class AIService
                     "type" => "function",
                     "function" => [
                         "name" => "get_ebmr_details",
-                        "description" => "Lấy chi tiết toàn bộ dữ liệu của một hồ sơ lô cụ thể.",
+                        "description" => "Lấy chi tiết toàn bộ dữ liệu của một hồ sơ cụ thể.",
                         "parameters" => [
                             "type" => "object",
                             "properties" => [
@@ -104,7 +104,7 @@ class AIService
                 }
             }
 
-            $systemContent = "Bạn là Trợ lý AI nội bộ của dự án eBMR. Bạn LUÔN LUÔN PHẢI TRẢ LỜI BẰNG TIẾNG VIỆT trong mọi trường hợp.\n"
+            $systemContent = "Bạn là Trợ lý AI nội bộ của dự án eR. Bạn LUÔN LUÔN PHẢI TRẢ LỜI BẰNG TIẾNG VIỆT trong mọi trường hợp.\n"
                            . "QUY TẮC CỐT LÕI (BẮT BUỘC TUÂN THỦ):\n"
                            . "1. Khi người dùng yêu cầu tìm kiếm, tra cứu, hoặc hỏi thông tin về lô, sản phẩm, nhân sự, bạn BẮT BUỘC PHẢI GỌI CÔNG CỤ (TOOL CALLING) ngay lập tức.\n"
                            . "2. TUYỆT ĐỐI KHÔNG BAO GIỜ trả lời bằng văn bản kiểu 'Em đang tìm kiếm...', 'Vui lòng đợi...', 'Em sẽ kiểm tra...'. Điều này là CẤM KỴ.\n"

@@ -53,6 +53,7 @@
     </div>
 </div>
 
+@section('script')
 <script>
     function editMf(data) {
         $('#up_id').val(data.id);
@@ -68,3 +69,4 @@
         }
     }
 </script>
+@append

@@ -50,7 +50,61 @@ class EbmrTemplateController extends Controller
                 ->addSelect('intermediate_category.intermediate_code as category_code', 'product_name.name as category_name');
         }
 
-        $templates = $templatesQuery->orderBy('ebmr_templates.updated_at', 'desc')->get();
+        $templates = $templatesQuery->get();
+
+        // Find all categories that have a pending (draft/submitted/issued) template of the current type
+        $pendingCategoryIds = DB::table('ebmr_templates')
+            ->where('type', $type)
+            ->whereIn('status', ['draft', 'submitted', 'issued'])
+            ->whereNotNull('caterogy_id')
+            ->distinct()
+            ->pluck('caterogy_id')
+            ->toArray();
+
+        $maxVersions = [];
+        foreach ($templates as $t) {
+            $catId = $t->caterogy_id;
+            $ver = (int)$t->version;
+            if (!isset($maxVersions[$catId]) || $ver > $maxVersions[$catId]) {
+                $maxVersions[$catId] = $ver;
+            }
+        }
+
+        // Fetch all active ingredients (formulas of role 'Hoạt Chất') for these templates
+        $templateIds = $templates->pluck('id')->toArray();
+        $activeIngredients = [];
+        if (!empty($templateIds)) {
+            $activeIngredients = DB::table('preparation_formula')
+                ->join('formula_materials', 'preparation_formula.id', '=', 'formula_materials.preparation_formula_id')
+                ->whereIn('preparation_formula.ebmr_templates_id', $templateIds)
+                ->whereRaw('LOWER(TRIM(preparation_formula.role)) = ?', ['hoạt chất'])
+                ->select(
+                    'preparation_formula.ebmr_templates_id',
+                    'preparation_formula.total_amount_per_unit',
+                    'formula_materials.name as material_name'
+                )
+                ->get()
+                ->groupBy('ebmr_templates_id');
+        }
+
+        foreach ($templates as $t) {
+            $t->is_max_version = ($t->caterogy_id && (int)$t->version === ($maxVersions[$t->caterogy_id] ?? 0));
+            $t->has_pending_version = in_array($t->caterogy_id, $pendingCategoryIds);
+            
+            // Build Labeled Strength (Hàm lượng nhãn)
+            $strengthParts = [];
+            if (isset($activeIngredients[$t->id])) {
+                foreach ($activeIngredients[$t->id] as $ing) {
+                    $matName = $ing->material_name;
+                    if (strpos($matName, '(') !== false) {
+                        $matName = trim(explode('(', $matName)[0]);
+                    }
+                    $amount = floatval($ing->total_amount_per_unit);
+                    $strengthParts[] = "{$matName} {$amount} mg";
+                }
+            }
+            $t->labeled_strength = !empty($strengthParts) ? implode(' / ', $strengthParts) : '';
+        }
 
         $users = DB::table('user_management')->select('id', 'fullName as name')->orderBy('fullName')->get();
 
@@ -120,6 +174,14 @@ class EbmrTemplateController extends Controller
 
             $t->sections = $sections;
         }
+
+        // Sort templates: is_max_version DESC, updated_at DESC
+        $templates = $templates->sortByDesc(function($t) {
+            return [
+                $t->is_max_version ? 1 : 0,
+                $t->updated_at
+            ];
+        })->values();
 
         $dosages = DB::table('dosage')->where('active', true)->get();
         $units = DB::table('unit')->where('active', true)->get();
@@ -546,6 +608,20 @@ class EbmrTemplateController extends Controller
 
     private function injectContent(&$field, $block, $contentBlocks, $testingCriteria = null, $properties = null)
     {
+        if (isset($field['id']) && $field['id'] === 'sys_bmr_tbl_desc') {
+            if (isset($field['rows']) && $field['rows'] == 6) {
+                $field['rows'] = 5;
+                if (isset($field['data']) && count($field['data']) >= 6) {
+                    unset($field['data'][5]);
+                    $field['data'] = array_values($field['data']);
+                }
+                if (isset($field['rowHeights']) && count($field['rowHeights']) >= 6) {
+                    unset($field['rowHeights'][5]);
+                    $field['rowHeights'] = array_values($field['rowHeights']);
+                }
+            }
+        }
+
         if (! $contentBlocks || empty($block->content)) {
             return;
         }
@@ -973,6 +1049,20 @@ class EbmrTemplateController extends Controller
      */
     public function saveTestingData(Request $request, $id)
     {
+        $template = DB::table('ebmr_templates')->where('id', $id)->first();
+        if (!$template) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Không tìm thấy hồ sơ mẫu.'
+            ], 404);
+        }
+        if ($template->status !== 'draft') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Hồ sơ mẫu không còn ở trạng thái nháp, không thể cấu hình.'
+            ], 403);
+        }
+
         $criteria = $request->input('criteria', []);
 
         DB::beginTransaction();
@@ -1307,6 +1397,12 @@ class EbmrTemplateController extends Controller
                     'message' => 'Không tìm thấy hồ sơ mẫu.'
                 ], 404);
             }
+            if ($template->status !== 'draft') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Hồ sơ mẫu không còn ở trạng thái nháp, không thể cấu hình.'
+                ], 403);
+            }
 
             $mappings = $request->input('mappings', []);
 
@@ -1343,6 +1439,268 @@ class EbmrTemplateController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Lỗi khi lưu cấu hình phòng: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Duplicate an existing template to create a new draft edition/version.
+     */
+    public function duplicateTemplate(Request $request)
+    {
+        $oldId = $request->input('id');
+        if (!$oldId) {
+            return response()->json(['success' => false, 'message' => 'Thiếu ID hồ sơ mẫu.']);
+        }
+
+        $oldTemplate = DB::table('ebmr_templates')->where('id', $oldId)->first();
+        if (!$oldTemplate) {
+            return response()->json(['success' => false, 'message' => 'Không tìm thấy hồ sơ mẫu gốc.']);
+        }
+
+        // Check if there is already a pending template of the same category and type
+        $pendingExists = DB::table('ebmr_templates')
+            ->where('caterogy_id', $oldTemplate->caterogy_id)
+            ->where('type', $oldTemplate->type)
+            ->whereIn('status', ['draft', 'submitted', 'issued'])
+            ->exists();
+        if ($pendingExists) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Đã tồn tại một bản sao đang soạn thảo hoặc phê duyệt (Draft/Submitted/Issued) cho danh mục này. Không thể tạo thêm bản sao mới.'
+            ]);
+        }
+
+        // 1. Calculate next version
+        $maxVersion = DB::table('ebmr_templates')
+            ->where('caterogy_id', $oldTemplate->caterogy_id)
+            ->where('type', $oldTemplate->type)
+            ->max('version');
+        $nextVersion = ($maxVersion ?? 0) + 1;
+
+        $userId = session('user')['userId'] ?? null;
+
+        DB::beginTransaction();
+        try {
+            // 2. Clone ebmr_templates metadata
+            $newTemplateId = DB::table('ebmr_templates')->insertGetId([
+                'type' => $oldTemplate->type,
+                'doc_code' => $oldTemplate->doc_code,
+                'caterogy_id' => $oldTemplate->caterogy_id,
+                'owner_id' => $userId,
+                'status' => 'draft',
+                'log_history' => $oldTemplate->log_history,
+                'version' => $nextVersion,
+                'pre_version' => $oldTemplate->version,
+                'dosage_id' => $oldTemplate->dosage_id,
+                'avg_core' => $oldTemplate->avg_core,
+                'average_unit_weight' => $oldTemplate->average_unit_weight,
+                'description' => $oldTemplate->description,
+                'storage_conditions' => $oldTemplate->storage_conditions,
+                'is_recalculation' => $oldTemplate->is_recalculation,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            // 3. Clone testing criteria (testing table) and keep track of ID mapping
+            $testingMapping = [];
+            $testings = DB::table('testing')->where('ebmr_templace_id', $oldId)->get();
+            foreach ($testings as $test) {
+                $newTestId = DB::table('testing')->insertGetId([
+                    'ebmr_templace_id' => $newTemplateId,
+                    'stage' => $test->stage,
+                    'stt' => $test->stt,
+                    'name' => $test->name,
+                    'specifictions' => $test->specifictions,
+                    'limits' => $test->limits,
+                    'note' => $test->note,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+                $testingMapping[$test->id] = $newTestId;
+
+                // Clone testing_images for this criteria
+                $images = DB::table('testing_images')->where('testing_id', $test->id)->get();
+                foreach ($images as $img) {
+                    DB::table('testing_images')->insert([
+                        'testing_id' => $newTestId,
+                        'image_path' => $img->image_path,
+                        'image_name' => $img->image_name,
+                        'image_description' => $img->image_description,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
+            }
+
+            // 4. Clone ebmr_properties
+            $properties = DB::table('ebmr_properties')->where('ebmr_templace_id', $oldId)->get();
+            foreach ($properties as $prop) {
+                DB::table('ebmr_properties')->insert([
+                    'ebmr_templace_id' => $newTemplateId,
+                    'name' => $prop->name,
+                    'value' => $prop->value,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+
+            // 5. Clone ebmr_template_blocks and map their IDs
+            $blockMapping = [];
+            $blocks = DB::table('ebmr_template_blocks')->where('template_id', $oldId)->orderBy('order')->get();
+            foreach ($blocks as $block) {
+                // Determine new block properties JSON
+                $propsArr = json_decode($block->properties, true);
+                if (is_array($propsArr)) {
+                    // Update any testing criteria references in properties if they exist
+                    if (isset($propsArr['criteria_id']) && isset($testingMapping[$propsArr['criteria_id']])) {
+                        $propsArr['criteria_id'] = $testingMapping[$propsArr['criteria_id']];
+                    }
+                }
+                
+                $propertiesJson = json_encode($propsArr, JSON_UNESCAPED_UNICODE);
+                foreach ($testingMapping as $oldTestId => $newTestId) {
+                    $propertiesJson = str_replace('data-criteria-id="' . $oldTestId . '"', 'data-criteria-id="' . $newTestId . '"', $propertiesJson);
+                    $propertiesJson = str_replace('"' . $oldTestId . '"', '"' . $newTestId . '"', $propertiesJson);
+                }
+
+                $contentStr = $block->content;
+                if ($contentStr) {
+                    foreach ($testingMapping as $oldTestId => $newTestId) {
+                        $contentStr = str_replace('data-criteria-id="' . $oldTestId . '"', 'data-criteria-id="' . $newTestId . '"', $contentStr);
+                    }
+                }
+
+                $newBlockId = DB::table('ebmr_template_blocks')->insertGetId([
+                    'template_id' => $newTemplateId,
+                    'section_id' => $block->section_id,
+                    'type' => $block->type,
+                    'label' => $block->label,
+                    'order' => $block->order,
+                    'content' => $contentStr,
+                    'properties' => $propertiesJson,
+                    'fields_config' => $block->fields_config,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+                $blockMapping[$block->id] = $newBlockId;
+            }
+
+            // 6. Clone ebmr_content_blocks for each template block
+            $contentBlocks = DB::table('ebmr_content_blocks')->where('template_id', $oldId)->get();
+            foreach ($contentBlocks as $cb) {
+                $viContents = $cb->vi_contents;
+                $enContents = $cb->en_contents;
+                if ($viContents) {
+                    foreach ($testingMapping as $oldTestId => $newTestId) {
+                        $viContents = str_replace('data-criteria-id="' . $oldTestId . '"', 'data-criteria-id="' . $newTestId . '"', $viContents);
+                    }
+                }
+                if ($enContents) {
+                    foreach ($testingMapping as $oldTestId => $newTestId) {
+                        $enContents = str_replace('data-criteria-id="' . $oldTestId . '"', 'data-criteria-id="' . $newTestId . '"', $enContents);
+                    }
+                }
+
+                $newCbBlockId = $blockMapping[$cb->ebmr_template_blocks_id] ?? null;
+                if ($newCbBlockId) {
+                    DB::table('ebmr_content_blocks')->insert([
+                        'ebmr_template_blocks_id' => $newCbBlockId,
+                        'template_id' => $newTemplateId,
+                        'section_id' => $cb->section_id,
+                        'type' => $cb->type,
+                        'vi_contents' => $viContents,
+                        'en_contents' => $enContents,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
+            }
+
+            // 7. Clone ebmr_variants and map block IDs
+            $variants = DB::table('ebmr_variants')->where('template_id', $oldId)->get();
+            foreach ($variants as $var) {
+                $newVarBlockId = $var->block_id ? ($blockMapping[$var->block_id] ?? null) : null;
+                
+                DB::table('ebmr_variants')->insert([
+                    'template_id' => $newTemplateId,
+                    'field_key' => $var->field_key,
+                    'name' => $var->name,
+                    'label' => $var->label,
+                    'type' => $var->type,
+                    'important_var_id' => $var->important_var_id,
+                    'section_id' => $var->section_id,
+                    'block_id' => $newVarBlockId,
+                    'config' => $var->config,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+
+            // 8. Clone formulas and recipe data
+            $formulas = DB::table('preparation_formula')->where('ebmr_templates_id', $oldId)->get();
+            foreach ($formulas as $formula) {
+                $newFormulaId = DB::table('preparation_formula')->insertGetId([
+                    'ebmr_templates_id' => $newTemplateId,
+                    'type' => $formula->type,
+                    'role' => $formula->role,
+                    'total_amount_per_unit' => $formula->total_amount_per_unit,
+                    'total_amount_per_batch' => $formula->total_amount_per_batch,
+                    'created_by' => $formula->created_by,
+                    'created_at' => now(),
+                ]);
+
+                // Clone formula_materials
+                $materials = DB::table('formula_materials')->where('preparation_formula_id', $formula->id)->get();
+                foreach ($materials as $mat) {
+                    DB::table('formula_materials')->insert([
+                        'preparation_formula_id' => $newFormulaId,
+                        'code' => $mat->code,
+                        'name' => $mat->name,
+                        'manufacturer' => $mat->manufacturer,
+                        'Spec' => $mat->Spec,
+                        'created_at' => now(),
+                    ]);
+                }
+
+                // Clone ingredient_amount
+                $subAmounts = DB::table('ingredient_amount')->where('preparation_formula_id', $formula->id)->get();
+                foreach ($subAmounts as $sub) {
+                    DB::table('ingredient_amount')->insert([
+                        'preparation_formula_id' => $newFormulaId,
+                        'amount_per_unit' => $sub->amount_per_unit,
+                        'amount_per_batch' => $sub->amount_per_batch,
+                        'note' => $sub->note,
+                        'created_by' => $sub->created_by,
+                        'created_at' => now(),
+                    ]);
+                }
+            }
+
+            // 9. Clone ebmr_template_rooms
+            $rooms = DB::table('ebmr_template_rooms')->where('template_id', $oldId)->get();
+            foreach ($rooms as $room) {
+                DB::table('ebmr_template_rooms')->insert([
+                    'template_id' => $newTemplateId,
+                    'section_id' => $room->section_id,
+                    'room_id' => $room->room_id,
+                    'condition_id' => $room->condition_id,
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+            }
+
+            DB::commit();
+            return response()->json([
+                'success' => true,
+                'message' => 'Lên ấn bản (phiên bản ' . $nextVersion . ') thành công.',
+                'new_id' => $newTemplateId,
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Lỗi nhân bản dữ liệu: ' . $e->getMessage()
             ], 500);
         }
     }

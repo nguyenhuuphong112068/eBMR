@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <title>eBMR | Electronic Batch Manufacturing Record</title>
+    <title>eR | Electronic Record</title>
     <!-- Tell the browser to be responsive to screen width -->
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
@@ -965,7 +965,7 @@
     <!-- ./wrapper -->
 
     <!-- AI Quick Access Button -->
-    <div class="ai-float-btn" onclick="openAiChat()" title="Chat với AI Agent eBMR">
+    <div class="ai-float-btn" onclick="openAiChat()" title="Chat với AI Agent eR">
         <div class="pulse-ring"></div>
         <i class="bi bi-robot"></i>
     </div>
@@ -1136,7 +1136,7 @@
             }
             window.openAiChat = function() {
                 // Mở cửa sổ chat trực tiếp với AI (ID: 9999)
-                startDirectChat(9999, 'AI Agent eBMR', true);
+                startDirectChat(9999, 'AI Agent eR', true);
             };
 
             $(window).on('focus click keydown', function() {
@@ -1707,7 +1707,7 @@
                             </div>
                             <div class="msg-body" style="margin-left: 10px;">
                                 <div class="msg-text" style="background:#f1f0f0; border-radius:15px; padding:8px 12px; font-style:italic; color:#666; font-size: 0.9em; animation: chat-blink 1.5s infinite;">
-                                    <i class="fas fa-spinner fa-spin"></i> eBMR Agent đang phân tích dữ liệu...
+                                    <i class="fas fa-spinner fa-spin"></i> eR Agent đang phân tích dữ liệu...
                                 </div>
                             </div>
                         </div>

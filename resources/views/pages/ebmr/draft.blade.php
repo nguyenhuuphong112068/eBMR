@@ -1,6 +1,6 @@
 @extends('layout.master')
 
-@section('title', 'Soạn hồ sơ eBMR (Document Mode)')
+@section('title', 'Soạn hồ sơ eR (Document Mode)')
 
 @section('topNAV')
     @include('layout.topNAV')

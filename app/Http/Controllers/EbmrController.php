@@ -188,6 +188,13 @@ class EbmrController extends Controller
             $id = DB::table('ebmr_templates')->insertGetId($data);
             $message = 'Khởi tạo hồ sơ mới thành công';
         } else {
+            $template = DB::table('ebmr_templates')->where('id', $validated['id'])->first();
+            if ($template && $template->status !== 'draft') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Hồ sơ mẫu không còn ở trạng thái nháp, không thể cấu hình.'
+                ], 403);
+            }
             DB::table('ebmr_templates')->where('id', $validated['id'])->update($data);
             $id = $validated['id'];
             $message = 'Cập nhật thông tin hồ sơ thành công';

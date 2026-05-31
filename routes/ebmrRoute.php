@@ -11,6 +11,7 @@ Route::group(['prefix' => 'ebmr', 'as' => 'pages.ebmr.'], function () {
     // 1. Template Management
     Route::get('/templates', [EbmrTemplateController::class, 'index'])->name('templates');
     Route::post('/templates/metadata', [EbmrTemplateController::class, 'storeMetadata'])->name('storeTemplateMetadata');
+    Route::post('/templates/duplicate', [EbmrTemplateController::class, 'duplicateTemplate'])->name('duplicateTemplate');
     Route::post('/templates/effective-date', [EbmrTemplateController::class, 'updateEffectiveDate'])->name('updateEffectiveDate');
     Route::get('/templates/{id}/data', [EbmrTemplateController::class, 'getMetadata'])->name('getTemplateMetadata');
     Route::get('/get-templates', [EbmrTemplateController::class, 'getTemplates'])->name('getTemplates');
@@ -47,6 +48,8 @@ Route::group(['prefix' => 'ebmr', 'as' => 'pages.ebmr.'], function () {
 
     // 5. Execution & Records
     Route::get('/records', [EbmrExecutionController::class, 'index'])->name('indexRecords');
+    Route::get('/production', [EbmrExecutionController::class, 'productionIndex'])->name('production');
+    Route::get('/production/bms-data', [EbmrExecutionController::class, 'getBmsData'])->name('productionBmsData');
     Route::get('/execute/{id}', [EbmrExecutionController::class, 'execute'])->name('execute');
     Route::post('/update-record-data', [EbmrExecutionController::class, 'updateRecordData'])->name('updateRecordData');
     Route::post('/verify-password', [EbmrExecutionController::class, 'verifyPassword'])->name('verifyPassword');

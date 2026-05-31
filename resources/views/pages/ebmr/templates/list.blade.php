@@ -3,6 +3,15 @@
 @section('title', 'Hồ Sơ Sản Xuất BMR')
 
 @section('mainContent')
+    @php
+        $hasTemplatesForCode = false;
+        $codeParam = request('code');
+        if ($codeParam) {
+            $hasTemplatesForCode = $templates->contains(function($t) use ($codeParam) {
+                return strtolower(trim($t->category_code)) === strtolower(trim($codeParam));
+            });
+        }
+    @endphp
     <div class="content-wrapper">
         <div class="container-fluid py-4">
             <div class="row">
@@ -14,21 +23,37 @@
                                     class="fas {{ request('type') == 'GF' ? 'fa-layer-group' : (request('type') == 'BPR' ? 'fa-box-open' : (request('type') == 'MF' ? 'fa-file-invoice' : 'fa-file-medical')) }} me-2"></i>
                                 {{ request('type') == 'GF' ? 'Danh Sách Biểu Mẫu Dùng Chung' : (request('type') == 'BPR' ? 'Danh Sách Hồ Sơ Đóng Gói' : (request('type') == 'MF' ? 'Danh Sách Biểu Mẫu Gốc' : 'Danh Sách Hồ Sơ Sản Xuất BMR')) }}
                             </h5>
-                            <div class="d-flex gap-2">
-                                <button class="btn btn-outline-primary rounded-pill px-4 shadow-sm fw-bold"
-                                    onclick="openBtpListModal()">
-                                    <i class="fas fa-file-signature me-2"></i> Tạo mới
-                                </button>
+                            <div class="d-flex align-items-center gap-3">
+                                <!-- View Toggle Button Group -->
+                                <div class="btn-group view-toggle-group shadow-sm p-0.5 bg-light rounded-pill border"
+                                    role="group" aria-label="View Toggle" style="display: flex;">
+                                    <button type="button" class="btn btn-sm rounded-pill px-3 active" id="btnCardView"
+                                        onclick="switchView('card')" style="transition: all 0.3s;">
+                                        <i class="fas fa-th-large me-1"></i> Thẻ
+                                    </button>
+                                    <button type="button" class="btn btn-sm rounded-pill px-3" id="btnTableView"
+                                        onclick="switchView('table')" style="transition: all 0.3s;">
+                                        <i class="fas fa-table me-1"></i> Bảng
+                                    </button>
+                                </div>
+                                @if (!request('code') || !$hasTemplatesForCode)
+                                    <button class="btn btn-outline-primary rounded-pill px-4 shadow-sm fw-bold"
+                                        onclick="openBtpListModal()">
+                                        <i class="fas fa-file-signature me-2"></i> Tạo mới
+                                    </button>
+                                @endif
                             </div>
                         </div>
                         <div class="card-body p-4">
-                            <div class="table-responsive">
+                            <!-- Table View Container -->
+                            <div class="table-responsive d-none" id="tableViewContainer">
                                 <table id="draftingTable" class="table table-hover align-middle bmr-datatable"
                                     style="width:100%">
                                     <thead class="bg-light">
                                         <tr>
                                             <th>Mã danh mục</th>
-                                            <th>{{ request('type') == 'BMR' ? 'Số BMR' : (request('type') == 'BPR' ? 'Số BPR' : 'Số BM gốc') }}</th>
+                                            <th>{{ request('type') == 'BMR' ? 'Số BMR' : (request('type') == 'BPR' ? 'Số BPR' : 'Số BM gốc') }}
+                                            </th>
                                             <th>Tên nội dung</th>
                                             <th>Phiên bản</th>
                                             <th>Công đoạn</th>
@@ -41,7 +66,7 @@
                                     </thead>
                                     <tbody>
                                         @foreach ($templates as $t)
-                                            <tr>
+                                            <tr class="{{ $t->status === 'expired' ? 'replaced-version-row' : ($t->status === 'active' ? 'active-version-row' : 'normal-version-row') }}">
                                                 <td class="fw-bold text-navy">{{ $t->category_code }}</td>
                                                 <td class="fw-bold text-primary">{{ $t->doc_code ?? '-' }}</td>
                                                 <td>{{ $t->category_name }}</td>
@@ -62,7 +87,8 @@
                                                 </td>
                                                 <td>
                                                     @if ($t->status === 'draft')
-                                                        <span class="badge bg-secondary"><i class="fas fa-edit me-1"></i>
+                                                        <span class="badge bg-secondary"><i
+                                                                class="fas fa-edit me-1"></i>
                                                             Nháp</span>
                                                     @elseif($t->status === 'submitted')
                                                         <span class="badge bg-warning text-dark"><i
@@ -76,16 +102,18 @@
                                                                     class="fas fa-hourglass-half me-1"></i> Chờ hiệu
                                                                 lực</span>
                                                         @else
-                                                            <span class="badge bg-info"><i class="fas fa-rocket me-1"></i>
+                                                            <span class="badge bg-info"><i
+                                                                    class="fas fa-rocket me-1"></i>
                                                                 Đã ban hành</span>
                                                         @endif
                                                     @elseif($t->status === 'active')
                                                         <span class="badge bg-primary"><i
                                                                 class="fas fa-check-double me-1"></i>
-                                                            Hiệu lực</span>
+                                                            Hiện hành</span>
                                                     @elseif($t->status === 'expired')
-                                                        <span class="badge bg-danger"><i class="fas fa-history me-1"></i>
-                                                            Hết hiệu lực</span>
+                                                        <span class="badge bg-light text-muted border"><i
+                                                                class="fas fa-history me-1"></i>
+                                                            Đã được thay thế</span>
                                                     @endif
                                                 </td>
                                                 <td><i class="fas fa-user-circle me-1 text-muted"></i>
@@ -95,53 +123,240 @@
                                                 <td>{{ $t->effective_date ? \Carbon\Carbon::parse($t->effective_date)->format('d/m/Y') : '-' }}
                                                 </td>
                                                 <td class="text-center">
-                                                     <div class="btn-group shadow-sm rounded-pill overflow-hidden">
-                                                         @if ($current_type === 'BMR')
-                                                             <button class="btn btn-sm btn-white text-info fw-bold"
-                                                                 onclick="openConfigSXModal({{ $t->id }}, '{{ addslashes($t->category_name) }}')"
-                                                                 title="Cấu hình sản xuất">
-                                                                 <i class="fas fa-cogs text-info me-1"></i> Cấu hình SX
-                                                             </button>
-                                                         @else
-                                                             <button class="btn btn-sm btn-white text-info"
-                                                                 onclick="openEditModal({{ $t->id }})"
-                                                                 title="Cập nhật thông tin gốc">
-                                                                 <i class="fas fa-edit"></i> Sửa
-                                                             </button>
-                                                         @endif
+                                                    <div class="btn-group shadow-sm rounded-pill overflow-hidden">
+                                                        @if ($current_type === 'BMR')
+                                                            <button class="btn btn-sm btn-white text-info fw-bold"
+                                                                onclick="openConfigSXModal({{ $t->id }}, '{{ addslashes($t->category_name) }}')"
+                                                                title="Cấu hình sản xuất">
+                                                                <i class="fas fa-cogs text-info me-1"></i> Cấu hình SX
+                                                            </button>
+                                                        @else
+                                                            <button class="btn btn-sm btn-white text-info"
+                                                                onclick="openEditModal({{ $t->id }})"
+                                                                title="Cập nhật thông tin gốc">
+                                                                <i class="fas fa-edit"></i> Sửa
+                                                            </button>
+                                                        @endif
 
-                                                         @if ($t->status === 'draft')
-                                                             <a href="{{ route('pages.ebmr.designer', $t->id) }}"
-                                                                 class="btn btn-sm btn-white text-navy"
-                                                                 title="Thiết kế nội dung">
-                                                                 <i class="fas fa-pencil-ruler"></i> Thiết kế
-                                                             </a>
-                                                             <button class="btn btn-sm btn-white text-success"
-                                                                 onclick="openWorkflowModal({{ $t->id }})"
-                                                                 title="Trình ký">
-                                                                 <i class="fas fa-paper-plane"></i> Gửi duyệt
-                                                             </button>
-                                                         @else
-                                                             <a href="{{ route('pages.ebmr.designer', $t->id) }}?mode=review"
-                                                                 class="btn btn-sm btn-white text-primary"
-                                                                 title="Xem nội dung">
-                                                                 <i class="fas fa-eye"></i> Xem hồ sơ
-                                                             </a>
-                                                         @endif
+                                                        @if ($t->status === 'draft')
+                                                            <a href="{{ route('pages.ebmr.designer', $t->id) }}"
+                                                                class="btn btn-sm btn-white text-navy"
+                                                                title="Thiết kế nội dung">
+                                                                <i class="fas fa-pencil-ruler"></i> Thiết kế
+                                                            </a>
+                                                            <button class="btn btn-sm btn-white text-success"
+                                                                onclick="openWorkflowModal({{ $t->id }})"
+                                                                title="Trình ký">
+                                                                <i class="fas fa-paper-plane"></i> Gửi duyệt
+                                                            </button>
+                                                        @else
+                                                            <a href="{{ route('pages.ebmr.designer', $t->id) }}?mode=review"
+                                                                class="btn btn-sm btn-white text-primary"
+                                                                title="Xem nội dung">
+                                                                <i class="fas fa-eye"></i> Xem hồ sơ
+                                                            </a>
+                                                            @if ($t->status === 'active' && !$t->has_pending_version)
+                                                                <button class="btn btn-sm btn-white text-warning fw-bold"
+                                                                    onclick="duplicateTemplate({{ $t->id }})"
+                                                                    title="Lên ấn bản">
+                                                                    <i class="fas fa-copy"></i> Lên ấn bản
+                                                                </button>
+                                                            @endif
+                                                        @endif
 
-                                                         @if ($t->issued_date && !$t->effective_date && $t->owner_id == session('user')['userId'])
-                                                             <button class="btn btn-sm btn-white text-warning"
-                                                                 onclick="openEffectiveDateModal({{ $t->id }})"
-                                                                 title="Xác định ngày hiệu lực">
-                                                                 <i class="fas fa-calendar-check"></i> Hiệu lực
-                                                             </button>
-                                                         @endif
-                                                     </div>
+                                                        @if ($t->issued_date && !$t->effective_date && $t->owner_id == session('user')['userId'])
+                                                            <button class="btn btn-sm btn-white text-warning"
+                                                                onclick="openEffectiveDateModal({{ $t->id }})"
+                                                                title="Xác định ngày hiệu lực">
+                                                                <i class="fas fa-calendar-check"></i> Hiệu lực
+                                                            </button>
+                                                        @endif
+                                                    </div>
                                                 </td>
                                             </tr>
                                         @endforeach
                                     </tbody>
                                 </table>
+                            </div>
+
+                            <!-- Card Grid View Container -->
+                            <div id="cardViewContainer" class="d-block">
+                                <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4" id="templateCardGrid">
+                                    @foreach ($templates as $t)
+                                        <div class="col template-card-item" data-id="{{ $t->id }}">
+                                            <div
+                                                class="card h-100 template-card {{ $t->status === 'expired' ? 'replaced-version-card' : ($t->status === 'active' ? 'active-version-card' : 'normal-version-card') }}">
+                                                <!-- Card Top Header -->
+                                                <div
+                                                    class="card-header bg-transparent border-0 pt-4 pb-0 px-4 d-flex justify-content-between align-items-start">
+                                                    <div>
+                                                        <span
+                                                            class="badge bg-soft-info fs-7 px-2.5 py-1 mb-1">V.{{ $t->version }}</span>
+                                                        <div class="text-muted small fw-semibold text-uppercase tracking-wider"
+                                                            style="font-size: 0.65rem; letter-spacing: 0.05em;">
+                                                            {{ $t->category_code }}</div>
+                                                    </div>
+                                                    <div class="status-badge">
+                                                        @if ($t->status === 'draft')
+                                                            <span class="badge bg-secondary"><i
+                                                                    class="fas fa-edit me-1"></i> Nháp</span>
+                                                        @elseif($t->status === 'submitted')
+                                                            <span class="badge bg-warning text-dark"><i
+                                                                    class="fas fa-clock me-1"></i> Chờ duyệt</span>
+                                                        @elseif($t->status === 'approved')
+                                                            <span class="badge bg-success"><i
+                                                                    class="fas fa-check-circle me-1"></i> Đã
+                                                                duyệt</span>
+                                                        @elseif($t->status === 'issued')
+                                                            @if ($t->effective_date)
+                                                                <span class="badge bg-warning text-dark"><i
+                                                                        class="fas fa-hourglass-half me-1"></i> Chờ
+                                                                    hiệu lực</span>
+                                                            @else
+                                                                <span class="badge bg-info"><i
+                                                                        class="fas fa-rocket me-1"></i> Đã ban
+                                                                    hành</span>
+                                                            @endif
+                                                        @elseif($t->status === 'active')
+                                                            <span class="badge bg-primary"><i
+                                                                    class="fas fa-check-double me-1"></i> Hiện hành</span>
+                                                        @elseif($t->status === 'expired')
+                                                            <span class="badge bg-light text-muted border"><i
+                                                                    class="fas fa-history me-1"></i> Đã được thay thế</span>
+                                                        @endif
+                                                    </div>
+                                                </div>
+
+                                                <!-- Card Body -->
+                                                <div class="card-body px-4 py-3 d-flex flex-column">
+                                                    <h6 class="card-title fw-bold text-navy mb-2 line-clamp-2"
+                                                        style="font-size: 1rem; line-height: 1.4;">
+                                                        {{ $t->category_name }}
+                                                    </h6>
+
+                                                    <!-- Doc Code -->
+                                                    <div class="mb-2">
+                                                        <span
+                                                            class="small text-muted me-1">{{ request('type') == 'BMR' ? 'Số BMR:' : (request('type') == 'BPR' ? 'Số BPR:' : 'Số BM gốc:') }}</span>
+                                                        <span
+                                                            class="fw-bold text-primary">{{ $t->doc_code ?? '-' }}</span>
+                                                    </div>
+
+                                                    <!-- Labeled Strength -->
+                                                    @if (!empty($t->labeled_strength))
+                                                        <div class="mb-2">
+                                                            <span class="small text-muted me-1">Hàm lượng nhãn:</span>
+                                                            <span class="fw-semibold text-navy"
+                                                                style="font-size: 0.85rem;">{{ $t->labeled_strength }}</span>
+                                                        </div>
+                                                    @endif
+
+                                                    <!-- Sections / stages timeline list -->
+                                                    <div class="mb-4 flex-grow-1">
+                                                        <div class="small fw-semibold text-navy mb-2"><i
+                                                                class="fas fa-project-diagram me-1 text-info"></i> Công
+                                                            đoạn:</div>
+                                                        <div class="d-flex flex-wrap gap-1.5"
+                                                            style="max-height: 80px; overflow-y: auto;">
+                                                            @forelse($t->sections as $s)
+                                                                <button
+                                                                    class="btn btn-xs btn-outline-info rounded-pill py-0.5 px-2 bg-light text-nowrap"
+                                                                    style="font-size: 0.65rem; border-color: rgba(23, 162, 184, 0.2);"
+                                                                    onclick="window.location.href='{{ route('pages.ebmr.designer', $t->id) }}?section={{ $s['id'] }}'">
+                                                                    {{ $s['label'] }}
+                                                                </button>
+                                                            @empty
+                                                                <span class="text-muted small italic">Không có công
+                                                                    đoạn</span>
+                                                            @endforelse
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Meta details -->
+                                                    <div class="pt-3 border-top mt-auto"
+                                                        style="border-top: 1px dashed #e2e8f0 !important;">
+                                                        <div class="row g-2">
+                                                            <div class="col-12 d-flex align-items-center text-muted small">
+                                                                <i class="fas fa-user-circle me-2 text-info"
+                                                                    style="font-size: 0.9rem;"></i>
+                                                                <span class="text-truncate">Dược sĩ: <strong
+                                                                        class="text-dark">{{ $t->owner_name ?? 'N/A' }}</strong></span>
+                                                            </div>
+                                                            <div class="col-6 d-flex align-items-center text-muted small">
+                                                                <i class="far fa-calendar-alt me-2 text-info"
+                                                                    style="font-size: 0.9rem;"></i>
+                                                                <span>Ban hành: <strong
+                                                                        class="text-dark">{{ $t->issued_date ? \Carbon\Carbon::parse($t->issued_date)->format('d/m/Y') : '-' }}</strong></span>
+                                                            </div>
+                                                            <div class="col-6 d-flex align-items-center text-muted small">
+                                                                <i class="far fa-calendar-check me-2 text-info"
+                                                                    style="font-size: 0.9rem;"></i>
+                                                                <span>Hiệu lực: <strong
+                                                                        class="text-dark">{{ $t->effective_date ? \Carbon\Carbon::parse($t->effective_date)->format('d/m/Y') : '-' }}</strong></span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Card Footer Actions -->
+                                                <div
+                                                    class="card-footer bg-light border-0 py-3 px-4 d-flex justify-content-end">
+                                                    <div class="d-flex gap-1">
+                                                        @if ($current_type === 'BMR')
+                                                            <button
+                                                                class="btn btn-sm btn-outline-info rounded-pill px-3 py-1 fw-bold"
+                                                                onclick="openConfigSXModal({{ $t->id }}, '{{ addslashes($t->category_name) }}')"
+                                                                title="Cấu hình sản xuất">
+                                                                <i class="fas fa-cogs me-1"></i> Cấu hình SX
+                                                            </button>
+                                                        @else
+                                                            <button
+                                                                class="btn btn-sm btn-outline-info rounded-pill px-3 py-1"
+                                                                onclick="openEditModal({{ $t->id }})"
+                                                                title="Cập nhật thông tin gốc">
+                                                                <i class="fas fa-edit me-1"></i> Sửa
+                                                            </button>
+                                                        @endif
+
+                                                        @if ($t->status === 'draft')
+                                                            <a href="{{ route('pages.ebmr.designer', $t->id) }}"
+                                                                class="btn btn-sm btn-navy rounded-pill px-3 py-1"
+                                                                title="Thiết kế nội dung">
+                                                                <i class="fas fa-pencil-ruler me-1"></i> Thiết kế
+                                                            </a>
+                                                            <button class="btn btn-sm btn-success rounded-pill px-3 py-1"
+                                                                onclick="openWorkflowModal({{ $t->id }})"
+                                                                title="Trình ký">
+                                                                <i class="fas fa-paper-plane me-1"></i> Gửi duyệt
+                                                            </button>
+                                                        @else
+                                                            <a href="{{ route('pages.ebmr.designer', $t->id) }}?mode=review"
+                                                                class="btn btn-sm btn-primary text-white rounded-pill px-3 py-1"
+                                                                title="Xem nội dung">
+                                                                <i class="fas fa-eye me-1"></i> Xem hồ sơ
+                                                            </a>
+                                                            @if ($t->status === 'active' && !$t->has_pending_version)
+                                                                <button class="btn btn-sm btn-outline-warning rounded-pill px-3 py-1"
+                                                                    onclick="duplicateTemplate({{ $t->id }})"
+                                                                    title="Lên ấn bản">
+                                                                    <i class="fas fa-copy me-1"></i> Lên ấn bản
+                                                                </button>
+                                                            @endif
+                                                        @endif
+
+                                                        @if ($t->issued_date && !$t->effective_date && $t->owner_id == session('user')['userId'])
+                                                            <button class="btn btn-sm btn-warning rounded-pill px-3 py-1"
+                                                                onclick="openEffectiveDateModal({{ $t->id }})"
+                                                                title="Xác định ngày hiệu lực">
+                                                                <i class="fas fa-calendar-check me-1"></i> Hiệu lực
+                                                            </button>
+                                                        @endif
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -276,70 +491,74 @@
 
             <div class="modal fade" id="templateMetadataModal" tabindex="-1" role="dialog" aria-hidden="true">
                 @if ((isset($current_type) && $current_type === 'BMR') || request('type', 'BMR') === 'BMR')
-                    <button type="button" class="modal-nav-btn modal-nav-left" onclick="navigateConfigSX('left', '#templateMetadataModal', this)" title="Khai báo phòng sản xuất">
+                    <button type="button" class="modal-nav-btn modal-nav-left"
+                        onclick="navigateConfigSX('left', '#templateMetadataModal', this)"
+                        title="Khai báo phòng sản xuất">
                         <i class="fas fa-chevron-left"></i>
                     </button>
-                    <button type="button" class="modal-nav-btn modal-nav-right" onclick="navigateConfigSX('right', '#templateMetadataModal', this)" title="Công thức">
+                    <button type="button" class="modal-nav-btn modal-nav-right"
+                        onclick="navigateConfigSX('right', '#templateMetadataModal', this)" title="Công thức">
                         <i class="fas fa-chevron-right"></i>
                     </button>
                 @endif
-                <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" role="document" style="max-width: 95%;">
+                <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" role="document"
+                    style="max-width: 95%;">
                     <div class="modal-content border-0 shadow-lg">
-                            <div class="modal-header">
-                                <h5 class="modal-title font-weight-bold text-info" id="modalTitle">
-                                    <i class="fas fa-file-medical me-2"></i>
-                                    {{ request('type') == 'GF' ? 'Tạo Biểu Mẫu Dùng Chung' : (request('type') == 'BPR' ? 'Tạo Hồ Sơ Đóng Gói' : (request('type') == 'MF' ? 'Tạo Biểu Mẫu Gốc' : 'Tạo Hồ Sơ Lô Sản Xuất')) }}
-                                </h5>
-                                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                                    <span aria-hidden="true">&times;</span>
-                                </button>
-                            </div>
-                            <div class="modal-body p-4">
-                                <div class="row align-items-center mb-3">
-                                    <div class="col-md-6">
-                                        <div class="alert alert-cyan border-0 shadow-none mb-0 p-3">
-                                            <div class="d-flex align-items-center">
-                                                <i class="fas fa-info-circle fa-2x me-3 text-primary"></i>
-                                                <div class="w-100" style="min-width: 0;">
-                                                    <h6 class="mb-1 fw-bold text-navy small">Sản phẩm đang chọn:</h6>
-                                                    <div id="selectedBtpName"
-                                                        class="fs-6 text-primary fw-bold text-truncate">Chưa chọn sản phẩm</div>
-                                                    <div id="selectedBtpInfo" class="small text-muted mt-1"
-                                                        style="font-size: 0.75rem;">Cỡ lô: - | Dạng bào chế: -</div>
-                                                </div>
+                        <div class="modal-header">
+                            <h5 class="modal-title font-weight-bold text-info" id="modalTitle">
+                                <i class="fas fa-file-medical me-2"></i>
+                                {{ request('type') == 'GF' ? 'Tạo Biểu Mẫu Dùng Chung' : (request('type') == 'BPR' ? 'Tạo Hồ Sơ Đóng Gói' : (request('type') == 'MF' ? 'Tạo Biểu Mẫu Gốc' : 'Tạo Hồ Sơ Lô Sản Xuất')) }}
+                            </h5>
+                            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                <span aria-hidden="true">&times;</span>
+                            </button>
+                        </div>
+                        <div class="modal-body p-4">
+                            <div class="row align-items-center mb-3">
+                                <div class="col-md-6">
+                                    <div class="alert alert-cyan border-0 shadow-none mb-0 p-3">
+                                        <div class="d-flex align-items-center">
+                                            <i class="fas fa-info-circle fa-2x me-3 text-primary"></i>
+                                            <div class="w-100" style="min-width: 0;">
+                                                <h6 class="mb-1 fw-bold text-navy small">Sản phẩm đang chọn:</h6>
+                                                <div id="selectedBtpName" class="fs-6 text-primary fw-bold text-truncate">
+                                                    Chưa chọn sản phẩm</div>
+                                                <div id="selectedBtpInfo" class="small text-muted mt-1"
+                                                    style="font-size: 0.75rem;">Cỡ lô: - | Dạng bào chế: -</div>
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="col-md-3">
-                                        <div class="form-group mb-0">
-                                            <label class="form-label fw-bold small">{{ request('type') == 'BMR' ? 'Số BMR' : (request('type') == 'BPR' ? 'Số BPR' : 'Số BM gốc') }}</label>
-                                            <input type="text"
-                                                class="form-control rounded-pill text-center fw-bold" name="doc_code"
-                                                id="docCode" placeholder="Nhập số...">
-                                        </div>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <div class="form-group mb-0">
-                                            <label class="form-label fw-bold small">Phiên Bản <span
-                                                    class="text-danger">*</span></label>
-                                            <input type="number"
-                                                class="form-control rounded-pill text-center fw-bold" name="version"
-                                                id="version" required value="1" min="1">
-                                            <small class="text-muted d-block mt-1 text-center"
-                                                style="font-size: 0.7rem;"><i class="fas fa-magic me-1"></i> Tự động</small>
-                                        </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="form-group mb-0">
+                                        <label
+                                            class="form-label fw-bold small">{{ request('type') == 'BMR' ? 'Số BMR' : (request('type') == 'BPR' ? 'Số BPR' : 'Số BM gốc') }}</label>
+                                        <input type="text" class="form-control rounded-pill text-center fw-bold"
+                                            name="doc_code" id="docCode" placeholder="Nhập số...">
                                     </div>
                                 </div>
-
-                                @include('pages.ebmr.templates.partials.bmr_metadata')
-
+                                <div class="col-md-3">
+                                    <div class="form-group mb-0">
+                                        <label class="form-label fw-bold small">Phiên Bản <span
+                                                class="text-danger">*</span></label>
+                                        <input type="number" class="form-control rounded-pill text-center fw-bold"
+                                            name="version" id="version" required value="1" min="1">
+                                        <small class="text-muted d-block mt-1 text-center" style="font-size: 0.7rem;"><i
+                                                class="fas fa-magic me-1"></i> Tự động</small>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="modal-footer bg-light p-3">
-                                <button type="button" class="btn btn-white rounded-pill px-4" data-dismiss="modal">Hủy bỏ</button>
-                                <button type="submit" class="btn btn-primary rounded-pill px-4 shadow-sm text-white">
-                                    <i class="fas fa-save me-2 text-white"></i> Lưu hồ sơ
-                                </button>
-                            </div>
+
+                            @include('pages.ebmr.templates.partials.bmr_metadata')
+
+                        </div>
+                        <div class="modal-footer bg-light p-3">
+                            <button type="button" class="btn btn-white rounded-pill px-4" data-dismiss="modal">Hủy
+                                bỏ</button>
+                            <button type="submit" class="btn btn-primary rounded-pill px-4 shadow-sm text-white">
+                                <i class="fas fa-save me-2 text-white"></i> Lưu hồ sơ
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -347,14 +566,17 @@
             <!-- Modal Công thức -->
             <div class="modal fade" id="modalFormula" tabindex="-1" role="dialog" aria-hidden="true">
                 @if ((isset($current_type) && $current_type === 'BMR') || request('type', 'BMR') === 'BMR')
-                    <button type="button" class="modal-nav-btn modal-nav-left" onclick="navigateConfigSX('left', '#modalFormula', this)" title="Thông tin sản phẩm">
+                    <button type="button" class="modal-nav-btn modal-nav-left"
+                        onclick="navigateConfigSX('left', '#modalFormula', this)" title="Thông tin sản phẩm">
                         <i class="fas fa-chevron-left"></i>
                     </button>
-                    <button type="button" class="modal-nav-btn modal-nav-right" onclick="navigateConfigSX('right', '#modalFormula', this)" title="Tiêu chuẩn kiểm nghiệm">
+                    <button type="button" class="modal-nav-btn modal-nav-right"
+                        onclick="navigateConfigSX('right', '#modalFormula', this)" title="Tiêu chuẩn kiểm nghiệm">
                         <i class="fas fa-chevron-right"></i>
                     </button>
                 @endif
-                <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" role="document" style="max-width: 95%;">
+                <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" role="document"
+                    style="max-width: 95%;">
                     <div class="modal-content border-0 shadow-lg">
                         <div class="modal-header">
                             <h5 class="modal-title font-weight-bold text-info" id="modalFormulaTitle">
@@ -367,10 +589,13 @@
                         </div>
                         <div class="modal-body p-4">
                             <!-- Thiết lập tính toán lại công thức -->
-                            <div class="form-group mb-3 pb-3 border-bottom" id="recalculation_container" style="display: {{ request('type') == 'BMR' ? 'block' : 'none' }};">
+                            <div class="form-group mb-3 pb-3 border-bottom" id="recalculation_container"
+                                style="display: {{ request('type') == 'BMR' ? 'block' : 'none' }};">
                                 <div class="custom-control custom-switch custom-switch-lg">
-                                    <input type="checkbox" class="custom-control-input" id="enable_recalculation" name="is_recalculation" value="1">
-                                    <label class="custom-control-label fw-bold text-navy" for="enable_recalculation" style="cursor: pointer;">
+                                    <input type="checkbox" class="custom-control-input" id="enable_recalculation"
+                                        name="is_recalculation" value="1">
+                                    <label class="custom-control-label fw-bold text-navy" for="enable_recalculation"
+                                        style="cursor: pointer;">
                                         <i class="fas fa-calculator text-info me-1"></i> Thiết lập tính toán lại công thức
                                     </label>
                                 </div>
@@ -379,7 +604,8 @@
                             @include('pages.ebmr.templates.partials.bmr_bom_tables')
                         </div>
                         <div class="modal-footer bg-light p-3">
-                            <button type="button" class="btn btn-white rounded-pill px-4" data-dismiss="modal">Hủy bỏ</button>
+                            <button type="button" class="btn btn-white rounded-pill px-4" data-dismiss="modal">Hủy
+                                bỏ</button>
                             <button type="submit" class="btn btn-primary rounded-pill px-4 shadow-sm text-white">
                                 <i class="fas fa-save me-2 text-white"></i> Lưu hồ sơ
                             </button>
@@ -392,66 +618,102 @@
         <!-- Modal Trình Ký (Workflow) -->
         <div class="modal fade" id="workflowModal" tabindex="-1" role="dialog" aria-hidden="true">
             <div class="modal-dialog modal-dialog-centered" role="document">
-                <div class="modal-content border-0 shadow-lg">
+                <div class="modal-content border-0 shadow-lg" style="border-radius: 16px; overflow: hidden;">
                     <form id="workflowForm">
                         @csrf
                         <input type="hidden" id="workflowTemplateId" name="template_id">
-                        <div class="modal-header">
-                            <h5 class="modal-title font-weight-bold text-info"><i class="fas fa-paper-plane me-2"></i>
-                                Thiết lập luồng Trình Ký</h5>
-                            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <div
+                            class="modal-header bg-white border-bottom py-3 px-4 d-flex justify-content-between align-items-center">
+                            <h5 class="modal-title fw-bold text-navy mb-0" style="font-size: 1.1rem;">
+                                <i class="fas fa-paper-plane text-primary me-2"></i> Trình Ký
+                            </h5>
+                            <button type="button" class="close border-0 bg-transparent text-muted fs-4 p-0 m-0"
+                                data-dismiss="modal" aria-label="Close" style="line-height: 1; outline: none;">
                                 <span aria-hidden="true">&times;</span>
                             </button>
                         </div>
-                        <div class="modal-body p-4">
-                            <div class="alert alert-info border-0 shadow-none small mb-4">
-                                <i class="fas fa-info-circle me-1"></i> Sau khi trình ký, hồ sơ thiết kế sẽ được gửi đến
-                                những người liên quan để xem xét và ban hành.
-                            </div>
+                        <div class="modal-body p-4" style="background-color: #f8fafc;">
 
-                            <div class="mb-3">
-                                <label class="form-label fw-bold text-navy"><i class="fas fa-search me-1"></i> Người kiểm
-                                    tra (Reviewers)</label>
-                                <select class="form-select select2-workflow" name="reviewers[]" id="wfReviewers"
-                                    multiple="multiple" data-placeholder="Chọn một hoặc nhiều người...">
-                                    @foreach ($users as $user)
-                                        <option value="{{ $user->id }}">{{ $user->name }}</option>
-                                    @endforeach
-                                </select>
-                                <small class="form-text text-muted">Có thể chọn nhiều người kiểm tra (VD: QA, QC, Sản
-                                    xuất).</small>
-                            </div>
+                            <!-- Stepper Container -->
+                            <div class="workflow-stepper position-relative ps-2">
+                                <div class="stepper-line"></div>
 
-                            <div class="mb-3">
-                                <label class="form-label fw-bold text-navy"><i class="fas fa-check-double me-1"></i> Người
-                                    phê duyệt (Approver) <span class="text-danger">*</span></label>
-                                <select class="form-select select2-workflow" name="approver" id="wfApprover" required>
-                                    <option value="">-- Chọn một người phê duyệt --</option>
-                                    @foreach ($users as $user)
-                                        <option value="{{ $user->id }}">{{ $user->name }}</option>
-                                    @endforeach
-                                </select>
-                                <small class="form-text text-muted">Trưởng phòng/Giám đốc phê duyệt nội dung.</small>
-                            </div>
+                                <!-- Step 1: Reviewers -->
+                                <div class="workflow-step position-relative mb-4 pb-1">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <span class="step-badge text-white">1</span>
+                                        <label class="form-label fw-bold text-navy mb-0 ms-3"
+                                            style="margin-left: 12px !important;">
+                                            Người kiểm tra (Reviewers)
+                                        </label>
+                                    </div>
+                                    <div class="ms-5" style="margin-left: 44px !important;">
+                                        <select class="form-select select2-workflow" name="reviewers[]" id="wfReviewers"
+                                            multiple="multiple" data-placeholder="Chọn một hoặc nhiều người...">
+                                            @foreach ($users as $user)
+                                                <option value="{{ $user->id }}">{{ $user->name }}</option>
+                                            @endforeach
+                                        </select>
+                                        <small class="form-text text-muted d-block mt-1" style="font-size: 0.73rem;">
+                                            <i class="far fa-lightbulb me-1"></i> Xem xét & kiểm tra nội dung (Có thể chọn
+                                            nhiều người).
+                                        </small>
+                                    </div>
+                                </div>
 
-                            <div class="mb-3">
-                                <label class="form-label fw-bold text-navy"><i class="fas fa-file-signature me-1"></i>
-                                    Người cho phép ban hành <span class="text-danger">*</span></label>
-                                <select class="form-select select2-workflow" name="authorizer" id="wfAuthorizer"
-                                    required>
-                                    <option value="">-- Chọn một người ban hành --</option>
-                                    @foreach ($users as $user)
-                                        <option value="{{ $user->id }}">{{ $user->name }}</option>
-                                    @endforeach
-                                </select>
-                                <small class="form-text text-muted">Giám đốc chất lượng/Người đại diện ban hành chính
-                                    thức.</small>
+                                <!-- Step 2: Approver -->
+                                <div class="workflow-step position-relative mb-4 pb-1">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <span class="step-badge text-white">2</span>
+                                        <label class="form-label fw-bold text-navy mb-0 ms-3"
+                                            style="margin-left: 12px !important;">
+                                            Người phê duyệt (Approver) <span class="text-danger">*</span>
+                                        </label>
+                                    </div>
+                                    <div class="ms-5" style="margin-left: 44px !important;">
+                                        <select class="form-select select2-workflow" name="approver" id="wfApprover"
+                                            required>
+                                            <option value="">-- Chọn một người phê duyệt --</option>
+                                            @foreach ($users as $user)
+                                                <option value="{{ $user->id }}">{{ $user->name }}</option>
+                                            @endforeach
+                                        </select>
+                                        <small class="form-text text-muted d-block mt-1" style="font-size: 0.73rem;">
+                                            <i class="far fa-lightbulb me-1"></i> Trưởng phòng/Giám đốc phê duyệt nội dung.
+                                        </small>
+                                    </div>
+                                </div>
+
+                                <!-- Step 3: Authorizer -->
+                                <div class="workflow-step position-relative mb-1">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <span class="step-badge text-white">3</span>
+                                        <label class="form-label fw-bold text-navy mb-0 ms-3"
+                                            style="margin-left: 12px !important;">
+                                            Người cho phép ban hành <span class="text-danger">*</span>
+                                        </label>
+                                    </div>
+                                    <div class="ms-5" style="margin-left: 44px !important;">
+                                        <select class="form-select select2-workflow" name="authorizer" id="wfAuthorizer"
+                                            required>
+                                            <option value="">-- Chọn một người ban hành --</option>
+                                            @foreach ($users as $user)
+                                                <option value="{{ $user->id }}">{{ $user->name }}</option>
+                                            @endforeach
+                                        </select>
+                                        <small class="form-text text-muted d-block mt-1" style="font-size: 0.73rem;">
+                                            <i class="far fa-lightbulb me-1"></i> Giám đốc chất lượng/Người đại diện ban
+                                            hành chính thức.
+                                        </small>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        <div class="modal-footer bg-light p-3">
-                            <button type="button" class="btn btn-white rounded-pill px-4" data-dismiss="modal">Hủy
-                                bỏ</button>
-                            <button type="submit" class="btn btn-success rounded-pill px-4 shadow-sm">
+                        <div class="modal-footer bg-white border-top py-3 px-4 d-flex justify-content-end gap-2">
+                            <button type="button" class="btn btn-outline-secondary rounded-pill px-4"
+                                data-dismiss="modal" style="font-size: 0.85rem; font-weight: 600;">Hủy bỏ</button>
+                            <button type="submit" class="btn btn-success rounded-pill px-4 shadow-sm"
+                                style="font-size: 0.85rem; font-weight: 600;">
                                 <i class="fas fa-paper-plane me-2"></i> Gửi trình ký
                             </button>
                         </div>
@@ -508,7 +770,80 @@
             .note-editor .note-toolbar {
                 border-radius: 0 !important;
                 border-bottom: 1px solid #ced4da !important;
-                background: #f8f9fa !important;
+            }
+
+            /* Style cho Workflow Modal */
+            .workflow-stepper {
+                position: relative;
+            }
+
+            .workflow-stepper .stepper-line {
+                position: absolute;
+                left: 16px;
+                top: 20px;
+                bottom: 30px;
+                width: 2px;
+                border-left: 2px dashed #cbd5e1;
+                z-index: 1;
+            }
+
+            .workflow-step {
+                position: relative;
+                z-index: 2;
+            }
+
+            .workflow-step .step-badge {
+                width: 32px;
+                height: 32px;
+                border-radius: 50%;
+                background-color: var(--primary-navy) !important;
+                color: white !important;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                font-weight: bold;
+                font-size: 0.85rem;
+                border: 2px solid white;
+                box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            }
+
+            .workflow-step .form-label {
+                margin-bottom: 0;
+            }
+
+            /* Custom Select2 styling inside workflow modal */
+            #workflowModal .select2-container--bootstrap4 .select2-selection {
+                border-radius: 8px !important;
+                border: 1px solid #cbd5e1 !important;
+                min-height: 38px !important;
+                display: flex;
+                align-items: center;
+                transition: all 0.2s ease-in-out;
+            }
+
+            #workflowModal .select2-container--bootstrap4.select2-container--focus .select2-selection {
+                border-color: var(--primary-navy) !important;
+                box-shadow: 0 0 0 0.2rem rgba(0, 58, 79, 0.15) !important;
+            }
+
+            #workflowModal .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice {
+                background-color: rgba(0, 58, 79, 0.08) !important;
+                border: 1px solid rgba(0, 58, 79, 0.15) !important;
+                color: var(--primary-navy) !important;
+                border-radius: 6px !important;
+                font-weight: 500 !important;
+                padding: 2px 8px !important;
+                margin-top: 4px !important;
+            }
+
+            #workflowModal .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice__remove {
+                color: #ef4444 !important;
+                margin-right: 5px !important;
+                font-weight: bold !important;
+            }
+
+            #workflowModal .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice__remove:hover {
+                color: #b91c1c !important;
             }
 
             /* Tăng kích thước các modal cấu hình lên 90% chiều rộng và 100% chiều cao viewport, lệch top 20px */
@@ -560,27 +895,33 @@
                 background-color: var(--primary-navy);
                 color: white !important;
                 border: 3px solid white;
-                box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+                box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                z-index: 2000; /* Phao nổi trên tất cả các lớp của modal */
+                z-index: 2000;
+                /* Phao nổi trên tất cả các lớp của modal */
                 transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
                 cursor: pointer;
                 outline: none !important;
-                pointer-events: auto; /* Đảm bảo click được */
+                pointer-events: auto;
+                /* Đảm bảo click được */
             }
+
             .modal-nav-btn:hover {
                 background-color: #002a3a;
                 transform: translateY(-50%) scale(1.1);
-                box-shadow: 0 6px 20px rgba(0,0,0,0.45);
+                box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
             }
+
             .modal-nav-btn i {
                 font-size: 1.5rem;
             }
+
             .modal-nav-left {
                 left: 20px;
             }
+
             .modal-nav-right {
                 right: 20px;
             }
@@ -589,31 +930,65 @@
             .modal-content.slide-out-left-content {
                 animation: slideOutLeftKey 0.25s forwards cubic-bezier(0.4, 0, 0.2, 1);
             }
+
             .modal-content.slide-in-right-content {
                 animation: slideInRightKey 0.25s forwards cubic-bezier(0.4, 0, 0.2, 1);
             }
+
             .modal-content.slide-out-right-content {
                 animation: slideOutRightKey 0.25s forwards cubic-bezier(0.4, 0, 0.2, 1);
             }
+
             .modal-content.slide-in-left-content {
                 animation: slideInLeftKey 0.25s forwards cubic-bezier(0.4, 0, 0.2, 1);
             }
 
             @keyframes slideOutLeftKey {
-                from { transform: translateX(0); opacity: 1; }
-                to { transform: translateX(-150px); opacity: 0; }
+                from {
+                    transform: translateX(0);
+                    opacity: 1;
+                }
+
+                to {
+                    transform: translateX(-150px);
+                    opacity: 0;
+                }
             }
+
             @keyframes slideInRightKey {
-                from { transform: translateX(150px); opacity: 0; }
-                to { transform: translateX(0); opacity: 1; }
+                from {
+                    transform: translateX(150px);
+                    opacity: 0;
+                }
+
+                to {
+                    transform: translateX(0);
+                    opacity: 1;
+                }
             }
+
             @keyframes slideOutRightKey {
-                from { transform: translateX(0); opacity: 1; }
-                to { transform: translateX(150px); opacity: 0; }
+                from {
+                    transform: translateX(0);
+                    opacity: 1;
+                }
+
+                to {
+                    transform: translateX(150px);
+                    opacity: 0;
+                }
             }
+
             @keyframes slideInLeftKey {
-                from { transform: translateX(-150px); opacity: 0; }
-                to { transform: translateX(0); opacity: 1; }
+                from {
+                    transform: translateX(-150px);
+                    opacity: 0;
+                }
+
+                to {
+                    transform: translateX(0);
+                    opacity: 1;
+                }
             }
         </style>
 
@@ -694,21 +1069,25 @@
 
         <div class="modal fade" id="modalRooms" tabindex="-1" role="dialog" aria-hidden="true">
             @if ((isset($current_type) && $current_type === 'BMR') || request('type', 'BMR') === 'BMR')
-                <button type="button" class="modal-nav-btn modal-nav-left" onclick="navigateConfigSX('left', '#modalRooms', this)" title="Tiêu chuẩn kiểm nghiệm">
+                <button type="button" class="modal-nav-btn modal-nav-left"
+                    onclick="navigateConfigSX('left', '#modalRooms', this)" title="Tiêu chuẩn kiểm nghiệm">
                     <i class="fas fa-chevron-left"></i>
                 </button>
-                <button type="button" class="modal-nav-btn modal-nav-right" onclick="navigateConfigSX('right', '#modalRooms', this)" title="Thông tin hồ sơ gốc">
+                <button type="button" class="modal-nav-btn modal-nav-right"
+                    onclick="navigateConfigSX('right', '#modalRooms', this)" title="Thông tin hồ sơ gốc">
                     <i class="fas fa-chevron-right"></i>
                 </button>
             @endif
-            <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" role="document" style="max-width: 95%;">
+            <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" role="document"
+                style="max-width: 95%;">
                 <div class="modal-content border-0 shadow-lg" style="border-radius: 16px; overflow: hidden;">
                     <div class="modal-header">
                         <h5 class="modal-title font-weight-bold text-info d-flex align-items-center" id="modalRoomsTitle">
                             <i class="fas fa-door-open me-2 text-info fs-4"></i>
                             <div>
                                 <span>Khai Báo Phòng Sản Xuất & Điều Kiện</span>
-                                <span class="d-block small text-muted fw-normal mt-1" id="roomsTemplateNameDisplay" style="font-size: 0.85rem; opacity: 0.85;">Hồ sơ: ...</span>
+                                <span class="d-block small text-muted fw-normal mt-1" id="roomsTemplateNameDisplay"
+                                    style="font-size: 0.85rem; opacity: 0.85;">Hồ sơ: ...</span>
                             </div>
                         </h5>
                         <button type="button" class="close" data-dismiss="modal" aria-label="Close">
@@ -718,7 +1097,8 @@
                     <div class="modal-body p-0 d-flex" style="height: 70vh; min-height: 500px;">
                         <!-- Left Sidebar for Sections/Stages -->
                         <div class="border-end bg-light p-3" style="width: 280px; overflow-y: auto;">
-                            <h6 class="text-uppercase text-muted fw-bold mb-3 small" style="letter-spacing: 1px;">Công đoạn quy trình</h6>
+                            <h6 class="text-uppercase text-muted fw-bold mb-3 small" style="letter-spacing: 1px;">Công
+                                đoạn quy trình</h6>
                             <div class="list-group list-group-flush rooms-stage-list" id="roomsStageList">
                                 <!-- Dynamic section tabs -->
                             </div>
@@ -732,7 +1112,8 @@
                                     <span id="activeRoomsStageTitle">Chọn công đoạn</span>
                                 </h5>
                                 <div class="text-muted small">
-                                    Cấu hình các phòng sản xuất có thể thực hiện công đoạn này và điều kiện sản xuất tương ứng.
+                                    Cấu hình các phòng sản xuất có thể thực hiện công đoạn này và điều kiện sản xuất tương
+                                    ứng.
                                 </div>
                             </div>
 
@@ -754,14 +1135,16 @@
                             </div>
 
                             <div class="mt-3">
-                                <button type="button" class="btn btn-outline-primary rounded-pill px-4 shadow-sm fw-bold btn-add-room-row">
+                                <button type="button"
+                                    class="btn btn-outline-primary rounded-pill px-4 shadow-sm fw-bold btn-add-room-row">
                                     <i class="fas fa-plus me-1"></i> Thêm phòng sản xuất
                                 </button>
                             </div>
                         </div>
                     </div>
                     <div class="modal-footer bg-light p-3 border-top">
-                        <button type="button" class="btn btn-white rounded-pill px-4" data-dismiss="modal">Hủy bỏ</button>
+                        <button type="button" class="btn btn-white rounded-pill px-4" data-dismiss="modal">Hủy
+                            bỏ</button>
                         <button type="button" class="btn btn-navy rounded-pill px-4 shadow-sm" id="btnSaveRooms">
                             <i class="fas fa-save me-2 text-white"></i> Lưu Cấu Hình
                         </button>
@@ -772,21 +1155,26 @@
 
         <div class="modal fade" id="modalTesting" tabindex="-1" role="dialog" aria-hidden="true">
             @if ((isset($current_type) && $current_type === 'BMR') || request('type', 'BMR') === 'BMR')
-                <button type="button" class="modal-nav-btn modal-nav-left" onclick="navigateConfigSX('left', '#modalTesting', this)" title="Thông tin hồ sơ gốc">
+                <button type="button" class="modal-nav-btn modal-nav-left"
+                    onclick="navigateConfigSX('left', '#modalTesting', this)" title="Thông tin hồ sơ gốc">
                     <i class="fas fa-chevron-left"></i>
                 </button>
-                <button type="button" class="modal-nav-btn modal-nav-right" onclick="navigateConfigSX('right', '#modalTesting', this)" title="Khai báo phòng sản xuất">
+                <button type="button" class="modal-nav-btn modal-nav-right"
+                    onclick="navigateConfigSX('right', '#modalTesting', this)" title="Khai báo phòng sản xuất">
                     <i class="fas fa-chevron-right"></i>
                 </button>
             @endif
-            <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" role="document" style="max-width: 95%;">
+            <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" role="document"
+                style="max-width: 95%;">
                 <div class="modal-content border-0 shadow-lg" style="border-radius: 16px; overflow: hidden;">
                     <div class="modal-header">
-                        <h5 class="modal-title font-weight-bold text-info d-flex align-items-center" id="modalTestingTitle">
+                        <h5 class="modal-title font-weight-bold text-info d-flex align-items-center"
+                            id="modalTestingTitle">
                             <i class="fas fa-clipboard-check me-2 text-info fs-4"></i>
                             <div>
                                 <span>Thiết Lập Tiêu Chuẩn Kiểm Nghiệm</span>
-                                <span class="d-block small text-muted fw-normal mt-1" id="testingTemplateNameDisplay" style="font-size: 0.85rem; opacity: 0.85;">Hồ sơ: ...</span>
+                                <span class="d-block small text-muted fw-normal mt-1" id="testingTemplateNameDisplay"
+                                    style="font-size: 0.85rem; opacity: 0.85;">Hồ sơ: ...</span>
                             </div>
                         </h5>
                         <button type="button" class="close" data-dismiss="modal" aria-label="Close">
@@ -796,7 +1184,8 @@
                     <div class="modal-body p-0 d-flex" style="height: 70vh; min-height: 500px;">
                         <!-- Left Stage Sidebar -->
                         <div class="border-end bg-light p-3" style="width: 280px; overflow-y: auto;">
-                            <h6 class="text-uppercase text-muted fw-bold mb-3 small" style="letter-spacing: 1px;">Công đoạn quy trình</h6>
+                            <h6 class="text-uppercase text-muted fw-bold mb-3 small" style="letter-spacing: 1px;">Công
+                                đoạn quy trình</h6>
                             <div class="list-group list-group-flush testing-stage-list" id="testingStageList">
                                 <!-- Dynamic stage tabs -->
                             </div>
@@ -835,14 +1224,16 @@
                             </div>
 
                             <div class="mt-3">
-                                <button type="button" class="btn btn-outline-primary rounded-pill px-4 shadow-sm fw-bold btn-add-row-action">
+                                <button type="button"
+                                    class="btn btn-outline-primary rounded-pill px-4 shadow-sm fw-bold btn-add-row-action">
                                     <i class="fas fa-plus me-1"></i> Thêm chỉ tiêu kiểm
                                 </button>
                             </div>
                         </div>
                     </div>
                     <div class="modal-footer bg-light p-3 border-top">
-                        <button type="button" class="btn btn-white rounded-pill px-4" data-dismiss="modal">Hủy bỏ</button>
+                        <button type="button" class="btn btn-white rounded-pill px-4" data-dismiss="modal">Hủy
+                            bỏ</button>
                         <button type="button" class="btn btn-navy rounded-pill px-4 shadow-sm" id="btnSaveTesting">
                             <i class="fas fa-save me-2"></i> Lưu Tiêu Chuẩn
                         </button>
@@ -852,18 +1243,22 @@
         </div>
 
         <!-- Modal 3A: Quản lý hình ảnh (Manage Images Sub-Modal) -->
-        <div class="modal fade" id="modalManageImages" tabindex="-1" role="dialog" aria-hidden="true" style="z-index: 1060;">
+        <div class="modal fade" id="modalManageImages" tabindex="-1" role="dialog" aria-hidden="true"
+            style="z-index: 1060;">
             <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" role="document">
-                <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; height: 80vh; max-height: 700px;">
+                <div class="modal-content border-0 shadow-lg"
+                    style="border-radius: 12px; height: 80vh; max-height: 700px;">
                     <div class="modal-header bg-info text-white py-3">
                         <h5 class="modal-title font-weight-bold text-white d-flex align-items-center">
                             <i class="fas fa-images me-2"></i>
                             <div>
                                 <span>Cấu Hình Hình Ảnh Đính Kèm</span>
-                                <span class="d-block small text-light fw-normal mt-1" id="manageImagesRowTitle" style="font-size: 0.8rem; opacity: 0.85;">Chỉ tiêu: ...</span>
+                                <span class="d-block small text-light fw-normal mt-1" id="manageImagesRowTitle"
+                                    style="font-size: 0.8rem; opacity: 0.85;">Chỉ tiêu: ...</span>
                             </div>
                         </h5>
-                        <button type="button" class="close text-white border-0 bg-transparent fs-4" onclick="$('#modalManageImages').modal('hide');" aria-label="Close" style="outline: none;">
+                        <button type="button" class="close text-white border-0 bg-transparent fs-4"
+                            onclick="$('#modalManageImages').modal('hide');" aria-label="Close" style="outline: none;">
                             <span aria-hidden="true">&times;</span>
                         </button>
                     </div>
@@ -874,28 +1269,35 @@
                         </div>
                     </div>
                     <div class="modal-footer bg-light p-3 border-top">
-                        <button type="button" class="btn btn-secondary rounded-pill px-4 fw-bold shadow-sm" onclick="$('#modalManageImages').modal('hide');">Đồng ý & Đóng</button>
+                        <button type="button" class="btn btn-secondary rounded-pill px-4 fw-bold shadow-sm"
+                            onclick="$('#modalManageImages').modal('hide');">Đồng ý & Đóng</button>
                     </div>
                 </div>
             </div>
         </div>
 
         <!-- Modal 3B: Carousel Viewer (Xem Hình Ảnh Carousel Card) -->
-        <div class="modal fade" id="modalCarouselViewer" tabindex="-1" role="dialog" aria-hidden="true" style="z-index: 1070;">
+        <div class="modal fade" id="modalCarouselViewer" tabindex="-1" role="dialog" aria-hidden="true"
+            style="z-index: 1070;">
             <div class="modal-dialog modal-dialog-centered modal-xl lightbox-carousel-modal" role="document">
                 <div class="modal-content border-0 shadow-lg">
-                    <div class="modal-header border-0 text-dark py-3 d-flex justify-content-between align-items-center lightbox-carousel-header">
+                    <div
+                        class="modal-header border-0 text-dark py-3 d-flex justify-content-between align-items-center lightbox-carousel-header">
                         <h5 class="modal-title font-weight-bold text-dark d-flex align-items-center">
                             <i class="fas fa-eye me-2 text-warning"></i>
-                            <span id="carouselViewerTitle" style="font-size: 1.1rem; letter-spacing: 0.3px;">Xem hình ảnh minh họa</span>
+                            <span id="carouselViewerTitle" style="font-size: 1.1rem; letter-spacing: 0.3px;">Xem hình ảnh
+                                minh họa</span>
                         </h5>
                         <div class="lightbox-toolbar">
-                            <button type="button" class="close text-dark border-0 bg-transparent fs-4 p-0 m-0" onclick="$('#modalCarouselViewer').modal('hide');" aria-label="Close" style="outline: none; opacity: 0.85; line-height: 1;">
+                            <button type="button" class="close text-dark border-0 bg-transparent fs-4 p-0 m-0"
+                                onclick="$('#modalCarouselViewer').modal('hide');" aria-label="Close"
+                                style="outline: none; opacity: 0.85; line-height: 1;">
                                 <span aria-hidden="true">&times;</span>
                             </button>
                         </div>
                     </div>
-                    <div class="modal-body p-0 d-flex justify-content-center align-items-center" style="background-color: transparent; min-height: 650px; height: 75vh; position: relative;">
+                    <div class="modal-body p-0 d-flex justify-content-center align-items-center"
+                        style="background-color: transparent; min-height: 650px; height: 75vh; position: relative;">
                         <div id="testingCarousel" class="carousel slide w-100 h-100" data-ride="carousel">
                             <ol class="carousel-indicators" id="testingCarouselIndicators" style="bottom: 120px;">
                                 <!-- Dynamic indicators -->
@@ -903,10 +1305,12 @@
                             <div class="carousel-inner" id="testingCarouselInner">
                                 <!-- Dynamic slides -->
                             </div>
-                            <a class="carousel-control-prev-premium" href="#testingCarousel" role="button" data-slide="prev" title="Ảnh trước">
+                            <a class="carousel-control-prev-premium" href="#testingCarousel" role="button"
+                                data-slide="prev" title="Ảnh trước">
                                 <i class="fas fa-chevron-left fa-lg"></i>
                             </a>
-                            <a class="carousel-control-next-premium" href="#testingCarousel" role="button" data-slide="next" title="Ảnh sau">
+                            <a class="carousel-control-next-premium" href="#testingCarousel" role="button"
+                                data-slide="next" title="Ảnh sau">
                                 <i class="fas fa-chevron-right fa-lg"></i>
                             </a>
                         </div>
@@ -921,6 +1325,7 @@
                 max-width: 1150px;
                 width: 95%;
             }
+
             .lightbox-carousel-modal .modal-content {
                 background: rgba(255, 255, 255, 0.98) !important;
                 backdrop-filter: blur(20px);
@@ -929,10 +1334,12 @@
                 overflow: hidden;
                 box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15) !important;
             }
+
             .lightbox-carousel-header {
                 background: rgba(248, 250, 252, 0.85) !important;
                 border-bottom: 1px solid rgba(0, 0, 0, 0.06);
             }
+
             .carousel-item-premium {
                 height: calc(100% - 150px);
                 text-align: center;
@@ -942,6 +1349,7 @@
                 align-items: center;
                 justify-content: center;
             }
+
             .carousel-item-premium img {
                 max-height: 100%;
                 max-width: 100%;
@@ -950,6 +1358,7 @@
                 box-shadow: 0 20px 40px rgba(0, 0, 0, 0.12);
                 transition: transform 0.3s ease;
             }
+
             .carousel-caption-premium {
                 position: absolute;
                 bottom: 15px;
@@ -966,18 +1375,21 @@
                 border-radius: 14px;
                 box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
             }
+
             .carousel-caption-premium h6 {
                 font-size: 0.95rem;
                 font-weight: 700;
                 margin-bottom: 4px;
                 color: #f8fafc;
             }
+
             .carousel-caption-premium p {
                 font-size: 0.8rem;
                 color: #cbd5e1;
                 margin-bottom: 0;
                 line-height: 1.4;
             }
+
             .carousel-control-prev-premium,
             .carousel-control-next-premium {
                 width: 48px;
@@ -995,6 +1407,7 @@
                 color: #1e293b;
                 opacity: 0.8;
             }
+
             .carousel-control-prev-premium:hover,
             .carousel-control-next-premium:hover {
                 background: rgba(15, 23, 42, 0.12);
@@ -1002,23 +1415,29 @@
                 color: #0f172a;
                 text-decoration: none;
             }
+
             .carousel-control-prev-premium {
                 left: 20px;
             }
+
             .carousel-control-next-premium {
                 right: 20px;
             }
+
             .lightbox-carousel-modal .carousel-indicators li {
                 background-color: #94a3b8 !important;
             }
+
             .lightbox-carousel-modal .carousel-indicators li.active {
                 background-color: #0f172a !important;
             }
+
             .lightbox-toolbar {
                 display: flex;
                 align-items: center;
                 gap: 12px;
             }
+
             .lightbox-btn {
                 background: rgba(15, 23, 42, 0.06);
                 border: 1px solid rgba(15, 23, 42, 0.08);
@@ -1031,11 +1450,13 @@
                 align-items: center;
                 gap: 6px;
             }
+
             .lightbox-btn:hover {
                 background: rgba(15, 23, 42, 0.12);
                 color: #0f172a;
                 text-decoration: none;
             }
+
             .border-dashed {
                 border-style: dashed !important;
             }
@@ -1051,22 +1472,26 @@
                 cursor: pointer;
                 padding: 10px 15px;
             }
+
             .testing-stage-list .list-group-item:hover,
             .rooms-stage-list .list-group-item:hover {
                 background-color: #e9ecef;
                 color: #003A4F;
             }
+
             .testing-stage-list .list-group-item.active,
             .rooms-stage-list .list-group-item.active {
                 background-color: #003A4F !important;
                 color: #fff !important;
                 box-shadow: 0 4px 8px rgba(0, 58, 79, 0.15);
             }
+
             .testing-stage-list .list-group-item .badge,
             .rooms-stage-list .list-group-item .badge {
                 font-size: 0.75rem;
                 padding: 4px 8px;
             }
+
             .testing-table th {
                 background-color: #f8f9fa;
                 color: #003A4F;
@@ -1075,19 +1500,23 @@
                 border-bottom: 2px solid #dee2e6;
                 padding: 12px 10px;
             }
+
             .testing-table td {
                 padding: 10px;
                 vertical-align: top;
             }
+
             .btn-xs {
                 padding: 1px 5px;
                 font-size: 0.75rem;
                 line-height: 1.5;
                 border-radius: 3px;
             }
+
             .spec-input-group {
                 margin-bottom: 4px;
             }
+
             .autofit-textarea {
                 resize: none;
                 overflow-y: hidden;
@@ -1096,17 +1525,118 @@
                 padding-bottom: 5px;
                 line-height: 1.5;
             }
+
             .note-editor.note-frame {
                 border: 1px solid #dee2e6 !important;
                 border-radius: 8px !important;
             }
+
             .note-editor.note-frame .note-editable {
                 padding: 8px 12px !important;
                 line-height: 1.5 !important;
                 min-height: 48px !important;
             }
+
             .note-editor.note-frame .note-placeholder {
                 padding: 8px 12px !important;
+            }
+
+            /* View Toggle styling */
+            .view-toggle-group .btn {
+                border: none !important;
+                background: transparent;
+                color: #64748b;
+                font-weight: 600;
+                font-size: 0.85rem;
+                padding: 6px 16px;
+            }
+
+            .view-toggle-group .btn.active {
+                background-color: var(--primary-navy) !important;
+                color: white !important;
+                box-shadow: 0 2px 6px rgba(0, 58, 79, 0.2);
+            }
+
+            /* Card Grid styling */
+            .template-card {
+                border-radius: 16px;
+                border: 1px solid #e2e8f0 !important;
+                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                overflow: hidden;
+            }
+
+            .template-card:hover {
+                transform: translateY(-5px);
+                box-shadow: 0 12px 24px rgba(0, 58, 79, 0.08) !important;
+                border-color: rgba(0, 58, 79, 0.25) !important;
+            }
+
+            .line-clamp-2 {
+                display: -webkit-box;
+                -webkit-line-clamp: 2;
+                -webkit-box-orient: vertical;
+                overflow: hidden;
+            }
+
+            /* Highlight row and card for active (max version & status active) */
+            .active-version-row {
+                background-color: #f0fdf4 !important;
+                /* light green/mint */
+            }
+
+            .active-version-row td {
+                background-color: #f0fdf4 !important;
+            }
+
+            .active-version-row:hover td {
+                background-color: #dcfce7 !important;
+            }
+
+            .active-version-card {
+                background-color: #f0fdf4 !important;
+                /* light green/mint */
+                border: 1px solid #bbf7d0 !important;
+            }
+
+            .active-version-card:hover {
+                border-color: #86efac !important;
+                box-shadow: 0 12px 24px rgba(22, 163, 74, 0.08) !important;
+            }
+
+            /* Draft / Normal versions (white background) */
+            .normal-version-row {
+                background-color: #ffffff !important;
+            }
+            
+            .normal-version-row td {
+                background-color: #ffffff !important;
+            }
+
+            .normal-version-card {
+                background-color: #ffffff !important;
+                border: 1px solid #e2e8f0 !important;
+            }
+
+            /* Replaced versions (light gray background) */
+            .replaced-version-row {
+                background-color: #f8fafc !important;
+                color: #64748b !important;
+            }
+
+            .replaced-version-row td {
+                background-color: #f8fafc !important;
+                color: #64748b !important;
+            }
+
+            .replaced-version-card {
+                background-color: #f8fafc !important;
+                border: 1px solid #cbd5e1 !important;
+                opacity: 0.85;
+            }
+
+            .replaced-version-card .card-title,
+            .replaced-version-card .text-navy {
+                color: #475569 !important;
             }
         </style>
     @endsection
@@ -1114,9 +1644,49 @@
     @section('script')
         <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
         <script>
+            function switchView(view) {
+                if (view === 'card') {
+                    $('#tableViewContainer').addClass('d-none').removeClass('d-block');
+                    $('#cardViewContainer').addClass('d-block').removeClass('d-none');
+                    $('#btnCardView').addClass('active');
+                    $('#btnTableView').removeClass('active');
+                    localStorage.setItem('templateViewMode', 'card');
+                } else {
+                    $('#cardViewContainer').addClass('d-none').removeClass('d-block');
+                    $('#tableViewContainer').addClass('d-block').removeClass('d-none');
+                    $('#btnTableView').addClass('active');
+                    $('#btnCardView').removeClass('active');
+                    localStorage.setItem('templateViewMode', 'table');
+                }
+            }
+
+            function filterCards(searchVal) {
+                if (!searchVal) {
+                    $('.template-card-item').show();
+                    return;
+                }
+
+                $('.template-card-item').each(function() {
+                    const card = $(this);
+                    const cardText = card.text().toLowerCase();
+                    if (cardText.indexOf(searchVal) > -1) {
+                        card.show();
+                    } else {
+                        card.hide();
+                    }
+                });
+            }
+
             $(document).ready(function() {
+                // Khởi tạo Select2 cho Workflow Modal
+                $('.select2-workflow').select2({
+                    theme: 'bootstrap4',
+                    width: '100%',
+                    dropdownParent: $('#workflowModal')
+                });
+
                 // Initialize the main drafting table
-                $('.bmr-datatable').DataTable({
+                const draftingTable = $('.bmr-datatable').DataTable({
                     language: {
                         url: '{{ asset('vendor/datatables/i18n/Vietnamese.json') }}'
                     },
@@ -1124,6 +1694,23 @@
                         [0, 'asc']
                     ]
                 });
+
+                // Sync DataTable search with Card Grid
+                draftingTable.on('search.dt', function() {
+                    const searchVal = draftingTable.search().toLowerCase();
+                    filterCards(searchVal);
+                });
+
+                // Load initial view mode preference (defaults to card)
+                let savedViewMode = localStorage.getItem('templateViewMode') || 'card';
+                switchView(savedViewMode);
+
+                // Tự động lọc theo tham số code từ URL
+                const urlParams = new URLSearchParams(window.location.search);
+                const codeParam = urlParams.get('code');
+                if (codeParam) {
+                    draftingTable.search(codeParam).draw();
+                }
 
                 // Initialize the BTP selection table in modal
                 $('#btpSelectionTable').DataTable({
@@ -1135,7 +1722,7 @@
 
                 $('#metadataForm').submit(function(e) {
                     e.preventDefault();
-                    
+
                     const data = $(this).serialize();
 
                     $.post('{{ route('pages.ebmr.storeTemplateMetadata') }}', data, function(res) {
@@ -1149,7 +1736,6 @@
 
 
                 // Prefill logic from URL if needed
-                const urlParams = new URLSearchParams(window.location.search);
                 const prefillBtpId = urlParams.get('prefill_btp_id');
                 if (prefillBtpId) {
                     openBtpListModal();
@@ -1241,11 +1827,55 @@
                 $('#templateId').val('');
                 if ($.fn.summernote) {
                     if ($('#create_description_editor').length) $('#create_description_editor').summernote('code', '');
-                    if ($('#create_storage_conditions_editor').length) $('#create_storage_conditions_editor').summernote('code', '');
+                    if ($('#create_storage_conditions_editor').length) $('#create_storage_conditions_editor').summernote('code',
+                        '');
                 }
                 $('#enable_recalculation').prop('checked', false);
                 $('#modalTitle').html('<i class="fas fa-file-medical me-2"></i> Soạn Mới Hồ Sơ Gốc');
                 $('#templateMetadataModal').modal('show');
+            }
+
+            function duplicateTemplate(id) {
+                Swal.fire({
+                    title: 'Xác nhận lên ấn bản?',
+                    text: "Hệ thống sẽ nhân bản toàn bộ nội dung của phiên bản hiện hành này sang một phiên bản nháp (Draft) mới để bạn chỉnh sửa.",
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonColor: '#3085d6',
+                    cancelButtonColor: '#d33',
+                    confirmButtonText: 'Đồng ý',
+                    cancelButtonText: 'Hủy'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        Swal.fire({
+                            title: 'Đang xử lý...',
+                            html: 'Vui lòng chờ trong giây lát.',
+                            allowOutsideClick: false,
+                            didOpen: () => {
+                                Swal.showLoading();
+                            }
+                        });
+
+                        $.post('{{ route("pages.ebmr.duplicateTemplate") }}', {
+                            _token: '{{ csrf_token() }}',
+                            id: id
+                        }, function(res) {
+                            if (res.success) {
+                                Swal.fire({
+                                    title: 'Thành công!',
+                                    text: res.message,
+                                    icon: 'success'
+                                }).then(() => {
+                                    window.location.href = `/ebmr/designer/${res.new_id}`;
+                                });
+                            } else {
+                                Swal.fire('Lỗi', res.message || 'Có lỗi xảy ra khi lên ấn bản.', 'error');
+                            }
+                        }).fail(function(xhr) {
+                            Swal.fire('Lỗi', xhr.responseJSON?.message || 'Không thể kết nối đến máy chủ.', 'error');
+                        });
+                    }
+                });
             }
 
             function openEditModal(id, onReadyCallback = null) {
@@ -1253,6 +1883,9 @@
                 $('#modalTitle').html('<i class="fas fa-cog me-2"></i> Cập Nhật Thông Tin Hồ Sơ Gốc');
 
                 $.get(`/ebmr/templates/${id}/data`, function(data) {
+                    window.isConfigReadOnly = (data.status !== 'draft');
+                    const isReadOnly = window.isConfigReadOnly;
+
                     $('#templateId').val(data.id);
                     $('#caterogyId').val(data.caterogy_id);
                     $('#version').val(data.version);
@@ -1271,20 +1904,38 @@
                         if ($('#create_description_editor').length) {
                             $('#create_description_editor').summernote('code', data.description || '');
                             $('#create_description_input').val(data.description || '');
+                            if (isReadOnly) {
+                                $('#create_description_editor').summernote('disable');
+                            } else {
+                                $('#create_description_editor').summernote('enable');
+                            }
                         }
                         if ($('#create_storage_conditions_editor').length) {
                             $('#create_storage_conditions_editor').summernote('code', data.storage_conditions || '');
                             $('#create_storage_conditions_input').val(data.storage_conditions || '');
+                            if (isReadOnly) {
+                                $('#create_storage_conditions_editor').summernote('disable');
+                            } else {
+                                $('#create_storage_conditions_editor').summernote('enable');
+                            }
                         }
 
                         if (data.bom && window.renderBOMRows) {
                             window.renderBOMRows(data.bom);
                         }
-                        
+
                         // Handle recalculation loading
                         $('#enable_recalculation').prop('checked', data.is_recalculation == 1);
                     } else {
                         $('#bmr_specific_fields').hide();
+                    }
+
+                    // Apply read-only state to all form inputs
+                    $('#metadataForm').find('input:not([type="hidden"]), select, textarea').prop('disabled', isReadOnly);
+                    if (isReadOnly) {
+                        $('#metadataForm button[type="submit"]').hide();
+                    } else {
+                        $('#metadataForm button[type="submit"]').show();
                     }
 
                     if (onReadyCallback) {
@@ -1394,7 +2045,7 @@
             function openTestingModal(templateId, templateName, onReadyCallback = null) {
                 currentTestingTemplateId = templateId;
                 $('#testingTemplateNameDisplay').text('Hồ sơ BMR: ' + templateName);
-                
+
                 if (!onReadyCallback) {
                     // Show loading overlay
                     Swal.fire({
@@ -1420,21 +2071,26 @@
                         stageList.empty();
 
                         if (testingStages.length === 0) {
-                            stageList.html('<div class="text-muted p-3 text-center small">Không có công đoạn nào trong thiết kế.</div>');
+                            stageList.html(
+                                '<div class="text-muted p-3 text-center small">Không có công đoạn nào trong thiết kế.</div>'
+                            );
                             $('#activeStageTitle').text('Không có công đoạn');
                             $('#testingTableBody').empty();
                             $('.btn-add-row-action').hide();
+                            $('#btnSaveTesting').hide();
                             $('#modalTesting').modal('show');
                             return;
                         }
 
-                        $('.btn-add-row-action').show();
+                        $('.btn-add-row-action').toggle(!window.isConfigReadOnly);
+                        $('#btnSaveTesting').toggle(!window.isConfigReadOnly);
 
                         // Count how many criteria items are already saved for each stage
                         testingStages.forEach((stage, idx) => {
                             const count = testingData.filter(d => d.stage === stage.id).length;
-                            const badgeHtml = count > 0 ? `<span class="badge bg-soft-info badge-pill ml-auto">${count}</span>` : '';
-                            
+                            const badgeHtml = count > 0 ?
+                                `<span class="badge bg-soft-info badge-pill ml-auto">${count}</span>` : '';
+
                             const activeClass = idx === 0 ? 'active' : '';
                             stageList.append(`
                                 <div class="list-group-item list-group-item-action ${activeClass} d-flex justify-content-between align-items-center" 
@@ -1496,6 +2152,11 @@
                         toolbar: [],
                         placeholder: 'Nhập nội dung...'
                     });
+                    if (window.isConfigReadOnly) {
+                        editor.summernote('disable');
+                    } else {
+                        editor.summernote('enable');
+                    }
                 });
             }
 
@@ -1526,7 +2187,7 @@
 
                     const stt = row.find('input[name="stt"]').val();
                     const name = row.find('[name="indicator_name"]').val().trim();
-                    
+
                     // Retrieve HTML from summernote
                     const specification = row.find('textarea[name="specification"]').summernote('code');
                     const note = row.find('textarea[name="note"]').summernote('code');
@@ -1567,7 +2228,7 @@
 
                 // Remove previous records for this stage in our local array
                 testingData = testingData.filter(d => d.stage !== activeStageId);
-                
+
                 // Add the updated ones
                 testingData.push(...rows);
 
@@ -1615,13 +2276,13 @@
             function addTestingRow(stt, data = null) {
                 const body = $('#testingTableBody');
                 const rowId = generateRowId();
-                
+
                 const name = data ? escapeHtml(data.name) : '';
                 const op = data && data.limits ? data.limits.operator : '=';
                 const limitVal = data && data.limits ? escapeHtml(data.limits.value) : '';
                 const limitValHigh = data && data.limits ? escapeHtml(data.limits.value_high || '') : '';
                 const limitUnit = data && data.limits ? escapeHtml(data.limits.unit || '') : '';
-                
+
                 // Specifications HTML (either string or array from legacy data)
                 let specsVal = '';
                 if (data) {
@@ -1632,7 +2293,7 @@
                     }
                 }
                 const noteVal = data ? (data.note || '') : '';
-                
+
                 // Images list
                 const rowImages = data && Array.isArray(data.images) ? data.images : [];
                 testingRowImages[rowId] = rowImages;
@@ -1697,9 +2358,14 @@
 
                 const tr = $(rowHtml);
                 body.append(tr);
-                
+
                 // Initialize editors for this row
                 initRowEditors(tr);
+
+                if (window.isConfigReadOnly) {
+                    tr.find('input, select, textarea').prop('disabled', true);
+                    tr.find('.btn-remove-testing-row, .btn-manage-images').hide();
+                }
 
                 // Auto-resize textareas to fit current content
                 setTimeout(() => {
@@ -1724,7 +2390,7 @@
             $(document).on('click', '.btn-remove-testing-row', function() {
                 const tr = $(this).closest('tr');
                 const rowId = tr.attr('data-row-id');
-                
+
                 tr.fadeOut(200, function() {
                     // Destroy editors first
                     destroyRowEditors(tr);
@@ -1757,7 +2423,7 @@
                 const name = row.find('input[name="indicator_name"]').val().trim() || 'Chỉ tiêu không tên';
 
                 $('#manageImagesRowTitle').text('Chỉ tiêu: ' + name);
-                
+
                 // Render images list
                 renderManageImagesList();
 
@@ -1833,7 +2499,7 @@
                         const images = testingRowImages[currentManagingRowId] || [];
                         images.splice(idx, 1);
                         testingRowImages[currentManagingRowId] = images;
-                        
+
                         // Re-render
                         renderManageImagesList();
                         updateRowImageButtons(currentManagingRowId);
@@ -1876,7 +2542,9 @@
                     if (index >= totalFiles) {
                         Swal.close();
                         if (failedCount > 0) {
-                            Swal.fire('Thông báo', `Đã tải lên thành công ${uploadedCount} hình ảnh. Thất bại: ${failedCount}.`, 'warning');
+                            Swal.fire('Thông báo',
+                                `Đã tải lên thành công ${uploadedCount} hình ảnh. Thất bại: ${failedCount}.`,
+                                'warning');
                         } else {
                             Swal.fire('Thành công', `Đã tải lên toàn bộ ${uploadedCount} hình ảnh!`, 'success');
                         }
@@ -1942,7 +2610,7 @@
 
                 const indicators = $('#testingCarouselIndicators');
                 const inner = $('#testingCarouselInner');
-                
+
                 indicators.empty();
                 inner.empty();
 
@@ -1952,9 +2620,9 @@
                         <li data-target="#testingCarousel" data-slide-to="${idx}" class="${activeClass}"></li>
                     `);
 
-                    const descHtml = img.image_description 
-                        ? `<p class="mb-0 small">${escapeHtml(img.image_description)}</p>` 
-                        : '';
+                    const descHtml = img.image_description ?
+                        `<p class="mb-0 small">${escapeHtml(img.image_description)}</p>` :
+                        '';
 
                     inner.append(`
                         <div class="carousel-item ${activeClass} h-100" style="position: relative;">
@@ -2017,7 +2685,7 @@
                 });
             });
 
-            $('#modalTesting').on('hidden.bs.modal', function () {
+            $('#modalTesting').on('hidden.bs.modal', function() {
                 destroyAllEditors();
                 currentTestingTemplateId = null;
                 testingStages = [];
@@ -2072,7 +2740,7 @@
             window.openRoomsModal = function(templateId, templateName, onReadyCallback = null) {
                 currentRoomsTemplateId = templateId;
                 $('#roomsTemplateNameDisplay').text('Hồ sơ: ' + templateName);
-                
+
                 // Clear UI
                 $('#roomsStageList').empty();
                 $('#roomsTableBody').empty();
@@ -2090,7 +2758,9 @@
                             assignmentsList = res.assignments;
 
                             if (roomsData.length === 0) {
-                                $('#roomsStageList').html('<div class="p-3 text-muted small text-center">Hồ sơ không có công đoạn nào</div>');
+                                $('#roomsStageList').html(
+                                    '<div class="p-3 text-muted small text-center">Hồ sơ không có công đoạn nào</div>'
+                                );
                                 return;
                             }
 
@@ -2108,6 +2778,9 @@
 
                             // Update count badges
                             updateAllRoomsCountBadges();
+
+                            $('.btn-add-room-row').toggle(!window.isConfigReadOnly);
+                            $('#btnSaveRooms').toggle(!window.isConfigReadOnly);
 
                             if (onReadyCallback) {
                                 onReadyCallback();
@@ -2182,7 +2855,8 @@
                 // Build room dropdown options
                 let roomOptionsHtml = `<option value="">-- Chọn phòng sản xuất --</option>`;
                 eligibleRooms.forEach(function(r) {
-                    const selected = (selectedRoomId !== null && parseInt(r.id) === parseInt(selectedRoomId)) ? 'selected' : '';
+                    const selected = (selectedRoomId !== null && parseInt(r.id) === parseInt(selectedRoomId)) ?
+                        'selected' : '';
                     roomOptionsHtml += `<option value="${r.id}" ${selected}>${r.code} - ${r.name}</option>`;
                 });
 
@@ -2224,6 +2898,12 @@
                 if (selectedRoomId) {
                     $roomSelect.trigger('change');
                 }
+
+                if (window.isConfigReadOnly) {
+                    $roomSelect.prop('disabled', true);
+                    $condSelect.prop('disabled', true);
+                    $row.find('.btn-delete-room-row').hide();
+                }
             }
 
             function loadConditionsForRoomSelect(roomId, $condSelect, selectedCondId) {
@@ -2240,9 +2920,10 @@
                 if (roomConditions.length === 0) {
                     $condSelect.prop('disabled', true);
                 } else {
-                    $condSelect.prop('disabled', false);
+                    $condSelect.prop('disabled', window.isConfigReadOnly);
                     roomConditions.forEach(function(c) {
-                        const selected = (selectedCondId !== null && parseInt(c.id) === parseInt(selectedCondId)) ? 'selected' : '';
+                        const selected = (selectedCondId !== null && parseInt(c.id) === parseInt(selectedCondId)) ?
+                            'selected' : '';
                         $condSelect.append(`<option value="${c.id}" ${selected}>${c.name}</option>`);
                     });
                 }
@@ -2296,7 +2977,7 @@
             $(document).on('click', '.btn-delete-room-row', function() {
                 const tr = $(this).closest('tr');
                 tr.remove();
-                
+
                 // Re-number STT
                 $('#roomsTableBody tr').each(function(idx) {
                     $(this).find('.row-stt').text(idx + 1);
@@ -2345,7 +3026,7 @@
                 });
             });
 
-            $('#modalRooms').on('hidden.bs.modal', function () {
+            $('#modalRooms').on('hidden.bs.modal', function() {
                 currentRoomsTemplateId = null;
                 roomsData = [];
                 roomsList = [];
@@ -2358,6 +3039,7 @@
 
             // --- CAROUSEL MODAL NAVIGATION FOR CẤU HÌNH SX ---
             let currentConfigTemplateName = '';
+            window.isConfigReadOnly = false;
 
             window.openConfigSXModal = function(id, name) {
                 currentConfigTemplateName = name;
@@ -2384,7 +3066,7 @@
 
                     // Ẩn modal cũ và hiển thị modal mới đồng thời
                     $fromModal.modal('hide');
-                    
+
                     if (callback) {
                         callback(); // Hiển thị modal mới lên
                     }

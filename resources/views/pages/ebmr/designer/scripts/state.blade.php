@@ -262,6 +262,7 @@
             id: "{{ $template->id ?? '' }}",
             code: "{{ $template->doc_code ?? ($template->category_code ?? '') }}",
             edition: "{{ $template->version ?? '1' }}",
+            pre_version: "{{ $template->pre_version ?? '' }}",
             name: "{{ $template->category_name ?? '' }}",
             dosage: "{{ $template->dosage_name ?? '' }}",
             type_name: "{{ $template->type_name ?? 'Thuốc Kê Đơn' }}",
@@ -385,7 +386,7 @@
                     cs: 1
                 },
                 {
-                    content: '<strong>: 00</strong>',
+                    content: '<strong>: ' + (t.pre_version !== '' ? String(t.pre_version).padStart(2, '0') : '00') + '</strong>',
                     rs: 1,
                     cs: 1
                 },
@@ -538,20 +539,6 @@
                     cs: 1,
                     textAlign: 'left'
                 }
-            ],
-            // Row 6: Điều kiện bảo quản
-            [{
-                    content: 'Điều kiện bảo quản',
-                    rs: 1,
-                    cs: 1,
-                    textAlign: 'left'
-                },
-                {
-                    content: ': ' + t.storage_conditions,
-                    rs: 1,
-                    cs: 1,
-                    textAlign: 'left'
-                }
             ]
         ];
 
@@ -559,11 +546,11 @@
             id: id,
             type: 'table',
             label: 'MÔ TẢ SẢN PHẨM',
-            rows: 6,
+            rows: 5,
             cols: 2,
             columns: columns,
             data: data,
-            rowHeights: new Array(6).fill('auto'),
+            rowHeights: new Array(5).fill('auto'),
             borderMode: 'none',
             hideHeader: true,
             locked: true,

@@ -852,6 +852,20 @@ class EbmrDesignerController extends Controller
 
     private function injectContent(&$field, $block, $contentBlocks, $lang = 'vi', $testingCriteria = null, $properties = null)
     {
+        if (isset($field['id']) && $field['id'] === 'sys_bmr_tbl_desc') {
+            if (isset($field['rows']) && $field['rows'] == 6) {
+                $field['rows'] = 5;
+                if (isset($field['data']) && count($field['data']) >= 6) {
+                    unset($field['data'][5]);
+                    $field['data'] = array_values($field['data']);
+                }
+                if (isset($field['rowHeights']) && count($field['rowHeights']) >= 6) {
+                    unset($field['rowHeights'][5]);
+                    $field['rowHeights'] = array_values($field['rowHeights']);
+                }
+            }
+        }
+
         if (! $contentBlocks || empty($block->content)) {
             return;
         }

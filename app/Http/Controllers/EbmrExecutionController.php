@@ -87,6 +87,118 @@ class EbmrExecutionController extends Controller
     }
 
     /**
+     * Dashboard of production stages and room states
+     */
+    public function productionIndex(Request $request)
+    {
+        session(['title' => 'Sản Xuất']);
+
+        // 1. Fetch active rooms
+        $rooms = DB::connection('pms')->table('room')
+            ->where('active', 1)
+            ->orderBy('code')
+            ->get();
+
+        // 2. Fetch active records (non-completed BMR/BPR) joined with ebmr_template_rooms mappings
+        $activeRecords = DB::table('ebmr_records')
+            ->join('ebmr_templates', 'ebmr_records.template_id', '=', 'ebmr_templates.id')
+            ->leftJoin('ebmr_template_rooms', 'ebmr_templates.id', '=', 'ebmr_template_rooms.template_id')
+            ->select('ebmr_records.*', 'ebmr_templates.type', 'ebmr_templates.caterogy_id', 'ebmr_template_rooms.room_id', 'ebmr_template_rooms.section_id')
+            ->whereNotIn('ebmr_records.status', ['completed', 'reviewed'])
+            ->get();
+
+        // Populate product name for each active record
+        foreach ($activeRecords as $r) {
+            if ($r->type === 'GF') {
+                $r->product_name = DB::table('gf_category')->where('id', $r->caterogy_id)->value('name') ?? 'N/A';
+            } elseif ($r->type === 'MF') {
+                $r->product_name = DB::table('mf_category')->where('id', $r->caterogy_id)->value('name') ?? 'N/A';
+            } elseif ($r->type === 'BPR') {
+                $r->product_name = DB::table('finished_product_category')
+                    ->leftJoin('product_name', 'finished_product_category.product_name_id', '=', 'product_name.id')
+                    ->where('finished_product_category.id', $r->caterogy_id)
+                    ->value('product_name.name') ?? 'N/A';
+            } else {
+                $r->product_name = DB::table('intermediate_category')
+                    ->leftJoin('product_name', 'intermediate_category.product_name_id', '=', 'product_name.id')
+                    ->where('intermediate_category.id', $r->caterogy_id)
+                    ->value('product_name.name') ?? 'N/A';
+            }
+        }
+
+        // Group active records by room_id
+        $recordsByRoom = $activeRecords->groupBy('room_id');
+
+        // Fetch all room conditions from local db
+        $conditions = DB::table('manu_condition')->get()->groupBy('room_id');
+
+        // Map records and condition limits to rooms
+        foreach ($rooms as $room) {
+            $room->active_records = $recordsByRoom->get($room->id, collect());
+            
+            $cond = $conditions->has($room->id) ? $conditions->get($room->id)->first() : null;
+            $room->limits = [
+                'temp_min' => ($cond && $cond->temp_min_1 !== null) ? (double)$cond->temp_min_1 : 20.0,
+                'temp_max' => ($cond && $cond->temp_max_1 !== null) ? (double)$cond->temp_max_1 : 25.0,
+                'humid_min' => ($cond && $cond->humidity_min_1 !== null) ? (double)$cond->humidity_min_1 : 35.0,
+                'humid_max' => ($cond && $cond->humidity_max_1 !== null) ? (double)$cond->humidity_max_1 : 60.0,
+                'press_min' => ($cond && ($cond->diff_press_corridor_min ?? $cond->diff_press_pal_min ?? $cond->diff_press_mal_min) !== null) 
+                    ? (double)($cond->diff_press_corridor_min ?? $cond->diff_press_pal_min ?? $cond->diff_press_mal_min) : 5.0,
+                'press_max' => ($cond && ($cond->diff_press_corridor_max ?? $cond->diff_press_pal_max ?? $cond->diff_press_mal_max) !== null) 
+                    ? (double)($cond->diff_press_corridor_max ?? $cond->diff_press_pal_max ?? $cond->diff_press_mal_max) : 15.0,
+            ];
+        }
+
+        $stageProductions = \App\Models\StageProduction::orderBy('workshop_code')->orderBy('order_num')->get()->groupBy('workshop_code');
+        $workshopsList = $stageProductions->keys();
+
+        return view('pages.ebmr.production.index', [
+            'rooms' => $rooms,
+            'stageProductions' => $stageProductions,
+            'workshopsList' => $workshopsList
+        ]);
+    }
+
+    /**
+     * Get real-time room telemetry data from simulated BMS
+     */
+    public function getBmsData(Request $request)
+    {
+        $rooms = DB::connection('pms')->table('room')
+            ->where('active', 1)
+            ->get();
+
+        $telemetries = [];
+        $time = time();
+
+        foreach ($rooms as $room) {
+            // Generate stable but fluctuating values based on room ID and current timestamp
+            $baseTemp = 20.0 + ($room->id % 5) * 0.8;
+            $fluctTemp = sin($time / 30.0 + $room->id) * 0.4;
+            $temp = number_format($baseTemp + $fluctTemp, 1);
+
+            $baseHumid = 42 + ($room->id % 6) * 1.5;
+            $fluctHumid = cos($time / 45.0 + $room->id) * 2;
+            $humid = number_format($baseHumid + $fluctHumid, 0);
+
+            $basePressure = 8 + ($room->id % 8);
+            $fluctPressure = sin($time / 60.0 + $room->id) * 1;
+            $pressure = '+' . number_format($basePressure + $fluctPressure, 0);
+
+            $telemetries[$room->id] = [
+                'temperature' => $temp,
+                'humidity' => $humid,
+                'pressure' => $pressure,
+            ];
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => $telemetries
+        ]);
+    }
+
+    /**
      * Execution interface for a specific record
      */
     public function execute(Request $request, $id)
@@ -489,6 +601,20 @@ class EbmrExecutionController extends Controller
     }
     private function injectContent(&$field, $block, $contentBlocks, $testingCriteria = null, $properties = null)
     {
+        if (isset($field['id']) && $field['id'] === 'sys_bmr_tbl_desc') {
+            if (isset($field['rows']) && $field['rows'] == 6) {
+                $field['rows'] = 5;
+                if (isset($field['data']) && count($field['data']) >= 6) {
+                    unset($field['data'][5]);
+                    $field['data'] = array_values($field['data']);
+                }
+                if (isset($field['rowHeights']) && count($field['rowHeights']) >= 6) {
+                    unset($field['rowHeights'][5]);
+                    $field['rowHeights'] = array_values($field['rowHeights']);
+                }
+            }
+        }
+
         if (!$contentBlocks || empty($block->content)) return;
 
         // 1. Rebuild the full HTML by replacing placeholders with text

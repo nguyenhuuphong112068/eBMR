@@ -106,9 +106,15 @@
                         </td>
                     </tr>
                 `;
-                $(`#${targetTableId}`).append(tr);
+                const $tr = $(tr);
+                $(`#${targetTableId}`).append($tr);
                 bomRowIndex++;
                 updateBOMSTT();
+
+                if (window.isConfigReadOnly) {
+                    $tr.find('input, select, textarea').prop('disabled', true);
+                    $tr.find('.btn_add_material, .btn_add_sub_amount, .btn_remove_bom_row').hide();
+                }
             }
 
             // Handle adding sub-amounts
@@ -425,6 +431,16 @@
                 updateBOMNotes();
                 checkTableSum('type_0');
                 checkTableSum('type_1');
+
+                if (window.isConfigReadOnly) {
+                    $('#bom_table_body_type_0, #bom_table_body_type_1').find('input:not([type="hidden"]), select, textarea').prop('disabled', true);
+                    $('#bom_table_body_type_0, #bom_table_body_type_1').find('.btn_add_material, .btn_remove_material, .btn_add_sub_amount, .btn_remove_sub_amount, .btn_edit_sub_note, .btn_remove_bom_row').hide();
+                    $('#btn_add_bom_row_type_0, #btn_add_bom_row_type_1').hide();
+                    $('#update_avg_core, #update_average_unit_weight').prop('disabled', true);
+                } else {
+                    $('#btn_add_bom_row_type_0, #btn_add_bom_row_type_1').show();
+                    $('#update_avg_core, #update_average_unit_weight').prop('disabled', false);
+                }
                 
                 setTimeout(function() {
                     $('.auto-resize').each(function() {

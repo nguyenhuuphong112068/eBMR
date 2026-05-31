@@ -40,6 +40,14 @@
         .dataTables_scrollBody {
             border-bottom: 1px solid #e2e8f0;
         }
+
+        #data_table_intermediate_category tbody tr[data-href] {
+            cursor: pointer;
+            transition: background-color 0.15s ease-in-out;
+        }
+        #data_table_intermediate_category tbody tr[data-href]:hover {
+            background-color: #e0f2fe !important;
+        }
     </style>
 
     <div class="content-wrapper">
@@ -148,7 +156,7 @@
                     <tbody>
                         @foreach ($datas as $data)
 
-                            <tr class = "{{ $data->IsHypothesis ? 'highlight-row' : '' }}">
+                            <tr data-href="{{ route('pages.ebmr.templates') }}?type=BMR&code={{ urlencode($data->intermediate_code) }}" class="{{ $data->IsHypothesis ? 'highlight-row' : '' }}">
                                 <td class="align-middle text-center">{{ $loop->iteration }}
                                     @if (session('user')['userGroup'] == 'Admin')
                                         <div class="text-muted small">ID: {{ $data->id }}</div>
@@ -346,12 +354,32 @@
 
                 // Filter Phân Xưởng
                 $('#filter_department').on('change', function() {
-                    const val = $(this).val();
-                    table.column(4).search(val ? '^' + val + '$' : '', true, false).draw();
+                    const val = $(this).val() ? $(this).val().trim() : '';
+                    let deptColIdx = 12; // default fallback
+                    
+                    table.columns().every(function(index) {
+                        const headerElement = this.header();
+                        if (headerElement) {
+                            const headerText = $(headerElement).text().trim();
+                            if (headerText === 'Phân Xưởng') {
+                                deptColIdx = index;
+                            }
+                        }
+                    });
+                    
+                    table.column(deptColIdx).search(val ? '^\\s*' + $.fn.dataTable.util.escapeRegex(val) + '\\s*$' : '', true, false).draw();
                     $('#create_deparment_code_input').val(val);
                     $('#update_deparment_code_input').val(val);
                 });
                 $('#filter_department').trigger('change');
+
+                // Click row to navigate to template
+                $('#data_table_intermediate_category tbody').on('click', 'tr[data-href]', function(e) {
+                    if ($(e.target).closest('td').is(':last-child') || $(e.target).closest('button, a, input, form, select').length) {
+                        return;
+                    }
+                    window.location.href = $(this).data('href');
+                });
 
                 $('.btn-create-bom').click(function() {
                     const button = $(this);
@@ -488,6 +516,6 @@
                         }
                     });
                 });
-                
+            });
         </script>
     @append

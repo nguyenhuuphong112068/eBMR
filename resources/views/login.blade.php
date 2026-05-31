@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" type="image/png" href="{{ asset('img/iconstella.svg') }}">
-    <title>eBMR | Electronic Batch Manufacturing Record</title>
+    <title>eR | Electronic Record</title>
 
     <!-- Local Arimo Font -->
     <link rel="stylesheet" href="{{ asset('fonts/Arimo/arimo.css') }}">
@@ -237,8 +237,8 @@
         <div class="login-card">
             <div class="brand-section">
                 <img src="{{ asset('img/iconstella.svg') }}" alt="Stella Logo" class="brand-logo">
-                <h1 class="brand-name">e<span>BMR</span></h1>
-                <p class="brand-tagline">Electronic Batch Manufacturing Record</p>
+                <h1 class="brand-name">e<span>R</span></h1>
+                <p class="brand-tagline">Electronic Record</p>
             </div>
 
             @if (session('error'))

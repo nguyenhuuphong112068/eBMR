@@ -43,10 +43,11 @@
                                         <td>
                                             <div class="d-flex flex-wrap gap-1">
                                                 @forelse($r->sections as $s)
-                                                    <span class="badge bg-soft-info text-info border border-info rounded-pill py-1 px-2" 
-                                                          style="font-size: 0.7rem; cursor: default;">
-                                                        {{ $s['label'] }}
-                                                    </span>
+                                                    <a href="{{ route('pages.ebmr.execute', $r->id) }}?section={{ $s['id'] }}" 
+                                                       class="badge bg-soft-info text-info border border-info rounded-pill py-1 px-2 text-decoration-none hover-glow" 
+                                                       style="font-size: 0.75rem; cursor: pointer; transition: all 0.2s;">
+                                                        <i class="fas fa-play-circle me-1"></i> {{ $s['label'] }}
+                                                    </a>
                                                 @empty
                                                     <span class="text-muted small">N/A</span>
                                                 @endforelse
@@ -98,6 +99,12 @@
     .text-navy { color: #003A4F !important; }
     .bg-soft-success { background-color: rgba(40, 167, 69, 0.1); }
     .bg-soft-info { background-color: rgba(23, 162, 184, 0.1); }
+    .hover-glow:hover {
+        background-color: #003A4F !important;
+        color: #fff !important;
+        box-shadow: 0 4px 10px rgba(0, 58, 79, 0.2);
+        transform: translateY(-1px);
+    }
 </style>
 @endsection
 

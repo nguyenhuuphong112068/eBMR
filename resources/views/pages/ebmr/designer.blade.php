@@ -1,6 +1,6 @@
 @extends('layout.master') {{-- Kế thừa layout gốc của hệ thống (Master Layout) --}}
 
-@section('title', 'eBMR Editor (Document Style)') {{-- Đặt tiêu đề cho trang web hiển thị trên trình duyệt --}}
+@section('title', 'eR Editor (Document Style)') {{-- Đặt tiêu đề cho trang web hiển thị trên trình duyệt --}}
 
 @section('topNAV') {{-- Định nghĩa vùng nội dung cho thanh điều hướng phía trên --}}
     @include('layout.topNAV') {{-- Nhúng file thanh điều hướng trên cùng --}}

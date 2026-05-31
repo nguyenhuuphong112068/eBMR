@@ -98,7 +98,7 @@
     <a href="{{ route('pages.general.home') }}" class="brand-link text-center px-0">
         <img src="{{ asset('img/iconstella.svg') }}" alt="Logo"
             style="width: 52px; height: auto; filter: drop-shadow(0 4px 6px rgba(8, 145, 178, 0.1));">
-        <span class="brand-text d-block">e<span>BMR</span> System</span>
+        <span class="brand-text d-block">e<span>R</span> System</span>
     </a>
 
     <!-- Sidebar Menu -->
@@ -177,39 +177,40 @@
                     </ul>
                 </li>
 
-                <!-- Droplist Menu Danh Muc  -->
+                <!-- Droplist Menu Hồ sơ Gốc  -->
                 <li class="nav-item has-treeview {{ str_contains(url()->current(), 'category') ? 'menu-open' : '' }}">
                     <a href="#"
                         class="nav-link {{ str_contains(url()->current(), 'category') ? 'active' : '' }}">
                         <i class="fas fa-newspaper"></i>
                         <p>
-                            Danh Mục
+                            Hồ Sơ Gốc
                             <i class="right fas fa-angle-left"></i>
                         </p>
                     </a>
 
                     <ul class="nav nav-treeview">
+                        <li class="nav-item">
+                            <a href="{{ route('pages.category.gf.list') }}" class="nav-link">
+                                <i class="far fa-circle nav-icon"></i>
+                                <p>Biểu mẫu</p>
+                            </a>
+                        </li>
 
                         <li class="nav-item">
                             <a href="{{ route('pages.category.intermediate.list') }}" class="nav-link">
                                 <i class="far fa-circle nav-icon"></i>
-                                <p>Bán Thành Phẩm</p>
+                                <p>Hồ sơ sản xuất </p>
                             </a>
                         </li>
 
                         <li class="nav-item">
                             <a href="{{ route('pages.category.product.list') }}" class="nav-link">
                                 <i class="far fa-circle nav-icon"></i>
-                                <p>Thành Phẩm</p>
+                                <p>Hồ sơ đóng gói</p>
                             </a>
                         </li>
 
-                        <li class="nav-item">
-                            <a href="{{ route('pages.category.gf.list') }}" class="nav-link">
-                                <i class="far fa-circle nav-icon"></i>
-                                <p>Biểu mẫu dùng chung</p>
-                            </a>
-                        </li>
+
 
                         {{-- <li class="nav-item">
                             <a href="{{ route('pages.category.mf.list') }}" class="nav-link">
@@ -220,8 +221,8 @@
                     </ul>
                 </li>
 
-
-                <li
+                <!-- Droplist Menu Soạn Hồ Sơ  -->
+                {{-- <li
                     class="nav-item has-treeview {{ str_contains(url()->current(), 'ebmr/templates') ? 'menu-open' : '' }}">
                     <a href="#"
                         class="nav-link {{ str_contains(url()->current(), 'ebmr/templates') ? 'active' : '' }}">
@@ -245,23 +246,23 @@
                                 <i class="fas fa-file-invoice nav-icon"></i>
                                 <p>Biểu mẫu gốc</p>
                             </a>
-                        </li> --}}
-                        <li class="nav-item">
-                            <a href="{{ route('pages.ebmr.templates') }}?type=BMR"
-                                class="nav-link {{ request('type') == 'BMR' || !request('type') ? 'active' : '' }}">
-                                <i class="fas fa-file-medical nav-icon"></i>
-                                <p>Hồ sơ sản xuất</p>
-                            </a>
                         </li>
-                        <li class="nav-item">
-                            <a href="{{ route('pages.ebmr.templates') }}?type=BPR"
-                                class="nav-link {{ request('type') == 'BPR' ? 'active' : '' }}">
-                                <i class="fas fa-box-open nav-icon"></i>
-                                <p>Hồ sơ đóng gói</p>
-                            </a>
-                        </li>
-                    </ul>
+                    <li class="nav-item">
+                        <a href="{{ route('pages.ebmr.templates') }}?type=BMR"
+                            class="nav-link {{ request('type') == 'BMR' || !request('type') ? 'active' : '' }}">
+                            <i class="fas fa-file-medical nav-icon"></i>
+                            <p>Hồ sơ sản xuất</p>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                    <a href="{{ route('pages.ebmr.templates') }}?type=BPR"
+                        class="nav-link {{ request('type') == 'BPR' ? 'active' : '' }}">
+                        <i class="fas fa-box-open nav-icon"></i>
+                        <p>Hồ sơ đóng gói</p>
+                    </a>
                 </li>
+                </ul>
+                </li> --}}
 
                 <!-- Duyệt Hồ Sơ -->
                 <li
@@ -314,14 +315,14 @@
                     </ul>
                 </li>
 
-                <!-- Hồ Sơ Sản Xuất (Cho Bộ Phận Sản Xuất) -->
+                <!-- Thực Thi Sản Xuất (Cho Bộ Phận Sản Xuất) -->
                 <li
-                    class="nav-item has-treeview {{ str_contains(url()->current(), 'ebmr/records') && request('mode') != 'history' ? 'menu-open' : '' }}">
+                    class="nav-item has-treeview {{ (str_contains(url()->current(), 'ebmr/records') && request('mode') != 'history') || request()->routeIs('pages.ebmr.production') ? 'menu-open' : '' }}">
                     <a href="#"
-                        class="nav-link {{ str_contains(url()->current(), 'ebmr/records') && request('mode') != 'history' ? 'active' : '' }}">
+                        class="nav-link {{ (str_contains(url()->current(), 'ebmr/records') && request('mode') != 'history') || request()->routeIs('pages.ebmr.production') ? 'active' : '' }}">
                         <i class="fas fa-industry"></i>
                         <p>
-                            Hồ Sơ Sản Xuất
+                            Thực Thi Sản Xuất
                             <i class="right fas fa-angle-left"></i>
                         </p>
                     </a>
@@ -330,7 +331,14 @@
                             <a href="{{ route('pages.ebmr.indexRecords') }}"
                                 class="nav-link {{ str_contains(url()->current(), 'ebmr/records') && !request('mode') ? 'active' : '' }}">
                                 <i class="fas fa-clipboard-list"></i>
-                                <p>Hồ Sơ Đã Nhận Ban Hành</p>
+                                <p>Nhận Ban Hành</p>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="{{ route('pages.ebmr.production') }}"
+                                class="nav-link {{ request()->routeIs('pages.ebmr.production') ? 'active' : '' }}">
+                                <i class="fas fa-cogs"></i>
+                                <p>Sản Xuất</p>
                             </a>
                         </li>
                         <li class="nav-item">
@@ -343,32 +351,35 @@
                     </ul>
                 </li>
 
-                {{-- 
-                <!-- Chuyển bộ phân -->
-                <li class="nav-item has-treeview">
-                    <a href="#" class="nav-link">
-                        <i class="fas fa-building"></i>
+                <!-- Nhật ký Sản Xuất (Cho Bộ Phận Sản Xuất) -->
+                <li
+                    class="nav-item has-treeview {{ request()->routeIs('pages.ebmr.logbooks.*') ? 'menu-open' : '' }}">
+                    <a href="#"
+                        class="nav-link {{ request()->routeIs('pages.ebmr.logbooks.*') ? 'active' : '' }}">
+                        <i class="fas fa-book"></i>
                         <p>
-                            {{ session('user')['selected_department'] }}
+                            Nhật Ký Sản Xuất
                             <i class="right fas fa-angle-left"></i>
                         </p>
                     </a>
-                    <ul class="nav nav-treeview">
-                        @php
-                            $departments = DB::table('deparments')->get();
-                        @endphp
-                        @foreach ($departments as $dept)
-                            <li class="nav-item">
-                                <a href="{{ route('switch', ['selected_department' => $dept->shortName, 'redirect' => url()->current()]) }}"
-                                    class="nav-link">
-                                    <i
-                                        class="far fa-circle nav-icon {{ session('user')['selected_department'] == $dept->shortName ? 'text-danger' : '' }}"></i>
-                                    <p>{{ $dept->shortName }}</p>
-                                </a>
-                            </li>
-                        @endforeach
+                    <ul class="nav nav-treeview pl-3">
+                        <li class="nav-item">
+                            <a href="{{ route('pages.ebmr.logbooks.room') }}"
+                                class="nav-link {{ request()->routeIs('pages.ebmr.logbooks.room') ? 'active' : '' }}">
+                                <i class="fas fa-clipboard-list"></i>
+                                <p>Nhật ký Phòng</p>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="{{ route('pages.ebmr.logbooks.instrument') }}"
+                                class="nav-link {{ request()->routeIs('pages.ebmr.logbooks.instrument') ? 'active' : '' }}">
+                                <i class="fas fa-microscope"></i>
+                                <p>Nhật ký Thiết bị</p>
+                            </a>
+                        </li>
                     </ul>
-                </li> --}}
+                </li>
+
 
                 {{-- <li
                     class="nav-item has-treeview {{ str_contains(url()->current(), 'ai-training') ? 'menu-open' : '' }}">
