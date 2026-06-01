@@ -53,6 +53,7 @@ class RoomController extends Controller
 
         $datas = DB::connection('pms')->table('room')
             ->where('deparment_code', $selectedDept)
+            ->where('stage_code', '!=', 8)
             ->orderBy('order_by', 'asc')
             ->orderBy('code', 'asc')
             ->get();
@@ -121,6 +122,7 @@ class RoomController extends Controller
         // Only load instruments that are not assigned to other workshops
         $allFixed = DB::table('instrument')
             ->where('is_Portable_equipment', 0)
+            ->where('department_code', $targetDept)
             ->whereNotExists(function($query) use ($targetDept, $pmsDb) {
                 $query->select(DB::raw(1))
                     ->from('equipment_in_room')

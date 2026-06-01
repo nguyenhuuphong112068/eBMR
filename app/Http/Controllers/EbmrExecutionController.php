@@ -132,9 +132,17 @@ class EbmrExecutionController extends Controller
         // Fetch all room conditions from local db
         $conditions = DB::table('manu_condition')->get()->groupBy('room_id');
 
+        // Fetch all assigned equipments
+        $equipments = DB::table('equipment_in_room')
+            ->join('instrument', 'equipment_in_room.equipment_id', '=', 'instrument.id')
+            ->select('equipment_in_room.room_id', 'instrument.code', 'instrument.name')
+            ->get()
+            ->groupBy('room_id');
+
         // Map records and condition limits to rooms
         foreach ($rooms as $room) {
             $room->active_records = $recordsByRoom->get($room->id, collect());
+            $room->equipments = $equipments->get($room->id, collect());
             
             $cond = $conditions->has($room->id) ? $conditions->get($room->id)->first() : null;
             $room->limits = [

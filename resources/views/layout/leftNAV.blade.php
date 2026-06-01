@@ -49,9 +49,66 @@
         box-shadow: 0 8px 15px -3px rgba(8, 145, 178, 0.3);
     }
 
-    .nav-pills .nav-link.active i {
+    .nav-pills .nav-link.active i:not(.right) {
         color: white !important;
         transform: scale(1.1);
+    }
+
+    .nav-pills .nav-link.active i.right {
+        color: white !important;
+    }
+
+    .nav-pills .nav-link p {
+        flex: 1;
+        margin: 0;
+        width: 100%;
+    }
+
+    .nav-sidebar .nav-link > p > .right {
+        position: absolute !important;
+        right: 1rem !important;
+        top: 50% !important;
+        transform: translateY(-50%);
+        transition: transform 0.3s ease;
+    }
+
+    .nav-sidebar .nav-item.menu-open > .nav-link > p > .right {
+        transform: translateY(-50%) rotate(-90deg) !important;
+    }
+
+    /* Subtle style for parent folders that are active/open */
+    .nav-pills .nav-item.has-treeview.menu-open>.nav-link,
+    .nav-pills .nav-item.has-treeview>.nav-link.active {
+        background: #ecfeff !important;
+        color: var(--primary) !important;
+        box-shadow: none !important;
+    }
+
+    .nav-pills .nav-item.has-treeview.menu-open>.nav-link i:not(.right),
+    .nav-pills .nav-item.has-treeview>.nav-link.active i:not(.right) {
+        color: var(--primary) !important;
+        transform: none !important;
+    }
+
+    .nav-pills .nav-item.has-treeview.menu-open>.nav-link i.right,
+    .nav-pills .nav-item.has-treeview>.nav-link.active i.right {
+        color: var(--primary) !important;
+    }
+
+    /* Strong gradient style for actual active sub-items */
+    .nav-treeview .nav-link.active {
+        background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%) !important;
+        color: white !important;
+        box-shadow: 0 4px 10px -2px rgba(8, 145, 178, 0.3) !important;
+    }
+
+    .nav-treeview .nav-link.active i:not(.right) {
+        color: white !important;
+        transform: scale(1.1) !important;
+    }
+
+    .nav-treeview .nav-link.active i.right {
+        color: white !important;
     }
 
     .brand-link {

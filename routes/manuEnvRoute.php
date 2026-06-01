@@ -13,6 +13,9 @@ Route::prefix('/manu_env')
             Route::post('store', 'store')->name('store');
             Route::post('update', 'update')->name('update');
             Route::post('delete', 'delete')->name('delete');
+            Route::get('get-calibration-label/{code}', 'getCalibrationLabel')->where('code', '.*')->name('getCalibrationLabel');
+            Route::get('get-maintenance-label/{code}', 'getMaintenanceLabel')->where('code', '.*')->name('getMaintenanceLabel');
+            Route::post('get-status-batch', 'getStatusBatch')->name('getStatusBatch');
         });
         
         Route::prefix('/room')->name('room.')->controller(RoomController::class)->group(function () {

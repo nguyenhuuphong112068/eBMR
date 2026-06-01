@@ -19,7 +19,7 @@ class EbmrController extends Controller
             ->orderBy('ebmr_templates.updated_at', 'desc')
             ->get();
 
-        foreach($templates as $t) {
+        foreach ($templates as $t) {
             if ($t->type === 'GF') {
                 $t->name = DB::table('gf_category')->where('id', $t->caterogy_id)->value('name') ?? 'N/A';
             } elseif ($t->type === 'MF') {
@@ -42,7 +42,7 @@ class EbmrController extends Controller
                 ->where('type', 'section')
                 ->orderBy('order')
                 ->get()
-                ->map(function($b) {
+                ->map(function ($b) {
                     $prop = json_decode($b->properties);
                     return [
                         'id' => $b->id,
@@ -67,7 +67,7 @@ class EbmrController extends Controller
             ->orderBy('updated_at', 'desc')
             ->get();
 
-        foreach($templates as $t) {
+        foreach ($templates as $t) {
             if ($t->type === 'GF') {
                 $t->name = DB::table('gf_category')->where('id', $t->caterogy_id)->value('name') ?? 'N/A';
                 $t->document_code = DB::table('gf_category')->where('id', $t->caterogy_id)->value('code') ?? 'N/A';
@@ -112,7 +112,7 @@ class EbmrController extends Controller
             ->orderBy('ebmr_records.created_at', 'desc')
             ->get();
 
-        foreach($records as $r) {
+        foreach ($records as $r) {
             if ($r->type === 'GF') {
                 $r->template_name = DB::table('gf_category')->where('id', $r->caterogy_id)->value('name') ?? 'N/A';
                 $r->document_code = DB::table('gf_category')->where('id', $r->caterogy_id)->value('code') ?? 'N/A';
@@ -143,7 +143,7 @@ class EbmrController extends Controller
                 ->where('type', 'section')
                 ->orderBy('order')
                 ->get()
-                ->map(function($b) {
+                ->map(function ($b) {
                     $prop = json_decode($b->properties);
                     return [
                         'id' => $b->id,
@@ -540,7 +540,7 @@ class EbmrController extends Controller
             ->orderBy('updated_at', 'desc')
             ->get();
 
-        foreach($templates as $t) {
+        foreach ($templates as $t) {
             if ($t->type === 'GF') {
                 $t->name = DB::table('gf_category')->where('id', $t->caterogy_id)->value('name') ?? 'N/A';
             } elseif ($t->type === 'MF') {
@@ -760,7 +760,7 @@ class EbmrController extends Controller
                 $fields[] = $f;
             }
         }
-        
+
         $fieldsConfig = (object)$fieldsConfig;
 
         $runDataRaw = DB::table('ebmr_run_data')->where('record_id', $id)->get();
