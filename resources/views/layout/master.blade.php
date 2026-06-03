@@ -790,6 +790,7 @@
             color: #666;
             white-space: nowrap;
         }
+
         /* AI Quick Access Button */
         .ai-float-btn {
             position: fixed;
@@ -830,8 +831,15 @@
         }
 
         @keyframes ai-pulse {
-            0% { transform: scale(1); opacity: 1; }
-            100% { transform: scale(1.8); opacity: 0; }
+            0% {
+                transform: scale(1);
+                opacity: 1;
+            }
+
+            100% {
+                transform: scale(1.8);
+                opacity: 0;
+            }
         }
     </style>
 
@@ -961,6 +969,26 @@
 
 
     </div>
+
+    <!-- Modal: Workflow History -->
+    <div class="modal fade" id="modalWorkflowHistory" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header text-white" style="background-color: var(--navy);">
+                    <h5 class="modal-title"><i class="fas fa-history me-2"></i> Qui Trình Ký Duyệt Hồ Sơ</h5>
+                    <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body bg-light p-4">
+                    <div id="workflowHistoryTimeline" class="timeline">
+                        <!-- Timeline items will be injected here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     </div>
     <!-- ./wrapper -->
 
@@ -972,6 +1000,78 @@
 
     <!-- jQuery -->
     @include('layout.js')
+
+    <script>
+        function showWorkflowHistory(type, id) {
+            Swal.fire({
+                title: 'Đang tải dữ liệu...',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            $.ajax({
+                url: `/ebmr/approvals/workflow-history/${type}/${id}`,
+                method: 'GET',
+                success: function(response) {
+                    Swal.close();
+                    let html = '';
+
+                    if (response.length === 0) {
+                        html = '<div class="text-center text-muted p-4">Không có dữ liệu trình duyệt</div>';
+                    } else {
+                        response.forEach(wf => {
+                            let statusColor = 'bg-warning';
+                            let statusIcon = 'fa-clock';
+                            let statusText = 'Chờ duyệt';
+
+                            if (wf.status === 'approved') {
+                                statusColor = 'bg-success';
+                                statusIcon = 'fa-check';
+                                statusText = 'Đã duyệt';
+                            } else if (wf.status === 'rejected') {
+                                statusColor = 'bg-danger';
+                                statusIcon = 'fa-times';
+                                statusText = 'Từ chối';
+                            } else if (wf.status === 'cancelled') {
+                                statusColor = 'bg-secondary';
+                                statusIcon = 'fa-ban';
+                                statusText = 'Đã hủy/Trả về';
+                            }
+
+                            let roleName = wf.role === 'reviewer' ? 'Kiểm tra' : (wf.role ===
+                                'approver' ? 'Phê duyệt' : 'Ban hành');
+
+                            let d = new Date(wf.updated_at);
+                            let dateStr = isNaN(d.getTime()) ? '' : d.toLocaleString('vi-VN');
+
+                            html += `
+                            <div>
+                                <i class="fas ${statusIcon} ${statusColor}"></i>
+                                <div class="timeline-item shadow-sm">
+                                    <span class="time"><i class="fas fa-calendar-alt"></i> ${dateStr}</span>
+                                    <h3 class="timeline-header font-weight-bold" style="color: var(--navy);">${roleName} - ${wf.user_name}</h3>
+                                    <div class="timeline-body">
+                                        <div class="mb-2"><span class="badge ${statusColor}">${statusText}</span></div>
+                                        ${wf.comment ? `<div class="bg-light p-2 rounded border border-light"><strong>Ghi chú:</strong> ${wf.comment}</div>` : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                        });
+                        html += `<div><i class="fas fa-flag-checkered bg-secondary"></i></div>`;
+                    }
+
+                    $('#workflowHistoryTimeline').html(html);
+                    $('#modalWorkflowHistory').modal('show');
+                },
+                error: function(err) {
+                    Swal.fire('Lỗi', 'Không thể lấy dữ liệu lịch sử', 'error');
+                }
+            });
+        }
+    </script>
 
     @yield('model')
     @yield('script')
@@ -1048,7 +1148,7 @@
             function loadNotifications() {
                 $.get("{{ route('notifications.list') }}", function(data) {
                     if (!Array.isArray(data)) return;
-                    
+
                     let unreadCount = data.filter(n => n.is_read == 0).length;
                     if (unreadCount > 0) {
                         $('#notif-badge-navbar').text(unreadCount).show();
@@ -1522,8 +1622,8 @@
                                     <i class="fas fa-reply"></i>
                                 </span>
                                 ${side === 'me' ? `<span class="msg-action-btn btn-recall text-danger" title="Thu hồi, sau 30p sẽ không được thu hồi" data-msg-id="${m.id}">
-                                                                        <i class="fas fa-undo"></i>
-                                                                    </span>` : ''}
+                                                                            <i class="fas fa-undo"></i>
+                                                                        </span>` : ''}
                             </div>
                         `;
                     }
@@ -1693,8 +1793,10 @@
 
                 // Thêm hiệu ứng AI đang tìm kiếm nếu nhóm chat liên quan đến AI
                 let container = $(`#chat-content-${groupId}`);
-                let groupName = $(`#chat-window-${groupId} .chat-window-header span.font-weight-bold`).text().toLowerCase();
-                let isAiChat = groupName.includes('ai') || groupName.includes('trợ lý') || groupName.includes('agent');
+                let groupName = $(`#chat-window-${groupId} .chat-window-header span.font-weight-bold`).text()
+                    .toLowerCase();
+                let isAiChat = groupName.includes('ai') || groupName.includes('trợ lý') || groupName.includes(
+                    'agent');
                 let aiIndicatorId = `ai-indicator-${groupId}`;
 
                 if (isAiChat) {

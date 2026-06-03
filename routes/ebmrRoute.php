@@ -36,6 +36,7 @@ Route::group(['prefix' => 'ebmr', 'as' => 'pages.ebmr.'], function () {
 
     // 3. Workflow & Approvals
     Route::get('/approvals', [EbmrApprovalController::class, 'index'])->name('approvals');
+    Route::get('/approvals/workflow-history/{type}/{id}', [EbmrApprovalController::class, 'getWorkflowHistory'])->name('getWorkflowHistory');
     Route::get('/templates/{id}/workflow', [EbmrApprovalController::class, 'getTemplateWorkflow'])->name('getTemplateWorkflow');
     Route::post('/templates/{id}/workflow', [EbmrApprovalController::class, 'storeTemplateWorkflow'])->name('storeTemplateWorkflow');
     Route::post('/approvals/process', [EbmrApprovalController::class, 'process'])->name('processApproval');
@@ -50,6 +51,7 @@ Route::group(['prefix' => 'ebmr', 'as' => 'pages.ebmr.'], function () {
     Route::get('/records', [EbmrExecutionController::class, 'index'])->name('indexRecords');
     Route::get('/production', [EbmrExecutionController::class, 'productionIndex'])->name('production');
     Route::get('/production/bms-data', [EbmrExecutionController::class, 'getBmsData'])->name('productionBmsData');
+    Route::get('/production/logbook-label', [EbmrExecutionController::class, 'getLogbookLabel'])->name('getLogbookLabel');
     Route::get('/execute/{id}', [EbmrExecutionController::class, 'execute'])->name('execute');
     Route::post('/update-record-data', [EbmrExecutionController::class, 'updateRecordData'])->name('updateRecordData');
     Route::post('/verify-password', [EbmrExecutionController::class, 'verifyPassword'])->name('verifyPassword');

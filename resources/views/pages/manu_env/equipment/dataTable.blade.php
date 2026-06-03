@@ -109,6 +109,7 @@
                         <th>Mã Thiết Bị</th>
                         <th>Tên Thiết Bị</th>
                         <th>Loại & Kết Nối</th>
+                        <th>Tình Trạng Vệ Sinh</th>
                         <th>Công Đoạn</th>
                         <th>SOP Vận Hành</th>
                         <th>SOP Vệ Sinh</th>
@@ -145,6 +146,13 @@
                                 @else
                                     <span class="badge bg-secondary text-white px-2 py-1 small fw-bold">Khác</span>
                                 @endif
+                            </td>
+                            <td class="text-center">
+                                @php
+                                    $eqClass = ($data->eq_status === 'cleaned') ? 'bg-success text-white' : 'bg-warning text-dark';
+                                    $eqText = ($data->eq_status === 'cleaned') ? 'Đã vệ sinh' : 'Cần vệ sinh';
+                                @endphp
+                                <span class="badge {{ $eqClass }} border btn-eq-label" style="cursor: pointer;" onclick="showLabel('equipment', '{{ $data->id }}')"><i class="fas fa-soap"></i> {{ $eqText }}</span>
                             </td>
                             <td>
                                 @if ($data->stage_id)
@@ -197,6 +205,12 @@
                                         data-code="{{ $data->code }}" title="Xem Nhãn Bảo trì">
                                         <i class="fas fa-wrench"></i>
                                     </button>
+
+                                    <a href="{{ route('pages.manu_env.cleaning_process.list', ['type' => 'equipment', 'id' => $data->id]) }}"
+                                        class="btn btn-sm btn-icon btn-light-secondary border shadow-sm"
+                                        title="Thiết kế quy trình vệ sinh">
+                                        <i class="fas fa-clipboard-list"></i>
+                                    </a>
 
                                     <form class="form-delete d-inline"
                                         action="{{ route('pages.manu_env.equipment.delete') }}" method="POST">
@@ -326,6 +340,10 @@
         </div>
     </div>
 </div>
+
+@section('model')
+    @include('pages.ebmr.production.modals.labelModal')
+@append
 
 @section('script')
     @if (session('success'))
@@ -606,6 +624,79 @@
                     }
                 });
             });
+            
+            window.showLabel = function(type, id) {
+                Swal.fire({
+                    title: 'Đang tải...',
+                    text: 'Vui lòng chờ trong giây lát',
+                    allowOutsideClick: false,
+                    didOpen: () => {
+                        Swal.showLoading();
+                    }
+                });
+
+                $.ajax({
+                    url: "{{ route('pages.ebmr.getLogbookLabel') }}",
+                    type: 'GET',
+                    data: {
+                        type: type,
+                        id: id
+                    },
+                    success: function(response) {
+                        Swal.close();
+                        if (response.success) {
+                            const data = response.data;
+                            const labelTitle = type === 'room' ? 'NHÃN PHÒNG' : 'NHÃN THIẾT BỊ';
+                            const labelSub = type === 'room' ? 'ROOM LABEL' : 'EQUIPMENT LABEL';
+                            
+                            if (data.current_status !== 'cleaned') {
+                                $('#cleanRequiredLabelType').text(labelTitle);
+                                $('#cleanRequiredLabelType').next('small').text(labelSub);
+                                
+                                $('#lblReqName').text(data.entity_name);
+                                $('#lblReqCode').text(data.entity_code);
+                                
+                                $('#reqLevel1').prop('checked', data.clean_level === 'level_1');
+                                $('#reqLevel2').prop('checked', data.clean_level === 'level_2');
+                                $('#reqReClean').prop('checked', data.clean_level === 're_cleaning');
+                                
+                                $('#reqFinishedDate').text(data.end_time || '-');
+                                $('#reqCleanBefore').text(data.to_be_cleaned_before || '-');
+                                $('#reqDoneBy').text(data.done_by || '-');
+
+                                $('#modalCleanRequired').modal('show');
+                            } else {
+                                $('#cleanedLabelType').text(labelTitle);
+                                $('#cleanedLabelType').next('small').text(labelSub);
+
+                                $('#lblCldName').text(data.entity_name);
+                                $('#lblCldCode').text(data.entity_code);
+
+                                $('#cldLevel1').prop('checked', data.clean_level === 'level_1');
+                                $('#cldLevel2').prop('checked', data.clean_level === 'level_2');
+                                $('#cldReClean').prop('checked', data.clean_level === 're_cleaning');
+
+                                $('#cldFinishedDate').text(data.end_time || '-');
+                                $('#cldValidUntil').text(data.clean_expiry_date || '-');
+                                $('#cldDoneBy').text(data.done_by || '-');
+                                $('#cldCheckedBy').text(data.checked_by || '-');
+                                
+                                $('#cldNextProduct').text(data.next_product_name || '-');
+                                $('#cldNextBatch').text(data.next_batch_number || '-');
+                                $('#cldAttachedBy').text(data.attached_by || '-');
+
+                                $('#modalCleaned').modal('show');
+                            }
+                        } else {
+                            Swal.fire('Lỗi!', response.message, 'error');
+                        }
+                    },
+                    error: function() {
+                        Swal.close();
+                        Swal.fire('Lỗi!', 'Không thể tải dữ liệu nhãn', 'error');
+                    }
+                });
+            };
         });
     </script>
 @append

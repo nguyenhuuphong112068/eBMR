@@ -104,6 +104,20 @@ class EbmrTemplateController extends Controller
                 }
             }
             $t->labeled_strength = !empty($strengthParts) ? implode(' / ', $strengthParts) : '';
+
+            $t->current_workflow_step = null;
+            if ($t->status === 'submitted') {
+                $pendingWf = DB::table('ebmr_template_workflows')
+                    ->where('template_id', $t->id)
+                    ->where('status', 'pending')
+                    ->orderBy('step_order', 'asc')
+                    ->first();
+                if ($pendingWf) {
+                    $user = DB::table('user_management')->where('id', $pendingWf->user_id)->first();
+                    $roleStr = $pendingWf->role === 'reviewer' ? 'Kiểm tra' : ($pendingWf->role === 'approver' ? 'Phê duyệt' : 'Ban hành');
+                    $t->current_workflow_step = 'Đang chờ ' . $roleStr . ' (' . ($user->fullName ?? 'Unknown') . ')';
+                }
+            }
         }
 
         $users = DB::table('user_management')->select('id', 'fullName as name')->orderBy('fullName')->get();
@@ -1114,7 +1128,7 @@ class EbmrTemplateController extends Controller
                         if (file_exists($localPath)) {
                             $extension = pathinfo($localPath, PATHINFO_EXTENSION);
                             $newName = "{$id}_{$testingId}_{$idx}.{$extension}";
-                            $newLocalPath = public_path("img/testing_img/{$newName}");
+                            $newLocalPath = public_path("upLoadData/img/testing/{$newName}");
 
                             // Ensure directory exists
                             $dir = dirname($newLocalPath);
@@ -1125,7 +1139,7 @@ class EbmrTemplateController extends Controller
                             if ($localPath !== $newLocalPath) {
                                 rename($localPath, $newLocalPath);
                             }
-                            $finalPath = "/img/testing_img/{$newName}";
+                            $finalPath = "/upLoadData/img/testing/{$newName}";
                         }
                     }
 
@@ -1175,7 +1189,7 @@ class EbmrTemplateController extends Controller
             $filename = 'temp_' . time() . '_' . \Illuminate\Support\Str::random(8) . '.' . $file->getClientOriginalExtension();
             
             // Ensure directory exists
-            $dir = public_path('img/testing_img');
+            $dir = public_path('upLoadData/img/testing');
             if (!file_exists($dir)) {
                 mkdir($dir, 0755, true);
             }
@@ -1184,7 +1198,7 @@ class EbmrTemplateController extends Controller
             
             return response()->json([
                 'success' => true,
-                'url' => '/img/testing_img/' . $filename,
+                'url' => '/upLoadData/img/testing/' . $filename,
                 'name' => pathinfo($originalName, PATHINFO_FILENAME)
             ]);
         }

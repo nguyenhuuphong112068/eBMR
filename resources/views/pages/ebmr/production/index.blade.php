@@ -153,39 +153,48 @@
                                 $mockPressure =
                                     '+' . number_format(8 + ($room->id % 8) + sin($time / 60.0 + $room->id) * 1, 0);
 
-                                // Mock status details
-                                $hasActive = count($room->active_records) > 0;
-                                if ($hasActive) {
+                                // Map real status to UI classes
+                                $rs = $room->room_status ?? 'ready';
+                                if ($rs === 'producing') {
                                     $statusText = 'Đang sản xuất';
-                                    $statusClass = 'status-active';
-                                } elseif ($room->id % 7 == 0) {
+                                    $statusClass = 'status-active'; // blue
+                                } elseif ($rs === 'maintenance') {
                                     $statusText = 'Bảo trì';
-                                    $statusClass = 'status-maintenance';
-                                } elseif ($room->id % 5 == 0) {
+                                    $statusClass = 'status-maintenance'; // red
+                                } elseif ($rs === 'cleaning') {
                                     $statusText = 'Đang vệ sinh';
-                                    $statusClass = 'status-cleaning';
+                                    $statusClass = 'status-cleaning'; // yellow
+                                } elseif ($rs === 'dirty' || $rs === 'line_clearance_required') {
+                                    $statusText = 'Cần vệ sinh';
+                                    $statusClass = 'status-cleaning'; // yellow
+                                } elseif ($rs === 'needs_reclean') {
+                                    $statusText = 'Cần vệ sinh lại';
+                                    $statusClass = 'status-cleaning'; // yellow
+                                } elseif ($rs === 'cleaned') {
+                                    $statusText = 'Đã vệ sinh';
+                                    $statusClass = 'status-ready'; // green
                                 } else {
                                     $statusText = 'Sẵn sàng';
-                                    $statusClass = 'status-ready';
+                                    $statusClass = 'status-ready'; // green
                                 }
                             @endphp
                             <div class="col-12 col-md-6 col-lg-4 room-card-col" data-stage-code="{{ $room->stage_code }}"
                                 data-workshop-code="{{ $room->deparment_code }}">
                                 <div
-                                    class="card h-100 border-0 shadow-sm rounded-4 overflow-hidden room-card transition-all">
+                                    class="card h-100 border-0 shadow-sm rounded-4 overflow-hidden room-card transition-all position-relative">
                                     <div
-                                        class="card-header bg-white pt-4 px-4 border-0 d-flex justify-content-between align-items-center">
+                                        class="card-header bg-white pt-4 px-4 border-0 d-flex justify-content-between align-items-start">
                                         <div>
                                             <span
                                                 class="badge bg-navy text-white rounded-pill px-3 py-1 font-monospace mb-1">{{ $room->code }}</span>
                                             <h5 class="fw-bold text-navy mb-0 mt-1">{{ $room->name }}</h5>
                                         </div>
-                                        <div class="d-flex flex-column align-items-end gap-1">
-                                            <span
-                                                class="status-indicator {{ $statusClass }} px-3 py-1 rounded-pill fw-bold text-uppercase"
-                                                style="font-size: 0.75rem;">
-                                                {{ $statusText }}
-                                            </span>
+                                        <div class="position-absolute" style="top: 1.2rem; right: 1.2rem;">
+                                            <button class="status-indicator {{ $statusClass }} px-3 py-1 rounded-pill fw-bold text-uppercase border-0 shadow-sm transition-all btn-room-label"
+                                                style="font-size: 0.75rem; cursor: pointer;"
+                                                onclick="showLabel('room', '{{ $room->id }}')" title="Nhấp để xem Nhãn phòng">
+                                                <i class="fas fa-tag me-1"></i>{{ $statusText }}
+                                            </button>
                                         </div>
                                     </div>
                                     <div class="card-body px-4 pb-4 pt-2">
@@ -301,17 +310,25 @@
                                                         class="badge bg-light text-dark border">{{ count($room->equipments) }}</span>
                                                 </div>
                                                 @forelse($room->equipments as $eq)
-                                                    <div class="d-flex justify-content-between align-items-center mb-2 p-2 bg-light rounded equipment-item"
-                                                        data-code="{{ $eq->code }}">
-                                                        <div class="text-navy fw-bold text-truncate me-2"
-                                                            style="font-size: 0.75rem; max-width: 60%;"
-                                                            title="{{ $eq->name }}">
+                                                    <div class="row align-items-center mb-2 p-2 bg-light rounded equipment-item mx-0" data-code="{{ $eq->code }}">
+                                                        <!-- Cột 1: Mã thiết bị -->
+                                                        <div class="col-4 px-1 text-navy fw-bold text-truncate" style="font-size: 0.75rem;" title="{{ $eq->name }}">
                                                             <i class="fas fa-cog me-1 text-secondary"></i>{{ $eq->code }}
                                                         </div>
-                                                        <div class="equipment-status d-flex gap-1"
-                                                            style="font-size: 0.65rem;">
-                                                            <span class="badge bg-secondary cal-badge" style="cursor: pointer;" title="Đang tải..."><i class="fas fa-spinner fa-spin"></i> Hiệu chuẩn</span>
-                                                            <span class="badge bg-secondary maint-badge" style="cursor: pointer;" title="Đang tải..."><i class="fas fa-spinner fa-spin"></i> Bảo trì</span>
+                                                        <!-- Cột 2: Nhãn vệ sinh -->
+                                                        <div class="col-3 px-1 text-center">
+                                                            @php
+                                                                $eqClass = ($eq->eq_status === 'cleaned') ? 'bg-success text-white' : 'bg-warning text-dark';
+                                                                $eqText = ($eq->eq_status === 'cleaned') ? 'Đã vệ sinh' : 'Cần vệ sinh';
+                                                            @endphp
+                                                            <span class="badge {{ $eqClass }} border btn-eq-label text-truncate w-100" style="cursor: pointer; font-size: 0.65rem;" onclick="showLabel('equipment', '{{ $eq->id }}')">
+                                                                <i class="fas fa-soap"></i> {{ $eqText }}
+                                                            </span>
+                                                        </div>
+                                                        <!-- Cột 3: Hiệu chuẩn bảo trì -->
+                                                        <div class="col-5 px-1 d-flex gap-1 justify-content-end" style="font-size: 0.65rem;">
+                                                            <span class="badge bg-secondary cal-badge text-truncate" style="cursor: pointer; max-width: 50%;" title="Đang tải..."><i class="fas fa-spinner fa-spin"></i> HC</span>
+                                                            <span class="badge bg-secondary maint-badge text-truncate" style="cursor: pointer; max-width: 50%;" title="Đang tải..."><i class="fas fa-spinner fa-spin"></i> BT</span>
                                                         </div>
                                                     </div>
                                                 @empty
@@ -323,6 +340,44 @@
                                             </div>
                                         @endif
                                     </div>
+                                    @if (in_array($rs, ['dirty', 'line_clearance_required', 'needs_reclean', 'cleaning']))
+                                        <div class="card-footer bg-transparent border-0 px-4 pb-4 pt-0">
+                                            @if ($rs === 'cleaning')
+                                                <a href="{{ route('pages.manu_env.cleaning_process.campaign.open', ['room_id' => $room->id]) }}"
+                                                    class="btn-cleaning-link d-flex align-items-center justify-content-center gap-2 w-100 text-decoration-none">
+                                                    <span class="cleaning-btn-icon">
+                                                        <i class="fas fa-broom"></i>
+                                                    </span>
+                                                    <span class="cleaning-btn-text">Tiếp Tục Vệ Sinh</span>
+                                                    <i class="fas fa-chevron-right cleaning-btn-arrow ms-auto"></i>
+                                                </a>
+                                            @elseif ($rs === 'needs_reclean')
+                                                <a href="{{ route('pages.manu_env.cleaning_process.campaign.open', ['room_id' => $room->id, 'type' => 3]) }}"
+                                                    class="btn-cleaning-link d-flex align-items-center justify-content-center gap-2 w-100 text-decoration-none bg-danger text-white border-danger">
+                                                    <span class="cleaning-btn-icon text-white">
+                                                        <i class="fas fa-exclamation-triangle"></i>
+                                                    </span>
+                                                    <span class="cleaning-btn-text">Vệ Sinh Lại</span>
+                                                    <i class="fas fa-chevron-right cleaning-btn-arrow ms-auto text-white"></i>
+                                                </a>
+                                            @else
+                                                <div class="dropdown w-100">
+                                                    <button class="btn-cleaning-link d-flex align-items-center justify-content-center gap-2 w-100 text-decoration-none dropdown-toggle" type="button" id="cleaningDropdown{{ $room->id }}" data-toggle="dropdown" aria-expanded="false">
+                                                        <span class="cleaning-btn-icon">
+                                                            <i class="fas fa-broom"></i>
+                                                        </span>
+                                                        <span class="cleaning-btn-text">Vệ Sinh Phòng</span>
+                                                    </button>
+                                                    <ul class="dropdown-menu w-100 text-center shadow border-0" aria-labelledby="cleaningDropdown{{ $room->id }}">
+                                                        <li><a class="dropdown-item fw-bold text-navy py-2" href="{{ route('pages.manu_env.cleaning_process.campaign.open', ['room_id' => $room->id, 'type' => 1]) }}"><i class="fas fa-broom me-2 text-primary"></i> Vệ Sinh Cấp 1</a></li>
+                                                        <li><a class="dropdown-item fw-bold text-navy py-2" href="{{ route('pages.manu_env.cleaning_process.campaign.open', ['room_id' => $room->id, 'type' => 2]) }}"><i class="fas fa-shower me-2 text-warning"></i> Vệ Sinh Cấp 2</a></li>
+                                                        <li><hr class="dropdown-divider"></li>
+                                                        <li><a class="dropdown-item fw-bold text-danger py-2" href="{{ route('pages.manu_env.cleaning_process.campaign.open', ['room_id' => $room->id, 'type' => 3]) }}"><i class="fas fa-exclamation-triangle me-2"></i> Vệ Sinh Lại</a></li>
+                                                    </ul>
+                                                </div>
+                                            @endif
+                                        </div>
+                                    @endif
                                 </div>
                             </div>
                         @empty
@@ -601,6 +656,65 @@
         .text-danger-blink {
             animation: blink-red-text 1.2s infinite !important;
         }
+
+        /* ── CLEANING BUTTON ─────────────────────────────────── */
+        .btn-cleaning-link {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            color: #fff;
+            font-weight: 700;
+            font-size: 0.82rem;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            padding: 11px 18px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.2);
+            box-shadow: 0 4px 14px rgba(245, 158, 11, 0.35);
+            transition: all 0.28s cubic-bezier(0.25, 0.8, 0.25, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        .btn-cleaning-link::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(255,255,255,0.18) 0%, transparent 60%);
+            border-radius: inherit;
+            pointer-events: none;
+        }
+        .btn-cleaning-link:hover {
+            background: linear-gradient(135deg, #fbbf24 0%, #b45309 100%);
+            box-shadow: 0 8px 24px rgba(245, 158, 11, 0.55);
+            transform: translateY(-2px);
+            color: #fff;
+        }
+        .btn-cleaning-link:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 8px rgba(245, 158, 11, 0.4);
+        }
+        .cleaning-btn-icon {
+            width: 30px;
+            height: 30px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+            flex-shrink: 0;
+            transition: transform 0.3s;
+        }
+        .btn-cleaning-link:hover .cleaning-btn-icon {
+            transform: rotate(-15deg) scale(1.1);
+        }
+        .cleaning-btn-arrow {
+            font-size: 0.75rem;
+            opacity: 0.7;
+            transition: transform 0.25s, opacity 0.25s;
+        }
+        .btn-cleaning-link:hover .cleaning-btn-arrow {
+            transform: translateX(4px);
+            opacity: 1;
+        }
     </style>
 @endsection
 
@@ -705,6 +819,11 @@
     </div>
 </div>
 
+@section('model')
+    @include('pages.ebmr.production.modals.labelModal')
+    @include('pages.ebmr.production.modals.cleaningCampaignModal')
+@endsection
+
 @section('script')
     <script>
         // Client-side mapping variables
@@ -719,6 +838,16 @@
 
         $(document).ready(function() {
             initSparklines();
+
+            // Hiển thị lỗi flash (nếu bị redirect từ campaign)
+            @if(session('error'))
+            Swal.fire({
+                icon: 'warning',
+                title: 'Không thể mở vệ sinh',
+                text: '{{ session("error") }}',
+                confirmButtonColor: '#003A4F'
+            });
+            @endif
         });
 
         function calculateMockValue(roomId, metric, timeSecs) {
@@ -1308,6 +1437,82 @@
                     }
                 });
             });
+
+            window.showLabel = function(type, id) {
+                Swal.fire({
+                    title: 'Đang tải...',
+                    text: 'Vui lòng chờ trong giây lát',
+                    allowOutsideClick: false,
+                    didOpen: () => {
+                        Swal.showLoading();
+                    }
+                });
+
+                $.ajax({
+                    url: "{{ route('pages.ebmr.getLogbookLabel') }}",
+                    type: 'GET',
+                    data: {
+                        type: type,
+                        id: id
+                    },
+                    success: function(response) {
+                        Swal.close();
+                        if (response.success) {
+                            const data = response.data;
+                            const labelTitle = type === 'room' ? 'NHÃN PHÒNG' : 'NHÃN THIẾT BỊ';
+                            const labelSub = type === 'room' ? 'ROOM LABEL' : 'EQUIPMENT LABEL';
+                            
+                            // Check if state is cleaning or something else (for now assume cleaning implies "to be cleaned")
+                            // Usually, if it's currently producing or dirty, it needs cleaning.
+                            // If it's 'cleaned', it shows the green modal.
+                            if (data.current_status !== 'cleaned') {
+                                $('#cleanRequiredLabelType').text(labelTitle);
+                                $('#cleanRequiredLabelType').next('small').text(labelSub);
+                                
+                                $('#lblReqName').text(data.entity_name);
+                                $('#lblReqCode').text(data.entity_code);
+                                
+                                $('#reqLevel1').prop('checked', data.clean_level === 'level_1');
+                                $('#reqLevel2').prop('checked', data.clean_level === 'level_2');
+                                $('#reqReClean').prop('checked', data.clean_level === 're_cleaning');
+                                
+                                $('#reqFinishedDate').text(data.end_time || '-');
+                                $('#reqCleanBefore').text(data.to_be_cleaned_before || '-');
+                                $('#reqDoneBy').text(data.done_by || '-');
+
+                                $('#modalCleanRequired').modal('show');
+                            } else {
+                                $('#cleanedLabelType').text(labelTitle);
+                                $('#cleanedLabelType').next('small').text(labelSub);
+
+                                $('#lblCldName').text(data.entity_name);
+                                $('#lblCldCode').text(data.entity_code);
+
+                                $('#cldLevel1').prop('checked', data.clean_level === 'level_1');
+                                $('#cldLevel2').prop('checked', data.clean_level === 'level_2');
+                                $('#cldReClean').prop('checked', data.clean_level === 're_cleaning');
+
+                                $('#cldFinishedDate').text(data.end_time || '-');
+                                $('#cldValidUntil').text(data.clean_expiry_date || '-');
+                                $('#cldDoneBy').text(data.done_by || '-');
+                                $('#cldCheckedBy').text(data.checked_by || '-');
+                                
+                                $('#cldNextProduct').text(data.next_product_name || '-');
+                                $('#cldNextBatch').text(data.next_batch_number || '-');
+                                $('#cldAttachedBy').text(data.attached_by || '-');
+
+                                $('#modalCleaned').modal('show');
+                            }
+                        } else {
+                            Swal.fire('Lỗi!', response.message, 'error');
+                        }
+                    },
+                    error: function() {
+                        Swal.close();
+                        Swal.fire('Lỗi!', 'Không thể tải dữ liệu nhãn', 'error');
+                    }
+                });
+            };
         });
     </script>
 @endsection

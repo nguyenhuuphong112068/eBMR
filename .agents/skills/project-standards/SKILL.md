@@ -21,5 +21,12 @@ Tài liệu này lưu trữ các yêu cầu và quy định thiết kế bắt b
   - KHÔNG sử dụng các liên kết CDN trực tuyến như `fonts.googleapis.com`, `cdnjs.cloudflare.com`, `cdn.jsdelivr.net`...
   - Lý do: Máy chủ chạy môi trường Production thực tế của dự án eBMR được cách ly hoàn toàn với internet để đảm bảo an toàn bảo mật.
 
-## 3. Các Tiêu Chuẩn Khác
+## 3. Nguyên tắc Lưu trữ và Đặt tên File Upload (Hình ảnh đính kèm)
+- **Quy tắc bắt buộc**: 
+  - Các file đính kèm, hình ảnh upload luôn phải được lưu vào một thư mục con nằm trong thư mục `public/` (ví dụ: `public/uploads/...`).
+  - Luôn phải đổi tên file khi lưu để tránh trùng lặp.
+  - **Cấu trúc đặt tên file bắt buộc**: `[tên_bảng_lưu_đường_dẫn]_[id_bản_ghi]_[timestamp_hoặc_chuỗi_ngẫu_nhiên].[phần_mở_rộng]`
+  - Ví dụ: `cleaning_room_campaign_steps_15_1684323232_a1b2c.jpg`
+
+## 4. Các Tiêu Chuẩn Khác
 *(Sẽ được bổ sung trong quá trình làm việc cùng user)*

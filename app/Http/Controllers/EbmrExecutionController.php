@@ -40,7 +40,7 @@ class EbmrExecutionController extends Controller
 
         $records = $query->orderBy('ebmr_records.created_at', 'desc')->get();
 
-        foreach($records as $r) {
+        foreach ($records as $r) {
             if ($r->type === 'GF') {
                 $r->template_name = DB::table('gf_category')->where('id', $r->caterogy_id)->value('name') ?? 'N/A';
                 $r->document_code = DB::table('gf_category')->where('id', $r->caterogy_id)->value('code') ?? 'N/A';
@@ -71,7 +71,7 @@ class EbmrExecutionController extends Controller
                 ->where('type', 'section')
                 ->orderBy('order')
                 ->get()
-                ->map(function($b) {
+                ->map(function ($b) {
                     $prop = json_decode($b->properties);
                     return [
                         'id' => $b->section_id,
@@ -132,28 +132,62 @@ class EbmrExecutionController extends Controller
         // Fetch all room conditions from local db
         $conditions = DB::table('manu_condition')->get()->groupBy('room_id');
 
-        // Fetch all assigned equipments
+        $latestEqLogs = DB::table('room_logbooks')
+            ->whereNotNull('equipment_id')
+            ->select('equipment_id', DB::raw('MAX(id) as max_id'))
+            ->groupBy('equipment_id');
+
+        // Fetch all assigned equipments and their latest status
         $equipments = DB::table('equipment_in_room')
             ->join('instrument', 'equipment_in_room.equipment_id', '=', 'instrument.id')
-            ->select('equipment_in_room.room_id', 'instrument.code', 'instrument.name')
+            ->leftJoinSub($latestEqLogs, 'latest_logs', function ($join) {
+                $join->on('instrument.id', '=', 'latest_logs.equipment_id');
+            })
+            ->leftJoin('room_logbooks', 'latest_logs.max_id', '=', 'room_logbooks.id')
+            ->select('equipment_in_room.room_id', 'instrument.id', 'instrument.code', 'instrument.name', 'room_logbooks.current_status as eq_status')
             ->get()
             ->groupBy('room_id');
+
+        // Fetch latest room status
+        $latestRoomLogs = DB::table('room_logbooks')
+            ->whereNull('equipment_id')
+            ->select('room_id', DB::raw('MAX(id) as max_id'))
+            ->groupBy('room_id');
+
+        $roomStatuses = DB::table('room_logbooks')
+            ->joinSub($latestRoomLogs, 'latest_logs', function ($join) {
+                $join->on('room_logbooks.id', '=', 'latest_logs.max_id');
+            })
+            ->select('room_logbooks.room_id', 'current_status as room_status', 'clean_expiry_date')
+            ->get()
+            ->keyBy('room_id');
 
         // Map records and condition limits to rooms
         foreach ($rooms as $room) {
             $room->active_records = $recordsByRoom->get($room->id, collect());
             $room->equipments = $equipments->get($room->id, collect());
             
+            $log = $roomStatuses->has($room->id) ? $roomStatuses->get($room->id) : null;
+            if ($log) {
+                if ($log->room_status === 'cleaned' && $log->clean_expiry_date && \Carbon\Carbon::parse($log->clean_expiry_date)->isPast()) {
+                    $room->room_status = 'needs_reclean';
+                } else {
+                    $room->room_status = $log->room_status;
+                }
+            } else {
+                $room->room_status = 'ready';
+            }
+
             $cond = $conditions->has($room->id) ? $conditions->get($room->id)->first() : null;
             $room->limits = [
-                'temp_min' => ($cond && $cond->temp_min_1 !== null) ? (double)$cond->temp_min_1 : 20.0,
-                'temp_max' => ($cond && $cond->temp_max_1 !== null) ? (double)$cond->temp_max_1 : 25.0,
-                'humid_min' => ($cond && $cond->humidity_min_1 !== null) ? (double)$cond->humidity_min_1 : 35.0,
-                'humid_max' => ($cond && $cond->humidity_max_1 !== null) ? (double)$cond->humidity_max_1 : 60.0,
-                'press_min' => ($cond && ($cond->diff_press_corridor_min ?? $cond->diff_press_pal_min ?? $cond->diff_press_mal_min) !== null) 
-                    ? (double)($cond->diff_press_corridor_min ?? $cond->diff_press_pal_min ?? $cond->diff_press_mal_min) : 5.0,
-                'press_max' => ($cond && ($cond->diff_press_corridor_max ?? $cond->diff_press_pal_max ?? $cond->diff_press_mal_max) !== null) 
-                    ? (double)($cond->diff_press_corridor_max ?? $cond->diff_press_pal_max ?? $cond->diff_press_mal_max) : 15.0,
+                'temp_min' => ($cond && $cond->temp_min_1 !== null) ? (float)$cond->temp_min_1 : 20.0,
+                'temp_max' => ($cond && $cond->temp_max_1 !== null) ? (float)$cond->temp_max_1 : 25.0,
+                'humid_min' => ($cond && $cond->humidity_min_1 !== null) ? (float)$cond->humidity_min_1 : 35.0,
+                'humid_max' => ($cond && $cond->humidity_max_1 !== null) ? (float)$cond->humidity_max_1 : 60.0,
+                'press_min' => ($cond && ($cond->diff_press_corridor_min ?? $cond->diff_press_pal_min ?? $cond->diff_press_mal_min) !== null)
+                    ? (float)($cond->diff_press_corridor_min ?? $cond->diff_press_pal_min ?? $cond->diff_press_mal_min) : 5.0,
+                'press_max' => ($cond && ($cond->diff_press_corridor_max ?? $cond->diff_press_pal_max ?? $cond->diff_press_mal_max) !== null)
+                    ? (float)($cond->diff_press_corridor_max ?? $cond->diff_press_pal_max ?? $cond->diff_press_mal_max) : 15.0,
             ];
         }
 
@@ -265,7 +299,7 @@ class EbmrExecutionController extends Controller
             $template->category_name = $cat->product_name ?? '';
             $template->dosage_name = $cat->dosage_name ?? '';
             $template->type_name = $cat->type ?? 'Thuốc Kê Đơn';
-            $template->batch_size = ($cat->batch_size ?? '').' '.($cat->unit_batch_size ?? '');
+            $template->batch_size = ($cat->batch_size ?? '') . ' ' . ($cat->unit_batch_size ?? '');
             $template->name = $template->category_name;
             $template->document_code = $template->category_code;
         }
@@ -274,7 +308,7 @@ class EbmrExecutionController extends Controller
         $fieldsConfig = new \stdClass();
 
         $blocks = DB::table('ebmr_template_blocks')->where('template_id', $template->id)->orderBy('order')->get();
-        
+
         // Fetch all testing criteria and properties for dynamic reference replacement (main + linked templates)
         $templateIds = [$template->id];
         foreach ($blocks as $block) {
@@ -314,7 +348,7 @@ class EbmrExecutionController extends Controller
         } else {
             $fieldsConfig = [];
         }
-    
+
         $allFields = [];
         foreach ($blocks as $block) {
             $f = json_decode($block->properties, true);
@@ -324,7 +358,7 @@ class EbmrExecutionController extends Controller
                 $linkedTemplateId = $f['template_id'] ?? null;
                 if ($linkedTemplateId) {
                     $linkedBlocks = DB::table('ebmr_template_blocks')->where('template_id', $linkedTemplateId)->orderBy('order')->get();
-                    
+
                     // Fetch linked content blocks
                     $lbIds = $linkedBlocks->pluck('id')->toArray();
                     $lContentBlocks = DB::table('ebmr_content_blocks')->whereIn('ebmr_template_blocks_id', $lbIds)->get()->groupBy('ebmr_template_blocks_id');
@@ -369,13 +403,13 @@ class EbmrExecutionController extends Controller
         if ($sectionId) {
             $blocksQuery = DB::table('ebmr_template_blocks')
                 ->where('template_id', $template->id)
-                ->where(function($q) use ($sectionId, $template) {
+                ->where(function ($q) use ($sectionId, $template) {
                     $q->where('section_id', $sectionId)
-                      ->orWhere('section_id', $template->caterogy_id);
+                        ->orWhere('section_id', $template->caterogy_id);
                 })
                 ->orderBy('order')
                 ->get();
-            
+
             $bqIds = $blocksQuery->pluck('id')->toArray();
             $bqContentBlocks = DB::table('ebmr_content_blocks')->whereIn('ebmr_template_blocks_id', $bqIds)->get()->groupBy('ebmr_template_blocks_id');
 
@@ -386,12 +420,12 @@ class EbmrExecutionController extends Controller
                 if (isset($f['type']) && $f['type'] === 'section' && $block->section_id == $sectionId) {
                     $activeSectionLabel = $f['label'] ?? 'Phân đoạn';
                 }
-                
+
                 if (isset($f['type']) && $f['type'] === 'linked-template') {
                     $linkedTemplateId = $f['template_id'] ?? null;
                     if ($linkedTemplateId) {
                         $linkedBlocks = DB::table('ebmr_template_blocks')->where('template_id', $linkedTemplateId)->orderBy('order')->get();
-                        
+
                         $lbIds = $linkedBlocks->pluck('id')->toArray();
                         $lContentBlocks = DB::table('ebmr_content_blocks')->whereIn('ebmr_template_blocks_id', $lbIds)->get()->groupBy('ebmr_template_blocks_id');
 
@@ -441,7 +475,7 @@ class EbmrExecutionController extends Controller
             if (!isset($executionValues->$blockUuid)) {
                 $executionValues->$blockUuid = (object)[];
             }
-            
+
             // Khởi tạo đối tượng meta nếu chưa có
             if (!isset($executionValues->$blockUuid->_meta)) {
                 $executionValues->$blockUuid->_meta = (object)[];
@@ -450,7 +484,7 @@ class EbmrExecutionController extends Controller
             $cellId = ($rd->cell_id && $rd->cell_id !== 'default') ? $rd->cell_id : 'default';
             // Giải mã raw_value (data cũ chưa mã hoá sẽ tự fallback)
             $executionValues->$blockUuid->$cellId = RunDataEncryptionService::decrypt($rd->raw_value);
-            
+
             // Lưu metadata
             $executionValues->$blockUuid->_meta->$cellId = (object)[
                 'by' => $rd->updated_by,
@@ -507,7 +541,7 @@ class EbmrExecutionController extends Controller
                 if (is_array($value) || is_object($value)) {
                     foreach ($value as $cellId => $rawValue) {
                         if ($cellId === '_meta') continue;
-                        
+
                         Log::info("Saving cell: " . $cellId . " = " . $rawValue);
                         DB::table('ebmr_run_data')->updateOrInsert(
                             [
@@ -548,7 +582,7 @@ class EbmrExecutionController extends Controller
 
             DB::commit();
             return response()->json([
-                'success' => true, 
+                'success' => true,
                 'message' => 'Lưu dữ liệu phân rã thành công',
                 'updated_by' => $userName,
                 'updated_at' => $now->format('d/m/Y H:i')
@@ -653,7 +687,7 @@ class EbmrExecutionController extends Controller
 
             // --- VARIABLE INJECTION ---
             $content = preg_replace_callback('/\{\{(field_[a-zA-Z0-9_]+)\}\}/', function ($m) {
-                return '<span contenteditable="false" class="ebmr-field-badge" data-field-id="'.$m[1].'" onclick="selectField(event, \''.$m[1].'\')"></span>';
+                return '<span contenteditable="false" class="ebmr-field-badge" data-field-id="' . $m[1] . '" onclick="selectField(event, \'' . $m[1] . '\')"></span>';
             }, $content);
 
             $field['content'] = $content;
@@ -672,7 +706,7 @@ class EbmrExecutionController extends Controller
                         if ($dbId && $cbMap->has($dbId)) {
                             $cb = $cbMap->get($dbId);
                             $content = $cb->vi_contents ?? '';
-                            
+
                             // --- DYNAMIC PROPERTIES REPLACEMENT ---
                             if ($properties) {
                                 $content = $this->replacePropertySpans($content, $properties);
@@ -685,9 +719,9 @@ class EbmrExecutionController extends Controller
 
                             // --- VARIABLE INJECTION ---
                             $content = preg_replace_callback('/\{\{(field_[a-zA-Z0-9_]+)\}\}/', function ($m) {
-                                return '<span contenteditable="false" class="ebmr-field-badge" data-field-id="'.$m[1].'" onclick="selectField(event, \''.$m[1].'\')"></span>';
+                                return '<span contenteditable="false" class="ebmr-field-badge" data-field-id="' . $m[1] . '" onclick="selectField(event, \'' . $m[1] . '\')"></span>';
                             }, $content);
-                            
+
                             $cell['content'] = $content;
                         }
                     } else {
@@ -753,18 +787,18 @@ class EbmrExecutionController extends Controller
                 $testingId = substr($fieldKey, strlen('field_crit_'));
                 if (isset($testingCriteria[$testingId])) {
                     $criterion = $testingCriteria[$testingId];
-                    
+
                     // Parse limits
                     $limits = null;
                     if ($criterion->limits) {
                         $limits = is_string($criterion->limits) ? json_decode($criterion->limits, true) : (array)$criterion->limits;
                     }
-                    
+
                     $op = $limits['operator'] ?? '=';
                     $min = $limits['value'] ?? '';
                     $max = $limits['value_high'] ?? '';
                     $unit = $limits['unit'] ?? '';
-                    
+
                     // Determine type (numeric vs select/checkbox)
                     $isNumeric = true;
                     if ($op === 'N/A' || $op === '') {
@@ -780,14 +814,14 @@ class EbmrExecutionController extends Controller
                             $isNumeric = false;
                         }
                     }
-                    
+
                     $varMin = null;
                     $varMax = null;
-                    
+
                     if ($isNumeric) {
                         $parsedMin = ($min !== '' && is_numeric($min)) ? floatval($min) : null;
                         $parsedMax = ($max !== '' && is_numeric($max)) ? floatval($max) : null;
-                        
+
                         if ($op === '<' || $op === '<=') {
                             $varMax = $parsedMin;
                         } else if ($op === '>' || $op === '>=') {
@@ -805,7 +839,7 @@ class EbmrExecutionController extends Controller
                             $varMax = $parsedMin;
                         }
                     }
-                    
+
                     $field['label'] = $criterion->name;
                     $field['type'] = $isNumeric ? 'number' : 'select';
                     $field['validation'] = [
@@ -839,7 +873,7 @@ class EbmrExecutionController extends Controller
 
         // Giải mã URL trong trường hợp mã tài liệu chứa các ký tự đặc biệt được encode
         $decodedCode = urldecode($code);
-        
+
         // Chuẩn hóa mã tài liệu để lọc PHP (chuyển chữ thường, loại bỏ ký tự đặc biệt)
         $normalizedUserCode = preg_replace('/[^a-z0-9]/', '', strtolower($decodedCode));
         if (empty($normalizedUserCode)) {
@@ -861,7 +895,7 @@ class EbmrExecutionController extends Controller
                 ->get();
 
             // Lọc chính xác mã tài liệu trên PHP
-            $matchedRecords = $records->filter(function($r) use ($normalizedUserCode) {
+            $matchedRecords = $records->filter(function ($r) use ($normalizedUserCode) {
                 $normalizedDocCode = preg_replace('/[^a-z0-9]/', '', strtolower($r->Document_Code));
                 return $normalizedDocCode === $normalizedUserCode;
             });
@@ -876,7 +910,6 @@ class EbmrExecutionController extends Controller
             $bestRecord = $matchedRecords->sortByDesc('id')->first();
             $id = $bestRecord->id;
             $fileNameInDb = $bestRecord->FileimageFileName;
-
         } catch (\Exception $e) {
             Log::error("Lỗi khi truy vấn thông tin tài liệu từ DB Doc: " . $e->getMessage());
             return response()->view('errors.document_error', [
@@ -1000,7 +1033,7 @@ class EbmrExecutionController extends Controller
                 ->where('Document_Code', 'like', $likePattern)
                 ->get();
 
-            $matchedRecords = $records->filter(function($r) use ($normalizedUserCode) {
+            $matchedRecords = $records->filter(function ($r) use ($normalizedUserCode) {
                 return preg_replace('/[^a-z0-9]/', '', strtolower($r->Document_Code)) === $normalizedUserCode;
             });
 
@@ -1014,7 +1047,6 @@ class EbmrExecutionController extends Controller
             $bestRecord = $matchedRecords->sortByDesc('id')->first();
             $id = $bestRecord->id;
             $fileNameInDb = $bestRecord->FileimageFileName;
-
         } catch (\Exception $e) {
             return response()->json([
                 'exists' => false,
@@ -1092,6 +1124,67 @@ class EbmrExecutionController extends Controller
         return response()->json([
             'exists' => false,
             'message' => "Tài liệu khớp với ID {$id} (Version {$bestRecord->Version}) trong DB, nhưng không tìm thấy file PDF thực tế trên máy chủ đĩa mạng."
+        ]);
+    }
+
+    public function getLogbookLabel(Request $request)
+    {
+        $type = $request->query('type'); // 'room' or 'equipment'
+        $id = $request->query('id');
+
+        $query = DB::table('room_logbooks')->orderBy('id', 'desc');
+
+        if ($type === 'room') {
+            $query->where('room_id', $id)->whereNull('equipment_id');
+            // get room info
+            $entity = DB::connection('pms')->table('room')->where('id', $id)->first();
+        } else {
+            $query->where('equipment_id', $id);
+            // get equipment info
+            $entity = DB::table('instrument')->where('id', $id)->first();
+        }
+
+        if (!$entity) {
+            return response()->json(['success' => false, 'message' => 'Không tìm thấy thực thể']);
+        }
+
+        $logbook = $query->first();
+
+        // format data for the UI
+        $data = [
+            'entity_name' => $entity->name,
+            'entity_code' => $entity->code,
+            'current_status' => $logbook ? $logbook->current_status : 'ready',
+            'stage' => $logbook ? $logbook->stage : '',
+            'lot_number' => $logbook ? $logbook->lot_number : '',
+            'product_name' => $logbook ? $logbook->product_name : '',
+            'batch_number' => $logbook ? $logbook->batch_number : '',
+            'clean_level' => $logbook ? $logbook->clean_level : '',
+            'clean_expiry_date' => $logbook && $logbook->clean_expiry_date ? date('d/m/Y H:i', strtotime($logbook->clean_expiry_date)) : '',
+            'to_be_cleaned_before' => $logbook && $logbook->to_be_cleaned_before ? date('d/m/Y H:i', strtotime($logbook->to_be_cleaned_before)) : '',
+            'end_time' => $logbook && $logbook->end_time ? date('d/m/Y H:i', strtotime($logbook->end_time)) : '',
+            'next_product_name' => $logbook ? $logbook->next_product_name : '',
+            'next_batch_number' => $logbook ? $logbook->next_batch_number : '',
+        ];
+
+        // get user names
+        if ($logbook) {
+            $created_by = DB::table('user_management')->where('id', $logbook->created_by)->value('fullName');
+            $checked_by = $logbook->checked_by ? DB::table('user_management')->where('id', $logbook->checked_by)->value('fullName') : '';
+            $attached_by = $logbook->attached_by ? DB::table('user_management')->where('id', $logbook->attached_by)->value('fullName') : '';
+            
+            $data['done_by'] = $created_by;
+            $data['checked_by'] = $checked_by;
+            $data['attached_by'] = $attached_by;
+        } else {
+            $data['done_by'] = '';
+            $data['checked_by'] = '';
+            $data['attached_by'] = '';
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => $data
         ]);
     }
 }

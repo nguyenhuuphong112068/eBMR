@@ -32,23 +32,23 @@
                                         <td><i class="fas fa-user text-muted me-1"></i> {{ $t->owner_name ?? 'N/A' }}</td>
                                         <td>
                                             @if($t->my_role === 'reviewer')
-                                                <span class="badge bg-soft-info"><i class="fas fa-search me-1"></i> Kiểm tra (Reviewer)</span>
+                                                <span class="badge bg-soft-info cursor-pointer" onclick="showWorkflowHistory('{{ $t->workflow_type }}', {{ $t->id }})" title="Xem lịch sử duyệt"><i class="fas fa-search me-1"></i> Kiểm tra (Reviewer)</span>
                                             @elseif($t->my_role === 'approver')
-                                                <span class="badge bg-warning text-dark"><i class="fas fa-check-double me-1"></i> Phê duyệt (Approver)</span>
+                                                <span class="badge bg-warning text-dark cursor-pointer" onclick="showWorkflowHistory('{{ $t->workflow_type }}', {{ $t->id }})" title="Xem lịch sử duyệt"><i class="fas fa-check-double me-1"></i> Phê duyệt (Approver)</span>
                                             @elseif($t->my_role === 'authorizer')
-                                                <span class="badge bg-success"><i class="fas fa-file-signature me-1"></i> Ban hành (Authorizer)</span>
+                                                <span class="badge bg-success cursor-pointer" onclick="showWorkflowHistory('{{ $t->workflow_type }}', {{ $t->id }})" title="Xem lịch sử duyệt"><i class="fas fa-file-signature me-1"></i> Ban hành (Authorizer)</span>
                                             @endif
                                         </td>
                                         <td>{{ \Carbon\Carbon::parse($t->updated_at)->format('d/m/Y H:i') }}</td>
                                         <td class="text-center">
                                             <div class="btn-group shadow-sm rounded-pill overflow-hidden">
-                                                <a href="{{ route('pages.ebmr.designer', $t->id) }}" target="_blank" class="btn btn-sm btn-light text-navy" title="Xem chi tiết hồ sơ">
+                                                <a href="{{ $t->view_url }}" target="_blank" class="btn btn-sm btn-light text-navy" title="Xem chi tiết hồ sơ">
                                                     <i class="fas fa-eye"></i> Xem nội dung
                                                 </a>
-                                                <button class="btn btn-sm btn-success text-white" onclick="openPerformApprovalModal({{ $t->workflow_id }}, 'approve')" title="Duyệt">
+                                                <button class="btn btn-sm btn-success text-white" onclick="openPerformApprovalModal({{ $t->workflow_id }}, '{{ $t->workflow_type }}', 'approve')" title="Duyệt">
                                                     <i class="fas fa-check"></i>
                                                 </button>
-                                                <button class="btn btn-sm btn-danger text-white" onclick="openPerformApprovalModal({{ $t->workflow_id }}, 'reject')" title="Từ chối">
+                                                <button class="btn btn-sm btn-danger text-white" onclick="openPerformApprovalModal({{ $t->workflow_id }}, '{{ $t->workflow_type }}', 'reject')" title="Từ chối">
                                                     <i class="fas fa-times"></i>
                                                 </button>
                                             </div>
@@ -78,6 +78,7 @@
                 <form id="performApprovalForm">
                     @csrf
                     <input type="hidden" id="approvalWorkflowId" name="workflow_id">
+                    <input type="hidden" id="approvalWorkflowType" name="workflow_type">
                     <input type="hidden" id="approvalAction" name="action">
                     
                     <div class="modal-header text-white" id="modalApprovalHeader">
@@ -122,9 +123,10 @@
 @section('script')
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
-    function openPerformApprovalModal(workflowId, action) {
+    function openPerformApprovalModal(workflowId, workflowType, action) {
         $('#performApprovalForm')[0].reset();
         $('#approvalWorkflowId').val(workflowId);
+        $('#approvalWorkflowType').val(workflowType);
         $('#approvalAction').val(action);
         
         const header = $('#modalApprovalHeader');

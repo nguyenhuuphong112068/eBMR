@@ -15,13 +15,15 @@ class EbmrApprovalController extends Controller
         session(['title' => 'Phê Duyệt Hồ Sơ']);
         $userId = session('user')['userId'];
 
+        $actionableTemplates = collect();
+
+        // --- 1. EBMR TEMPLATES ---
         $myPendingWorkflows = DB::table('ebmr_template_workflows')
             ->where('user_id', $userId)
             ->where('status', 'pending')
             ->get();
 
         $templateIds = $myPendingWorkflows->pluck('template_id')->unique();
-
         $templates = DB::table('ebmr_templates')
             ->leftJoin('user_management', 'ebmr_templates.owner_id', '=', 'user_management.id')
             ->select('ebmr_templates.*', 'user_management.fullName as owner_name')
@@ -30,7 +32,6 @@ class EbmrApprovalController extends Controller
             ->orderBy('ebmr_templates.updated_at', 'desc')
             ->get();
 
-        $actionableTemplates = collect();
         foreach ($templates as $t) {
             $wfForMe = $myPendingWorkflows->where('template_id', $t->id)->first();
             $hasEarlierPending = DB::table('ebmr_template_workflows')
@@ -40,7 +41,6 @@ class EbmrApprovalController extends Controller
                 ->exists();
 
             if (!$hasEarlierPending) {
-                // Fetch document code and name from category tables
                 $type = $t->type ?? 'BMR';
                 if ($type === 'GF') {
                     $cat = DB::table('gf_category')->where('id', $t->caterogy_id)->first();
@@ -70,17 +70,74 @@ class EbmrApprovalController extends Controller
 
                 $t->my_role = $wfForMe->role;
                 $t->workflow_id = $wfForMe->id;
+                $t->workflow_type = 'ebmr';
+                $t->view_url = route('pages.ebmr.designer', $t->id);
                 $actionableTemplates->push($t);
             }
         }
+
+        // --- 2. CLEANING PROCESSES ---
+        $myCleaningWorkflows = DB::table('cleaning_process_workflows')
+            ->where('user_id', $userId)
+            ->where('status', 'pending')
+            ->get();
+
+        foreach ($myCleaningWorkflows as $wf) {
+            $hasEarlierPending = DB::table('cleaning_process_workflows')
+                ->where('process_list_id', $wf->process_list_id)
+                ->where('type', $wf->type)
+                ->where('status', 'pending')
+                ->where('step_order', '<', $wf->step_order)
+                ->exists();
+
+            if (!$hasEarlierPending) {
+                if ($wf->type === 'room') {
+                    $list = DB::table('cleaning_room_processes_list')
+                        ->leftJoin('user_management', 'cleaning_room_processes_list.created_by', '=', 'user_management.id')
+                        ->where('cleaning_room_processes_list.id', $wf->process_list_id)
+                        ->where('cleaning_room_processes_list.status', 'submitted')
+                        ->select('cleaning_room_processes_list.*', 'user_management.fullName as owner_name')
+                        ->first();
+                } else {
+                    $list = DB::table('cleaning_equip_processes_list')
+                        ->leftJoin('user_management', 'cleaning_equip_processes_list.created_by', '=', 'user_management.id')
+                        ->where('cleaning_equip_processes_list.id', $wf->process_list_id)
+                        ->where('cleaning_equip_processes_list.status', 'submitted')
+                        ->select('cleaning_equip_processes_list.*', 'user_management.fullName as owner_name')
+                        ->first();
+                }
+
+                if ($list) {
+                    $t = new \stdClass();
+                    $t->id = $list->id;
+                    $t->document_code = $list->process_code . ' (V.' . $list->version . ')';
+                    $t->name = $list->process_name;
+                    $t->owner_name = $list->owner_name;
+                    $t->updated_at = $list->updated_at;
+                    $t->my_role = $wf->role;
+                    $t->workflow_id = $wf->id;
+                    $t->workflow_type = 'cleaning';
+                    $t->view_url = route('pages.manu_env.cleaning_process.index', ['type' => $wf->type, 'list_id' => $list->id]);
+                    
+                    $actionableTemplates->push($t);
+                }
+            }
+        }
+
+        // Sort by updated_at descending
+        $actionableTemplates = $actionableTemplates->sortByDesc('updated_at')->values();
 
         return view('pages.ebmr.approvals.list', ['templates' => $actionableTemplates]);
     }
 
     public function getTemplateWorkflow($id)
     {
-        $workflows = DB::table('ebmr_template_workflows')->where('template_id', $id)->get();
-        return response()->json($workflows);
+        $latest = DB::table('ebmr_template_workflows')->where('template_id', $id)->orderBy('id', 'desc')->first();
+        if ($latest) {
+            $workflows = DB::table('ebmr_template_workflows')->where('template_id', $id)->where('created_at', $latest->created_at)->get();
+            return response()->json($workflows);
+        }
+        return response()->json([]);
     }
 
     public function storeTemplateWorkflow(Request $request, $id)
@@ -93,7 +150,7 @@ class EbmrApprovalController extends Controller
         ]);
 
         DB::transaction(function () use ($id, $validated) {
-            DB::table('ebmr_template_workflows')->where('template_id', $id)->delete();
+            DB::table('ebmr_template_workflows')->where('template_id', $id)->where('status', 'pending')->update(['status' => 'cancelled']);
             $insertData = [];
             if (!empty($validated['reviewers'])) {
                 foreach ($validated['reviewers'] as $userId) {
@@ -116,38 +173,80 @@ class EbmrApprovalController extends Controller
     {
         $validated = $request->validate([
             'workflow_id' => 'required|integer',
+            'workflow_type' => 'required|in:ebmr,cleaning',
             'action' => 'required|in:approve,reject',
             'comment' => 'nullable|string'
         ]);
 
-        $workflow = DB::table('ebmr_template_workflows')->where('id', $validated['workflow_id'])->first();
-        if (!$workflow || $workflow->status !== 'pending') {
-            return response()->json(['success' => false, 'message' => 'Luồng duyệt không hợp lệ hoặc đã xử lý']);
-        }
-
         $newWfStatus = $validated['action'] === 'approve' ? 'approved' : 'rejected';
 
-        DB::transaction(function () use ($workflow, $newWfStatus, $validated) {
-            DB::table('ebmr_template_workflows')->where('id', $workflow->id)->update(['status' => $newWfStatus, 'comment' => $validated['comment'], 'updated_at' => now()]);
-
-            // Nếu người phê duyệt là Authorizer (Ban hành) và đồng ý, cập nhật ngày ban hành hồ sơ
-            if ($newWfStatus === 'approved' && $workflow->role === 'authorizer') {
-                DB::table('ebmr_templates')->where('id', $workflow->template_id)->update(['issued_date' => now()]);
+        if ($validated['workflow_type'] === 'ebmr') {
+            $workflow = DB::table('ebmr_template_workflows')->where('id', $validated['workflow_id'])->first();
+            if (!$workflow || $workflow->status !== 'pending') {
+                return response()->json(['success' => false, 'message' => 'Luồng duyệt không hợp lệ hoặc đã xử lý']);
             }
 
-            if ($newWfStatus === 'rejected') {
-                DB::table('ebmr_template_workflows')->where('template_id', $workflow->template_id)->where('status', 'pending')->update(['status' => 'cancelled', 'updated_at' => now()]);
-                DB::table('ebmr_templates')->where('id', $workflow->template_id)->update(['status' => 'draft']);
-            } else {
-                $pendingCount = DB::table('ebmr_template_workflows')->where('template_id', $workflow->template_id)->where('status', 'pending')->count();
-                if ($pendingCount === 0) {
-                    // All approved! Issue the template
-                    DB::table('ebmr_templates')->where('id', $workflow->template_id)->update(['status' => 'issued', 'updated_at' => now()]);
+            DB::transaction(function () use ($workflow, $newWfStatus, $validated) {
+                DB::table('ebmr_template_workflows')->where('id', $workflow->id)->update(['status' => $newWfStatus, 'comment' => $validated['comment'], 'updated_at' => now()]);
+
+                if ($newWfStatus === 'approved' && $workflow->role === 'authorizer') {
+                    DB::table('ebmr_templates')->where('id', $workflow->template_id)->update(['issued_date' => now()]);
                 }
+
+                if ($newWfStatus === 'rejected') {
+                    DB::table('ebmr_template_workflows')->where('template_id', $workflow->template_id)->where('status', 'pending')->update(['status' => 'cancelled', 'updated_at' => now()]);
+                    DB::table('ebmr_templates')->where('id', $workflow->template_id)->update(['status' => 'draft']);
+                } else {
+                    $pendingCount = DB::table('ebmr_template_workflows')->where('template_id', $workflow->template_id)->where('status', 'pending')->count();
+                    if ($pendingCount === 0) {
+                        DB::table('ebmr_templates')->where('id', $workflow->template_id)->update(['status' => 'issued', 'updated_at' => now()]);
+                    }
+                }
+            });
+        } elseif ($validated['workflow_type'] === 'cleaning') {
+            $workflow = DB::table('cleaning_process_workflows')->where('id', $validated['workflow_id'])->first();
+            if (!$workflow || $workflow->status !== 'pending') {
+                return response()->json(['success' => false, 'message' => 'Luồng duyệt không hợp lệ hoặc đã xử lý']);
             }
-        });
+
+            DB::transaction(function () use ($workflow, $newWfStatus, $validated) {
+                DB::table('cleaning_process_workflows')->where('id', $workflow->id)->update(['status' => $newWfStatus, 'comment' => $validated['comment'], 'updated_at' => now()]);
+
+                $tableList = $workflow->type === 'room' ? 'cleaning_room_processes_list' : 'cleaning_equip_processes_list';
+
+                if ($newWfStatus === 'rejected') {
+                    DB::table('cleaning_process_workflows')->where('process_list_id', $workflow->process_list_id)->where('type', $workflow->type)->where('status', 'pending')->update(['status' => 'cancelled', 'updated_at' => now()]);
+                    DB::table($tableList)->where('id', $workflow->process_list_id)->update(['status' => 'draft']);
+                } else {
+                    $pendingCount = DB::table('cleaning_process_workflows')->where('process_list_id', $workflow->process_list_id)->where('type', $workflow->type)->where('status', 'pending')->count();
+                    if ($pendingCount === 0) {
+                        DB::table($tableList)->where('id', $workflow->process_list_id)->update(['status' => 'approved', 'updated_at' => now()]);
+                    }
+                }
+            });
+        }
 
         $msg = $validated['action'] === 'approve' ? 'Đã phê duyệt thành công' : 'Đã từ chối hồ sơ';
         return response()->json(['success' => true, 'message' => $msg]);
+    }
+
+    public function getWorkflowHistory($type, $id)
+    {
+        if ($type === 'ebmr') {
+            $workflows = DB::table('ebmr_template_workflows')
+                ->join('user_management', 'ebmr_template_workflows.user_id', '=', 'user_management.id')
+                ->where('template_id', $id)
+                ->select('ebmr_template_workflows.*', 'user_management.fullName as user_name')
+                ->orderBy('ebmr_template_workflows.id', 'asc')
+                ->get();
+        } else {
+            $workflows = DB::table('cleaning_process_workflows')
+                ->join('user_management', 'cleaning_process_workflows.user_id', '=', 'user_management.id')
+                ->where('process_list_id', $id)
+                ->select('cleaning_process_workflows.*', 'user_management.fullName as user_name')
+                ->orderBy('cleaning_process_workflows.id', 'asc')
+                ->get();
+        }
+        return response()->json($workflows);
     }
 }

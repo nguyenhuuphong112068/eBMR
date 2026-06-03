@@ -57,6 +57,23 @@ class RoomController extends Controller
             ->orderBy('order_by', 'asc')
             ->orderBy('code', 'asc')
             ->get();
+            
+        $latestRoomLogs = DB::table('room_logbooks')
+            ->whereNull('equipment_id')
+            ->select('room_id', DB::raw('MAX(id) as max_id'))
+            ->groupBy('room_id');
+
+        $roomStatuses = DB::table('room_logbooks')
+            ->joinSub($latestRoomLogs, 'latest_logs', function ($join) {
+                $join->on('room_logbooks.id', '=', 'latest_logs.max_id');
+            })
+            ->select('room_logbooks.room_id', 'current_status as room_status')
+            ->get()
+            ->keyBy('room_id');
+
+        foreach ($datas as $room) {
+            $room->room_status = $roomStatuses->has($room->id) ? $roomStatuses->get($room->id)->room_status : 'ready';
+        }
         
         // Fetch all assigned equipments
         $equipments = DB::table('equipment_in_room')
@@ -143,21 +160,12 @@ class RoomController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'room_id' => 'required|exists:pms.room,id',
-            'equipment_id' => 'required|exists:instrument,id',
+            'equipment_ids' => 'required|array',
+            'equipment_ids.*' => 'exists:instrument,id',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['success' => false, 'message' => $validator->errors()->first()]);
-        }
-
-        // Check if already assigned
-        $exists = DB::table('equipment_in_room')
-            ->where('room_id', $request->room_id)
-            ->where('equipment_id', $request->equipment_id)
-            ->exists();
-
-        if ($exists) {
-            return response()->json(['success' => false, 'message' => 'Thiết bị này đã được khai báo trong phòng này.']);
         }
 
         $pmsDb = config('database.connections.pms.database', 'pms');
@@ -166,37 +174,64 @@ class RoomController extends Controller
         $targetRoom = DB::connection('pms')->table('room')->where('id', $request->room_id)->first();
         $targetDept = $targetRoom ? $targetRoom->deparment_code : null;
 
-        // Check if this equipment is already assigned to any room in a different department
-        $otherDeptAssignment = DB::table('equipment_in_room')
-            ->join("{$pmsDb}.room as room", 'equipment_in_room.room_id', '=', 'room.id')
-            ->where('equipment_in_room.equipment_id', $request->equipment_id)
-            ->where('room.deparment_code', '<>', $targetDept)
-            ->select('room.code as room_code', 'room.name as room_name', 'room.deparment_code')
-            ->first();
+        $insertedCount = 0;
+        $errors = [];
 
-        if ($otherDeptAssignment) {
-            return response()->json([
-                'success' => false, 
-                'message' => "Thiết bị này đã được khai báo tại phòng {$otherDeptAssignment->room_code} thuộc phân xưởng khác ({$otherDeptAssignment->deparment_code}). Chỉ cho phép kết hợp thiết bị và phòng cùng 1 phân xưởng."
+        foreach ($request->equipment_ids as $eq_id) {
+            // Check if already assigned
+            $exists = DB::table('equipment_in_room')
+                ->where('room_id', $request->room_id)
+                ->where('equipment_id', $eq_id)
+                ->exists();
+
+            if ($exists) {
+                continue;
+            }
+
+            // Check if this equipment is already assigned to any room in a different department
+            $otherDeptAssignment = DB::table('equipment_in_room')
+                ->join("{$pmsDb}.room as room", 'equipment_in_room.room_id', '=', 'room.id')
+                ->where('equipment_in_room.equipment_id', $eq_id)
+                ->where('room.deparment_code', '<>', $targetDept)
+                ->select('room.code as room_code', 'room.name as room_name', 'room.deparment_code')
+                ->first();
+
+            if ($otherDeptAssignment) {
+                $errors[] = "Thiết bị ID $eq_id đã khai báo tại phòng {$otherDeptAssignment->room_code} (phân xưởng {$otherDeptAssignment->deparment_code}).";
+                continue;
+            }
+
+            DB::table('equipment_in_room')->insert([
+                'room_id' => $request->room_id,
+                'equipment_id' => $eq_id,
+                'created_by' => session('user')['fullName'] ?? 'Admin',
+                'created_at' => now(),
             ]);
+            $insertedCount++;
         }
 
-        DB::table('equipment_in_room')->insert([
-            'room_id' => $request->room_id,
-            'equipment_id' => $request->equipment_id,
-            'created_by' => session('user')['fullName'] ?? 'Admin',
-            'created_at' => now(),
-        ]);
+        if (count($errors) > 0 && $insertedCount == 0) {
+            return response()->json(['success' => false, 'message' => implode('<br>', $errors)]);
+        } elseif (count($errors) > 0 && $insertedCount > 0) {
+            return response()->json(['success' => true, 'message' => "Khai báo $insertedCount thiết bị thành công.<br>Lỗi: " . implode('<br>', $errors)]);
+        }
 
-        return response()->json(['success' => true, 'message' => 'Khai báo thiết bị vào phòng thành công!']);
+        return response()->json(['success' => true, 'message' => "Khai báo $insertedCount thiết bị vào phòng thành công!"]);
     }
 
     public function removeEquipment(Request $request)
     {
-        DB::table('equipment_in_room')
+        $deleted = DB::table('equipment_in_room')
             ->where('room_id', $request->room_id)
             ->where('equipment_id', $request->equipment_id)
             ->delete();
+
+        if ($deleted === 0) {
+            return response()->json([
+                'success' => false, 
+                'message' => "Lỗi: Không tìm thấy liên kết giữa thiết bị ($request->equipment_id) và phòng ($request->room_id). Có thể đã bị xóa trước đó."
+            ]);
+        }
 
         return response()->json(['success' => true, 'message' => 'Đã gỡ thiết bị khỏi phòng thành công!']);
     }

@@ -91,10 +91,13 @@
                                                                 class="fas fa-edit me-1"></i>
                                                             Nháp</span>
                                                     @elseif($t->status === 'submitted')
-                                                        <span class="badge bg-warning text-dark"><i
+                                                        <span class="badge bg-warning text-dark" style="cursor: pointer;" onclick="showWorkflowHistory('ebmr', {{ $t->id }})" title="Xem lịch sử duyệt"><i
                                                                 class="fas fa-clock me-1"></i> Chờ duyệt</span>
+                                                        @if($t->current_workflow_step)
+                                                            <div class="mt-1 small text-muted"><i class="fas fa-user-clock me-1"></i>{{ $t->current_workflow_step }}</div>
+                                                        @endif
                                                     @elseif($t->status === 'approved')
-                                                        <span class="badge bg-success"><i
+                                                        <span class="badge bg-success" style="cursor: pointer;" onclick="showWorkflowHistory('ebmr', {{ $t->id }})" title="Xem lịch sử duyệt"><i
                                                                 class="fas fa-check-circle me-1"></i> Đã duyệt</span>
                                                     @elseif($t->status === 'issued')
                                                         @if ($t->effective_date)
@@ -201,10 +204,13 @@
                                                             <span class="badge bg-secondary"><i
                                                                     class="fas fa-edit me-1"></i> Nháp</span>
                                                         @elseif($t->status === 'submitted')
-                                                            <span class="badge bg-warning text-dark"><i
+                                                            <span class="badge bg-warning text-dark" style="cursor: pointer;" onclick="showWorkflowHistory('ebmr', {{ $t->id }})" title="Xem lịch sử duyệt"><i
                                                                     class="fas fa-clock me-1"></i> Chờ duyệt</span>
+                                                            @if($t->current_workflow_step)
+                                                                <div class="mt-1 small text-muted"><i class="fas fa-user-clock me-1"></i>{{ $t->current_workflow_step }}</div>
+                                                            @endif
                                                         @elseif($t->status === 'approved')
-                                                            <span class="badge bg-success"><i
+                                                            <span class="badge bg-success" style="cursor: pointer;" onclick="showWorkflowHistory('ebmr', {{ $t->id }})" title="Xem lịch sử duyệt"><i
                                                                     class="fas fa-check-circle me-1"></i> Đã
                                                                 duyệt</span>
                                                         @elseif($t->status === 'issued')

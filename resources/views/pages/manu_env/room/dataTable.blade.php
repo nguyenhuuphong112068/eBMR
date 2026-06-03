@@ -73,6 +73,7 @@
                         <th style="width: 50px;">STT</th>
                         <th>Mã Phòng</th>
                         <th>Tên Phòng</th>
+                        <th class="text-center">Tình Trạng Vệ Sinh</th>
                         <th>Công Đoạn</th>
                         <th>Tổ Sản Xuất</th>
                         <th>Thiết Bị</th>
@@ -89,6 +90,31 @@
                             <td>{{ $loop->iteration }}</td>
                             <td class="fw-bold text-primary">{{ $data->code }}</td>
                             <td class="fw-medium">{{ $data->name }}</td>
+                            <td class="text-center">
+                                @php
+                                    $rs = $data->room_status ?? 'ready';
+                                    if ($rs === 'producing') {
+                                        $statusText = 'Đang sản xuất';
+                                        $statusClass = 'bg-primary text-white';
+                                    } elseif ($rs === 'maintenance') {
+                                        $statusText = 'Bảo trì';
+                                        $statusClass = 'bg-danger text-white';
+                                    } elseif ($rs === 'cleaning') {
+                                        $statusText = 'Đang vệ sinh';
+                                        $statusClass = 'bg-warning text-dark';
+                                    } elseif ($rs === 'dirty' || $rs === 'line_clearance_required') {
+                                        $statusText = 'Cần vệ sinh';
+                                        $statusClass = 'bg-warning text-dark';
+                                    } elseif ($rs === 'cleaned') {
+                                        $statusText = 'Đã vệ sinh';
+                                        $statusClass = 'bg-success text-white';
+                                    } else {
+                                        $statusText = 'Sẵn sàng';
+                                        $statusClass = 'bg-success text-white';
+                                    }
+                                @endphp
+                                <button class="badge {{ $statusClass }} border-0 shadow-sm" style="cursor: pointer; padding: 5px 10px;" onclick="showLabel('room', '{{ $data->id }}')"><i class="fas fa-tag me-1"></i> {{ $statusText }}</button>
+                            </td>
                             <td>
                                 <span
                                     class="badge bg-light text-dark border px-2 py-1 small fw-bold">{{ $data->stage }}</span>
@@ -253,9 +279,15 @@
                                         class="btn btn-sm btn-icon btn-light-primary border shadow-sm btn-related-form"
                                         data-id="{{ $data->id }}" data-code="{{ $data->code }}"
                                         data-name="{{ $data->name }}" data-toggle="modal"
-                                        data-target="#relatedFormModal" title="Liên kết biểu mẫu">
+                                        data-target="#relatedFormModal" title="Khai báo biểu mẫu">
                                         <i class="fas fa-file-alt"></i>
                                     </button>
+
+                                    <a href="{{ route('pages.manu_env.cleaning_process.list', ['type' => 'room', 'id' => $data->id]) }}"
+                                        class="btn btn-sm btn-icon btn-light-warning border shadow-sm"
+                                        title="Thiết kế quy trình vệ sinh">
+                                        <i class="fas fa-clipboard-list"></i>
+                                    </a>
                                 </div>
                             </td>
                         </tr>
@@ -265,6 +297,10 @@
         </div>
     </div>
 </div>
+
+@section('model')
+    @include('pages.ebmr.production.modals.labelModal')
+@append
 
 @section('script')
     @if (session('success'))
@@ -304,6 +340,78 @@
                 }
             });
 
+            window.showLabel = function(type, id) {
+                Swal.fire({
+                    title: 'Đang tải...',
+                    text: 'Vui lòng chờ trong giây lát',
+                    allowOutsideClick: false,
+                    didOpen: () => {
+                        Swal.showLoading();
+                    }
+                });
+
+                $.ajax({
+                    url: "{{ route('pages.ebmr.getLogbookLabel') }}",
+                    type: 'GET',
+                    data: {
+                        type: type,
+                        id: id
+                    },
+                    success: function(response) {
+                        Swal.close();
+                        if (response.success) {
+                            const data = response.data;
+                            const labelTitle = type === 'room' ? 'NHÃN PHÒNG' : 'NHÃN THIẾT BỊ';
+                            const labelSub = type === 'room' ? 'ROOM LABEL' : 'EQUIPMENT LABEL';
+                            
+                            if (data.current_status !== 'cleaned') {
+                                $('#cleanRequiredLabelType').text(labelTitle);
+                                $('#cleanRequiredLabelType').next('small').text(labelSub);
+                                
+                                $('#lblReqName').text(data.entity_name);
+                                $('#lblReqCode').text(data.entity_code);
+                                
+                                $('#reqLevel1').prop('checked', data.clean_level === 'level_1');
+                                $('#reqLevel2').prop('checked', data.clean_level === 'level_2');
+                                $('#reqReClean').prop('checked', data.clean_level === 're_cleaning');
+                                
+                                $('#reqFinishedDate').text(data.end_time || '-');
+                                $('#reqCleanBefore').text(data.to_be_cleaned_before || '-');
+                                $('#reqDoneBy').text(data.done_by || '-');
+
+                                $('#modalCleanRequired').modal('show');
+                            } else {
+                                $('#cleanedLabelType').text(labelTitle);
+                                $('#cleanedLabelType').next('small').text(labelSub);
+
+                                $('#lblCldName').text(data.entity_name);
+                                $('#lblCldCode').text(data.entity_code);
+
+                                $('#cldLevel1').prop('checked', data.clean_level === 'level_1');
+                                $('#cldLevel2').prop('checked', data.clean_level === 'level_2');
+                                $('#cldReClean').prop('checked', data.clean_level === 're_cleaning');
+
+                                $('#cldFinishedDate').text(data.end_time || '-');
+                                $('#cldValidUntil').text(data.clean_expiry_date || '-');
+                                $('#cldDoneBy').text(data.done_by || '-');
+                                $('#cldCheckedBy').text(data.checked_by || '-');
+                                
+                                $('#cldNextProduct').text(data.next_product_name || '-');
+                                $('#cldNextBatch').text(data.next_batch_number || '-');
+                                $('#cldAttachedBy').text(data.attached_by || '-');
+
+                                $('#modalCleaned').modal('show');
+                            }
+                        } else {
+                            Swal.fire('Lỗi!', response.message, 'error');
+                        }
+                    },
+                    error: function() {
+                        Swal.close();
+                        Swal.fire('Lỗi!', 'Không thể tải dữ liệu nhãn', 'error');
+                    }
+                });
+            };
 
             $('.btn-assign').click(function() {
                 const button = $(this);

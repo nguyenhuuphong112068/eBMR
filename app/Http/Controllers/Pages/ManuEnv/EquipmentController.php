@@ -21,7 +21,18 @@ class EquipmentController extends Controller
 
     public function index(Request $request)
     {
-        $query = DB::table('instrument')->orderBy('code', 'asc');
+        $latestEqLogs = DB::table('room_logbooks')
+            ->whereNotNull('equipment_id')
+            ->select('equipment_id', DB::raw('MAX(id) as max_id'))
+            ->groupBy('equipment_id');
+
+        $query = DB::table('instrument')
+            ->leftJoinSub($latestEqLogs, 'latest_logs', function ($join) {
+                $join->on('instrument.id', '=', 'latest_logs.equipment_id');
+            })
+            ->leftJoin('room_logbooks', 'latest_logs.max_id', '=', 'room_logbooks.id')
+            ->select('instrument.*', 'room_logbooks.current_status as eq_status')
+            ->orderBy('instrument.code', 'asc');
         
         if ($request->has('department') && $request->department !== '') {
             $query->where('department_code', $request->department);

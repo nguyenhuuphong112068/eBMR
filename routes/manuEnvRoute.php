@@ -30,4 +30,22 @@ Route::prefix('/manu_env')
             Route::get('get-related-forms', 'getRelatedForms')->name('getRelatedForms');
             Route::post('save-related-forms', 'saveRelatedForms')->name('saveRelatedForms');
         });
+
+        Route::prefix('/cleaning-process')->name('cleaning_process.')->controller(\App\Http\Controllers\Pages\ManuEnv\CleaningProcessController::class)->group(function () {
+            Route::get('/{type}/{id}/list', 'list')->name('list');
+            Route::post('/{type}/{id}/list/create', 'createList')->name('createList');
+            Route::post('/{type}/{list_id}/up-version', 'upVersion')->name('upVersion');
+            Route::get('/{type}/{list_id}/design', 'index')->name('index');
+            Route::post('/{type}/{list_id}/store', 'store')->name('store');
+            Route::get('/{type}/{list_id}/workflow', 'getWorkflow')->name('getWorkflow');
+            Route::post('/{type}/{list_id}/workflow', 'storeWorkflow')->name('storeWorkflow');
+            Route::post('/{type}/{list_id}/effective-date', 'setEffectiveDate')->name('setEffectiveDate');
+            Route::post('/upload-image', 'uploadImage')->name('upload_image');
+            // Campaign routes (thực hiện vệ sinh phòng)
+            Route::get('/room/{room_id}/campaign/open', 'openCampaignPage')->name('campaign.open');
+            Route::post('/room/{room_id}/campaign/start', 'startCampaign')->name('campaign.start');
+            Route::get('/campaign/{campaign_id}', 'getCampaign')->name('campaign.get');
+            Route::post('/campaign/{campaign_id}/step/{step_id}/complete', 'completeStep')->name('campaign.completeStep');
+            Route::post('/campaign/{campaign_id}/complete', 'completeCampaign')->name('campaign.complete');
+        });
     });
