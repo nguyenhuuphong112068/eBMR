@@ -22,10 +22,8 @@
 
                     <div class="d-flex gap-2">
                         @if (user_has_permission(session('user')['userId'], 'category_product_create', 'boolean'))
-                            <button
-                                class="btn btn-primary d-flex align-items-center px-4 fw-bold shadow-sm rounded-pill"
-                                data-toggle="modal" data-target="#intermediate_category"
-                                data-modal_type="#create_modal">
+                            <button class="btn btn-primary d-flex align-items-center px-4 fw-bold shadow-sm rounded-pill"
+                                data-toggle="modal" data-target="#intermediate_category" data-modal_type="#create_modal">
                                 <i class="fas fa-plus-circle me-2"></i> Thêm Sản Phẩm
                             </button>
                         @endif
@@ -75,7 +73,8 @@
                         </thead>
                         <tbody>
                             @foreach ($datas as $data)
-                                <tr data-href="{{ route('pages.ebmr.templates') }}?type=BPR&code={{ urlencode($data->finished_product_code) }}" class="{{ $data->IsHypothesis ? 'table-warning' : '' }}">
+                                <tr data-href="{{ route('pages.ebmr.templates') }}?type=BPR&code={{ urlencode($data->finished_product_code) }}"
+                                    class="{{ $data->IsHypothesis ? 'table-warning' : '' }}">
                                     <td class="text-center fw-bold text-muted small">
                                         {{ $loop->iteration }}
                                         @if (session('user')['userGroup'] == 'Admin')
@@ -192,7 +191,8 @@
                                                     class="btn btn-sm btn-icon btn-light-success btn-create-bom border shadow-sm"
                                                     data-id="{{ $data->id }}"
                                                     data-product_name="{{ $data->finished_product_name }} - {{ $data->batch_qty }} {{ $data->unit_batch_qty }}"
-                                                    data-toggle="modal" data-target="#createBOMModal" title="Tạo BOM">
+                                                    data-toggle="modal" data-target="#createBOMModal"
+                                                    title="Tạo BOM">
                                                     <i class="fas fa-plus"></i>
                                                 </button>
                                             @endif
@@ -233,6 +233,7 @@
             cursor: pointer;
             transition: background-color 0.15s ease-in-out;
         }
+
         #data_table_product_category tbody tr[data-href]:hover {
             background-color: #e0f2fe !important;
         }
@@ -406,7 +407,7 @@
             $('#filter_department').on('change', function() {
                 const val = $(this).val() ? $(this).val().trim() : '';
                 let deptColIdx = 7; // default fallback
-                
+
                 table.columns().every(function(index) {
                     const headerElement = this.header();
                     if (headerElement) {
@@ -416,13 +417,15 @@
                         }
                     }
                 });
-                
-                table.column(deptColIdx).search(val ? '^\\s*' + $.fn.dataTable.util.escapeRegex(val) + '\\s*$' : '', true, false).draw();
+
+                table.column(deptColIdx).search(val ? '^\\s*' + $.fn.dataTable.util.escapeRegex(val) +
+                    '\\s*$' : '', true, false).draw();
             });
 
             // Click row to navigate to template
             $('#data_table_product_category tbody').on('click', 'tr[data-href]', function(e) {
-                if ($(e.target).closest('td').is(':last-child') || $(e.target).closest('button, a, input, form, select').length) {
+                if ($(e.target).closest('td').is(':last-child') || $(e.target).closest(
+                        'button, a, input, form, select').length) {
                     return;
                 }
                 window.location.href = $(this).data('href');

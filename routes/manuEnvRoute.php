@@ -47,5 +47,33 @@ Route::prefix('/manu_env')
             Route::get('/campaign/{campaign_id}', 'getCampaign')->name('campaign.get');
             Route::post('/campaign/{campaign_id}/step/{step_id}/complete', 'completeStep')->name('campaign.completeStep');
             Route::post('/campaign/{campaign_id}/complete', 'completeCampaign')->name('campaign.complete');
+            // Equip campaign routes
+            Route::get('/equip/{equip_id}/campaign/open', [\App\Http\Controllers\Pages\ManuEnv\CleaningEquipCampaignController::class, 'openCampaignPage'])->name('equip.campaign.open');
+            Route::post('/equip-campaign/{campaign_id}/step/{step_id}/complete', [\App\Http\Controllers\Pages\ManuEnv\CleaningEquipCampaignController::class, 'completeStep'])->name('equip.campaign.completeStep');
+            Route::post('/equip-campaign/{campaign_id}/complete', [\App\Http\Controllers\Pages\ManuEnv\CleaningEquipCampaignController::class, 'completeCampaign'])->name('equip.campaign.complete');
+            Route::get('/equip-campaign/{campaign_id}', [\App\Http\Controllers\Pages\ManuEnv\CleaningEquipCampaignController::class, 'getCampaign'])->name('equip.campaign.get');
+        });
+
+        // Room Clearing (Phòng Vệ Sinh Chung)
+        Route::prefix('/room-clearing')->name('room_clearing.')->controller(\App\Http\Controllers\Pages\ManuEnv\RoomClearingController::class)->group(function () {
+            Route::get('', 'index')->name('index');
+            Route::get('/{id}/dashboard', 'dashboard')->name('dashboard');
+            Route::post('', 'store')->name('store');
+            Route::put('/{id}', 'update')->name('update');
+            Route::post('/{id}/receive-equip', 'receiveEquip')->name('receiveEquip');
         });
     });
+
+// ── API nhẹ (không cần middleware riêng, dùng chung middleware của manu_env) ──
+Route::middleware(\App\Http\Middleware\CheckLogin::class)->group(function () {
+    Route::get('/ebmr/api/equip-processes', function (\Illuminate\Http\Request $req) {
+        $equipId = $req->query('equip_id');
+        if (!$equipId) return response()->json([]);
+        $processes = \App\Models\CleaningEquipProcessList::where('equipment_id', $equipId)
+            ->whereIn('status', ['active', 'approved', 'submitted'])
+            ->orderByRaw("FIELD(status, 'active', 'approved', 'submitted')")
+            ->orderBy('version', 'desc')
+            ->get(['id', 'process_name', 'version', 'status', 'cleaning_type']);
+        return response()->json($processes);
+    })->name('api.equip_processes');
+});

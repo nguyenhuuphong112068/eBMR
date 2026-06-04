@@ -16,19 +16,23 @@
             border-radius: 0 !important;
             margin-bottom: 0 !important;
         }
+
         #cleaning-process-table .note-editor .note-toolbar {
             border-radius: 0 !important;
             border-bottom: 1px solid #dee2e6;
             background-color: #f8f9fa;
         }
+
         #cleaning-process-table .note-editor .note-statusbar {
             border-radius: 0 !important;
         }
+
         /* Bỏ padding của ô chứa editor và ô tiêu chuẩn */
         #cleaning-process-table td.editor-cell,
         #cleaning-process-table td.standard-cell {
             padding: 0 !important;
         }
+
         /* Xóa viền và bo góc của textarea tiêu chuẩn */
         #cleaning-process-table .step-standard {
             border: none !important;
@@ -47,13 +51,14 @@
                         <h1 class="m-0 text-uppercase fw-bold text-navy">Thiết kế Quy trình vệ sinh - {{ $entityCode }}
                             ({{ $entityName }}) - Ấn bản V.{{ $list->version }}</h1>
                         <div>
-                            <a href="{{ route('pages.manu_env.cleaning_process.list', ['type' => $type, 'id' => $id]) }}" class="btn btn-outline-secondary me-2">
+                            <a href="{{ route('pages.manu_env.cleaning_process.list', ['type' => $type, 'id' => $id]) }}"
+                                class="btn btn-outline-secondary me-2">
                                 <i class="fas fa-arrow-left me-1"></i> Quay lại Danh sách
                             </a>
-                            @if($list->status === 'draft')
-                            <button class="btn btn-primary" id="btn-save-process">
-                                <i class="fas fa-save me-1"></i> Lưu quy trình
-                            </button>
+                            @if ($list->status === 'draft')
+                                <button class="btn btn-primary" id="btn-save-process">
+                                    <i class="fas fa-save me-1"></i> Lưu quy trình
+                                </button>
                             @endif
                         </div>
                     </div>
@@ -71,8 +76,8 @@
                                     <th style="width: 80px;" class="text-center">Bước</th>
                                     <th>Nội dung quy trình</th>
                                     <th style="width: 250px;">Tiêu chuẩn</th>
-                                    @if($list->status === 'draft')
-                                    <th style="width: 80px;" class="text-center">Thao tác</th>
+                                    @if ($list->status === 'draft')
+                                        <th style="width: 80px;" class="text-center">Thao tác</th>
                                     @endif
                                 </tr>
                             </thead>
@@ -92,39 +97,44 @@
                                             <td class="standard-cell">
                                                 <div class="summernote-editor step-standard">{!! $p->standard !!}</div>
                                             </td>
-                                            @if($list->status === 'draft')
-                                            <td class="text-center align-middle">
-                                                <div class="d-flex flex-column gap-2 align-items-center">
-                                                    <button class="btn btn-sm btn-outline-success btn-insert-step" title="Chèn bước xuống dưới">
-                                                        <i class="fas fa-plus"></i>
-                                                    </button>
-                                                    <button class="btn btn-sm btn-outline-danger btn-remove-step" title="Xóa bước">
-                                                        <i class="fas fa-trash"></i>
-                                                    </button>
-                                                </div>
-                                            </td>
+                                            @if ($list->status === 'draft')
+                                                <td class="text-center align-middle">
+                                                    <div class="d-flex flex-column gap-2 align-items-center">
+                                                        <button class="btn btn-sm btn-outline-success btn-insert-step"
+                                                            title="Chèn bước xuống dưới">
+                                                            <i class="fas fa-plus"></i>
+                                                        </button>
+                                                        <button class="btn btn-sm btn-outline-danger btn-remove-step"
+                                                            title="Xóa bước">
+                                                            <i class="fas fa-trash"></i>
+                                                        </button>
+                                                    </div>
+                                                </td>
                                             @endif
                                         </tr>
                                     @endforeach
                                 @endif
                             </tbody>
-                            @if($list->status === 'draft')
-                            <tfoot>
-                                <tr>
-                                    <td colspan="4" class="text-center p-3">
-                                        <div class="d-flex justify-content-center gap-3">
-                                            <button class="btn btn-outline-primary" id="btn-add-step">
-                                                <i class="fas fa-plus me-1"></i> Thêm bước mới
-                                            </button>
-                                            <button class="btn btn-primary" id="btn-save-process-bottom">
-                                                <i class="fas fa-save me-1"></i> Lưu quy trình
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            </tfoot>
+                            @if ($list->status === 'draft')
+                                <tfoot>
+                                    <tr>
+                                        <td colspan="4" class="text-center p-3">
+                                            <div class="d-flex justify-content-center gap-3">
+                                                <button class="btn btn-outline-primary" id="btn-add-step">
+                                                    <i class="fas fa-plus me-1"></i> Thêm bước mới
+                                                </button>
+                                                <button class="btn btn-primary" id="btn-save-process-bottom">
+                                                    <i class="fas fa-save me-1"></i> Lưu quy trình
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </tfoot>
                             @endif
                         </table>
+
+                        {{-- Khung Ký duyệt quy trình --}}
+                        @include('components.signature_block', ['wfType' => 'cleaning', 'type' => $type, 'listId' => $list_id])
                     </div>
                 </div>
             </div>
@@ -208,7 +218,7 @@
                 $('.process-step').each(function() {
                     const contentEditable = $(this).find('.editor-cell .note-editable');
                     const standardEditable = $(this).find('.standard-cell .note-editable');
-                    
+
                     if (contentEditable.length && standardEditable.length) {
                         // Reset first to allow shrinking
                         standardEditable.css('min-height', '150px');
@@ -289,7 +299,7 @@
                     confirmButtonText: 'Đồng ý',
                     cancelButtonText: 'Hủy'
                 }).then((result) => {
-                    if (result.isConfirmed) {
+                    if (result.value) {
                         step.find('.summernote-editor').summernote('destroy');
                         step.remove();
                         updateStepNumbers();
@@ -301,14 +311,14 @@
                 const currentStep = $(this).closest('.process-step');
                 const template = document.getElementById('step-template');
                 const clone = template.content.cloneNode(true);
-                
+
                 // Insert after the current step
                 currentStep.after(clone);
-                
+
                 const newStep = currentStep.next('.process-step');
                 initSummernote(newStep.find('.editor-cell .summernote-editor'), false);
                 initSummernote(newStep.find('.standard-cell .step-standard'), true);
-                
+
                 updateStepNumbers();
             });
 
@@ -330,8 +340,10 @@
                 $('#process-list .process-step').each(function() {
                     const step = $(this).find('.step-number').val();
                     // Vì có 2 editor (content và standard), cần phải find chính xác
-                    const content = $(this).find('.editor-cell .summernote-editor').summernote('code');
-                    const standard = $(this).find('.standard-cell .step-standard').summernote('code');
+                    const content = $(this).find('.editor-cell .summernote-editor').summernote(
+                        'code');
+                    const standard = $(this).find('.standard-cell .step-standard').summernote(
+                        'code');
 
                     if (!step || !content || content === '<p><br></p>') {
                         valid = false;

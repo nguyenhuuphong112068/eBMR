@@ -181,7 +181,7 @@
                             <div class="col-12 col-md-6 col-lg-4 room-card-col" data-stage-code="{{ $room->stage_code }}"
                                 data-workshop-code="{{ $room->deparment_code }}">
                                 <div
-                                    class="card h-100 border-0 shadow-sm rounded-4 overflow-hidden room-card transition-all position-relative">
+                                    class="card h-100 border-0 shadow-sm rounded-4 room-card transition-all position-relative">
                                     <div
                                         class="card-header bg-white pt-4 px-4 border-0 d-flex justify-content-between align-items-start">
                                         <div>
@@ -352,7 +352,7 @@
                                                     <i class="fas fa-chevron-right cleaning-btn-arrow ms-auto"></i>
                                                 </a>
                                             @elseif ($rs === 'needs_reclean')
-                                                <a href="{{ route('pages.manu_env.cleaning_process.campaign.open', ['room_id' => $room->id, 'type' => 3]) }}"
+                                                <a href="javascript:void(0)" onclick="openStartCleaningModal({{ $room->id }}, 3, '{{ $room->code }} - {{ $room->name }}')"
                                                     class="btn-cleaning-link d-flex align-items-center justify-content-center gap-2 w-100 text-decoration-none bg-danger text-white border-danger">
                                                     <span class="cleaning-btn-icon text-white">
                                                         <i class="fas fa-exclamation-triangle"></i>
@@ -361,7 +361,7 @@
                                                     <i class="fas fa-chevron-right cleaning-btn-arrow ms-auto text-white"></i>
                                                 </a>
                                             @else
-                                                <div class="dropdown w-100">
+                                                <div class="dropup w-100">
                                                     <button class="btn-cleaning-link d-flex align-items-center justify-content-center gap-2 w-100 text-decoration-none dropdown-toggle" type="button" id="cleaningDropdown{{ $room->id }}" data-toggle="dropdown" aria-expanded="false">
                                                         <span class="cleaning-btn-icon">
                                                             <i class="fas fa-broom"></i>
@@ -369,10 +369,10 @@
                                                         <span class="cleaning-btn-text">Vệ Sinh Phòng</span>
                                                     </button>
                                                     <ul class="dropdown-menu w-100 text-center shadow border-0" aria-labelledby="cleaningDropdown{{ $room->id }}">
-                                                        <li><a class="dropdown-item fw-bold text-navy py-2" href="{{ route('pages.manu_env.cleaning_process.campaign.open', ['room_id' => $room->id, 'type' => 1]) }}"><i class="fas fa-broom me-2 text-primary"></i> Vệ Sinh Cấp 1</a></li>
-                                                        <li><a class="dropdown-item fw-bold text-navy py-2" href="{{ route('pages.manu_env.cleaning_process.campaign.open', ['room_id' => $room->id, 'type' => 2]) }}"><i class="fas fa-shower me-2 text-warning"></i> Vệ Sinh Cấp 2</a></li>
+                                                        <li><a class="dropdown-item fw-bold text-navy py-2" href="javascript:void(0)" onclick="openStartCleaningModal({{ $room->id }}, 1, '{{ $room->code }} - {{ $room->name }}')"><i class="fas fa-broom me-2 text-primary"></i> Vệ Sinh Cấp 1</a></li>
+                                                        <li><a class="dropdown-item fw-bold text-navy py-2" href="javascript:void(0)" onclick="openStartCleaningModal({{ $room->id }}, 2, '{{ $room->code }} - {{ $room->name }}')"><i class="fas fa-shower me-2 text-warning"></i> Vệ Sinh Cấp 2</a></li>
                                                         <li><hr class="dropdown-divider"></li>
-                                                        <li><a class="dropdown-item fw-bold text-danger py-2" href="{{ route('pages.manu_env.cleaning_process.campaign.open', ['room_id' => $room->id, 'type' => 3]) }}"><i class="fas fa-exclamation-triangle me-2"></i> Vệ Sinh Lại</a></li>
+                                                        <li><a class="dropdown-item fw-bold text-danger py-2" href="javascript:void(0)" onclick="openStartCleaningModal({{ $room->id }}, 3, '{{ $room->code }} - {{ $room->name }}')"><i class="fas fa-exclamation-triangle me-2"></i> Vệ Sinh Lại</a></li>
                                                     </ul>
                                                 </div>
                                             @endif
@@ -1514,5 +1514,62 @@
                 });
             };
         });
+
+        function openStartCleaningModal(roomId, type, roomName) {
+            $('#startCleaningRoomName').text(roomName);
+            $('#startCleaningType').val(type);
+            
+            let actionUrl = "{{ route('pages.manu_env.cleaning_process.campaign.open', ['room_id' => ':roomId']) }}";
+            actionUrl = actionUrl.replace(':roomId', roomId);
+            $('#startCleaningForm').attr('action', actionUrl);
+            
+            if (!$('#startCleaningEmployees').hasClass("select2-hidden-accessible")) {
+                $('#startCleaningEmployees').select2({
+                    placeholder: "Chọn người thực hiện",
+                    allowClear: true,
+                    dropdownParent: $('#startCleaningModal')
+                });
+            }
+            
+            $('#startCleaningModal').modal('show');
+        }
     </script>
+
+    <!-- Start Cleaning Modal -->
+    <div class="modal fade" id="startCleaningModal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content border-0 shadow">
+                <form id="startCleaningForm" method="GET" action="">
+                    <input type="hidden" name="type" id="startCleaningType" value="">
+                    <div class="modal-header bg-navy text-white">
+                        <h5 class="modal-title"><i class="fas fa-broom me-2 text-warning"></i> Bắt đầu Vệ sinh</h5>
+                        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="mb-3">Xác nhận bắt đầu quy trình vệ sinh cho phòng: <br>
+                        <strong id="startCleaningRoomName" class="text-navy fs-5"></strong></p>
+                        
+                        <div class="form-group">
+                            <label class="fw-bold">Người thực hiện:</label>
+                            <select class="form-control select2" name="employee_ids[]" id="startCleaningEmployees" multiple="multiple" style="width: 100%;" required>
+                                @php $currentUserId = session('user')['id'] ?? session('user.id') ?? 1; @endphp
+                                @foreach($users as $user)
+                                    <option value="{{ $user->id }}" {{ $user->id == $currentUserId ? 'selected' : '' }}>
+                                        {{ $user->name }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            <small class="text-muted mt-1 d-block"><i class="fas fa-info-circle me-1"></i> Có thể chọn thêm người thực hiện cùng.</small>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Hủy bỏ</button>
+                        <button type="submit" class="btn btn-primary fw-bold"><i class="fas fa-check me-1"></i> Xác nhận Bắt đầu</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 @endsection

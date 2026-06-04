@@ -236,14 +236,14 @@ class EbmrApprovalController extends Controller
             $workflows = DB::table('ebmr_template_workflows')
                 ->join('user_management', 'ebmr_template_workflows.user_id', '=', 'user_management.id')
                 ->where('template_id', $id)
-                ->select('ebmr_template_workflows.*', 'user_management.fullName as user_name')
+                ->select('ebmr_template_workflows.*', 'user_management.fullName as user_name', 'user_management.signature_image')
                 ->orderBy('ebmr_template_workflows.id', 'asc')
                 ->get();
         } else {
             $workflows = DB::table('cleaning_process_workflows')
                 ->join('user_management', 'cleaning_process_workflows.user_id', '=', 'user_management.id')
                 ->where('process_list_id', $id)
-                ->select('cleaning_process_workflows.*', 'user_management.fullName as user_name')
+                ->select('cleaning_process_workflows.*', 'user_management.fullName as user_name', 'user_management.signature_image')
                 ->orderBy('cleaning_process_workflows.id', 'asc')
                 ->get();
         }

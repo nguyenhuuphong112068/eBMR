@@ -46,6 +46,7 @@
                                 <th class="py-3 border-0">Hạn Sạch</th>
                                 <th class="text-center py-3 border-0">Trạng Thái (Trước -> Sau)</th>
                                 <th class="text-center py-3 border-0">Người Thực Hiện</th>
+                                <th class="text-center py-3 border-0">Hành Động</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -107,6 +108,13 @@
                                         <span class="badge bg-light text-dark shadow-sm border">
                                             <i class="fas fa-users text-primary me-1"></i> {{ is_array($emps) ? count($emps) : 0 }} Người
                                         </span>
+                                    </td>
+                                    <td class="text-center">
+                                        @if($log->action_type === 'cleaning' && $log->campaign_id)
+                                            <a href="{{ route('pages.manu_env.cleaning_process.campaign.open', ['room_id' => $log->room_id]) }}?campaign_id={{ $log->campaign_id }}" class="btn btn-sm btn-outline-primary rounded-pill px-3 shadow-sm" target="_blank" data-bs-toggle="tooltip" title="Xem hồ sơ vệ sinh">
+                                                <i class="fas fa-eye me-1"></i> Xem HS
+                                            </a>
+                                        @endif
                                     </td>
                                 </tr>
                             @empty

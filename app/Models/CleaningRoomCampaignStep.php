@@ -27,4 +27,9 @@ class CleaningRoomCampaignStep extends Model
     {
         return $this->belongsTo(CleaningRoomCampaign::class, 'campaign_id', 'id');
     }
+
+    public function doneByUser()
+    {
+        return $this->belongsTo(User::class, 'done_by', 'id');
+    }
 }

@@ -64,7 +64,7 @@
         width: 100%;
     }
 
-    .nav-sidebar .nav-link > p > .right {
+    .nav-sidebar .nav-link>p>.right {
         position: absolute !important;
         right: 1rem !important;
         top: 50% !important;
@@ -72,7 +72,7 @@
         transition: transform 0.3s ease;
     }
 
-    .nav-sidebar .nav-item.menu-open > .nav-link > p > .right {
+    .nav-sidebar .nav-item.menu-open>.nav-link>p>.right {
         transform: translateY(-50%) rotate(-90deg) !important;
     }
 
@@ -226,9 +226,16 @@
                         </li>
                         <li class="nav-item">
                             <a href="{{ route('pages.manu_env.room.list') }}"
-                                class="nav-link {{ str_contains(url()->current(), 'room') ? 'active' : '' }}">
+                                class="nav-link {{ str_contains(url()->current(), 'manu_env/room') && !str_contains(url()->current(), 'room-clearing') ? 'active' : '' }}">
                                 <i class="far fa-circle nav-icon text-success"></i>
                                 <p>Phòng Sản Xuất</p>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="{{ route('pages.manu_env.room_clearing.index') }}"
+                                class="nav-link {{ str_contains(url()->current(), 'room-clearing') ? 'active' : '' }}">
+                                <i class="far fa-circle nav-icon text-info"></i>
+                                <p>Phòng VS Chung</p>
                             </a>
                         </li>
                     </ul>
@@ -395,7 +402,14 @@
                             <a href="{{ route('pages.ebmr.production') }}"
                                 class="nav-link {{ request()->routeIs('pages.ebmr.production') ? 'active' : '' }}">
                                 <i class="fas fa-cogs"></i>
-                                <p>Sản Xuất</p>
+                                <p>Phòng Sản Xuất</p>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="{{ route('pages.ebmr.dirty_equipments') }}"
+                                class="nav-link {{ request()->routeIs('pages.ebmr.dirty_equipments') ? 'active' : '' }}">
+                                <i class="fas fa-cogs"></i>
+                                <p>Thiết Bị Cần Vệ Sinh</p>
                             </a>
                         </li>
                         <li class="nav-item">

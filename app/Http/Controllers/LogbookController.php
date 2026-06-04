@@ -34,42 +34,42 @@ class LogbookController extends Controller
         $workshopsList = DB::table('stage_production')->pluck('workshop_code')->unique();
         $workshop = $request->input('workshop', $workshopsList->first());
 
-        // Fetch rooms for the selected workshop
-        $roomIds = DB::connection('pms')->table('room')
-                    ->where('deparment_code', $workshop)
-                    ->pluck('id')
-                    ->toArray();
-
-        // Find instruments assigned to these rooms
-        $equipmentIds = DB::table('equipment_in_room')
-                            ->whereIn('room_id', $roomIds)
-                            ->pluck('equipment_id')
-                            ->toArray();
-
-        // Get instrument codes
+        // Get instruments for the workshop
         $instruments = DB::table('instrument')
-                        ->whereIn('id', $equipmentIds)
-                        ->get()
-                        ->keyBy('code');
+                        ->where('department_code', $workshop)
+                        ->get();
                         
-        $instrumentCodes = $instruments->keys()->toArray();
+        $instrumentCodes = $instruments->pluck('code')->toArray();
+        $instrumentIds = $instruments->pluck('id')->toArray();
         
         // For testing purposes, always include the seeded dummy instruments regardless of workshop 
         // just so the view isn't empty when testing
         $instrumentCodes = array_merge($instrumentCodes, ['MAYCAN-01', 'MAYTRON-02', 'MAYBAO-01']);
 
         // We fetch the dummy instruments info as well
-        $dummyInstruments = DB::table('instrument')->whereIn('code', ['MAYCAN-01', 'MAYTRON-02', 'MAYBAO-01'])->get()->keyBy('code');
-        foreach ($dummyInstruments as $code => $inst) {
-            if (!isset($instruments[$code])) {
-                $instruments[$code] = $inst;
-            }
+        $dummyInstruments = DB::table('instrument')->whereIn('code', ['MAYCAN-01', 'MAYTRON-02', 'MAYBAO-01'])->get();
+        
+        $instrumentsCollection = collect();
+        foreach ($instruments as $inst) {
+            $instrumentsCollection->put((string)$inst->id, $inst);
+            $instrumentsCollection->put($inst->code, $inst);
+        }
+        foreach ($dummyInstruments as $inst) {
+            $instrumentsCollection->put((string)$inst->id, $inst);
+            $instrumentsCollection->put($inst->code, $inst);
         }
 
-        $logbooks = InstrumentLogbook::whereIn('instrument_id', $instrumentCodes)
+        $searchKeys = array_merge($instrumentCodes, $instrumentIds);
+
+        $logbooks = InstrumentLogbook::whereIn('instrument_id', $searchKeys)
                         ->orderBy('start_time', 'desc')
                         ->paginate(20);
 
-        return view('pages.logbooks.instrument', compact('logbooks', 'instruments', 'workshopsList', 'workshop'));
+        return view('pages.logbooks.instrument', [
+            'logbooks' => $logbooks, 
+            'instruments' => $instrumentsCollection, 
+            'workshopsList' => $workshopsList, 
+            'workshop' => $workshop
+        ]);
     }
 }

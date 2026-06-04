@@ -11,6 +11,8 @@ use App\Models\CleaningRoomProcessList;
 use App\Models\CleaningEquipProcessList;
 use App\Models\CleaningRoomCampaign;
 use App\Models\CleaningRoomCampaignStep;
+use App\Models\CleaningEquipCampaign;
+use App\Models\CleaningEquipCampaignStep;
 use Carbon\Carbon;
 
 class CleaningProcessController extends Controller
@@ -355,45 +357,77 @@ class CleaningProcessController extends Controller
         $room = DB::connection('pms')->table('room')->where('id', $room_id)->first();
         if (!$room) abort(404, 'Không tìm thấy phòng.');
 
-        $type = $request->query('type', 1);
+        $campaignId = $request->query('campaign_id');
+        $campaign = null;
+        
+        if ($campaignId) {
+            // View specific campaign
+            $campaign = CleaningRoomCampaign::where('room_id', $room_id)->findOrFail($campaignId);
+            $activeProcess = CleaningRoomProcessList::findOrFail($campaign->process_list_id);
+            $processSteps = CleaningRoomProcess::where('process_list_id', $activeProcess->id)
+                ->orderBy('step', 'asc')
+                ->get();
+        } else {
+            // Logic cho việc bắt đầu campaign mới hoặc tiếp tục campaign in_progress
+            $type = $request->query('type', 1);
 
-        // Tìm quy trình theo loại: ưu tiên active → approved → submitted → draft
-        $activeProcess = CleaningRoomProcessList::where('room_id', $room_id)
-            ->where('cleaning_type', $type)
-            ->whereIn('status', ['active', 'approved', 'submitted', 'draft'])
-            ->orderByRaw("FIELD(status, 'active', 'approved', 'submitted', 'draft')")
-            ->orderBy('version', 'desc')
-            ->first();
+            // Tìm quy trình theo loại: ưu tiên active → approved → submitted → draft
+            $activeProcess = CleaningRoomProcessList::where('room_id', $room_id)
+                ->where('cleaning_type', $type)
+                ->whereIn('status', ['active', 'approved', 'submitted', 'draft'])
+                ->orderByRaw("FIELD(status, 'active', 'approved', 'submitted', 'draft')")
+                ->orderBy('version', 'desc')
+                ->first();
 
-        if (!$activeProcess) {
-            return redirect()->route('pages.ebmr.production')
-                ->with('error', "Phòng {$room->code} chưa có quy trình vệ sinh. Vui lòng thiết kế quy trình tại Môi Trường > Vệ Sinh Phòng.");
+            if (!$activeProcess) {
+                return redirect()->route('pages.ebmr.production')
+                    ->with('error', "Phòng {$room->code} chưa có quy trình vệ sinh. Vui lòng thiết kế quy trình tại Môi Trường > Vệ Sinh Phòng.");
+            }
+
+            $processSteps = CleaningRoomProcess::where('process_list_id', $activeProcess->id)
+                ->orderBy('step', 'asc')
+                ->get();
+
+            if ($processSteps->isEmpty()) {
+                return redirect()->route('pages.ebmr.production')
+                    ->with('error', "Quy trình vệ sinh của phòng {$room->code} chưa có bước nào. Vui lòng thiết kế các bước thực hiện.");
+            }
+
+            // Kiểm tra xem có campaign nào đang thực hiện dở dang không
+            $campaign = CleaningRoomCampaign::where('room_id', $room_id)
+                ->where('status', 'in_progress')
+                ->first();
         }
-
-        $processSteps = CleaningRoomProcess::where('process_list_id', $activeProcess->id)
-            ->orderBy('step', 'asc')
-            ->get();
-
-        if ($processSteps->isEmpty()) {
-            return redirect()->route('pages.ebmr.production')
-                ->with('error', "Quy trình vệ sinh của phòng {$room->code} chưa có bước nào. Vui lòng thiết kế các bước thực hiện.");
-        }
-
-        // Kiểm tra xem có campaign nào đang thực hiện dở dang không
-        $campaign = CleaningRoomCampaign::where('room_id', $room_id)
-            ->where('status', 'in_progress')
-            ->first();
 
         if (!$campaign) {
             DB::beginTransaction();
             try {
-                // 1. Đổi trạng thái phòng → 'cleaning'
+                $employeeIds = $request->query('employee_ids', [$userId]);
+                if (!is_array($employeeIds)) $employeeIds = [$employeeIds];
+                // Convert to integer
+                $employeeIds = array_map('intval', $employeeIds);
+                if (!in_array($userId, $employeeIds)) {
+                    $employeeIds[] = $userId;
+                }
+
+                // 1. Tạo campaign mới
+                $campaign = CleaningRoomCampaign::create([
+                    'room_id'         => $room_id,
+                    'process_list_id' => $activeProcess->id,
+                    'status'          => 'in_progress',
+                    'started_by'      => $userId,
+                    'started_at'      => now(),
+                    'employee_ids'    => $employeeIds,
+                ]);
+
+                // 2. Đổi trạng thái phòng → 'cleaning'
                 DB::table('room_logbooks')->insert([
                     'room_id'         => $room_id,
+                    'campaign_id'     => $campaign->id,
                     'equipment_id'    => null,
                     'action_type'     => 'cleaning',
                     'start_time'      => now(),
-                    'employee_ids'    => json_encode([$userId]),
+                    'employee_ids'    => json_encode($employeeIds),
                     'previous_status' => 'dirty',
                     'current_status'  => 'cleaning',
                     'created_by'      => $userId,
@@ -402,22 +436,100 @@ class CleaningProcessController extends Controller
                     'updated_at'      => now(),
                 ]);
 
-                // 2. Tạo campaign mới
-                $campaign = CleaningRoomCampaign::create([
-                    'room_id'         => $room_id,
-                    'process_list_id' => $activeProcess->id,
-                    'status'          => 'in_progress',
-                    'started_by'      => $userId,
-                    'started_at'      => now(),
-                ]);
 
-                // 3. Tạo các bước tương ứng
+
+                // 3. Tạo các bước phòng tương ứng
                 foreach ($processSteps as $s) {
                     CleaningRoomCampaignStep::create([
                         'campaign_id'     => $campaign->id,
                         'process_step_id' => $s->id,
                         'step'            => $s->step,
                         'is_done'         => false,
+                    ]);
+                }
+
+                // 4. BắT BUỘC: Tạo equip campaigns cho tất cả thiết bị CỐ ĐỊNH trong phòng
+                $fixedEquipments = DB::table('equipment_in_room')
+                    ->join('instrument', 'equipment_in_room.equipment_id', '=', 'instrument.id')
+                    ->where('equipment_in_room.room_id', $room_id)
+                    ->where('instrument.is_Portable_equipment', 0)
+                    ->select('instrument.*')
+                    ->get();
+
+                foreach ($fixedEquipments as $equip) {
+                    // Tìm quy trình vệ sinh thiết bị có active/approved
+                    $equipProcess = CleaningEquipProcessList::where('equipment_id', $equip->id)
+                        ->whereIn('status', ['active', 'approved', 'submitted'])
+                        ->orderByRaw("FIELD(status, 'active', 'approved', 'submitted')")
+                        ->orderBy('version', 'desc')
+                        ->first();
+
+                    if (!$equipProcess) continue; // Bỏ qua nếu thiết bị chưa có quy trình
+
+                    // Kiểm tra thiết bị này có campaign đang chạy không
+                    $existingEquipCampaign = CleaningEquipCampaign::where('equipment_id', $equip->id)
+                        ->where('status', 'in_progress')
+                        ->first();
+
+                    if ($existingEquipCampaign) continue; // Bỏ qua nếu đã có
+
+                    $equipSteps = CleaningEquipProcess::where('process_list_id', $equipProcess->id)
+                        ->orderBy('step', 'asc')
+                        ->get();
+
+                    if ($equipSteps->isEmpty()) continue;
+
+                    $equipCampaign = CleaningEquipCampaign::create([
+                        'equipment_id'    => $equip->id,
+                        'process_list_id' => $equipProcess->id,
+                        'room_campaign_id'=> $campaign->id,
+                        'clean_location'  => 'in_room',
+                        'source_room_id'  => $room_id,
+                        'status'          => 'in_progress',
+                        'cleaning_type'   => $campaign->cleaning_type ?? 1,
+                        'employee_ids'    => $employeeIds,
+                        'started_by'      => $userId,
+                        'started_at'      => now(),
+                    ]);
+
+                    foreach ($equipSteps as $es) {
+                        CleaningEquipCampaignStep::create([
+                            'campaign_id'     => $equipCampaign->id,
+                            'process_step_id' => $es->id,
+                            'step'            => $es->step,
+                            'is_done'         => false,
+                        ]);
+                    }
+
+                    // Ghi nhận vào room_logbooks
+                    DB::table('room_logbooks')->insert([
+                        'room_id'            => $room_id,
+                        'campaign_id'        => $campaign->id,
+                        'campaign_equip_id'  => $equipCampaign->id,
+                        'equipment_id'       => $equip->id,
+                        'action_type'        => 'cleaning',
+                        'start_time'         => now(),
+                        'employee_ids'       => json_encode($employeeIds),
+                        'previous_status'    => 'dirty',
+                        'current_status'     => 'cleaning',
+                        'created_by'         => $userId,
+                        'remarks'            => 'Bắt đầu vệ sinh thiết bị ' . $equip->code . ' bởi ' . $fullName,
+                        'created_at'         => now(),
+                        'updated_at'         => now(),
+                    ]);
+
+                    // Ghi nhận vào instrument_logbooks
+                    DB::table('instrument_logbooks')->insert([
+                        'instrument_id'      => $equip->id,
+                        'action_type'        => 'cleaning',
+                        'start_time'         => now(),
+                        'employee_ids'       => json_encode($employeeIds),
+                        'previous_status'    => 'dirty',
+                        'current_status'     => 'cleaning',
+                        'created_by'         => $userId,
+                        'remarks'            => 'Bắt đầu vệ sinh thiết bị ' . $equip->code . ' bởi ' . $fullName,
+                        'created_at'         => now(),
+                        'updated_at'         => now(),
                     ]);
                 }
 
@@ -430,7 +542,7 @@ class CleaningProcessController extends Controller
         }
 
         // 4. Load lại campaign với steps + nội dung HTML
-        $campaign->load('steps');
+        $campaign->load('steps.doneByUser');
         $campaignSteps = $campaign->steps->map(function ($step) use ($processSteps) {
             $source = $processSteps->firstWhere('id', $step->process_step_id);
             
@@ -446,11 +558,23 @@ class CleaningProcessController extends Controller
             return $step;
         });
 
+        // 5. Load equip campaigns liên kết với campaign phòng này
+        $equipCampaigns = CleaningEquipCampaign::where('room_campaign_id', $campaign->id)
+            ->with(['steps'])
+            ->get()
+            ->map(function ($ec) {
+                $equip = DB::table('instrument')->where('id', $ec->equipment_id)->first();
+                $ec->equipment_code = $equip->code ?? '';
+                $ec->equipment_name = $equip->name ?? '';
+                return $ec;
+            });
+
         return view('pages.manu_env.cleaning_process.campaign_execute', [
-            'room'          => $room,
-            'campaign'      => $campaign,
-            'campaignSteps' => $campaignSteps,
-            'processList'   => $activeProcess,
+            'room'           => $room,
+            'campaign'       => $campaign,
+            'campaignSteps'  => $campaignSteps,
+            'processList'    => $activeProcess,
+            'equipCampaigns' => $equipCampaigns,
         ]);
     }
 
@@ -563,6 +687,23 @@ class CleaningProcessController extends Controller
     }
 
     /**
+     * Lấy trạng thái vệ sinh thiết bị thuộc chiến dịch phòng
+     */
+    public function getEquipStatuses($campaign_id)
+    {
+        $equips = CleaningEquipCampaign::where('room_campaign_id', $campaign_id)->get(['id', 'equipment_id', 'status'])
+            ->map(function($ec) {
+                $equip = DB::table('instrument')->where('id', $ec->equipment_id)->first();
+                $ec->equipment_code = $equip->code ?? '';
+                return $ec;
+            });
+        return response()->json([
+            'success' => true,
+            'data'    => $equips
+        ]);
+    }
+
+    /**
      * POST /cleaning-process/campaign/{campaign_id}/step/{step_id}/complete
      * Ghi nhận hoàn thành một bước vệ sinh.
      */
@@ -629,13 +770,13 @@ class CleaningProcessController extends Controller
         $cleanLevel = '';
         if ($cleaningType == 1) {
             $cleanExpiryDate = now()->addDays(3);
-            $cleanLevel = 'Cấp 1';
+            $cleanLevel = 'Vệ Sinh Cấp I';
         } elseif ($cleaningType == 2) {
             $cleanExpiryDate = now()->addDays(7);
-            $cleanLevel = 'Cấp 2';
+            $cleanLevel = 'Vệ Sinh Cấp II';
         } elseif ($cleaningType == 3) {
             $cleanExpiryDate = now()->addHours(24);
-            $cleanLevel = 'Vệ sinh lại';
+            $cleanLevel = 'Vệ Sinh Lại';
         }
 
         // Kiểm tra tất cả bước đã hoàn thành chưa
@@ -659,6 +800,7 @@ class CleaningProcessController extends Controller
             // Cập nhật room_logbooks: ghi nhận trạng thái 'cleaned'
             DB::table('room_logbooks')->insert([
                 'room_id'           => $campaign->room_id,
+                'campaign_id'       => $campaign->id,
                 'equipment_id'      => null,
                 'action_type'       => 'cleaning',
                 'start_time'        => $campaign->started_at ?? now(),

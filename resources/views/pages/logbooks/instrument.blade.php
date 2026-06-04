@@ -46,6 +46,7 @@
                                 <th class="py-3 border-0">Hạn Sạch</th>
                                 <th class="text-center py-3 border-0">Trạng Thái (Trước -> Sau)</th>
                                 <th class="text-center py-3 border-0">Người Thực Hiện</th>
+                                <th class="text-center py-3 border-0">Hành Động</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -58,7 +59,7 @@
                                     </td>
                                     <td>
                                         <span class="badge bg-navy text-white rounded-pill px-2 py-1 font-monospace" title="{{ isset($instruments[$log->instrument_id]) ? $instruments[$log->instrument_id]->name : '' }}">
-                                            {{ $log->instrument_id }}
+                                            {{ isset($instruments[$log->instrument_id]) ? $instruments[$log->instrument_id]->code : $log->instrument_id }}
                                         </span>
                                         @if(isset($instruments[$log->instrument_id]))
                                             <div class="small text-muted mt-1" style="font-size: 0.7rem;">{{ $instruments[$log->instrument_id]->name }}</div>
@@ -111,10 +112,17 @@
                                             <i class="fas fa-users text-primary me-1"></i> {{ is_array($emps) ? count($emps) : 0 }} Người
                                         </span>
                                     </td>
+                                    <td class="text-center">
+                                        @if($log->action_type === 'cleaning' && $log->campaign_id)
+                                            <a href="{{ route('pages.manu_env.cleaning_process.equip.campaign.open', ['equip_id' => $log->instrument_id]) }}?campaign_id={{ $log->campaign_id }}" class="btn btn-sm btn-outline-primary rounded-pill px-3 shadow-sm" target="_blank" data-bs-toggle="tooltip" title="Xem hồ sơ vệ sinh">
+                                                <i class="fas fa-eye me-1"></i> Xem HS
+                                            </a>
+                                        @endif
+                                    </td>
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="9" class="text-center py-5 text-muted">
+                                    <td colspan="10" class="text-center py-5 text-muted">
                                         <i class="fas fa-inbox fa-3x mb-3 text-light"></i>
                                         <h5>Không có dữ liệu nhật ký thiết bị cho phân xưởng này.</h5>
                                     </td>

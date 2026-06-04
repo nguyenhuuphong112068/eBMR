@@ -50,6 +50,7 @@ Route::group(['prefix' => 'ebmr', 'as' => 'pages.ebmr.'], function () {
     // 5. Execution & Records
     Route::get('/records', [EbmrExecutionController::class, 'index'])->name('indexRecords');
     Route::get('/production', [EbmrExecutionController::class, 'productionIndex'])->name('production');
+    Route::get('/dirty-equipments', [\App\Http\Controllers\Pages\ManuEnv\DirtyEquipmentController::class, 'index'])->name('dirty_equipments');
     Route::get('/production/bms-data', [EbmrExecutionController::class, 'getBmsData'])->name('productionBmsData');
     Route::get('/production/logbook-label', [EbmrExecutionController::class, 'getLogbookLabel'])->name('getLogbookLabel');
     Route::get('/execute/{id}', [EbmrExecutionController::class, 'execute'])->name('execute');

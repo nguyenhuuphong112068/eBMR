@@ -298,9 +298,6 @@
             <aside class="campaign-sidebar">
                 <div class="sidebar-header">
                     <div class="d-flex align-items-center gap-2 mb-2">
-                        <div class="bg-white bg-opacity-25 rounded-2 p-2">
-                            <i class="fas fa-broom text-white"></i>
-                        </div>
                         <div>
                             <div class="text-white fw-bold" style="font-size: 0.9rem; line-height: 1.2;">VỆ SINH PHÒNG</div>
                             <div class="text-white opacity-75" style="font-size: 0.72rem;">{{ $room->code }} –
@@ -344,6 +341,37 @@
                         </div>
                     @endforeach
                 </div>
+
+                @if (isset($equipCampaigns) && $equipCampaigns->count() > 0 && $campaign->status !== 'completed')
+                    <div class="p-3 border-top mt-auto" style="background: #f8fafc;">
+                        <h6 class="fw-bold text-info mb-3" style="font-size: 0.85rem;">
+                            <i class="fas fa-tools me-1"></i> THIẾT BỊ CẦN VỆ SINH
+                        </h6>
+                        @foreach ($equipCampaigns as $ec)
+                            <div class="bg-white p-2 rounded border mb-2 shadow-sm d-flex flex-column gap-2">
+                                <div class="d-flex align-items-center justify-content-between">
+                                    <span class="fw-bold text-dark"
+                                        style="font-size: 0.8rem;">{{ $ec->equipment_code }}</span>
+                                    <span id="badge-equip-{{ $ec->id }}"
+                                        class="badge {{ $ec->status === 'completed' ? 'bg-success' : 'bg-warning text-dark' }}"
+                                        style="font-size: 0.65rem;">
+                                        {{ $ec->status === 'completed' ? 'Hoàn thành' : 'Chưa xong' }}
+                                    </span>
+                                </div>
+                                <div class="text-muted"
+                                    style="font-size: 0.75rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                    {{ $ec->equipment_name }}
+                                </div>
+                                <a href="{{ route('pages.manu_env.cleaning_process.equip.campaign.open', ['equip_id' => $ec->equipment_id]) }}?campaign_id={{ $ec->id }}&room_campaign_id={{ $campaign->id }}"
+                                    target="_blank" class="btn btn-sm btn-outline-info w-100 mt-1"
+                                    style="font-size: 0.75rem;"
+                                    onclick="this.classList.remove('btn-outline-info'); this.classList.add('btn-info', 'text-white');">
+                                    <i class="fas fa-external-link-alt me-1"></i> Thực hiện (Mở tab mới)
+                                </a>
+                            </div>
+                        @endforeach
+                    </div>
+                @endif
             </aside>
 
             {{-- ═══ MAIN ═══ --}}
@@ -372,10 +400,7 @@
                         <div class="fw-bold text-navy bg-light px-3 py-2 rounded-pill border" style="font-size: 0.9rem;">
                             Bước <span id="topbar-current-step">1</span> / {{ $campaignSteps->count() }}
                         </div>
-                        <span class="badge bg-warning text-dark fw-bold px-3 py-2">
-                            <i class="fas fa-spinner fa-spin me-1" id="status-icon"></i>
-                            <span id="status-text">Đang vệ sinh</span>
-                        </span>
+
                     </div>
                 </div>
 
@@ -406,96 +431,142 @@
                                     {!! $step->content ?? '<span class="text-muted">Không có nội dung</span>' !!}
                                 </div>
 
-                                {{-- Tiêu chuẩn --}}
-                                @if (!empty($step->standard) && trim(strip_tags($step->standard)) !== '')
-                                    <div class="mb-2 small text-muted fw-bold text-uppercase"
-                                        style="font-size: 0.68rem; letter-spacing: 0.06em;">
-                                        <i class="fas fa-ruler-combined me-1 text-info"></i> Tiêu chuẩn
-                                    </div>
-                                    <div class="standard-section mb-4">
-                                        {!! $step->standard !!}
-                                    </div>
-                                @endif
-
-                                {{-- Đánh giá kết quả --}}
-                                @if (!$step->is_done)
-                                    <div
-                                        class="mb-3 p-3 bg-white border rounded-3 d-flex align-items-center justify-content-between">
-                                        <div class="small text-muted fw-bold text-uppercase"
-                                            style="font-size: 0.75rem; letter-spacing: 0.05em;">
-                                            <i class="fas fa-check-double me-1 text-success"></i> Đánh giá kết quả
+                                @php $hasStandard = !empty($step->standard) && trim(strip_tags($step->standard)) !== ''; @endphp
+                                <div class="row gx-4 mt-3">
+                                    @if ($hasStandard)
+                                        <div class="col-md-6 mb-4 mb-md-0 d-flex flex-column">
+                                            <div class="mb-2 small text-muted fw-bold text-uppercase"
+                                                style="font-size: 0.68rem; letter-spacing: 0.06em;">
+                                                <i class="fas fa-ruler-combined me-1 text-info"></i> Tiêu chuẩn
+                                            </div>
+                                            <div class="standard-section flex-grow-1 mb-0">
+                                                {!! $step->standard !!}
+                                            </div>
                                         </div>
-                                        <div class="form-check form-switch fs-5 mb-0 d-flex align-items-center">
-                                            <input class="form-check-input mt-0" type="checkbox" role="switch"
-                                                id="is-passed-{{ $idx }}" checked
-                                                onchange="togglePassedLabel({{ $idx }})" style="cursor: pointer;">
-                                            <label class="form-check-label fs-6 ms-2 fw-bold text-success"
-                                                for="is-passed-{{ $idx }}"
-                                                id="is-passed-label-{{ $idx }}"
-                                                style="cursor: pointer;">ĐẠT</label>
-                                        </div>
-                                    </div>
+                                    @endif
 
-                                    <div class="mb-2 small text-muted fw-bold text-uppercase"
-                                        style="font-size: 0.68rem; letter-spacing: 0.06em;">
-                                        <i class="fas fa-pen me-1 text-secondary"></i> Ghi chú kết quả (tuỳ chọn)
-                                    </div>
-                                    <textarea class="form-control note-area" id="note-{{ $idx }}" rows="3"
-                                        placeholder="Nhập ghi chú kết quả bước này..."></textarea>
+                                    <div class="{{ $hasStandard ? 'col-md-6' : 'col-12' }}">
+                                        @if (!$step->is_done)
+                                            <div
+                                                class="mb-3 p-3 bg-white border rounded-3 d-flex align-items-center justify-content-between">
+                                                <div class="small text-muted fw-bold text-uppercase"
+                                                    style="font-size: 0.75rem; letter-spacing: 0.05em;">
+                                                    <i class="fas fa-check-double me-1 text-success"></i> Đánh giá kết quả
+                                                </div>
+                                                <div class="form-check form-switch fs-5 mb-0 d-flex align-items-center">
+                                                    <input class="form-check-input mt-0" type="checkbox" role="switch"
+                                                        id="is-passed-{{ $idx }}" checked
+                                                        onchange="togglePassedLabel({{ $idx }})"
+                                                        style="cursor: pointer;">
+                                                    <label class="form-check-label fs-6 ms-2 fw-bold text-success"
+                                                        for="is-passed-{{ $idx }}"
+                                                        id="is-passed-label-{{ $idx }}"
+                                                        style="cursor: pointer;">ĐẠT</label>
+                                                </div>
+                                            </div>
 
-                                    <div class="mt-3">
-                                        <div class="mb-2 small text-muted fw-bold text-uppercase"
-                                            style="font-size: 0.68rem; letter-spacing: 0.06em;">
-                                            <i class="fas fa-camera me-1 text-secondary"></i> Đính kèm hình ảnh (Tối đa 5
-                                            hình)
-                                        </div>
-                                        <input type="file" id="file-input-{{ $idx }}" class="d-none"
-                                            multiple accept="image/*"
-                                            onchange="handleFileSelect(event, {{ $idx }})">
-                                        <button type="button" class="btn btn-outline-secondary btn-sm"
-                                            onclick="document.getElementById('file-input-{{ $idx }}').click()">
-                                            <i class="fas fa-upload me-1"></i> Chọn hình ảnh
-                                        </button>
-                                        <div id="image-preview-container-{{ $idx }}"
-                                            class="d-flex flex-wrap gap-2 mt-2"></div>
-                                    </div>
-                                @else
-                                    <div class="mb-3 d-flex align-items-center gap-2">
-                                        <div class="small text-muted fw-bold text-uppercase" style="font-size: 0.68rem;">
-                                            Kết
-                                            quả:</div>
-                                        @if ($step->is_passed)
-                                            <span class="badge bg-success"><i class="fas fa-check me-1"></i> ĐẠT</span>
+                                            <div id="confirm-info-{{ $idx }}"
+                                                class="mb-3 p-3 bg-light rounded-3 border d-flex align-items-center gap-3">
+                                                @php
+                                                    $username =
+                                                        session('user')['userName'] ??
+                                                        (session('user')['user_name'] ?? null);
+                                                    $userSig = $username
+                                                        ? \Illuminate\Support\Facades\DB::table('user_management')
+                                                            ->where('userName', $username)
+                                                            ->value('signature_image')
+                                                        : session('user')['signature_image'] ?? null;
+                                                @endphp
+                                                @if (!empty($userSig))
+                                                    <img src="{{ $userSig }}" alt="Chữ ký"
+                                                        style="max-height: 40px; mix-blend-mode: multiply; object-fit: contain;">
+                                                @else
+                                                    <div class="fw-bold text-navy" style=" font-size: 1.5rem;">
+                                                        {{ session('user')['fullName'] ?? (session('user')['user_name'] ?? 'Bạn') }}
+                                                    </div>
+                                                @endif
+                                                <div class="small text-muted border-start ps-3 border-secondary">
+                                                    <div><i class="fas fa-user-check me-1 text-success"></i> Xác nhận bởi:
+                                                        <strong
+                                                            class="text-navy">{{ session('user')['fullName'] ?? (session('user')['user_name'] ?? 'Bạn') }}</strong>
+                                                    </div>
+                                                    <div><i class="far fa-clock me-1 text-info mt-1"></i> Lúc: <span
+                                                            id="confirm-time-{{ $idx }}"></span></div>
+                                                </div>
+                                            </div>
+
+                                            <div class="mb-2 small text-muted fw-bold text-uppercase"
+                                                style="font-size: 0.68rem; letter-spacing: 0.06em;">
+                                                <i class="fas fa-pen me-1 text-secondary"></i> Ghi chú kết quả (tuỳ chọn)
+                                            </div>
+                                            <textarea class="form-control note-area mb-3" id="note-{{ $idx }}" rows="2"
+                                                placeholder="Nhập ghi chú kết quả bước này..."></textarea>
+
+                                            <div class="mt-3">
+                                                <div class="mb-2 small text-muted fw-bold text-uppercase"
+                                                    style="font-size: 0.68rem; letter-spacing: 0.06em;">
+                                                    <i class="fas fa-camera me-1 text-secondary"></i> Chụp hình (Tối đa 5
+                                                    hình)
+                                                </div>
+                                                <input type="file" id="file-input-{{ $idx }}" class="d-none"
+                                                    multiple accept="image/*"
+                                                    onchange="handleFileSelect(event, {{ $idx }})">
+                                                <div class="d-flex gap-2 flex-wrap align-items-center">
+                                                    <button type="button"
+                                                        class="btn btn-primary btn-sm rounded-pill shadow-sm"
+                                                        onclick="openCamera({{ $idx }})">
+                                                        <i class="fas fa-camera me-1"></i> Chụp hình
+                                                    </button>
+                                                    <button type="button"
+                                                        class="btn btn-outline-secondary btn-sm rounded-pill"
+                                                        onclick="document.getElementById('file-input-{{ $idx }}').click()">
+                                                        <i class="fas fa-image me-1"></i> Tải ảnh lên
+                                                    </button>
+                                                    <div id="image-preview-container-{{ $idx }}"
+                                                        class="d-flex gap-2 flex-wrap w-100 mt-2"></div>
+                                                </div>
+                                            </div>
                                         @else
-                                            <span class="badge bg-danger"><i class="fas fa-times me-1"></i> KHÔNG
-                                                ĐẠT</span>
+                                            <div class="mb-3 d-flex align-items-center gap-2">
+                                                <div class="small text-muted fw-bold text-uppercase"
+                                                    style="font-size: 0.68rem;">
+                                                    Kết
+                                                    quả:</div>
+                                                @if ($step->is_passed)
+                                                    <span class="badge bg-success"><i class="fas fa-check me-1"></i>
+                                                        ĐẠT</span>
+                                                @else
+                                                    <span class="badge bg-danger"><i class="fas fa-times me-1"></i> KHÔNG
+                                                        ĐẠT</span>
+                                                @endif
+                                            </div>
+                                            @if (!empty($step->result_note))
+                                                <div class="mb-2 small text-muted fw-bold text-uppercase"
+                                                    style="font-size: 0.68rem; letter-spacing: 0.06em;">
+                                                    <i class="fas fa-pen me-1 text-secondary"></i> Ghi chú đã lưu
+                                                </div>
+                                                <div class="p-3 bg-light rounded-3 text-navy small">
+                                                    {{ $step->result_note }}</div>
+                                            @endif
+                                            @if (!empty($step->attached_images))
+                                                <div class="mb-2 mt-3 small text-muted fw-bold text-uppercase"
+                                                    style="font-size: 0.68rem; letter-spacing: 0.06em;">
+                                                    <i class="fas fa-camera me-1 text-secondary"></i> Hình ảnh đính kèm
+                                                </div>
+                                                <div class="d-flex flex-wrap gap-2">
+                                                    @foreach ($step->attached_images as $imgUrl)
+                                                        <a href="{{ $imgUrl }}" target="_blank">
+                                                            <img src="{{ $imgUrl }}" alt="Attachment"
+                                                                class="img-thumbnail"
+                                                                style="width: 100px; height: 100px; object-fit: cover;">
+                                                        </a>
+                                                    @endforeach
+                                                </div>
+                                            @endif
                                         @endif
                                     </div>
-                                    @if (!empty($step->result_note))
-                                        <div class="mb-2 small text-muted fw-bold text-uppercase"
-                                            style="font-size: 0.68rem; letter-spacing: 0.06em;">
-                                            <i class="fas fa-pen me-1 text-secondary"></i> Ghi chú đã lưu
-                                        </div>
-                                        <div class="p-3 bg-light rounded-3 text-navy small">{{ $step->result_note }}</div>
-                                    @endif
-                                    @if (!empty($step->attached_images))
-                                        <div class="mb-2 mt-3 small text-muted fw-bold text-uppercase"
-                                            style="font-size: 0.68rem; letter-spacing: 0.06em;">
-                                            <i class="fas fa-camera me-1 text-secondary"></i> Hình ảnh đính kèm
-                                        </div>
-                                        <div class="d-flex flex-wrap gap-2">
-                                            @foreach ($step->attached_images as $imgUrl)
-                                                <a href="{{ $imgUrl }}" target="_blank">
-                                                    <img src="{{ $imgUrl }}" alt="Attachment"
-                                                        class="img-thumbnail"
-                                                        style="width: 100px; height: 100px; object-fit: cover;">
-                                                </a>
-                                            @endforeach
-                                        </div>
-                                    @endif
-                                @endif
+                                </div>
                             </div>
-
                         </div>
                     @endforeach
                 </div>
@@ -566,9 +637,37 @@
                                 </tbody>
                             </table>
                         </div>
+
+                        {{-- Khung Ký duyệt quy trình --}}
+                        @include('components.signature_block', ['wfType' => 'cleaning', 'type' => 'room', 'listId' => $campaign->process_list_id])
                     </div>
                     <div class="modal-footer bg-light">
                         <button type="button" class="btn btn-secondary" data-dismiss="modal">Đóng</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {{-- Camera Modal --}}
+        <div class="modal fade" id="cameraModal" tabindex="-1" aria-hidden="true" data-backdrop="static">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header bg-dark text-white">
+                        <h5 class="modal-title mb-0"><i class="fas fa-camera me-2 text-info"></i> Chụp hình thực tế</h5>
+                        <button type="button" class="close text-white" data-dismiss="modal"
+                            onclick="stopCamera()"><span>&times;</span></button>
+                    </div>
+                    <div class="modal-body bg-black p-0 text-center position-relative">
+                        <video id="camera-video" autoplay playsinline
+                            style="width: 100%; max-height: 60vh; object-fit: cover;"></video>
+                        <canvas id="camera-canvas" class="d-none"></canvas>
+                        <div class="position-absolute bottom-0 w-100 p-3"
+                            style="background: linear-gradient(transparent, rgba(0,0,0,0.8));">
+                            <button type="button" class="btn btn-info btn-lg rounded-circle shadow"
+                                style="width: 60px; height: 60px;" onclick="takePicture()">
+                                <i class="fas fa-camera fs-3"></i>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -579,6 +678,7 @@
         <script>
             // ── DATA ────────────────────────────────────────────────────────
             const CAMPAIGN_ID = {{ $campaign->id }};
+            const CAMPAIGN_STATUS = '{{ $campaign->status }}';
             const TOTAL_STEPS = {{ $campaignSteps->count() }};
             const CSRF_TOKEN = '{{ csrf_token() }}';
 
@@ -596,6 +696,23 @@
             @endphp
             const stepsData = @json($stepsDataArray);
 
+            @php
+                $equipCampaignsDataArray = isset($equipCampaigns)
+                    ? $equipCampaigns
+                        ->map(
+                            fn($ec) => [
+                                'id' => $ec->id,
+                                'equipment_id' => $ec->equipment_id,
+                                'equipment_code' => $ec->equipment_code,
+                                'status' => $ec->status,
+                            ],
+                        )
+                        ->values()
+                        ->toArray()
+                    : [];
+            @endphp
+            let equipCampaignsData = @json($equipCampaignsDataArray);
+
             let currentIndex = (() => {
                 const i = stepsData.findIndex(s => !s.is_done);
                 return i >= 0 ? i : 0;
@@ -605,12 +722,65 @@
             $(document).ready(function() {
                 renderStep(currentIndex);
                 updateProgress();
-                checkFinishButton();
+                checkFinishButton(true);
+
+                // Poll equipment status every 3 seconds if there are equipments
+                if (equipCampaignsData.length > 0) {
+                    setInterval(syncEquipStatus, 3000);
+                }
             });
+
+            function syncEquipStatus() {
+                const hasPending = equipCampaignsData.some(e => e.status !== 'completed');
+                if (!hasPending) return;
+
+                $.ajax({
+                    url: '/manu_env/cleaning-process/room-campaign/' + CAMPAIGN_ID + '/equip-status',
+                    method: 'GET',
+                    success: function(res) {
+                        if (res.success) {
+                            res.data.forEach(updated => {
+                                const match = equipCampaignsData.find(e => e.id === updated.id);
+                                if (match && match.status !== updated.status) {
+                                    match.status = updated.status;
+                                    // Update UI badge
+                                    const badge = $('#badge-equip-' + match.id);
+                                    if (updated.status === 'completed') {
+                                        badge.removeClass('bg-warning text-dark').addClass('bg-success')
+                                            .text('Hoàn thành');
+                                    } else {
+                                        badge.removeClass('bg-success').addClass('bg-warning text-dark')
+                                            .text('Chưa xong');
+                                    }
+                                }
+                            });
+                            checkFinishButton(true);
+                        }
+                    }
+                });
+            }
 
             // ── NAVIGATION ───────────────────────────────────────────────────
             function goToStep(idx) {
                 if (idx < 0 || idx >= TOTAL_STEPS) return;
+
+                if (CAMPAIGN_STATUS === 'completed') {
+                    // Cuộn tới bước tương ứng thay vì chuyển trang
+                    const target = $('#panel-' + idx);
+                    if (target.length) {
+                        const container = $('.campaign-content');
+                        container.animate({
+                            scrollTop: target.position().top + container.scrollTop() - 20
+                        }, 500);
+                        
+                        // Highlight nhẹ
+                        $('.step-panel').removeClass('shadow-lg border border-primary');
+                        target.addClass('shadow-lg border border-primary');
+                        setTimeout(() => target.removeClass('shadow-lg border border-primary'), 2000);
+                    }
+                    return;
+                }
+
                 currentIndex = idx;
                 renderStep(idx);
             }
@@ -620,6 +790,14 @@
             }
 
             function renderStep(idx) {
+                if (CAMPAIGN_STATUS === 'completed') {
+                    // Show all panels
+                    $('.step-panel').show().addClass('mb-4');
+                    $('.campaign-footer').hide(); // Hide footer buttons
+                    $('#topbar-current-step').parent().html('<i class="fas fa-check-circle text-success me-1"></i> Toàn bộ quy trình');
+                    return;
+                }
+
                 // Hide all panels
                 $('.step-panel').hide();
                 $('#panel-' + idx).show();
@@ -654,11 +832,33 @@
                 checkFinishButton();
             }
 
-            function checkFinishButton() {
-                const allDone = stepsData.every(s => s.is_done);
-                if (allDone) {
+            function checkFinishButton(silent = true) {
+                if (CAMPAIGN_STATUS === 'completed') {
+                    $('#btn-complete-step').addClass('d-none');
+                    $('#btn-finish').addClass('d-none');
+                    return;
+                }
+
+                const allStepsDone = stepsData.every(s => s.is_done);
+                const allEquipDone = equipCampaignsData.length === 0 || equipCampaignsData.every(e => e.status === 'completed');
+
+                if (allStepsDone && allEquipDone) {
                     $('#btn-complete-step').addClass('d-none');
                     $('#btn-finish').removeClass('d-none');
+                } else if (allStepsDone && !allEquipDone) {
+                    $('#btn-complete-step').addClass('d-none');
+                    $('#btn-finish').addClass('d-none');
+                    if (!silent) {
+                        const pending = equipCampaignsData.filter(e => e.status !== 'completed').map(e => e.equipment_code)
+                            .join(
+                                ', ');
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'Còn thiết bị chưa vệ sinh xong!',
+                            html: `Thiết bị sau cần hoàn thành trước khi kết thúc phòng:<br><strong class="text-danger">${pending}</strong>`,
+                            confirmButtonText: 'OK'
+                        });
+                    }
                 }
             }
 
@@ -666,34 +866,98 @@
             function togglePassedLabel(idx) {
                 const isChecked = $('#is-passed-' + idx).is(':checked');
                 const label = $('#is-passed-label-' + idx);
+                const infoBox = $('#confirm-info-' + idx);
+                const timeSpan = $('#confirm-time-' + idx);
+
                 if (isChecked) {
                     label.text('ĐẠT').removeClass('text-danger').addClass('text-success');
+                    infoBox.removeClass('d-none').addClass('d-flex');
+                    const now = new Date();
+                    timeSpan.text(now.toLocaleDateString('en-GB') + ' ' + now.toLocaleTimeString('en-GB', {
+                        hour12: false
+                    }));
                 } else {
                     label.text('KHÔNG ĐẠT').removeClass('text-success').addClass('text-danger');
+                    infoBox.addClass('d-none').removeClass('d-flex');
                 }
             }
 
-            // Global object to store selected files per step
+            // ── CAMERA & FILE UPLOAD ─────────────────────────────────────────
+            let cameraStream = null;
+            let currentCameraIdx = null;
             const selectedFiles = {};
+
+            function openCamera(idx) {
+                currentCameraIdx = idx;
+                $('#cameraModal').modal('show');
+                navigator.mediaDevices.getUserMedia({
+                        video: {
+                            facingMode: 'environment'
+                        }
+                    })
+                    .then(stream => {
+                        cameraStream = stream;
+                        document.getElementById('camera-video').srcObject = stream;
+                    })
+                    .catch(err => {
+                        console.error("Camera error:", err);
+                        Swal.fire('Lỗi', 'Không thể truy cập camera. Vui lòng kiểm tra quyền.', 'error');
+                        $('#cameraModal').modal('hide');
+                    });
+            }
+
+            function stopCamera() {
+                if (cameraStream) {
+                    cameraStream.getTracks().forEach(track => track.stop());
+                    cameraStream = null;
+                }
+            }
+
+            $('#cameraModal').on('hidden.bs.modal', function() {
+                stopCamera();
+            });
+
+            function takePicture() {
+                const video = document.getElementById('camera-video');
+                const canvas = document.getElementById('camera-canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                canvas.getContext('2d').drawImage(video, 0, 0);
+
+                canvas.toBlob(blob => {
+                    const file = new File([blob], `cam_capture_${Date.now()}.jpg`, {
+                        type: 'image/jpeg'
+                    });
+                    addFileToState(currentCameraIdx, file);
+                    $('#cameraModal').modal('hide');
+                }, 'image/jpeg', 0.85);
+            }
+
+            function addFileToState(idx, file) {
+                if (!selectedFiles[idx]) selectedFiles[idx] = [];
+                if (selectedFiles[idx].length >= 5) {
+                    Swal.fire('Lỗi', 'Chỉ được đính kèm tối đa 5 hình ảnh cho mỗi bước.', 'warning');
+                    return;
+                }
+                selectedFiles[idx].push(file);
+                renderImagePreviews(idx);
+                syncFileInput(idx);
+            }
 
             function handleFileSelect(event, idx) {
                 const files = event.target.files;
-                if (!selectedFiles[idx]) {
-                    selectedFiles[idx] = [];
-                }
-
-                // Check max 5
-                if (selectedFiles[idx].length + files.length > 5) {
-                    Swal.fire('Lỗi', 'Chỉ được đính kèm tối đa 5 hình ảnh cho mỗi bước.', 'error');
-                    event.target.value = ''; // Reset
-                    return;
-                }
+                if (!selectedFiles[idx]) selectedFiles[idx] = [];
 
                 for (let i = 0; i < files.length; i++) {
+                    if (selectedFiles[idx].length >= 5) {
+                        Swal.fire('Lỗi', 'Chỉ được đính kèm tối đa 5 hình ảnh cho mỗi bước.', 'warning');
+                        break;
+                    }
                     selectedFiles[idx].push(files[i]);
                 }
                 renderImagePreviews(idx);
                 syncFileInput(idx);
+                event.target.value = '';
             }
 
             function removeFile(idx, fileIndex) {
@@ -704,7 +968,9 @@
 
             function syncFileInput(idx) {
                 const dt = new DataTransfer();
-                selectedFiles[idx].forEach(file => dt.items.add(file));
+                if (selectedFiles[idx]) {
+                    selectedFiles[idx].forEach(file => dt.items.add(file));
+                }
                 document.getElementById('file-input-' + idx).files = dt.files;
             }
 
@@ -780,7 +1046,7 @@
                                 goToStep(nextIdx);
                             } else {
                                 // All steps done
-                                checkFinishButton();
+                                checkFinishButton(false);
                                 renderStep(currentIndex);
 
                                 // Tự động gọi màn hình hoàn thành chiến dịch nếu đây là bước cuối cùng vừa làm xong

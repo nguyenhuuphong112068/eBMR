@@ -194,10 +194,14 @@ class EbmrExecutionController extends Controller
         $stageProductions = \App\Models\StageProduction::orderBy('workshop_code')->orderBy('order_num')->get()->groupBy('workshop_code');
         $workshopsList = $stageProductions->keys();
 
+        // 3. Fetch users for executor selection
+        $users = DB::table('user_management')->select('id', 'fullName as name')->orderBy('fullName')->get();
+
         return view('pages.ebmr.production.index', [
             'rooms' => $rooms,
             'stageProductions' => $stageProductions,
-            'workshopsList' => $workshopsList
+            'workshopsList' => $workshopsList,
+            'users' => $users
         ]);
     }
 

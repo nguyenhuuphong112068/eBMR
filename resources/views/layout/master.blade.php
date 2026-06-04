@@ -1053,8 +1053,21 @@
                                     <span class="time"><i class="fas fa-calendar-alt"></i> ${dateStr}</span>
                                     <h3 class="timeline-header font-weight-bold" style="color: var(--navy);">${roleName} - ${wf.user_name}</h3>
                                     <div class="timeline-body">
-                                        <div class="mb-2"><span class="badge ${statusColor}">${statusText}</span></div>
-                                        ${wf.comment ? `<div class="bg-light p-2 rounded border border-light"><strong>Ghi chú:</strong> ${wf.comment}</div>` : ''}
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <div>
+                                                <div class="mb-2"><span class="badge ${statusColor}">${statusText}</span></div>
+                                                ${wf.comment ? `<div class="bg-light p-2 rounded border border-light mt-2 text-dark small"><strong>Ghi chú:</strong> ${wf.comment}</div>` : ''}
+                                            </div>
+                                            ${wf.status === 'approved' ? `
+                                                        <div class="ms-3 text-center  p-2 bg-white rounded" style="min-width: 120px;">
+                                                          
+                                                            ${wf.signature_image 
+                                                                ? `<img src="${wf.signature_image}" alt="Chữ ký" style="max-height: 50px; mix-blend-mode: multiply; object-fit: contain;">` 
+                                                                : `<div class="fw-bold text-navy" style="font-family: 'Brush Script MT', cursive; font-size: 1.2rem;">${wf.user_name}</div>`
+                                                            }
+                                                        </div>
+                                                    ` : ''}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -1622,8 +1635,8 @@
                                     <i class="fas fa-reply"></i>
                                 </span>
                                 ${side === 'me' ? `<span class="msg-action-btn btn-recall text-danger" title="Thu hồi, sau 30p sẽ không được thu hồi" data-msg-id="${m.id}">
-                                                                            <i class="fas fa-undo"></i>
-                                                                        </span>` : ''}
+                                                                                    <i class="fas fa-undo"></i>
+                                                                                </span>` : ''}
                             </div>
                         `;
                     }
