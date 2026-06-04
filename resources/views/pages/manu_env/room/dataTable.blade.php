@@ -236,25 +236,19 @@
                                     @endforelse
                                 </div>
                             </td>
-                            <td>
-                                @if ($data->line_clearance_form)
-                                    <span class="badge bg-light-success text-success border px-2 py-1 small fw-bold"
-                                        title="{{ $data->line_clearance_form->category_name }}">
-                                        <i class="fas fa-broom me-1"></i>{{ $data->line_clearance_form->doc_code }}
-                                    </span>
-                                @else
-                                    <span class="text-muted small">-</span>
-                                @endif
+                            <td class="text-center align-middle">
+                                <a href="{{ route('pages.manu_env.clearance_process.list', ['type' => 'room', 'id' => $data->id]) }}"
+                                    class="btn btn-sm btn-icon btn-light-success border shadow-sm"
+                                    title="Thiết kế quy trình dọn quang">
+                                    <i class="fas fa-broom"></i>
+                                </a>
                             </td>
-                            <td>
-                                @if ($data->cleaning_form)
-                                    <span class="badge bg-light-info text-info border px-2 py-1 small fw-bold"
-                                        title="{{ $data->cleaning_form->category_name }}">
-                                        <i class="fas fa-soap me-1"></i>{{ $data->cleaning_form->doc_code }}
-                                    </span>
-                                @else
-                                    <span class="text-muted small">-</span>
-                                @endif
+                            <td class="text-center align-middle">
+                                <a href="{{ route('pages.manu_env.cleaning_process.list', ['type' => 'room', 'id' => $data->id]) }}"
+                                    class="btn btn-sm btn-icon btn-light-warning border shadow-sm"
+                                    title="Thiết kế quy trình vệ sinh">
+                                    <i class="fas fa-soap"></i>
+                                </a>
                             </td>
                             <td><span class="small fw-bold">{{ $data->prepareBy ?? '-' }}</span></td>
                             <td class="text-center align-middle">
@@ -275,19 +269,7 @@
                                         <i class="fas fa-thermometer-half"></i>
                                     </button>
 
-                                    <button type="button"
-                                        class="btn btn-sm btn-icon btn-light-primary border shadow-sm btn-related-form"
-                                        data-id="{{ $data->id }}" data-code="{{ $data->code }}"
-                                        data-name="{{ $data->name }}" data-toggle="modal"
-                                        data-target="#relatedFormModal" title="Khai báo biểu mẫu">
-                                        <i class="fas fa-file-alt"></i>
-                                    </button>
 
-                                    <a href="{{ route('pages.manu_env.cleaning_process.list', ['type' => 'room', 'id' => $data->id]) }}"
-                                        class="btn btn-sm btn-icon btn-light-warning border shadow-sm"
-                                        title="Thiết kế quy trình vệ sinh">
-                                        <i class="fas fa-clipboard-list"></i>
-                                    </a>
                                 </div>
                             </td>
                         </tr>

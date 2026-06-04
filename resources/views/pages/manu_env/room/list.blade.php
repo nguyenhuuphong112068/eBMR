@@ -15,5 +15,4 @@
 @section('model')
     @include('pages.manu_env.room.assign')
     @include('pages.manu_env.room.condition')
-    @include('pages.manu_env.room.relatedForm')
-@endsection
+@append

@@ -1,16 +1,12 @@
 @php
     $wfType = $wfType ?? 'cleaning'; // 'cleaning' or 'ebmr'
-    $type = $type ?? 'room';         // 'room' or 'equipment' (only for cleaning)
+    $type = $type ?? 'room'; // 'room' or 'equipment' (only for cleaning)
     $listId = $listId ?? 0;
-    
-    $creatorName = '.......................................';
-    $creatorDate = '................';
-    
-    $checkerName = '.......................................';
-    $checkerDate = '................';
-    
-    $authorizerName = '.......................................';
-    $authorizerDate = '................';
+
+    $signatureBoxes = [];
+    $list = null;
+    $workflowsTable = '';
+    $foreignKey = '';
 
     if ($wfType === 'cleaning') {
         if ($type === 'room') {
@@ -18,100 +14,145 @@
         } else {
             $list = \DB::table('cleaning_equip_processes_list')->where('id', $listId)->first();
         }
-        
-        if ($list) {
-            $creator = \DB::table('user_management')->where('id', $list->created_by)->first();
-            if ($creator) {
-                $creatorName = $creator->fullName;
-                $creatorDate = date('d.m.Y', strtotime($list->created_at));
-            }
-            
-            $workflows = \DB::table('cleaning_process_workflows')
-                ->where('type', $type)
-                ->where('process_list_id', $listId)
-                ->join('user_management', 'cleaning_process_workflows.user_id', '=', 'user_management.id')
-                ->select('cleaning_process_workflows.*', 'user_management.fullName as user_name')
-                ->get()
-                ->keyBy('role');
-                
-            $reviewer = $workflows['reviewer'] ?? null;
-            $approver = $workflows['approver'] ?? null;
-            $authorizer = $workflows['authorizer'] ?? null;
-            
-            $checkerApprover = $approver ?? $reviewer;
-            
-            if ($checkerApprover && $checkerApprover->status === 'approved') {
-                $checkerName = $checkerApprover->user_name;
-                $checkerDate = date('d.m.Y', strtotime($checkerApprover->updated_at));
-            }
-            if ($authorizer && $authorizer->status === 'approved') {
-                $authorizerName = $authorizer->user_name;
-                $authorizerDate = date('d.m.Y', strtotime($authorizer->updated_at));
-            }
-        }
+        $workflowsTable = 'cleaning_process_workflows';
+        $foreignKey = 'process_list_id';
     } elseif ($wfType === 'ebmr') {
         // eBMR Template logic
-        $template = \DB::table('ebmr_templates')->where('id', $listId)->first();
-        if ($template) {
-            $creator = \DB::table('user_management')->where('id', $template->created_by ?? 0)->first();
-            if ($creator) {
-                $creatorName = $creator->fullName;
-                $creatorDate = date('d.m.Y', strtotime($template->created_at));
-            }
-            
-            $workflows = \DB::table('ebmr_template_workflows')
-                ->where('template_id', $listId)
-                ->join('user_management', 'ebmr_template_workflows.user_id', '=', 'user_management.id')
-                ->select('ebmr_template_workflows.*', 'user_management.fullName as user_name')
-                ->get()
-                ->keyBy('role');
-                
-            $reviewer = $workflows['reviewer'] ?? null;
-            $approver = $workflows['approver'] ?? null;
-            $authorizer = $workflows['authorizer'] ?? null;
-            
-            $checkerApprover = $approver ?? $reviewer;
-            
-            if ($checkerApprover && $checkerApprover->status === 'approved') {
-                $checkerName = $checkerApprover->user_name;
-                $checkerDate = date('d.m.Y', strtotime($checkerApprover->updated_at));
-            }
-            if ($authorizer && $authorizer->status === 'approved') {
-                $authorizerName = $authorizer->user_name;
-                $authorizerDate = date('d.m.Y', strtotime($authorizer->updated_at));
-            }
+        $list = \DB::table('ebmr_templates')->where('id', $listId)->first();
+        $workflowsTable = 'ebmr_template_workflows';
+        $foreignKey = 'template_id';
+    }
+
+    if ($list) {
+        $creator = \DB::table('user_management')
+            ->leftJoin('designations', 'user_management.designation_id', '=', 'designations.id')
+            ->select('user_management.*', 'designations.name as designation_name')
+            ->where('user_management.id', $list->created_by ?? 0)
+            ->first();
+
+        if ($creator) {
+            $signatureBoxes[] = [
+                'role_title' => 'Người soạn thảo',
+                'user_name' => $creator->fullName,
+                'designation_name' => $creator->designation_name,
+                'date' => date('d.m.Y', strtotime($list->created_at)),
+                'signature_image' => $creator->signature_image ?? null,
+                'color_class' => '',
+            ];
+        } else {
+            $signatureBoxes[] = [
+                'role_title' => 'Người soạn thảo',
+                'user_name' => '.......................................',
+                'designation_name' => '',
+                'date' => '................',
+                'signature_image' => null,
+                'color_class' => '',
+            ];
         }
+
+        $query = \DB::table($workflowsTable)
+            ->where($foreignKey, $listId)
+            ->join('user_management', "{$workflowsTable}.user_id", '=', 'user_management.id')
+            ->leftJoin('designations', 'user_management.designation_id', '=', 'designations.id')
+            ->select(
+                "{$workflowsTable}.*",
+                'user_management.fullName as user_name',
+                'user_management.signature_image',
+                'designations.name as designation_name',
+            )
+            ->orderBy("{$workflowsTable}.step_order", 'asc');
+
+        if ($wfType === 'cleaning') {
+            $query->where("{$workflowsTable}.type", $type);
+        }
+
+        $workflows = $query->get();
+
+        foreach ($workflows as $wf) {
+            $roleTitle = '';
+            $colorClass = '';
+            if ($wf->role === 'reviewer') {
+                $roleTitle = 'Người kiểm tra';
+                $colorClass = ''; // Black
+            } elseif ($wf->role === 'approver') {
+                $roleTitle = 'Người phê duyệt';
+                $colorClass = ''; // Black
+            } elseif ($wf->role === 'authorizer') {
+                $roleTitle = 'Người ban hành';
+                $colorClass = 'text-danger';
+            } else {
+                $roleTitle = ucfirst($wf->role);
+            }
+
+            $isApproved = $wf->status === 'approved';
+
+            $signatureBoxes[] = [
+                'role_title' => $roleTitle,
+                'user_name' => $isApproved ? $wf->user_name : '.......................................',
+                'designation_name' => $isApproved ? $wf->designation_name : '',
+                'date' => $isApproved ? date('d.m.Y', strtotime($wf->updated_at)) : '................',
+                'signature_image' => $isApproved ? $wf->signature_image : null,
+                'color_class' => $colorClass,
+            ];
+        }
+    } else {
+        // Fallback if list not found
+        $signatureBoxes[] = [
+            'role_title' => 'Người soạn thảo',
+            'user_name' => '.......................................',
+            'designation_name' => '',
+            'date' => '................',
+            'signature_image' => null,
+            'color_class' => '',
+        ];
+        $signatureBoxes[] = [
+            'role_title' => 'Người kiểm tra / phê duyệt',
+            'user_name' => '.......................................',
+            'designation_name' => '',
+            'date' => '................',
+            'signature_image' => null,
+            'color_class' => '',
+        ];
+        $signatureBoxes[] = [
+            'role_title' => 'Người ban hành',
+            'user_name' => '.......................................',
+            'designation_name' => '',
+            'date' => '................',
+            'signature_image' => null,
+            'color_class' => 'text-danger',
+        ];
     }
 @endphp
 
-<!-- DEBUG INFO: wfType={{$wfType}}, type={{$type}}, listId={{$listId}}, list_exists={{$list ? 'yes' : 'no'}} -->
+<!-- DEBUG INFO: wfType={{ $wfType }}, type={{ $type }}, listId={{ $listId }}, list_exists={{ $list ? 'yes' : 'no' }} -->
 
-<div class="p-4 bg-white border-top mt-3">
-    <table class="table table-bordered text-center mb-0" style="table-layout: fixed; border-color: #dee2e6;">
+<div class="p-4 bg-white border-top mt-3" style="overflow-x: auto;">
+    <table class="table table-bordered text-center mb-0"
+        style="table-layout: fixed; min-width: {{ count($signatureBoxes) * 200 }}px; border-color: #dee2e6;">
         <tbody>
             <tr>
-                <td class="p-2">Người soạn thảo</td>
-                <td class="p-2">Người kiểm tra và phê duyệt</td>
-                <td class="p-2">Cho phép ban hành</td>
+                @foreach ($signatureBoxes as $box)
+                    <td class="p-2">{{ $box['role_title'] }}</td>
+                @endforeach
             </tr>
             <tr>
-                <td style="height: 150px; vertical-align: bottom;" class="pb-2">
-                    <div class="fw-bold mb-2">{{ $creatorName }}</div>
-                    <div class="border-top border-dark mx-4 pt-2">Người soạn thảo</div>
-                </td>
-                <td style="height: 150px; vertical-align: bottom;" class="pb-2">
-                    <div class="fw-bold text-primary mb-2">{{ $checkerName }}</div>
-                    <div class="border-top border-dark mx-4 pt-2">Người kiểm tra / phê duyệt</div>
-                </td>
-                <td style="height: 150px; vertical-align: bottom;" class="pb-2">
-                    <div class="fw-bold text-danger mb-2">{{ $authorizerName }}</div>
-                    <div class="border-top border-dark mx-4 pt-2">Người ban hành</div>
-                </td>
+                @foreach ($signatureBoxes as $box)
+                    <td style="height: 150px; vertical-align: bottom;" class="pb-2">
+                        @if ($box['signature_image'])
+                            <div class="mb-2"><img src="{{ $box['signature_image'] }}" alt="Chữ ký"
+                                    style="max-height: 80px; mix-blend-mode: multiply;"></div>
+                        @endif
+                        <div class="fw-bold {{ $box['color_class'] }} mb-1">{{ $box['user_name'] }}</div>
+                        <div class="small text-muted mb-2" style="min-height: 20px;">{{ $box['designation_name'] }}
+                        </div>
+                        {{-- <div class="border-top border-dark mx-4 pt-2">{{ $box['role_title'] }}</div> --}}
+                    </td>
+                @endforeach
             </tr>
             <tr class="text-start">
-                <td class="p-2">Ngày: {{ $creatorDate }}</td>
-                <td class="p-2">Ngày: {{ $checkerDate }}</td>
-                <td class="p-2">Ngày: {{ $authorizerDate }}</td>
+                @foreach ($signatureBoxes as $box)
+                    <td class="p-2">Ngày: {{ $box['date'] }}</td>
+                @endforeach
             </tr>
         </tbody>
     </table>

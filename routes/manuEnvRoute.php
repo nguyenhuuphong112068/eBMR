@@ -54,6 +54,24 @@ Route::prefix('/manu_env')
             Route::get('/equip-campaign/{campaign_id}', [\App\Http\Controllers\Pages\ManuEnv\CleaningEquipCampaignController::class, 'getCampaign'])->name('equip.campaign.get');
         });
 
+        Route::prefix('/clearance-process')->name('clearance_process.')->controller(\App\Http\Controllers\Pages\ManuEnv\ClearanceProcessController::class)->group(function () {
+            Route::get('/{type}/{id}/list', 'list')->name('list');
+            Route::post('/{type}/{id}/list/create', 'createList')->name('createList');
+            Route::post('/{type}/{list_id}/up-version', 'upVersion')->name('upVersion');
+            Route::get('/{type}/{list_id}/design', 'index')->name('index');
+            Route::post('/{type}/{list_id}/store', 'store')->name('store');
+            Route::get('/{type}/{list_id}/workflow', 'getWorkflow')->name('getWorkflow');
+            Route::post('/{type}/{list_id}/workflow', 'storeWorkflow')->name('storeWorkflow');
+            Route::post('/{type}/{list_id}/effective-date', 'setEffectiveDate')->name('setEffectiveDate');
+            Route::post('/upload-image', 'uploadImage')->name('upload_image');
+            
+            Route::get('/room/{room_id}/campaign/open', 'openCampaignPage')->name('campaign.open');
+            Route::post('/room/{room_id}/campaign/start', 'startCampaign')->name('campaign.start');
+            Route::get('/campaign/{campaign_id}', 'getCampaign')->name('campaign.get');
+            Route::post('/campaign/{campaign_id}/step/{step_id}/complete', 'completeStep')->name('campaign.completeStep');
+            Route::post('/campaign/{campaign_id}/complete', 'completeCampaign')->name('campaign.complete');
+        });
+
         // Room Clearing (Phòng Vệ Sinh Chung)
         Route::prefix('/room-clearing')->name('room_clearing.')->controller(\App\Http\Controllers\Pages\ManuEnv\RoomClearingController::class)->group(function () {
             Route::get('', 'index')->name('index');
