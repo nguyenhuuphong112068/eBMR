@@ -22,7 +22,7 @@
         if ($list) {
             $creator = \DB::table('user_management')->where('id', $list->created_by)->first();
             if ($creator) {
-                $creatorName = $creator->name;
+                $creatorName = $creator->fullName;
                 $creatorDate = date('d.m.Y', strtotime($list->created_at));
             }
             
@@ -30,7 +30,7 @@
                 ->where('type', $type)
                 ->where('process_list_id', $listId)
                 ->join('user_management', 'cleaning_process_workflows.user_id', '=', 'user_management.id')
-                ->select('cleaning_process_workflows.*', 'user_management.name as user_name')
+                ->select('cleaning_process_workflows.*', 'user_management.fullName as user_name')
                 ->get()
                 ->keyBy('role');
                 
@@ -55,14 +55,14 @@
         if ($template) {
             $creator = \DB::table('user_management')->where('id', $template->created_by ?? 0)->first();
             if ($creator) {
-                $creatorName = $creator->name;
+                $creatorName = $creator->fullName;
                 $creatorDate = date('d.m.Y', strtotime($template->created_at));
             }
             
             $workflows = \DB::table('ebmr_template_workflows')
                 ->where('template_id', $listId)
                 ->join('user_management', 'ebmr_template_workflows.user_id', '=', 'user_management.id')
-                ->select('ebmr_template_workflows.*', 'user_management.name as user_name')
+                ->select('ebmr_template_workflows.*', 'user_management.fullName as user_name')
                 ->get()
                 ->keyBy('role');
                 
