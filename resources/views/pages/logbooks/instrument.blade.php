@@ -5,28 +5,18 @@
 @section('mainContent')
 <div class="content-wrapper">
     <div class="container-fluid py-4">
+        <div class="mb-3">
+            <a href="javascript:history.back()" class="btn btn-sm btn-outline-secondary rounded-pill shadow-sm">
+                <i class="fas fa-arrow-left me-1"></i> Quay lại
+            </a>
+        </div>
         <div class="d-flex align-items-center mb-4">
             <div class="p-3 bg-navy text-white rounded-3 shadow-sm me-3">
                 <i class="fas fa-microscope fa-2x"></i>
             </div>
             <div>
-                <h3 class="mb-0 text-navy fw-bold">NHẬT KÝ THIẾT BỊ</h3>
-                <p class="text-muted mb-0 small">Theo dõi lịch sử vận hành, sản xuất và bảo trì của các thiết bị</p>
-            </div>
-        </div>
-
-        <!-- Workshop Filter -->
-        <div class="card border-0 shadow-sm rounded-4 mb-4">
-            <div class="card-body p-3 d-flex flex-wrap align-items-center gap-3">
-                <h6 class="mb-0 fw-bold text-navy"><i class="fas fa-filter me-2"></i>Lọc theo phân xưởng:</h6>
-                <div class="btn-group shadow-sm" role="group">
-                    @foreach($workshopsList as $ws)
-                        <a href="{{ route('pages.ebmr.logbooks.instrument', ['workshop' => $ws]) }}" 
-                           class="btn btn-outline-primary {{ $workshop == $ws ? 'active' : '' }}">
-                            <i class="fas fa-building me-1"></i> {{ $ws }}
-                        </a>
-                    @endforeach
-                </div>
+                <h3 class="mb-0 text-navy fw-bold">SỔ NHẬT KÝ THIẾT BỊ: {{ $instrument->code }}</h3>
+                <p class="text-muted mb-0 small">Tên thiết bị: {{ $instrument->name ?? $instrument->code }}</p>
             </div>
         </div>
 
@@ -39,7 +29,6 @@
                             <tr>
                                 <th class="text-center py-3 border-0">ID</th>
                                 <th class="py-3 border-0">Thời Gian</th>
-                                <th class="py-3 border-0">Mã Thiết Bị</th>
                                 <th class="py-3 border-0">Loại Hoạt Động</th>
                                 <th class="py-3 border-0">Sản Phẩm / Lô</th>
                                 <th class="py-3 border-0">Mức Độ VS</th>
@@ -56,14 +45,6 @@
                                     <td>
                                         <div class="small fw-bold text-navy">{{ $log->start_time->format('d/m/Y H:i') }}</div>
                                         <div class="small text-muted">đến {{ $log->end_time ? $log->end_time->format('d/m/Y H:i') : 'Đang tiếp tục' }}</div>
-                                    </td>
-                                    <td>
-                                        <span class="badge bg-navy text-white rounded-pill px-2 py-1 font-monospace" title="{{ isset($instruments[$log->instrument_id]) ? $instruments[$log->instrument_id]->name : '' }}">
-                                            {{ isset($instruments[$log->instrument_id]) ? $instruments[$log->instrument_id]->code : $log->instrument_id }}
-                                        </span>
-                                        @if(isset($instruments[$log->instrument_id]))
-                                            <div class="small text-muted mt-1" style="font-size: 0.7rem;">{{ $instruments[$log->instrument_id]->name }}</div>
-                                        @endif
                                     </td>
                                     <td>
                                         @php
@@ -107,15 +88,35 @@
                                     <td class="text-center">
                                         @php
                                             $emps = is_array($log->employee_ids) ? $log->employee_ids : json_decode($log->employee_ids, true);
+                                            $empNames = [];
+                                            if (is_array($emps)) {
+                                                foreach($emps as $empId) {
+                                                    $empNames[] = $usersMap[$empId] ?? "ID: $empId";
+                                                }
+                                            }
                                         @endphp
-                                        <span class="badge bg-light text-dark shadow-sm border">
-                                            <i class="fas fa-users text-primary me-1"></i> {{ is_array($emps) ? count($emps) : 0 }} Người
-                                        </span>
+                                        @if(count($empNames) > 0)
+                                            <div class="d-flex flex-wrap justify-content-center gap-1">
+                                                @foreach($empNames as $name)
+                                                    <span class="badge bg-light text-dark shadow-sm border mt-1">
+                                                        <i class="fas fa-user text-primary me-1"></i> {{ $name }}
+                                                    </span>
+                                                    <br>
+                                                @endforeach
+                                            </div>
+                                        @else
+                                            <span class="badge bg-light text-dark shadow-sm border">
+                                                <i class="fas fa-users text-secondary me-1"></i> 0 Người
+                                            </span>
+                                        @endif
                                     </td>
                                     <td class="text-center">
                                         @if($log->action_type === 'cleaning' && $log->campaign_id)
                                             <a href="{{ route('pages.manu_env.cleaning_process.equip.campaign.open', ['equip_id' => $log->instrument_id]) }}?campaign_id={{ $log->campaign_id }}" class="btn btn-sm btn-outline-primary rounded-pill px-3 shadow-sm" target="_blank" data-bs-toggle="tooltip" title="Xem hồ sơ vệ sinh">
                                                 <i class="fas fa-eye me-1"></i> Xem HS
+                                            </a>
+                                            <a href="{{ route('pages.manu_env.cleaning_process.equip.campaign.print', ['equip_id' => $log->instrument_id]) }}?campaign_id={{ $log->campaign_id }}" class="btn btn-sm btn-outline-danger rounded-pill px-3 shadow-sm ms-1" target="_blank" data-bs-toggle="tooltip" title="In báo cáo PDF">
+                                                <i class="fas fa-file-pdf me-1"></i> In Report
                                             </a>
                                         @endif
                                     </td>

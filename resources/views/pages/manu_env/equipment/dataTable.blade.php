@@ -114,6 +114,9 @@
                         <th>SOP Vận Hành</th>
                         <th>SOP Vệ Sinh</th>
                         <th>Phân Loại</th>
+                        <th>Nhãn Bảo trì - Hiệu Chuẩn</th>
+                        <th>Qui trình KT Thiết bị sạch</th>
+                        <th>Qui trình vệ sinh</th>
                         <th>Người Tạo</th>
                         <th>Ngày Tạo</th>
                         <th class="text-center" style="width: 150px;">Thao Tác</th>
@@ -126,7 +129,7 @@
                             <td class="fw-bold text-primary">{{ $data->code }}</td>
                             <td>
                                 {{ $data->name }}
-                                <div class="equip-status-badges mt-1" data-code="{{ $data->code }}"></div>
+
                             </td>
                             <td>
                                 @if ($data->type === 'scale')
@@ -149,10 +152,15 @@
                             </td>
                             <td class="text-center">
                                 @php
-                                    $eqClass = ($data->eq_status === 'cleaned') ? 'bg-success text-white' : 'bg-warning text-dark';
-                                    $eqText = ($data->eq_status === 'cleaned') ? 'Đã vệ sinh' : 'Cần vệ sinh';
+                                    $eqClass =
+                                        $data->eq_status === 'cleaned'
+                                            ? 'bg-success text-white'
+                                            : 'bg-warning text-dark';
+                                    $eqText = $data->eq_status === 'cleaned' ? 'Đã vệ sinh' : 'Cần vệ sinh';
                                 @endphp
-                                <span class="badge {{ $eqClass }} border btn-eq-label" style="cursor: pointer;" onclick="showLabel('equipment', '{{ $data->id }}')"><i class="fas fa-soap"></i> {{ $eqText }}</span>
+                                <span class="badge {{ $eqClass }} border btn-eq-label" style="cursor: pointer;"
+                                    onclick="showLabel('equipment', '{{ $data->id }}')"><i class="fas fa-soap"></i>
+                                    {{ $eqText }}</span>
                             </td>
                             <td>
                                 @if ($data->stage_id)
@@ -162,14 +170,93 @@
                                     <span class="text-muted">-</span>
                                 @endif
                             </td>
-                            <td>{{ $data->operation_SOP_code ?? '-' }}</td>
-                            <td>{{ $data->clearing_SOP_code ?? '-' }}</td>
+                            <td class="text-center">
+                                @if (!empty($data->operation_SOP_code))
+                                    <a href="{{ route('pages.ebmr.viewDocumentByCode', ['code' => urlencode($data->operation_SOP_code)]) }}"
+                                        target="_blank" class="btn btn-sm btn-light-primary border shadow-sm"
+                                        title="Xem SOP Vận Hành: {{ $data->operation_SOP_code }}">
+                                        <i class="fas fa-file-pdf text-danger me-1"></i>
+                                        {{ $data->operation_SOP_code }}
+                                    </a>
+                                @else
+                                    <span class="text-muted">-</span>
+                                @endif
+                            </td>
+                            <td class="text-center">
+                                @if (!empty($data->clearing_SOP_code))
+                                    <a href="{{ route('pages.ebmr.viewDocumentByCode', ['code' => urlencode($data->clearing_SOP_code)]) }}"
+                                        target="_blank" class="btn btn-sm btn-light-info border shadow-sm"
+                                        title="Xem SOP Vệ Sinh: {{ $data->clearing_SOP_code }}">
+                                        <i class="fas fa-file-pdf text-danger me-1"></i> {{ $data->clearing_SOP_code }}
+                                    </a>
+                                @else
+                                    <span class="text-muted">-</span>
+                                @endif
+                            </td>
                             <td>
                                 @if ($data->is_Portable_equipment)
                                     <span class="badge bg-warning text-dark px-2 py-1 small fw-bold">Di Động</span>
                                 @else
                                     <span class="badge bg-light text-dark border px-2 py-1 small fw-bold">Cố Định</span>
                                 @endif
+                            </td>
+                            <!-- Nhãn Bảo trì - Hiệu Chuẩn -->
+                            <td class="text-center">
+                                <button type="button"
+                                    class="btn btn-sm btn-light border shadow-sm btn-view-cal-label d-none"
+                                    data-code="{{ $data->code }}" title="Xem Nhãn Hiệu chuẩn">
+                                    <i class="fas fa-tag"></i>
+                                    <span class="cal-badge-container"></span>
+                                </button>
+                                <button type="button"
+                                    class="btn btn-sm btn-light border shadow-sm btn-view-maint-label d-none"
+                                    data-code="{{ $data->code }}" title="Xem Nhãn Bảo trì">
+                                    <i class="fas fa-wrench"></i>
+                                    <span class="maint-badge-container"></span>
+                                </button>
+                                <div class="equip-status-badges d-none" data-code="{{ $data->code }}"></div>
+                            </td>
+                            <!-- Qui trình KT Thiết bị sạch -->
+                            <td class="text-center">
+                                @php
+                                    $clearance_active_count = DB::table('clearance_equip_processes_list')
+                                        ->where('equipment_id', $data->id)
+                                        ->where('status', 'active')
+                                        ->count();
+                                @endphp
+                                <a href="{{ route('pages.manu_env.clearance_process.list', ['type' => 'equipment', 'id' => $data->id]) }}"
+                                    class="btn btn-sm btn-icon btn-light-success border shadow-sm position-relative"
+                                    title="Thiết kế quy trình kiểm tra thiết bị sạch">
+                                    <i class="fas fa-broom"></i>
+                                    @if ($clearance_active_count > 0)
+                                        <span
+                                            class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger border border-light"
+                                            style="font-size: 0.55rem; padding: 0.25em 0.4em;">
+                                            {{ $clearance_active_count }}
+                                        </span>
+                                    @endif
+                                </a>
+                            </td>
+                            <!-- Qui trình vệ sinh -->
+                            <td class="text-center">
+                                @php
+                                    $cleaning_active_count = DB::table('cleaning_equip_processes_list')
+                                        ->where('equipment_id', $data->id)
+                                        ->where('status', 'active')
+                                        ->count();
+                                @endphp
+                                <a href="{{ route('pages.manu_env.cleaning_process.list', ['type' => 'equipment', 'id' => $data->id]) }}"
+                                    class="btn btn-sm btn-icon btn-light-warning border shadow-sm position-relative"
+                                    title="Thiết kế quy trình vệ sinh">
+                                    <i class="fas fa-soap"></i>
+                                    @if ($cleaning_active_count > 0)
+                                        <span
+                                            class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger border border-light"
+                                            style="font-size: 0.55rem; padding: 0.25em 0.4em;">
+                                            {{ $cleaning_active_count }}
+                                        </span>
+                                    @endif
+                                </a>
                             </td>
                             <td><span class="small fw-bold">{{ $data->created_by ?? '-' }}</span></td>
                             <td><span
@@ -193,24 +280,6 @@
                                         data-toggle="modal" data-target="#updateModal" title="Sửa">
                                         <i class="fas fa-pen"></i>
                                     </button>
-
-                                    <button type="button"
-                                        class="btn btn-sm btn-icon btn-light-info border shadow-sm btn-view-cal-label"
-                                        data-code="{{ $data->code }}" title="Xem Nhãn Hiệu chuẩn">
-                                        <i class="fas fa-tag"></i>
-                                    </button>
-
-                                    <button type="button"
-                                        class="btn btn-sm btn-icon btn-light-primary border shadow-sm btn-view-maint-label"
-                                        data-code="{{ $data->code }}" title="Xem Nhãn Bảo trì">
-                                        <i class="fas fa-wrench"></i>
-                                    </button>
-
-                                    <a href="{{ route('pages.manu_env.cleaning_process.list', ['type' => 'equipment', 'id' => $data->id]) }}"
-                                        class="btn btn-sm btn-icon btn-light-secondary border shadow-sm"
-                                        title="Thiết kế quy trình vệ sinh">
-                                        <i class="fas fa-clipboard-list"></i>
-                                    </a>
 
                                     <form class="form-delete d-inline"
                                         action="{{ route('pages.manu_env.equipment.delete') }}" method="POST">
@@ -383,11 +452,11 @@
                 }
             });
 
-            $('#data_table_instrument').on('draw.dt', function () {
+            $('#data_table_instrument').on('draw.dt', function() {
                 let codes = [];
                 let badgeContainers = [];
 
-                $('#data_table_instrument tbody tr').each(function () {
+                $('#data_table_instrument tbody tr').each(function() {
                     const container = $(this).find('.equip-status-badges');
                     if (container.length) {
                         const code = container.data('code');
@@ -406,20 +475,40 @@
                             _token: "{{ csrf_token() }}",
                             codes: codes
                         },
-                        success: function (res) {
+                        success: function(res) {
                             badgeContainers.forEach(container => {
                                 const code = container.data('code');
                                 if (res[code]) {
-                                    let html = '';
-                                    if (res[code].cal_expired) {
-                                        html += '<span class="badge bg-danger text-white me-1" title="Quá hạn Hiệu chuẩn"><i class="fas fa-exclamation-triangle"></i> HC</span>';
+                                    const tr = container.closest('tr');
+                                    const btnCal = tr.find('.btn-view-cal-label');
+                                    const btnMaint = tr.find('.btn-view-maint-label');
+
+                                    if (res[code].has_cal) {
+                                        btnCal.removeClass('d-none btn-light btn-light-info btn-light-danger btn-success btn-danger');
+                                        if (res[code].cal_expired) {
+                                            btnCal.addClass('btn-danger text-white');
+                                            btnCal.find('.cal-badge-container').html('<span class="badge bg-white text-danger ms-1"><i class="fas fa-exclamation-triangle"></i> HC</span>');
+                                        } else {
+                                            btnCal.addClass('btn-success text-white');
+                                            btnCal.find('.cal-badge-container').html('');
+                                        }
                                     }
-                                    if (res[code].maint_warning === 2) {
-                                        html += '<span class="badge bg-danger text-white me-1" title="Quá hạn Bảo trì"><i class="fas fa-exclamation-triangle"></i> BT</span>';
-                                    } else if (res[code].maint_warning === 1) {
-                                        html += '<span class="badge text-white me-1" style="background-color: #fd7e14;" title="Sắp đến hạn Bảo trì"><i class="fas fa-exclamation-circle"></i> BT</span>';
+
+                                    if (res[code].has_maint) {
+                                        btnMaint.removeClass('d-none btn-light btn-light-primary btn-light-warning btn-light-danger btn-success btn-warning btn-danger text-white text-dark');
+                                        if (res[code].maint_warning === 2) {
+                                            btnMaint.addClass('btn-danger text-white');
+                                            btnMaint.find('.maint-badge-container').html('<span class="badge bg-white text-danger ms-1"><i class="fas fa-exclamation-triangle"></i> BT</span>');
+                                        } else if (res[code].maint_warning === 1) {
+                                            btnMaint.addClass('btn-warning text-dark');
+                                            btnMaint.find('.maint-badge-container').html('<span class="badge bg-white text-dark ms-1"><i class="fas fa-exclamation-circle"></i> BT</span>');
+                                        } else {
+                                            btnMaint.addClass('btn-success text-white');
+                                            btnMaint.find('.maint-badge-container').html('');
+                                        }
                                     }
-                                    container.html(html);
+
+                                    container.html('<!-- fetched -->');
                                 }
                             });
                         }
@@ -624,7 +713,7 @@
                     }
                 });
             });
-            
+
             window.showLabel = function(type, id) {
                 Swal.fire({
                     title: 'Đang tải...',
@@ -648,18 +737,19 @@
                             const data = response.data;
                             const labelTitle = type === 'room' ? 'NHÃN PHÒNG' : 'NHÃN THIẾT BỊ';
                             const labelSub = type === 'room' ? 'ROOM LABEL' : 'EQUIPMENT LABEL';
-                            
+
                             if (data.current_status !== 'cleaned') {
                                 $('#cleanRequiredLabelType').text(labelTitle);
                                 $('#cleanRequiredLabelType').next('small').text(labelSub);
-                                
+
                                 $('#lblReqName').text(data.entity_name);
                                 $('#lblReqCode').text(data.entity_code);
-                                
+
                                 $('#reqLevel1').prop('checked', data.clean_level === 'level_1');
                                 $('#reqLevel2').prop('checked', data.clean_level === 'level_2');
-                                $('#reqReClean').prop('checked', data.clean_level === 're_cleaning');
-                                
+                                $('#reqReClean').prop('checked', data.clean_level ===
+                                    're_cleaning');
+
                                 $('#reqFinishedDate').text(data.end_time || '-');
                                 $('#reqCleanBefore').text(data.to_be_cleaned_before || '-');
                                 $('#reqDoneBy').text(data.done_by || '-');
@@ -674,13 +764,14 @@
 
                                 $('#cldLevel1').prop('checked', data.clean_level === 'level_1');
                                 $('#cldLevel2').prop('checked', data.clean_level === 'level_2');
-                                $('#cldReClean').prop('checked', data.clean_level === 're_cleaning');
+                                $('#cldReClean').prop('checked', data.clean_level ===
+                                    're_cleaning');
 
                                 $('#cldFinishedDate').text(data.end_time || '-');
                                 $('#cldValidUntil').text(data.clean_expiry_date || '-');
                                 $('#cldDoneBy').text(data.done_by || '-');
                                 $('#cldCheckedBy').text(data.checked_by || '-');
-                                
+
                                 $('#cldNextProduct').text(data.next_product_name || '-');
                                 $('#cldNextBatch').text(data.next_batch_number || '-');
                                 $('#cldAttachedBy').text(data.attached_by || '-');

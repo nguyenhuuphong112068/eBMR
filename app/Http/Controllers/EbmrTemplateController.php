@@ -13,7 +13,7 @@ class EbmrTemplateController extends Controller
      */
     public function index(Request $request)
     {
-        $this->syncStatuses();
+        \App\Services\DocumentActivationService::activateAllIssuedDocuments();
         $type = $request->query('type', 'BMR');
         $title = 'Soạn Thảo Hồ Sơ BMR';
         if ($type === 'GF') {
@@ -435,45 +435,7 @@ class EbmrTemplateController extends Controller
         ]);
     }
 
-    /**
-     * Sync statuses: Activate reached dates and expire old versions
-     */
-    private function syncStatuses()
-    {
-        // 1. Activate templates where effective_date <= now
-        $toActivate = DB::table('ebmr_templates')
-            ->where('status', 'issued')
-            ->whereNotNull('effective_date')
-            ->where('effective_date', '<=', now()->toDateString())
-            ->get();
 
-        foreach ($toActivate as $t) {
-            DB::table('ebmr_templates')->where('id', $t->id)->update([
-                'status' => 'active',
-                'updated_at' => now()
-            ]);
-            $this->expirePreviousVersions($t->id);
-        }
-    }
-
-    /**
-     * Expire previous versions of the same category and type
-     */
-    private function expirePreviousVersions($templateId)
-    {
-        $current = DB::table('ebmr_templates')->where('id', $templateId)->first();
-        if (!$current) return;
-
-        DB::table('ebmr_templates')
-            ->where('caterogy_id', $current->caterogy_id)
-            ->where('type', $current->type)
-            ->where('version', '<', $current->version)
-            ->where('status', 'active')
-            ->update([
-                'status' => 'expired',
-                'updated_at' => now()
-            ]);
-    }
 
     public function getNextVersion(Request $request)
     {

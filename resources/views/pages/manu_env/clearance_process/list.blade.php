@@ -105,6 +105,9 @@
                                                             onclick="showWorkflowHistory('cleaning', {{ $item->id }})"
                                                             title="Xem lịch sử duyệt"><i
                                                                 class="fas fa-check-circle me-1"></i> Đã duyệt</span>
+                                                    @elseif($item->status === 'issued')
+                                                        <span class="badge bg-info"><i
+                                                                class="fas fa-hourglass-half me-1"></i> Chờ hiệu lực</span>
                                                     @elseif($item->status === 'active')
                                                         <span class="badge bg-primary"><i
                                                                 class="fas fa-check-double me-1"></i> Hiện hành</span>
@@ -193,6 +196,9 @@
                                                                 onclick="showWorkflowHistory('cleaning', {{ $item->id }})"
                                                                 title="Xem lịch sử duyệt"><i
                                                                     class="fas fa-check-circle me-1"></i> Đã duyệt</span>
+                                                        @elseif($item->status === 'issued')
+                                                            <span class="badge bg-info"><i
+                                                                    class="fas fa-hourglass-half me-1"></i> Chờ hiệu lực</span>
                                                         @elseif($item->status === 'active')
                                                             <span class="badge bg-primary"><i
                                                                     class="fas fa-check-double me-1"></i> Hiện hành</span>
@@ -424,7 +430,7 @@
             @if(isset($latestByType[$t]))
                 categoryData[{{$t}}].hasProcess = true;
                 categoryData[{{$t}}].latestId = {{ $latestByType[$t]->id }};
-                categoryData[{{$t}}].canUpVersion = {{ in_array($latestByType[$t]->status, ['active', 'approved']) ? 'true' : 'false' }};
+                categoryData[{{$t}}].canUpVersion = {{ in_array($latestByType[$t]->status, ['active', 'approved', 'issued']) ? 'true' : 'false' }};
             @endif
         @endforeach
 
@@ -571,7 +577,7 @@
                 title: 'Xác Định Ngày hiệu lực',
                 html: `
                 <p>Chọn ngày hiệu lực cho quy trình <b>${code}</b></p>
-                <input type="date" id="effectiveDateInput" class="form-control">
+                <input type="date" id="effectiveDateInput" class="form-control" min="${new Date().toISOString().split('T')[0]}">
             `,
                 showCancelButton: true,
                 confirmButtonText: 'Lưu',

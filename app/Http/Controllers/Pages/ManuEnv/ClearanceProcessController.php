@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Models\ClearanceRoomProcess;
-use App\Models\CleaningEquipProcess;
+use App\Models\ClearanceEquipProcess;
 use App\Models\ClearanceRoomProcessList;
 use App\Models\ClearanceEquipProcessList;
 use App\Models\ClearanceRoomCampaign;
@@ -19,6 +19,7 @@ class ClearanceProcessController extends Controller
 {
     public function list($type, $id)
     {
+        \App\Services\DocumentActivationService::activateAllIssuedDocuments();
         $entityName = '';
         $entityCode = '';
         $processesList = [];
@@ -42,9 +43,9 @@ class ClearanceProcessController extends Controller
         foreach($processesList as $p) {
             $p->current_workflow_step = null;
             if ($p->status === 'submitted') {
-                $pendingWf = DB::table('clearance_process_workflows')
+                $wfTable = $type === 'room' ? 'clearance_room_process_workflows' : 'clearance_equip_process_workflows';
+                $pendingWf = DB::table($wfTable)
                     ->where('process_list_id', $p->id)
-                    ->where('type', $type)
                     ->where('status', 'pending')
                     ->orderBy('step_order', 'asc')
                     ->first();
@@ -137,9 +138,9 @@ class ClearanceProcessController extends Controller
                 'created_by' => $userId,
                 'clearance_type' => $oldList->clearance_type
             ]);
-            $steps = CleaningEquipProcess::where('process_list_id', $oldList->id)->get();
+            $steps = ClearanceEquipProcess::where('process_list_id', $oldList->id)->get();
             foreach($steps as $s) {
-                CleaningEquipProcess::create([
+                ClearanceEquipProcess::create([
                     'process_list_id' => $newList->id,
                     'step' => $s->step,
                     'content' => $s->content,
@@ -172,7 +173,7 @@ class ClearanceProcessController extends Controller
             if (!$entity) abort(404);
             $entityName = $entity->name;
             $entityCode = $entity->code;
-            $processes = CleaningEquipProcess::where('process_list_id', $list_id)->orderBy('step', 'asc')->get();
+            $processes = ClearanceEquipProcess::where('process_list_id', $list_id)->orderBy('step', 'asc')->get();
         } else {
             abort(400, 'Invalid type');
         }
@@ -212,9 +213,9 @@ class ClearanceProcessController extends Controller
                     ]);
                 }
             } elseif ($type === 'equipment') {
-                CleaningEquipProcess::where('process_list_id', $list_id)->delete();
+                ClearanceEquipProcess::where('process_list_id', $list_id)->delete();
                 foreach ($processes as $p) {
-                    CleaningEquipProcess::create([
+                    ClearanceEquipProcess::create([
                         'process_list_id' => $list_id,
                         'step' => $p['step'],
                         'content' => $p['content'],
@@ -253,9 +254,10 @@ class ClearanceProcessController extends Controller
 
     public function getWorkflow($type, $list_id)
     {
-        $latest = DB::table('clearance_process_workflows')->where('type', $type)->where('process_list_id', $list_id)->orderBy('id', 'desc')->first();
+        $wfTable = $type === 'room' ? 'clearance_room_process_workflows' : 'clearance_equip_process_workflows';
+        $latest = DB::table($wfTable)->where('process_list_id', $list_id)->orderBy('id', 'desc')->first();
         if ($latest) {
-            $workflows = DB::table('clearance_process_workflows')->where('type', $type)->where('process_list_id', $list_id)->where('created_at', $latest->created_at)->get();
+            $workflows = DB::table($wfTable)->where('process_list_id', $list_id)->where('created_at', $latest->created_at)->get();
             return response()->json($workflows);
         }
         return response()->json([]);
@@ -271,22 +273,23 @@ class ClearanceProcessController extends Controller
         ]);
 
         DB::transaction(function () use ($type, $list_id, $validated) {
-            DB::table('clearance_process_workflows')->where('type', $type)->where('process_list_id', $list_id)->where('status', 'pending')->update(['status' => 'cancelled']);
+            $wfTable = $type === 'room' ? 'clearance_room_process_workflows' : 'clearance_equip_process_workflows';
+            DB::table($wfTable)->where('process_list_id', $list_id)->where('status', 'pending')->update(['status' => 'cancelled']);
             $insertData = [];
             if (!empty($validated['reviewers'])) {
                 foreach ($validated['reviewers'] as $userId) {
-                    $insertData[] = ['type' => $type, 'process_list_id' => $list_id, 'role' => 'reviewer', 'user_id' => $userId, 'step_order' => 1, 'status' => 'pending', 'created_at' => now(), 'updated_at' => now()];
+                    $insertData[] = ['process_list_id' => $list_id, 'role' => 'reviewer', 'user_id' => $userId, 'step_order' => 1, 'status' => 'pending', 'created_at' => now(), 'updated_at' => now()];
                 }
             }
-            if (!empty($validated['approver'])) $insertData[] = ['type' => $type, 'process_list_id' => $list_id, 'role' => 'approver', 'user_id' => $validated['approver'], 'step_order' => 2, 'status' => 'pending', 'created_at' => now(), 'updated_at' => now()];
-            if (!empty($validated['authorizer'])) $insertData[] = ['type' => $type, 'process_list_id' => $list_id, 'role' => 'authorizer', 'user_id' => $validated['authorizer'], 'step_order' => 3, 'status' => 'pending', 'created_at' => now(), 'updated_at' => now()];
+            if (!empty($validated['approver'])) $insertData[] = ['process_list_id' => $list_id, 'role' => 'approver', 'user_id' => $validated['approver'], 'step_order' => 2, 'status' => 'pending', 'created_at' => now(), 'updated_at' => now()];
+            if (!empty($validated['authorizer'])) $insertData[] = ['process_list_id' => $list_id, 'role' => 'authorizer', 'user_id' => $validated['authorizer'], 'step_order' => 3, 'status' => 'pending', 'created_at' => now(), 'updated_at' => now()];
             
-            if (count($insertData) > 0) DB::table('clearance_process_workflows')->insert($insertData);
+            if (count($insertData) > 0) DB::table($wfTable)->insert($insertData);
             
             if ($type === 'room') {
-                DB::table('cleaning_room_processes_list')->where('id', $list_id)->where('status', 'draft')->update(['status' => 'submitted']);
+                DB::table('clearance_room_processes_list')->where('id', $list_id)->where('status', 'draft')->update(['status' => 'submitted']);
             } else {
-                DB::table('cleaning_equip_processes_list')->where('id', $list_id)->where('status', 'draft')->update(['status' => 'submitted']);
+                DB::table('clearance_equip_processes_list')->where('id', $list_id)->where('status', 'draft')->update(['status' => 'submitted']);
             }
         });
 
@@ -299,7 +302,7 @@ class ClearanceProcessController extends Controller
             'effective_date' => 'required|date'
         ]);
         
-        $table = $type === 'room' ? 'cleaning_room_processes_list' : 'cleaning_equip_processes_list';
+        $table = $type === 'room' ? 'clearance_room_processes_list' : 'clearance_equip_processes_list';
         
         $list = DB::table($table)->where('id', $list_id)->first();
         if (!$list) {
@@ -311,7 +314,7 @@ class ClearanceProcessController extends Controller
         }
         
         $effectiveDate = Carbon::parse($validated['effective_date']);
-        $newStatus = $effectiveDate->isToday() || !$effectiveDate->isFuture() ? 'active' : 'approved';
+        $newStatus = $effectiveDate->isToday() || !$effectiveDate->isFuture() ? 'active' : 'issued';
         
         DB::table($table)->where('id', $list_id)->update([
             'status' => $newStatus,
@@ -323,12 +326,14 @@ class ClearanceProcessController extends Controller
             if ($type === 'room') {
                 DB::table($table)
                     ->where('room_id', $list->room_id)
+                    ->where('clearance_type', $list->clearance_type)
                     ->where('id', '!=', $list_id)
                     ->where('status', 'active')
                     ->update(['status' => 'expired', 'updated_at' => now()]);
             } else {
                 DB::table($table)
                     ->where('equipment_id', $list->equipment_id)
+                    ->where('clearance_type', $list->clearance_type)
                     ->where('id', '!=', $list_id)
                     ->where('status', 'active')
                     ->update(['status' => 'expired', 'updated_at' => now()]);

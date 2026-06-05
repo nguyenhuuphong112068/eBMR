@@ -5,11 +5,11 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class ClearanceProcessWorkflow extends Model
+class ClearanceEquipProcessWorkflow extends Model
 {
     use HasFactory;
 
-    protected $table = 'clearance_process_workflows';
+    protected $table = 'clearance_equip_process_workflows';
 
     protected $fillable = [
         'process_list_id', 'user_id', 'role', 'step_order', 'status'
@@ -17,7 +17,7 @@ class ClearanceProcessWorkflow extends Model
 
     public function processList()
     {
-        return $this->belongsTo(ClearanceRoomProcessList::class, 'process_list_id', 'id');
+        return $this->belongsTo(ClearanceEquipProcessList::class, 'process_list_id', 'id');
     }
 
     public function user()

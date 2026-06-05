@@ -17,16 +17,26 @@ class LogbookController extends Controller
         // Fetch rooms for the selected workshop
         $rooms = DB::connection('pms')->table('room')
                     ->where('deparment_code', $workshop)
+                    ->where('stage_code', '<=', 7)
+                    ->orderBy('stage_code')
                     ->get()
-                    ->keyBy('id');
+                    ->groupBy('stage');
 
-        $roomIds = $rooms->keys()->toArray();
+        return view('pages.logbooks.room_list', compact('rooms', 'workshopsList', 'workshop'));
+    }
 
-        $logbooks = RoomLogbook::whereIn('room_id', $roomIds)
+    public function showRoom(Request $request, $room_id)
+    {
+        $room = DB::connection('pms')->table('room')->where('id', $room_id)->first();
+        if (!$room) abort(404, 'Không tìm thấy phòng.');
+
+        $logbooks = RoomLogbook::where('room_id', $room_id)
                         ->orderBy('start_time', 'desc')
                         ->paginate(20);
 
-        return view('pages.logbooks.room', compact('logbooks', 'rooms', 'workshopsList', 'workshop'));
+        $usersMap = DB::table('user_management')->pluck('fullName', 'id');
+
+        return view('pages.logbooks.room', compact('logbooks', 'room', 'usersMap'));
     }
 
     public function indexInstrument(Request $request)
@@ -59,17 +69,25 @@ class LogbookController extends Controller
             $instrumentsCollection->put($inst->code, $inst);
         }
 
-        $searchKeys = array_merge($instrumentCodes, $instrumentIds);
-
-        $logbooks = InstrumentLogbook::whereIn('instrument_id', $searchKeys)
-                        ->orderBy('start_time', 'desc')
-                        ->paginate(20);
-
-        return view('pages.logbooks.instrument', [
-            'logbooks' => $logbooks, 
-            'instruments' => $instrumentsCollection, 
+        return view('pages.logbooks.instrument_list', [
+            'instruments' => $instrumentsCollection->unique('id'), 
             'workshopsList' => $workshopsList, 
             'workshop' => $workshop
         ]);
+    }
+
+    public function showInstrument(Request $request, $instrument_id)
+    {
+        $instrument = DB::table('instrument')->where('id', $instrument_id)->orWhere('code', $instrument_id)->first();
+        if (!$instrument) abort(404, 'Không tìm thấy thiết bị.');
+
+        $logbooks = InstrumentLogbook::where('instrument_id', $instrument->id)
+                        ->orWhere('instrument_id', $instrument->code)
+                        ->orderBy('start_time', 'desc')
+                        ->paginate(20);
+
+        $usersMap = DB::table('user_management')->pluck('fullName', 'id');
+
+        return view('pages.logbooks.instrument', compact('logbooks', 'instrument', 'usersMap'));
     }
 }

@@ -19,6 +19,8 @@ class CleaningProcessController extends Controller
 {
     public function list($type, $id)
     {
+        \App\Services\DocumentActivationService::activateAllIssuedDocuments();
+
         $entityName = '';
         $entityCode = '';
         $processesList = [];
@@ -311,7 +313,7 @@ class CleaningProcessController extends Controller
         }
         
         $effectiveDate = Carbon::parse($validated['effective_date']);
-        $newStatus = $effectiveDate->isToday() || !$effectiveDate->isFuture() ? 'active' : 'approved';
+        $newStatus = $effectiveDate->isToday() || !$effectiveDate->isFuture() ? 'active' : 'issued';
         
         DB::table($table)->where('id', $list_id)->update([
             'status' => $newStatus,
@@ -323,12 +325,14 @@ class CleaningProcessController extends Controller
             if ($type === 'room') {
                 DB::table($table)
                     ->where('room_id', $list->room_id)
+                    ->where('cleaning_type', $list->cleaning_type)
                     ->where('id', '!=', $list_id)
                     ->where('status', 'active')
                     ->update(['status' => 'expired', 'updated_at' => now()]);
             } else {
                 DB::table($table)
                     ->where('equipment_id', $list->equipment_id)
+                    ->where('cleaning_type', $list->cleaning_type)
                     ->where('id', '!=', $list_id)
                     ->where('status', 'active')
                     ->update(['status' => 'expired', 'updated_at' => now()]);
@@ -575,6 +579,40 @@ class CleaningProcessController extends Controller
             'campaignSteps'  => $campaignSteps,
             'processList'    => $activeProcess,
             'equipCampaigns' => $equipCampaigns,
+        ]);
+    }
+
+    /**
+     * GET /cleaning-process/room/{room_id}/campaign/print
+     */
+    public function printCampaign(Request $request, $room_id)
+    {
+        $room = DB::connection('pms')->table('room')->where('id', $room_id)->first();
+        if (!$room) abort(404, 'Không tìm thấy phòng.');
+
+        $campaignId = $request->query('campaign_id');
+        if (!$campaignId) abort(404, 'Không tìm thấy chiến dịch.');
+
+        $campaign = \App\Models\CleaningRoomCampaign::where('room_id', $room_id)->findOrFail($campaignId);
+        $activeProcess = \App\Models\CleaningRoomProcessList::findOrFail($campaign->process_list_id);
+        $processSteps = \App\Models\CleaningRoomProcess::where('process_list_id', $activeProcess->id)->orderBy('step', 'asc')->get();
+
+        $campaign->load('steps.doneByUser');
+        $campaignSteps = $campaign->steps->map(function ($step) use ($processSteps) {
+            $source = $processSteps->firstWhere('id', $step->process_step_id);
+            $content = $source ? $source->content : '';
+            $content = str_replace('http://127.0.0.1:8001', '', $content);
+            $content = str_replace('http://localhost:8001', '', $content);
+            $step->content  = $content;
+            $step->standard = $source ? $source->standard : '';
+            return $step;
+        });
+
+        return view('pages.manu_env.cleaning_process.room_campaign_print', [
+            'room'           => $room,
+            'campaign'       => $campaign,
+            'campaignSteps'  => $campaignSteps,
+            'processList'    => $activeProcess,
         ]);
     }
 

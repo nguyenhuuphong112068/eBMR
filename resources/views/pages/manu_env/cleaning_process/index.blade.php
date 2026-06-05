@@ -194,8 +194,12 @@
                     ];
                 }
 
+                if (!isDraft) {
+                    toolbarOptions = false;
+                }
+
                 $(element).summernote({
-                    minHeight: 150,
+                    minHeight: isDraft ? 150 : null,
                     toolbar: toolbarOptions,
                     dialogsInBody: true,
                     callbacks: {
@@ -221,10 +225,10 @@
 
                     if (contentEditable.length && standardEditable.length) {
                         // Reset first to allow shrinking
-                        standardEditable.css('min-height', '150px');
+                        standardEditable.css('min-height', isDraft ? '150px' : '0px');
                         // Set standard editor's min-height to match content editor's height
                         const contentHeight = contentEditable.outerHeight();
-                        if (contentHeight > 150) {
+                        if (contentHeight > (isDraft ? 150 : 0)) {
                             standardEditable.css('min-height', contentHeight + 'px');
                         }
                     }

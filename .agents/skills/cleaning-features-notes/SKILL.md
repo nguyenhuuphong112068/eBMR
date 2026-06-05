@@ -348,6 +348,10 @@ match($cleaningType) {
 - Tên file: `cleaning_room_campaign_steps_{step_id}_{time}_{uniqid}.{ext}`
 - Lưu trong cột `attached_images` dạng JSON array.
 
+### 7.9. Quy tắc thay thế phiên bản quy trình Hiện hành (Active)
+- Khi một quy trình (Phòng hoặc Thiết bị) được phê duyệt và được chuyển sang trạng thái `active` (Hiện hành), hệ thống sẽ **chỉ thay thế (chuyển sang `expired`) các phiên bản cũ có CÙNG LOẠI** (`cleaning_type` đối với vệ sinh hoặc `clearance_type` đối với dọn quang).
+- Các quy trình khác loại (ví dụ Cấp 1, Cấp 2, Vệ sinh lại) hoạt động hoàn toàn độc lập và có thể cùng ở trạng thái `active` đồng thời cho cùng một phòng/thiết bị.
+
 ---
 
 ## 8. Lưu ý Kỹ thuật

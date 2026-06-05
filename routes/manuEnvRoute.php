@@ -43,12 +43,14 @@ Route::prefix('/manu_env')
             Route::post('/upload-image', 'uploadImage')->name('upload_image');
             // Campaign routes (thực hiện vệ sinh phòng)
             Route::get('/room/{room_id}/campaign/open', 'openCampaignPage')->name('campaign.open');
+            Route::get('/room/{room_id}/campaign/print', 'printCampaign')->name('campaign.print');
             Route::post('/room/{room_id}/campaign/start', 'startCampaign')->name('campaign.start');
             Route::get('/campaign/{campaign_id}', 'getCampaign')->name('campaign.get');
             Route::post('/campaign/{campaign_id}/step/{step_id}/complete', 'completeStep')->name('campaign.completeStep');
             Route::post('/campaign/{campaign_id}/complete', 'completeCampaign')->name('campaign.complete');
             // Equip campaign routes
             Route::get('/equip/{equip_id}/campaign/open', [\App\Http\Controllers\Pages\ManuEnv\CleaningEquipCampaignController::class, 'openCampaignPage'])->name('equip.campaign.open');
+            Route::get('/equip/{equip_id}/campaign/print', [\App\Http\Controllers\Pages\ManuEnv\CleaningEquipCampaignController::class, 'printCampaign'])->name('equip.campaign.print');
             Route::post('/equip-campaign/{campaign_id}/step/{step_id}/complete', [\App\Http\Controllers\Pages\ManuEnv\CleaningEquipCampaignController::class, 'completeStep'])->name('equip.campaign.completeStep');
             Route::post('/equip-campaign/{campaign_id}/complete', [\App\Http\Controllers\Pages\ManuEnv\CleaningEquipCampaignController::class, 'completeCampaign'])->name('equip.campaign.complete');
             Route::get('/equip-campaign/{campaign_id}', [\App\Http\Controllers\Pages\ManuEnv\CleaningEquipCampaignController::class, 'getCampaign'])->name('equip.campaign.get');

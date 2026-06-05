@@ -78,10 +78,9 @@
                         <th>Tổ Sản Xuất</th>
                         <th>Thiết Bị</th>
                         <th>Điều kiện sản xuất</th>
-                        <th>Biểu mẫu dọn quang</th>
-                        <th>Biểu mẫu vệ sinh</th>
+                        <th>Qui trình dọn quang</th>
+                        <th>Qui trình vệ sinh</th>
                         <th>Người Tạo</th>
-                        <th class="text-center" style="width: 180px;">Thao Tác</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -113,7 +112,10 @@
                                         $statusClass = 'bg-success text-white';
                                     }
                                 @endphp
-                                <button class="badge {{ $statusClass }} border-0 shadow-sm" style="cursor: pointer; padding: 5px 10px;" onclick="showLabel('room', '{{ $data->id }}')"><i class="fas fa-tag me-1"></i> {{ $statusText }}</button>
+                                <button class="badge {{ $statusClass }} border-0 shadow-sm"
+                                    style="cursor: pointer; padding: 5px 10px;"
+                                    onclick="showLabel('room', '{{ $data->id }}')"><i class="fas fa-tag me-1"></i>
+                                    {{ $statusText }}</button>
                             </td>
                             <td>
                                 <span
@@ -122,6 +124,13 @@
                             <td>{{ $data->production_group }}</td>
                             <td>
                                 <div class="d-flex flex-wrap gap-1">
+                                    <button type="button"
+                                        class="btn btn-sm btn-icon btn-light-info border shadow-sm btn-assign mx-2"
+                                        data-id="{{ $data->id }}" data-code="{{ $data->code }}"
+                                        data-name="{{ $data->name }}" data-toggle="modal" data-target="#assignModal"
+                                        title="Khai báo thiết bị" style="width: 24px; height: 24px; padding: 0;">
+                                        <i class="fas fa-desktop" style="font-size: 11px;"></i>
+                                    </button>
                                     @forelse($data->equipments as $eq)
                                         <span class="badge bg-light-info text-info border px-2 py-1 small fw-bold"
                                             title="{{ $eq->name }}">
@@ -130,10 +139,20 @@
                                     @empty
                                         <span class="text-muted small">-</span>
                                     @endforelse
+
                                 </div>
                             </td>
                             <td>
-                                <div class="d-flex flex-wrap gap-1">
+                                <div class="d-flex flex-wrap gap-1 align-items-center">
+                                    <button type="button"
+                                        class="btn btn-sm btn-icon btn-light-success border shadow-sm btn-condition mx-2"
+                                        data-id="{{ $data->id }}" data-code="{{ $data->code }}"
+                                        data-name="{{ $data->name }}" data-toggle="modal"
+                                        data-target="#conditionModal" title="Cài đặt điều kiện sản xuất"
+                                        style="width: 24px; height: 24px; padding: 0;">
+                                        <i class="fas fa-thermometer-half" style="font-size: 11px;"></i>
+                                    </button>
+
                                     @forelse($data->conditions as $cond)
                                         @php
                                             $t1 = formatConditionPHP(
@@ -234,44 +253,72 @@
                                     @empty
                                         <span class="text-muted small">-</span>
                                     @endforelse
+
+                                </div>
+                            </td>
+                            @php
+                                $clearance_active_count = DB::table('clearance_room_processes_list')
+                                    ->where('room_id', $data->id)
+                                    ->where('status', 'active')
+                                    ->count();
+
+                                $clearance_latest = DB::table('clearance_room_processes_list')
+                                    ->where('room_id', $data->id)
+                                    ->where('status', 'active')
+                                    ->orderBy('effective_date', 'desc')
+                                    ->first();
+
+                                $cleaning_active_count = DB::table('cleaning_room_processes_list')
+                                    ->where('room_id', $data->id)
+                                    ->where('status', 'active')
+                                    ->count();
+
+                                $cleaning_latest = DB::table('cleaning_room_processes_list')
+                                    ->where('room_id', $data->id)
+                                    ->where('status', 'active')
+                                    ->orderBy('effective_date', 'desc')
+                                    ->first();
+                            @endphp
+                            <td class="text-center align-middle">
+                                <div class="d-flex flex-column align-items-center gap-1">
+                                    <a href="{{ route('pages.manu_env.clearance_process.list', ['type' => 'room', 'id' => $data->id]) }}"
+                                        class="btn btn-sm btn-icon btn-light-success border shadow-sm position-relative"
+                                        title="Thiết kế quy trình dọn quang">
+                                        <i class="fas fa-broom"></i>
+                                        @if ($clearance_active_count > 0)
+                                            <span
+                                                class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger border border-light"
+                                                style="font-size: 0.55rem; padding: 0.25em 0.4em;">
+                                                {{ $clearance_active_count }}
+                                            </span>
+                                        @endif
+                                    </a>
+                                    @if ($clearance_latest && !empty($clearance_latest->effective_date))
+                                        <span class="badge bg-light text-success border mt-1"
+                                            style="font-size: 0.65rem;" title="Ngày hiệu lực">
+                                            {{ \Carbon\Carbon::parse($clearance_latest->effective_date)->format('d/m/Y') }}
+                                        </span>
+                                    @endif
                                 </div>
                             </td>
                             <td class="text-center align-middle">
-                                <a href="{{ route('pages.manu_env.clearance_process.list', ['type' => 'room', 'id' => $data->id]) }}"
-                                    class="btn btn-sm btn-icon btn-light-success border shadow-sm"
-                                    title="Thiết kế quy trình dọn quang">
-                                    <i class="fas fa-broom"></i>
-                                </a>
-                            </td>
-                            <td class="text-center align-middle">
-                                <a href="{{ route('pages.manu_env.cleaning_process.list', ['type' => 'room', 'id' => $data->id]) }}"
-                                    class="btn btn-sm btn-icon btn-light-warning border shadow-sm"
-                                    title="Thiết kế quy trình vệ sinh">
-                                    <i class="fas fa-soap"></i>
-                                </a>
+                                <div class="d-flex flex-column align-items-center gap-1">
+                                    <a href="{{ route('pages.manu_env.cleaning_process.list', ['type' => 'room', 'id' => $data->id]) }}"
+                                        class="btn btn-sm btn-icon btn-light-warning border shadow-sm position-relative"
+                                        title="Thiết kế quy trình vệ sinh">
+                                        <i class="fas fa-soap"></i>
+                                        @if ($cleaning_active_count > 0)
+                                            <span
+                                                class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger border border-light"
+                                                style="font-size: 0.55rem; padding: 0.25em 0.4em;">
+                                                {{ $cleaning_active_count }}
+                                            </span>
+                                        @endif
+                                    </a>
+
+                                </div>
                             </td>
                             <td><span class="small fw-bold">{{ $data->prepareBy ?? '-' }}</span></td>
-                            <td class="text-center align-middle">
-                                <div class="d-flex gap-1 justify-content-center">
-                                    <button type="button"
-                                        class="btn btn-sm btn-icon btn-light-info border shadow-sm btn-assign"
-                                        data-id="{{ $data->id }}" data-code="{{ $data->code }}"
-                                        data-name="{{ $data->name }}" data-toggle="modal" data-target="#assignModal"
-                                        title="Khai báo thiết bị">
-                                        <i class="fas fa-desktop"></i>
-                                    </button>
-
-                                    <button type="button"
-                                        class="btn btn-sm btn-icon btn-light-success border shadow-sm btn-condition"
-                                        data-id="{{ $data->id }}" data-code="{{ $data->code }}"
-                                        data-name="{{ $data->name }}" data-toggle="modal"
-                                        data-target="#conditionModal" title="Cài đặt điều kiện sản xuất">
-                                        <i class="fas fa-thermometer-half"></i>
-                                    </button>
-
-
-                                </div>
-                            </td>
                         </tr>
                     @endforeach
                 </tbody>
@@ -345,18 +392,19 @@
                             const data = response.data;
                             const labelTitle = type === 'room' ? 'NHÃN PHÒNG' : 'NHÃN THIẾT BỊ';
                             const labelSub = type === 'room' ? 'ROOM LABEL' : 'EQUIPMENT LABEL';
-                            
+
                             if (data.current_status !== 'cleaned') {
                                 $('#cleanRequiredLabelType').text(labelTitle);
                                 $('#cleanRequiredLabelType').next('small').text(labelSub);
-                                
+
                                 $('#lblReqName').text(data.entity_name);
                                 $('#lblReqCode').text(data.entity_code);
-                                
+
                                 $('#reqLevel1').prop('checked', data.clean_level === 'level_1');
                                 $('#reqLevel2').prop('checked', data.clean_level === 'level_2');
-                                $('#reqReClean').prop('checked', data.clean_level === 're_cleaning');
-                                
+                                $('#reqReClean').prop('checked', data.clean_level ===
+                                    're_cleaning');
+
                                 $('#reqFinishedDate').text(data.end_time || '-');
                                 $('#reqCleanBefore').text(data.to_be_cleaned_before || '-');
                                 $('#reqDoneBy').text(data.done_by || '-');
@@ -371,13 +419,14 @@
 
                                 $('#cldLevel1').prop('checked', data.clean_level === 'level_1');
                                 $('#cldLevel2').prop('checked', data.clean_level === 'level_2');
-                                $('#cldReClean').prop('checked', data.clean_level === 're_cleaning');
+                                $('#cldReClean').prop('checked', data.clean_level ===
+                                    're_cleaning');
 
                                 $('#cldFinishedDate').text(data.end_time || '-');
                                 $('#cldValidUntil').text(data.clean_expiry_date || '-');
                                 $('#cldDoneBy').text(data.done_by || '-');
                                 $('#cldCheckedBy').text(data.checked_by || '-');
-                                
+
                                 $('#cldNextProduct').text(data.next_product_name || '-');
                                 $('#cldNextBatch').text(data.next_batch_number || '-');
                                 $('#cldAttachedBy').text(data.attached_by || '-');

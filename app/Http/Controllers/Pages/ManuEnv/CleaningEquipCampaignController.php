@@ -273,4 +273,37 @@ class CleaningEquipCampaignController extends Controller
             'steps'      => $campaign->steps->values(),
         ]);
     }
+    /**
+     * GET /cleaning-process/equip/{equip_id}/campaign/print
+     */
+    public function printCampaign(Request $request, $equip_id)
+    {
+        $equip = DB::table('instrument')->where('id', $equip_id)->first();
+        if (!$equip) abort(404, 'Không tìm thấy thiết bị.');
+
+        $campaignId = $request->query('campaign_id');
+        if (!$campaignId) abort(404, 'Không tìm thấy chiến dịch.');
+
+        $campaign = CleaningEquipCampaign::where('equipment_id', $equip_id)->findOrFail($campaignId);
+        $activeProcess = CleaningEquipProcessList::findOrFail($campaign->process_list_id);
+        $processSteps = CleaningEquipProcess::where('process_list_id', $activeProcess->id)->orderBy('step')->get();
+
+        $campaign->load('steps.doneByUser');
+        $campaignSteps = $campaign->steps->map(function ($step) use ($processSteps) {
+            $source = $processSteps->firstWhere('id', $step->process_step_id);
+            $content = $source ? $source->content : '';
+            $content = str_replace('http://127.0.0.1:8001', '', $content);
+            $content = str_replace('http://localhost:8001', '', $content);
+            $step->content  = $content;
+            $step->standard = $source ? $source->standard : '';
+            return $step;
+        });
+
+        return view('pages.manu_env.cleaning_process.equip_campaign_print', [
+            'equip'          => $equip,
+            'campaign'       => $campaign,
+            'campaignSteps'  => $campaignSteps,
+            'processList'    => $activeProcess,
+        ]);
+    }
 }
