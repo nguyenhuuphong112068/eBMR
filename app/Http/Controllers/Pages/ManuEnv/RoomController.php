@@ -83,7 +83,7 @@ class RoomController extends Controller
             ->groupBy('room_id');
 
         // Fetch all room conditions
-        $conditions = DB::table('manu_condition')
+        $conditions = DB::table('room_manufactured_condition')
             ->orderBy('id', 'asc')
             ->get()
             ->groupBy('room_id');
@@ -239,7 +239,7 @@ class RoomController extends Controller
     public function getConditions(Request $request)
     {
         $roomId = $request->query('room_id');
-        $conditions = DB::table('manu_condition')
+        $conditions = DB::table('room_manufactured_condition')
             ->where('room_id', $roomId)
             ->orderBy('id', 'asc')
             ->get();
@@ -290,7 +290,7 @@ class RoomController extends Controller
         
         list($hepa_filter_min, $hepa_filter_max) = $this->calculateBounds($request->hepa_filter_op, $request->hepa_filter_val1, $request->hepa_filter_val2);
 
-        DB::table('manu_condition')->insert([
+        DB::table('room_manufactured_condition')->insert([
             'room_id' => $request->room_id,
             'name' => $request->name,
             
@@ -353,7 +353,7 @@ class RoomController extends Controller
 
     public function deleteCondition(Request $request)
     {
-        DB::table('manu_condition')
+        DB::table('room_manufactured_condition')
             ->where('id', $request->id)
             ->where('room_id', $request->room_id)
             ->delete();
@@ -364,7 +364,7 @@ class RoomController extends Controller
     public function updateCondition(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'id' => 'required|exists:manu_condition,id',
+            'id' => 'required|exists:room_manufactured_condition,id',
             'room_id' => 'required|exists:room,id',
             'name' => 'required|string|max:255',
             'temp_val1_1' => 'nullable|numeric',
@@ -403,7 +403,7 @@ class RoomController extends Controller
         
         list($hepa_filter_min, $hepa_filter_max) = $this->calculateBounds($request->hepa_filter_op, $request->hepa_filter_val1, $request->hepa_filter_val2);
 
-        DB::table('manu_condition')
+        DB::table('room_manufactured_condition')
             ->where('id', $request->id)
             ->where('room_id', $request->room_id)
             ->update([

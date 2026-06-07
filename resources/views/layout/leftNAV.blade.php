@@ -261,6 +261,13 @@
                         </li>
 
                         <li class="nav-item">
+                            <a href="{{ route('pages.category.mf.list') }}" class="nav-link">
+                                <i class="far fa-circle nav-icon"></i>
+                                <p>Biểu mẫu gốc</p>
+                            </a>
+                        </li>
+
+                        <li class="nav-item">
                             <a href="{{ route('pages.category.intermediate.list') }}" class="nav-link">
                                 <i class="far fa-circle nav-icon"></i>
                                 <p>Hồ sơ sản xuất </p>
@@ -276,12 +283,7 @@
 
 
 
-                        {{-- <li class="nav-item">
-                            <a href="{{ route('pages.category.mf.list') }}" class="nav-link">
-                                <i class="far fa-circle nav-icon"></i>
-                                <p>Biểu mẫu gốc</p>
-                            </a>
-                        </li> --}}
+
                     </ul>
                 </li>
 

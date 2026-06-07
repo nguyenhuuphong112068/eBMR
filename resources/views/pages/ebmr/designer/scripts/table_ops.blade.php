@@ -123,80 +123,85 @@
         if (!item || item.type !== 'table') return;
 
         if (item.rows > 0) {
-            const lastRowIndex = item.rows - 1;
-            const lastRow = item.data[lastRowIndex];
-            
-            // Create a deep copy of the last row's structure and content
-            // Tag with is_dynamic: true so we know this row was added during execution
-            let newRow = lastRow.map(cell => {
-                let cellContent = cell.content;
-                if (cellContent && typeof cellContent === 'string' && cellContent.includes('ebmr-field-badge')) {
-                    // Resolve the active fieldsConfig object
-                    let configObj = null;
-                    if (typeof fieldsConfig !== 'undefined') {
-                        configObj = fieldsConfig;
-                    } else if (window.fieldsConfig) {
-                        configObj = window.fieldsConfig;
+            const addRowsCount = parseInt(item.addRowsCount) || 1;
+            const actualRowsToAdd = Math.min(addRowsCount, item.rows);
+
+            for (let offset = actualRowsToAdd; offset >= 1; offset--) {
+                const sourceRowIndex = item.rows - offset;
+                const sourceRow = item.data[sourceRowIndex];
+                
+                // Create a deep copy of the source row's structure and content
+                // Tag with is_dynamic: true so we know this row was added during execution
+                let newRow = sourceRow.map(cell => {
+                    let cellContent = cell.content;
+                    if (cellContent && typeof cellContent === 'string' && cellContent.includes('ebmr-field-badge')) {
+                        // Resolve the active fieldsConfig object
+                        let configObj = null;
+                        if (typeof fieldsConfig !== 'undefined') {
+                            configObj = fieldsConfig;
+                        } else if (window.fieldsConfig) {
+                            configObj = window.fieldsConfig;
+                        }
+                        
+                        if (configObj) {
+                            const tempDiv = document.createElement('div');
+                            tempDiv.innerHTML = cellContent;
+                            const badges = tempDiv.querySelectorAll('.ebmr-field-badge');
+                            badges.forEach(badge => {
+                                const oldId = badge.getAttribute('data-field-id');
+                                if (oldId && configObj[oldId]) {
+                                    const newId = 'field_' + Math.floor(Math.random() * 1000000);
+                                    const oldConfig = configObj[oldId];
+                                    
+                                    // Tạo config mới, đổi tên tránh trùng
+                                    let newName = oldConfig.name || `Var_${newId}`;
+                                    let baseName = newName;
+                                    let num = 1;
+                                    const match = newName.match(/^(.*?)(\d+)$/);
+                                    if (match) {
+                                        baseName = match[1];
+                                        num = parseInt(match[2]) + 1;
+                                    }
+                                    
+                                    newName = baseName + num;
+                                    while (Object.values(configObj).some(f => f && f.name === newName)) {
+                                        num++;
+                                        newName = baseName + num;
+                                    }
+                                    
+                                    configObj[newId] = {
+                                        ...oldConfig,
+                                        id: newId,
+                                        name: newName
+                                    };
+                                    
+                                    badge.setAttribute('data-field-id', newId);
+                                    badge.setAttribute('onclick', `selectField(event, '${newId}')`);
+                                }
+                            });
+                            cellContent = tempDiv.innerHTML;
+                        }
                     }
                     
-                    if (configObj) {
-                        const tempDiv = document.createElement('div');
-                        tempDiv.innerHTML = cellContent;
-                        const badges = tempDiv.querySelectorAll('.ebmr-field-badge');
-                        badges.forEach(badge => {
-                            const oldId = badge.getAttribute('data-field-id');
-                            if (oldId && configObj[oldId]) {
-                                const newId = 'field_' + Math.floor(Math.random() * 1000000);
-                                const oldConfig = configObj[oldId];
-                                
-                                // Tạo config mới, đổi tên tránh trùng
-                                let newName = oldConfig.name || `Var_${newId}`;
-                                let baseName = newName;
-                                let num = 1;
-                                const match = newName.match(/^(.*?)(\d+)$/);
-                                if (match) {
-                                    baseName = match[1];
-                                    num = parseInt(match[2]) + 1;
-                                }
-                                
-                                newName = baseName + num;
-                                while (Object.values(configObj).some(f => f && f.name === newName)) {
-                                    num++;
-                                    newName = baseName + num;
-                                }
-                                
-                                configObj[newId] = {
-                                    ...oldConfig,
-                                    id: newId,
-                                    name: newName
-                                };
-                                
-                                badge.setAttribute('data-field-id', newId);
-                                badge.setAttribute('onclick', `selectField(event, '${newId}')`);
-                            }
-                        });
-                        cellContent = tempDiv.innerHTML;
-                    }
-                }
-                
-                return {
-                    ...cell,
-                    content: cellContent, // Copy content/variables from the previous row as requested
-                    is_dynamic: true 
-                };
-            });
+                    return {
+                        ...cell,
+                        content: cellContent, // Copy content/variables from the previous row as requested
+                        is_dynamic: true 
+                    };
+                });
 
-            item.rows++;
-            item.data.push(newRow);
-            
-            // Handle row heights if defined
-            if (item.rowHeights) {
-                const lastHeight = item.rowHeights[lastRowIndex] || 'auto';
-                item.rowHeights.push(lastHeight);
+                item.data.push(newRow);
+                
+                // Handle row heights if defined
+                if (item.rowHeights) {
+                    const sourceHeight = item.rowHeights[sourceRowIndex] || 'auto';
+                    item.rowHeights.push(sourceHeight);
+                }
             }
 
+            item.rows += actualRowsToAdd;
             renderBlocks();
-            toastr.success('Đã thêm dòng mới vào bảng');
+            toastr.success(`Đã thêm ${actualRowsToAdd} dòng mới vào bảng`);
         }
     };
 

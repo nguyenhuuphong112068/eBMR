@@ -27,6 +27,7 @@
     </script>
 
     @include('pages.ebmr.designer.partials.modals') {{-- Nhúng các cửa sổ popup (Modals) như: chèn ảnh, cấu hình bảng, AI translate... --}}
+    @include('pages.ebmr.designer.partials.master_form_modal')
     @include('pages.ebmr.designer.partials.styles') {{-- Nhúng các định dạng CSS riêng cho trình thiết kế (layout trang giấy, hiệu ứng hover...) --}}
 
 @endsection
@@ -49,6 +50,7 @@
     @include('pages.ebmr.designer.scripts.events') {{-- Quản lý các sự kiện phím tắt (Ctrl+S, Ctrl+Z) và các sự kiện chung --}}
     @include('pages.ebmr.designer.scripts.symbol_ops') {{-- Xử lý chèn các ký tự đặc biệt (Symbol Picker) --}}
     @include('pages.ebmr.designer.scripts.import_word') {{-- Xử lý import file Word (.docx) --}}
+    @include('pages.ebmr.designer.scripts.import_master')
     @include('pages.ebmr.designer.scripts.scale_reader') {{-- Tích hợp đọc dữ liệu từ Cân Điện Tử qua RS-232 --}}
     @include('pages.ebmr.designer.scripts.properties') {{-- Xử lý Document Properties đồng bộ --}}
     @include('pages.ebmr.designer.scripts.split_view') {{-- Tính năng chia đôi màn hình (Split View) so sánh tài liệu --}}

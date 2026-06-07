@@ -702,16 +702,16 @@
 
     /* Sidebar Columns & Layout Custom Widths (Reduced by 30% for cleaner presentation) */
     #outline-col.col-lg-2 {
-        width: 175px !important;
-        flex: 0 0 175px !important;
-        max-width: 175px !important;
+        width: 220px !important;
+        flex: 0 0 220px !important;
+        max-width: 220px !important;
     }
 
     #sidebar-col.col-lg-2,
     #sidebar-col.col-lg-3 {
-        width: 266px !important;
-        flex: 0 0 266px !important;
-        max-width: 266px !important;
+        width: 330px !important;
+        flex: 0 0 330px !important;
+        max-width: 330px !important;
     }
 
     #outline-col.col-lg-1,
@@ -1215,7 +1215,7 @@
     }
 
     /* Make variable fill the whole table cell */
-    td .ebmr-field-badge {
+    td.solo-badge-cell .ebmr-field-badge {
         display: flex !important;
         width: 100% !important;
         min-height: 38px;
@@ -1293,12 +1293,12 @@
         box-shadow: inset 0 0 0 2px #4f46e5;
     }
 
-    td .ebmr-field-badge.formula-preview {
+    td.solo-badge-cell .ebmr-field-badge.formula-preview {
         background-color: #f5f3ff !important;
         border-color: #4f46e5 !important;
     }
 
-    td:has(.ebmr-field-badge) {
+    td.solo-badge-cell {
         padding: 0 !important;
         vertical-align: stretch;
     }
@@ -1439,7 +1439,7 @@
     }
 
     .execution-meta {
-        font-size: 8px;
+        font-size: 12px;
         color: #999;
         display: block;
         line-height: 1.2;
@@ -1643,7 +1643,7 @@
         top: 57px;
         /* Below AdminLTE header height */
         right: 0;
-        width: 300px;
+        width: 330px;
         height: calc(100vh - 57px);
         z-index: 1045;
         transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);

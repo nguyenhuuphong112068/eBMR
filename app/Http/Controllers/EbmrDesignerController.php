@@ -76,7 +76,7 @@ class EbmrDesignerController extends Controller
                         $template->raw_batch_size = (float)($cat->batch_size ?? 0);
                         $template->unit_batch_size = $cat->unit_batch_size ?? '';
 
-                        $formulas = DB::table('preparation_formula')
+                        $formulas = DB::table('formula_preparation')
                             ->where('ebmr_templates_id', $id)
                             ->orderBy('id')
                             ->get();
@@ -87,7 +87,7 @@ class EbmrDesignerController extends Controller
                                 ->orderBy('id')
                                 ->get();
                                 
-                            $formula->sub_amounts = DB::table('ingredient_amount')
+                            $formula->sub_amounts = DB::table('formula_ingredient_amount')
                                 ->where('preparation_formula_id', $formula->id)
                                 ->orderBy('id')
                                 ->get();

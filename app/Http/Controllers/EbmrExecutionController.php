@@ -130,7 +130,7 @@ class EbmrExecutionController extends Controller
         $recordsByRoom = $activeRecords->groupBy('room_id');
 
         // Fetch all room conditions from local db
-        $conditions = DB::table('manu_condition')->get()->groupBy('room_id');
+        $conditions = DB::table('room_manufactured_condition')->get()->groupBy('room_id');
 
         $latestEqLogs = DB::table('room_logbooks')
             ->whereNotNull('equipment_id')
@@ -473,6 +473,13 @@ class EbmrExecutionController extends Controller
 
         // Lấy dữ liệu và gộp lại theo block_uuid (Khởi tạo là object để tránh lỗi JSON array trong JS)
         $runDataRaw = DB::table('ebmr_run_data')->where('record_id', $id)->get();
+        
+        $historyCounts = DB::table('ebmr_run_data_history')
+            ->select('ebmr_run_data_id', DB::raw('count(*) as count'))
+            ->where('record_id', $id)
+            ->groupBy('ebmr_run_data_id')
+            ->pluck('count', 'ebmr_run_data_id');
+
         $executionValues = (object)[];
         foreach ($runDataRaw as $rd) {
             $blockUuid = $rd->block_uuid;
@@ -492,7 +499,8 @@ class EbmrExecutionController extends Controller
             // Lưu metadata
             $executionValues->$blockUuid->_meta->$cellId = (object)[
                 'by' => $rd->updated_by,
-                'at' => $rd->updated_at ? \Carbon\Carbon::parse($rd->updated_at)->format('d/m/Y H:i') : null
+                'at' => $rd->updated_at ? \Carbon\Carbon::parse($rd->updated_at)->format('d/m/Y H:i') : null,
+                'history_count' => $historyCounts[$rd->id] ?? 0
             ];
         }
 
@@ -526,6 +534,7 @@ class EbmrExecutionController extends Controller
         $userId = session('user')['userId'] ?? 1;
         $now = now();
         $dataEntries = $request->input('data') ?? [];
+        $reasons = is_string($request->input('reasons')) ? json_decode($request->input('reasons'), true) : ($request->input('reasons') ?? []);
         Log::info("Data Entries to process: " . count($dataEntries));
         DB::beginTransaction();
         try {
@@ -546,6 +555,24 @@ class EbmrExecutionController extends Controller
                     foreach ($value as $cellId => $rawValue) {
                         if ($cellId === '_meta') continue;
 
+                        $reason = $reasons[$blockUuid][$cellId] ?? null;
+
+                        $existing = DB::table('ebmr_run_data')->where([
+                            'record_id' => $validated['record_id'],
+                            'block_uuid' => $blockUuid,
+                            'cell_id' => $cellId
+                        ])->first();
+
+                        $oldRawValue = null;
+                        if ($existing) {
+                            $oldRawValue = RunDataEncryptionService::decrypt($existing->raw_value);
+                            if ((string)$oldRawValue !== (string)$rawValue && $oldRawValue !== null && $oldRawValue !== "") {
+                                if (empty($reason)) {
+                                    throw new \Exception("Vui lòng cung cấp lý do thay đổi dữ liệu.");
+                                }
+                            }
+                        }
+
                         Log::info("Saving cell: " . $cellId . " = " . $rawValue);
                         DB::table('ebmr_run_data')->updateOrInsert(
                             [
@@ -562,8 +589,42 @@ class EbmrExecutionController extends Controller
                                 'updated_by' => $userName,
                             ]
                         );
+
+                        if ($existing && (string)$oldRawValue !== (string)$rawValue) {
+                            DB::table('ebmr_run_data_history')->insert([
+                                'ebmr_run_data_id' => $existing->id,
+                                'record_id' => $validated['record_id'],
+                                'block_uuid' => $blockUuid,
+                                'cell_id' => $cellId,
+                                'old_raw_value' => $existing->raw_value,
+                                'new_raw_value' => RunDataEncryptionService::encrypt((string)$rawValue),
+                                'reason' => $reason,
+                                'changed_by' => $userName,
+                                'changed_at' => $now,
+                                'created_at' => $now,
+                                'updated_at' => $now,
+                            ]);
+                        }
                     }
                 } else {
+                    $reason = $reasons[$blockUuid]['default'] ?? null;
+
+                    $existing = DB::table('ebmr_run_data')->where([
+                        'record_id' => $validated['record_id'],
+                        'block_uuid' => $blockUuid,
+                        'cell_id' => 'default'
+                    ])->first();
+
+                    $oldRawValue = null;
+                    if ($existing) {
+                        $oldRawValue = RunDataEncryptionService::decrypt($existing->raw_value);
+                        if ((string)$oldRawValue !== (string)$value && $oldRawValue !== null && $oldRawValue !== "") {
+                            if (empty($reason)) {
+                                throw new \Exception("Vui lòng cung cấp lý do thay đổi dữ liệu.");
+                            }
+                        }
+                    }
+
                     Log::info("Saving direct value for block: " . $blockUuid);
                     // Nếu là giá trị đơn
                     DB::table('ebmr_run_data')->updateOrInsert(
@@ -581,6 +642,22 @@ class EbmrExecutionController extends Controller
                             'updated_by' => $userName,
                         ]
                     );
+
+                    if ($existing && (string)$oldRawValue !== (string)$value) {
+                        DB::table('ebmr_run_data_history')->insert([
+                            'ebmr_run_data_id' => $existing->id,
+                            'record_id' => $validated['record_id'],
+                            'block_uuid' => $blockUuid,
+                            'cell_id' => 'default',
+                            'old_raw_value' => $existing->raw_value,
+                            'new_raw_value' => RunDataEncryptionService::encrypt((string)$value),
+                            'reason' => $reason,
+                            'changed_by' => $userName,
+                            'changed_at' => $now,
+                            'created_at' => $now,
+                            'updated_at' => $now,
+                        ]);
+                    }
                 }
             }
 
@@ -598,16 +675,52 @@ class EbmrExecutionController extends Controller
     }
 
     /**
+     * Get run data history for a specific cell
+     */
+    public function getRunDataHistory($record_id, $block_uuid, $cell_id)
+    {
+        $history = DB::table('ebmr_run_data_history')
+            ->where('record_id', $record_id)
+            ->where('block_uuid', $block_uuid)
+            ->where('cell_id', $cell_id)
+            ->orderBy('changed_at', 'desc')
+            ->get();
+
+        $formattedHistory = [];
+        $count = $history->count();
+        foreach ($history as $idx => $h) {
+            $formattedHistory[] = [
+                'change_index' => $count - $idx,
+                'old_value' => RunDataEncryptionService::decrypt($h->old_raw_value),
+                'new_value' => RunDataEncryptionService::decrypt($h->new_raw_value),
+                'reason' => $h->reason,
+                'changed_by' => $h->changed_by,
+                'changed_at' => \Carbon\Carbon::parse($h->changed_at)->format('d/m/Y H:i:s')
+            ];
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => $formattedHistory
+        ]);
+    }
+
+    /**
      * Verify user password for electronic signature
      */
     public function verifyPassword(Request $request)
     {
         $password = $request->password;
-        $userSession = session('user');
-        $username = $userSession['username'] ?? $userSession['user_name'] ?? $userSession['userName'] ?? null;
+        
+        if ($request->has('username') && $request->username) {
+            $username = $request->username;
+        } else {
+            $userSession = session('user');
+            $username = $userSession['username'] ?? $userSession['user_name'] ?? $userSession['userName'] ?? null;
+        }
 
-        if (!$userSession || !$username) {
-            return response()->json(['success' => false, 'message' => 'Phiên đăng nhập hết hạn.']);
+        if (!$username) {
+            return response()->json(['success' => false, 'message' => 'Không thể xác định tài khoản.']);
         }
 
         $user = DB::table('user_management')->where('userName', $username)->first();
@@ -619,7 +732,7 @@ class EbmrExecutionController extends Controller
             ]);
         }
 
-        return response()->json(['success' => false, 'message' => 'Mật khẩu xác nhận không chính xác.']);
+        return response()->json(['success' => false, 'message' => 'Tài khoản hoặc mật khẩu xác nhận không chính xác.']);
     }
 
     /**

@@ -74,13 +74,13 @@ class EbmrTemplateController extends Controller
         $templateIds = $templates->pluck('id')->toArray();
         $activeIngredients = [];
         if (!empty($templateIds)) {
-            $activeIngredients = DB::table('preparation_formula')
-                ->join('formula_materials', 'preparation_formula.id', '=', 'formula_materials.preparation_formula_id')
-                ->whereIn('preparation_formula.ebmr_templates_id', $templateIds)
-                ->whereRaw('LOWER(TRIM(preparation_formula.role)) = ?', ['hoạt chất'])
+            $activeIngredients = DB::table('formula_preparation')
+                ->join('formula_materials', 'formula_preparation.id', '=', 'formula_materials.preparation_formula_id')
+                ->whereIn('formula_preparation.ebmr_templates_id', $templateIds)
+                ->whereRaw('LOWER(TRIM(formula_preparation.role)) = ?', ['hoạt chất'])
                 ->select(
-                    'preparation_formula.ebmr_templates_id',
-                    'preparation_formula.total_amount_per_unit',
+                    'formula_preparation.ebmr_templates_id',
+                    'formula_preparation.total_amount_per_unit',
                     'formula_materials.name as material_name'
                 )
                 ->get()
@@ -310,6 +310,24 @@ class EbmrTemplateController extends Controller
                         'updated_at' => now(),
                     ]);
                 }
+            } elseif (in_array($data['type'], ['MF', 'GF'])) {
+                $sectionIdStr = $data['caterogy_id'] . '_' . $data['type'];
+                DB::table('ebmr_template_blocks')->insert([
+                    'template_id' => $id,
+                    'section_id' => $sectionIdStr,
+                    'type' => 'section',
+                    'label' => 'section_0',
+                    'order' => 0,
+                    'properties' => json_encode([
+                        'id' => 'blk_sec_'.uniqid(),
+                        'type' => 'section',
+                        'label' => 'Nội Dung',
+                        'stage_code' => $data['type'],
+                        'section_id' => $sectionIdStr
+                    ]),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
             }
 
             $message = 'Khởi tạo hồ sơ mới thành công';
@@ -319,16 +337,26 @@ class EbmrTemplateController extends Controller
             $message = 'Cập nhật thông tin hồ sơ thành công';
         }
 
-        if ($data['type'] === 'BMR' && $request->has('bom') && is_array($request->bom)) {
-            // Clear existing formulas for this template if updating
-            $existingFormulaIds = DB::table('preparation_formula')->where('ebmr_templates_id', $id)->pluck('id');
-            if ($existingFormulaIds->isNotEmpty()) {
-                DB::table('formula_materials')->whereIn('preparation_formula_id', $existingFormulaIds)->delete();
-                DB::table('ingredient_amount')->whereIn('preparation_formula_id', $existingFormulaIds)->delete();
-                DB::table('preparation_formula')->where('ebmr_templates_id', $id)->delete();
+        if ($data['type'] === 'BMR') {
+            $submittedBOM = $request->input('bom', []);
+            $submittedIds = collect($submittedBOM)->pluck('id')->filter()->toArray();
+
+            // Lấy tất cả công thức hiện tại của template này đang có active=1
+            $existingFormulaIds = DB::table('formula_preparation')
+                ->where('ebmr_templates_id', $id)
+                ->where('active', 1)
+                ->pluck('id')
+                ->toArray();
+
+            // Những ID có trong DB nhưng không có trong form submit => Bị xóa mềm
+            $idsToSoftDelete = array_diff($existingFormulaIds, $submittedIds);
+            if (!empty($idsToSoftDelete)) {
+                DB::table('formula_preparation')
+                    ->whereIn('id', $idsToSoftDelete)
+                    ->update(['active' => 0]);
             }
 
-            foreach ($request->bom as $bomItem) {
+            foreach ($submittedBOM as $bomItem) {
                 $materials = !empty($bomItem['materials']) && is_array($bomItem['materials']) ? $bomItem['materials'] : [];
                 // Fallback for old structure or single material
                 if (empty($materials) && (!empty($bomItem['code']) || !empty($bomItem['name']))) {
@@ -343,15 +371,34 @@ class EbmrTemplateController extends Controller
                 if (!empty($materials)) {
                     $firstMat = $materials[0] ?? [];
                     if (!empty($firstMat['code']) || !empty($firstMat['name'])) {
-                        $formulaId = DB::table('preparation_formula')->insertGetId([
+                        $formulaId = $bomItem['id'] ?? null;
+                        $batchVal = isset($bomItem['total_amount_per_batch']) ? str_replace(['(', ')'], '', $bomItem['total_amount_per_batch']) : null;
+
+                        $formulaData = [
                             'ebmr_templates_id' => $id,
                             'type' => $bomItem['type'] ?? 0,
                             'role' => $bomItem['role'] ?? null,
                             'total_amount_per_unit' => $bomItem['total_amount_per_unit'] ?: null,
-                            'total_amount_per_batch' => $bomItem['total_amount_per_batch'] ?: null,
-                            'created_by' => session('user')['fullName'] ?? null,
-                            'created_at' => now(),
-                        ]);
+                            'total_amount_per_batch' => $batchVal ?: null,
+                            'not_calculator' => isset($bomItem['not_calculator']) ? 1 : 0,
+                        ];
+
+                        if ($formulaId && in_array($formulaId, $existingFormulaIds)) {
+                            // Cập nhật dòng có sẵn
+                            DB::table('formula_preparation')->where('id', $formulaId)->update(array_merge($formulaData, [
+                                'updated_at' => now()
+                            ]));
+                            
+                            // Cập nhật lại materials và sub_amounts: Hard delete và re-insert (do không cần quan tâm ID của 2 bảng con này)
+                            DB::table('formula_materials')->where('preparation_formula_id', $formulaId)->delete();
+                            DB::table('formula_ingredient_amount')->where('preparation_formula_id', $formulaId)->delete();
+                        } else {
+                            // Thêm dòng mới
+                            $formulaData['created_by'] = session('user')['fullName'] ?? null;
+                            $formulaData['created_at'] = now();
+                            $formulaData['active'] = 1;
+                            $formulaId = DB::table('formula_preparation')->insertGetId($formulaData);
+                        }
 
                         foreach ($materials as $mat) {
                             if (!empty($mat['code']) || !empty($mat['name'])) {
@@ -369,7 +416,7 @@ class EbmrTemplateController extends Controller
                         if (isset($bomItem['sub_amounts']) && is_array($bomItem['sub_amounts'])) {
                             foreach ($bomItem['sub_amounts'] as $sub) {
                                 if (!empty($sub['amount_per_unit'])) {
-                                    DB::table('ingredient_amount')->insert([
+                                    DB::table('formula_ingredient_amount')->insert([
                                         'preparation_formula_id' => $formulaId,
                                         'amount_per_unit' => $sub['amount_per_unit'],
                                         'amount_per_batch' => $sub['amount_per_batch'] ?? null,
@@ -447,8 +494,13 @@ class EbmrTemplateController extends Controller
             ->where('type', $type)
             ->max('version');
 
+        $nextVersion = ($maxVersion ?? 0) + 1;
+        if ($type === 'MF' && is_null($maxVersion)) {
+            $nextVersion = 0;
+        }
+
         return response()->json([
-            'next_version' => ($maxVersion ?? 0) + 1,
+            'next_version' => $nextVersion,
         ]);
     }
 
@@ -461,10 +513,15 @@ class EbmrTemplateController extends Controller
                 $cat = DB::table('intermediate_category')->where('id', $template->caterogy_id)->first();
                 $template->batch_qty = $cat->batch_qty ?? 0;
                 $template->batch_size = $cat->batch_size ?? 0;
+                $template->product_name = DB::table('product_name')->where('id', $cat->product_name_id ?? 0)->value('name') ?? '';
+                $template->product_code = $cat->intermediate_code ?? '';
+                $template->unit_batch_size = $cat->unit_batch_size ?? '';
+                $template->dosage_form_name = DB::table('dosage')->where('id', $template->dosage_id)->value('name') ?? '-';
             }
 
-            $formulas = DB::table('preparation_formula')
+            $formulas = DB::table('formula_preparation')
                 ->where('ebmr_templates_id', $id)
+                ->where('active', 1)
                 ->orderBy('id')
                 ->get();
 
@@ -474,7 +531,7 @@ class EbmrTemplateController extends Controller
                     ->orderBy('id')
                     ->get();
                     
-                $formula->sub_amounts = DB::table('ingredient_amount')
+                $formula->sub_amounts = DB::table('formula_ingredient_amount')
                     ->where('preparation_formula_id', $formula->id)
                     ->orderBy('id')
                     ->get();
@@ -1335,7 +1392,7 @@ class EbmrTemplateController extends Controller
                 ->get();
 
             // Get all conditions from local ebr database
-            $conditions = DB::table('manu_condition')
+            $conditions = DB::table('room_manufactured_condition')
                 ->orderBy('name')
                 ->get();
 
@@ -1614,9 +1671,9 @@ class EbmrTemplateController extends Controller
             }
 
             // 8. Clone formulas and recipe data
-            $formulas = DB::table('preparation_formula')->where('ebmr_templates_id', $oldId)->get();
+            $formulas = DB::table('formula_preparation')->where('ebmr_templates_id', $oldId)->get();
             foreach ($formulas as $formula) {
-                $newFormulaId = DB::table('preparation_formula')->insertGetId([
+                $newFormulaId = DB::table('formula_preparation')->insertGetId([
                     'ebmr_templates_id' => $newTemplateId,
                     'type' => $formula->type,
                     'role' => $formula->role,
@@ -1640,9 +1697,9 @@ class EbmrTemplateController extends Controller
                 }
 
                 // Clone ingredient_amount
-                $subAmounts = DB::table('ingredient_amount')->where('preparation_formula_id', $formula->id)->get();
+                $subAmounts = DB::table('formula_ingredient_amount')->where('preparation_formula_id', $formula->id)->get();
                 foreach ($subAmounts as $sub) {
-                    DB::table('ingredient_amount')->insert([
+                    DB::table('formula_ingredient_amount')->insert([
                         'preparation_formula_id' => $newFormulaId,
                         'amount_per_unit' => $sub->amount_per_unit,
                         'amount_per_batch' => $sub->amount_per_batch,

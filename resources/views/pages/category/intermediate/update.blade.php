@@ -126,7 +126,7 @@
                             </div>
 
                             <div class="row mb-2">
-                                <div class="col-md-12">
+                                <div class="col-md-6">
                                     <div class="form-group mb-2">
                                         <label class="fw-bold small text-uppercase text-muted mb-1">Dạng Bào Chế <span class="text-danger">*</span></label>
                                         <select class="form-control" name="dosage_id" id="update_dosage_id">
@@ -140,6 +140,16 @@
                                         @error('dosage_id', 'updateErrors')
                                             <div class="alert alert-danger mt-1 py-0 small px-2">{{ $message }}</div>
                                         @enderror
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group mb-2">
+                                        <label class="fw-bold small text-uppercase text-muted mb-1">Phân Loại</label>
+                                        <select class="form-control" name="classification" id="update_classification">
+                                            <option value="">-Chọn-</option>
+                                            <option value="Thuốc kê đơn" {{ old('classification') == 'Thuốc kê đơn' ? 'selected' : '' }}>Thuốc kê đơn</option>
+                                            <option value="Thuốc không kê đơn" {{ old('classification') == 'Thuốc không kê đơn' ? 'selected' : '' }}>Thuốc không kê đơn</option>
+                                        </select>
                                     </div>
                                 </div>
                             </div>

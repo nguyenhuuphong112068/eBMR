@@ -124,6 +124,82 @@ class EbmrApprovalController extends Controller
             }
         }
 
+        // --- 3. CLEARANCE ROOM PROCESSES ---
+        $myClearanceRoomWorkflows = DB::table('clearance_room_process_workflows')
+            ->where('user_id', $userId)
+            ->where('status', 'pending')
+            ->get();
+
+        foreach ($myClearanceRoomWorkflows as $wf) {
+            $hasEarlierPending = DB::table('clearance_room_process_workflows')
+                ->where('process_list_id', $wf->process_list_id)
+                ->where('status', 'pending')
+                ->where('step_order', '<', $wf->step_order)
+                ->exists();
+
+            if (!$hasEarlierPending) {
+                $list = DB::table('clearance_room_processes_list')
+                    ->leftJoin('user_management', 'clearance_room_processes_list.created_by', '=', 'user_management.id')
+                    ->where('clearance_room_processes_list.id', $wf->process_list_id)
+                    ->where('clearance_room_processes_list.status', 'submitted')
+                    ->select('clearance_room_processes_list.*', 'user_management.fullName as owner_name')
+                    ->first();
+
+                if ($list) {
+                    $t = new \stdClass();
+                    $t->id = $list->id;
+                    $t->document_code = $list->process_code . ' (V.' . $list->version . ')';
+                    $t->name = $list->process_name;
+                    $t->owner_name = $list->owner_name;
+                    $t->updated_at = $list->updated_at;
+                    $t->my_role = $wf->role;
+                    $t->workflow_id = $wf->id;
+                    $t->workflow_type = 'clearance_room';
+                    $t->view_url = route('pages.manu_env.clearance_process.index', ['type' => 'room', 'list_id' => $list->id]);
+                    
+                    $actionableTemplates->push($t);
+                }
+            }
+        }
+
+        // --- 4. CLEARANCE EQUIP PROCESSES ---
+        $myClearanceEquipWorkflows = DB::table('clearance_equip_process_workflows')
+            ->where('user_id', $userId)
+            ->where('status', 'pending')
+            ->get();
+
+        foreach ($myClearanceEquipWorkflows as $wf) {
+            $hasEarlierPending = DB::table('clearance_equip_process_workflows')
+                ->where('process_list_id', $wf->process_list_id)
+                ->where('status', 'pending')
+                ->where('step_order', '<', $wf->step_order)
+                ->exists();
+
+            if (!$hasEarlierPending) {
+                $list = DB::table('clearance_equip_processes_list')
+                    ->leftJoin('user_management', 'clearance_equip_processes_list.created_by', '=', 'user_management.id')
+                    ->where('clearance_equip_processes_list.id', $wf->process_list_id)
+                    ->where('clearance_equip_processes_list.status', 'submitted')
+                    ->select('clearance_equip_processes_list.*', 'user_management.fullName as owner_name')
+                    ->first();
+
+                if ($list) {
+                    $t = new \stdClass();
+                    $t->id = $list->id;
+                    $t->document_code = $list->process_code . ' (V.' . $list->version . ')';
+                    $t->name = $list->process_name;
+                    $t->owner_name = $list->owner_name;
+                    $t->updated_at = $list->updated_at;
+                    $t->my_role = $wf->role;
+                    $t->workflow_id = $wf->id;
+                    $t->workflow_type = 'clearance_equip';
+                    $t->view_url = route('pages.manu_env.clearance_process.index', ['type' => 'equipment', 'list_id' => $list->id]);
+                    
+                    $actionableTemplates->push($t);
+                }
+            }
+        }
+
         // Sort by updated_at descending
         $actionableTemplates = $actionableTemplates->sortByDesc('updated_at')->values();
 
@@ -173,7 +249,7 @@ class EbmrApprovalController extends Controller
     {
         $validated = $request->validate([
             'workflow_id' => 'required|integer',
-            'workflow_type' => 'required|in:ebmr,cleaning',
+            'workflow_type' => 'required|in:ebmr,cleaning,clearance_room,clearance_equip',
             'action' => 'required|in:approve,reject',
             'comment' => 'nullable|string'
         ]);
@@ -224,6 +300,28 @@ class EbmrApprovalController extends Controller
                     }
                 }
             });
+        } elseif (in_array($validated['workflow_type'], ['clearance_room', 'clearance_equip'])) {
+            $tableWf = $validated['workflow_type'] === 'clearance_room' ? 'clearance_room_process_workflows' : 'clearance_equip_process_workflows';
+            $tableList = $validated['workflow_type'] === 'clearance_room' ? 'clearance_room_processes_list' : 'clearance_equip_processes_list';
+
+            $workflow = DB::table($tableWf)->where('id', $validated['workflow_id'])->first();
+            if (!$workflow || $workflow->status !== 'pending') {
+                return response()->json(['success' => false, 'message' => 'Luồng duyệt không hợp lệ hoặc đã xử lý']);
+            }
+
+            DB::transaction(function () use ($workflow, $newWfStatus, $validated, $tableWf, $tableList) {
+                DB::table($tableWf)->where('id', $workflow->id)->update(['status' => $newWfStatus, 'comment' => $validated['comment'], 'updated_at' => now()]);
+
+                if ($newWfStatus === 'rejected') {
+                    DB::table($tableWf)->where('process_list_id', $workflow->process_list_id)->where('status', 'pending')->update(['status' => 'cancelled', 'updated_at' => now()]);
+                    DB::table($tableList)->where('id', $workflow->process_list_id)->update(['status' => 'draft']);
+                } else {
+                    $pendingCount = DB::table($tableWf)->where('process_list_id', $workflow->process_list_id)->where('status', 'pending')->count();
+                    if ($pendingCount === 0) {
+                        DB::table($tableList)->where('id', $workflow->process_list_id)->update(['status' => 'approved', 'updated_at' => now()]);
+                    }
+                }
+            });
         }
 
         $msg = $validated['action'] === 'approve' ? 'Đã phê duyệt thành công' : 'Đã từ chối hồ sơ';
@@ -238,6 +336,20 @@ class EbmrApprovalController extends Controller
                 ->where('template_id', $id)
                 ->select('ebmr_template_workflows.*', 'user_management.fullName as user_name', 'user_management.signature_image')
                 ->orderBy('ebmr_template_workflows.id', 'asc')
+                ->get();
+        } elseif ($type === 'clearance_room') {
+            $workflows = DB::table('clearance_room_process_workflows')
+                ->join('user_management', 'clearance_room_process_workflows.user_id', '=', 'user_management.id')
+                ->where('process_list_id', $id)
+                ->select('clearance_room_process_workflows.*', 'user_management.fullName as user_name', 'user_management.signature_image')
+                ->orderBy('clearance_room_process_workflows.id', 'asc')
+                ->get();
+        } elseif ($type === 'clearance_equip') {
+            $workflows = DB::table('clearance_equip_process_workflows')
+                ->join('user_management', 'clearance_equip_process_workflows.user_id', '=', 'user_management.id')
+                ->where('process_list_id', $id)
+                ->select('clearance_equip_process_workflows.*', 'user_management.fullName as user_name', 'user_management.signature_image')
+                ->orderBy('clearance_equip_process_workflows.id', 'asc')
                 ->get();
         } else {
             $workflows = DB::table('cleaning_process_workflows')

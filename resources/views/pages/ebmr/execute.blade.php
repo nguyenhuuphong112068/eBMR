@@ -91,6 +91,10 @@
                             </div>
                             <p class="small text-center text-muted mt-2">Bằng cách nhấn xác nhận, bạn đồng ý đính kèm chữ ký điện tử của mình vào hồ sơ này.</p>
                         </div>
+                        <div class="mb-3 d-none" id="reasonInputGroup">
+                            <label class="form-label fw-bold small text-danger">Lý do thay đổi <span class="text-danger">*</span></label>
+                            <textarea class="form-control" id="execReasonContent" rows="2" placeholder="Vui lòng nhập lý do (bắt buộc) vì bạn đang thay đổi dữ liệu đã có..."></textarea>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer border-0 p-4 pt-0">
@@ -133,7 +137,91 @@
         </div>
     </div>
 
+    <!-- Modal: Xem lịch sử thay đổi -->
+    <div class="modal fade" id="runDataHistoryModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content shadow-lg border-0" style="border-radius: 12px;">
+                <div class="modal-header bg-navy text-white border-0 py-2 px-3" style="border-radius: 12px 12px 0 0;">
+                    <h5 class="modal-title fw-bold small"><i class="fas fa-history me-2"></i> LỊCH SỬ THAY ĐỔI DỮ LIỆU</h5>
+                    <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body p-0">
+                    <div class="table-responsive" style="max-height: 400px;">
+                        <table class="table table-bordered table-striped table-hover mb-0 text-center" style="font-size: 13px;">
+                            <thead class="bg-light sticky-top">
+                                <tr>
+                                    <th width="5%">Lần</th>
+                                    <th width="20%">Giá trị cũ</th>
+                                    <th width="20%">Giá trị mới</th>
+                                    <th width="25%">Lý do</th>
+                                    <th width="15%">Người đổi</th>
+                                    <th width="15%">Thời gian</th>
+                                </tr>
+                            </thead>
+                            <tbody id="historyTableBody">
+                                <!-- Data will be loaded dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
+        window.showRunDataHistory = async function(event, recordId, blockId, cellId) {
+            if (event) event.stopPropagation();
+            
+            if (!recordId || recordId === 'undefined' || recordId === 'null') {
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'info',
+                        title: 'Chế độ Chạy thử',
+                        text: 'Lịch sử chi tiết chỉ được lưu vào cơ sở dữ liệu trong chế độ Thực thi thật. Trong chế độ này, bạn chỉ đang mô phỏng việc thay đổi dữ liệu.'
+                    });
+                } else if (typeof toastr !== 'undefined') {
+                    toastr.info('Lịch sử chi tiết chỉ được lưu vào cơ sở dữ liệu trong chế độ Thực thi thật.');
+                }
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/ebmr/run-data-history/${recordId}/${blockId}/${cellId}`);
+                const res = await response.json();
+                
+                if (res.success) {
+                    const tbody = document.getElementById('historyTableBody');
+                    tbody.innerHTML = '';
+                    
+                    if (res.data.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Không có lịch sử thay đổi</td></tr>';
+                    } else {
+                        res.data.forEach(item => {
+                            tbody.innerHTML += `
+                                <tr>
+                                    <td>${item.change_index}</td>
+                                    <td>${item.old_value}</td>
+                                    <td>${item.new_value}</td>
+                                    <td>${item.reason || ''}</td>
+                                    <td>${item.changed_by}</td>
+                                    <td>${item.changed_at}</td>
+                                </tr>
+                            `;
+                        });
+                    }
+                    
+                    $('#runDataHistoryModal').modal('show');
+                } else {
+                    toastr.error('Không thể lấy lịch sử dữ liệu');
+                }
+            } catch (err) {
+                console.error(err);
+                toastr.error('Lỗi kết nối máy chủ');
+            }
+        };
+
         let currentExecContext = null;
 
         function toggleExecPassword() {
@@ -160,6 +248,10 @@
             // Reset password field
             document.getElementById('execPassConfirm').value = '';
 
+            const cellKey = (row === 'default' && col === 'default') ? 'default' : `${row}_${col}`;
+            const existing = (window.executionValues[blockId] && window.executionValues[blockId][cellKey] !== undefined) 
+                             ? window.executionValues[blockId][cellKey] : '';
+
             // Toggle UI groups
             if (type === 'signature') {
                 document.getElementById('textInputGroup').classList.add('d-none');
@@ -167,11 +259,14 @@
             } else {
                 document.getElementById('textInputGroup').classList.remove('d-none');
                 document.getElementById('signatureInputGroup').classList.add('d-none');
-                
-                // Load existing value if any
-                const existing = (window.executionValues[blockId] && window.executionValues[blockId][`${row}_${col}`]) 
-                                 ? window.executionValues[blockId][`${row}_${col}`] : '';
                 document.getElementById('execTextContent').value = existing;
+            }
+
+            if (existing !== '') {
+                document.getElementById('reasonInputGroup').classList.remove('d-none');
+                document.getElementById('execReasonContent').value = '';
+            } else {
+                document.getElementById('reasonInputGroup').classList.add('d-none');
             }
 
             $('#executionInputModal').modal('show');
@@ -223,11 +318,27 @@
             }
 
             // Update local state
-            // Nếu row và col đều là 'default' => đây là biến số đơn (không phải ô bảng),
-            // cần dùng key 'default' thay vì 'default_default' để khớp cấu trúc DB và render.
             const cellKey = (row === 'default' && col === 'default') ? 'default' : `${row}_${col}`;
+            const existing = (window.executionValues[blockId] && window.executionValues[blockId][cellKey] !== undefined) 
+                             ? window.executionValues[blockId][cellKey] : '';
+
+            let reason = '';
+            if (existing !== '' && existing !== value) {
+                reason = document.getElementById('execReasonContent').value.trim();
+                if (!reason) {
+                    Swal.fire('Lỗi', 'Vui lòng nhập lý do thay đổi dữ liệu', 'warning');
+                    return;
+                }
+            }
+
             if (!window.executionValues[blockId]) window.executionValues[blockId] = {};
             window.executionValues[blockId][cellKey] = value;
+            if (!window.executionValues[blockId]._meta) window.executionValues[blockId]._meta = {};
+            if (!window.executionValues[blockId]._meta[cellKey]) window.executionValues[blockId]._meta[cellKey] = {};
+            if (reason) {
+                window.executionValues[blockId]._meta[cellKey].reason = reason;
+                window.executionValues[blockId]._meta[cellKey].history_count = (window.executionValues[blockId]._meta[cellKey].history_count || 0) + 1;
+            }
 
             // Cập nhật metadata ngay lập tức để hiển thị người ký và thời gian
             if (type === 'signature') {
@@ -268,11 +379,20 @@
         }
 
         function saveRecordData(status) {
-            // Đảm bảo dữ liệu gửi đi luôn là Object dể tránh lỗi JSON.stringify bỏ qua string keys trong Array
+            // Đảm bảo dữ liệu gửi đi luôn là Object để tránh lỗi JSON.stringify bỏ qua string keys trong Array
             let dataToSend = {};
+            let reasons = {};
             if (window.executionValues) {
                 Object.keys(window.executionValues).forEach(key => {
                     dataToSend[key] = window.executionValues[key];
+                    if (window.executionValues[key]._meta) {
+                        Object.keys(window.executionValues[key]._meta).forEach(cellKey => {
+                            if (window.executionValues[key]._meta[cellKey].reason) {
+                                if (!reasons[key]) reasons[key] = {};
+                                reasons[key][cellKey] = window.executionValues[key]._meta[cellKey].reason;
+                            }
+                        });
+                    }
                 });
             }
 
@@ -299,6 +419,7 @@
                 body: JSON.stringify({
                     record_id: window.currentRecordId,
                     data: dataToSend,
+                    reasons: reasons,
                     status: status,
                     _token: '{{ csrf_token() }}'
                 })

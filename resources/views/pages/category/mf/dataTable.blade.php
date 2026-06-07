@@ -22,7 +22,7 @@
                         </thead>
                         <tbody>
                             @foreach($datas as $data)
-                            <tr>
+                            <tr data-href="{{ route('pages.ebmr.templates') }}?type=MF&code={{ urlencode($data->code) }}">
                                 <td class="fw-bold text-navy">{{ $data->code }}</td>
                                 <td>{{ $data->name }}</td>
                                 <td>{{ $data->stage_name }}</td>
@@ -35,10 +35,12 @@
                                 <td class="text-center">
                                     <button class="btn btn-sm btn-outline-info rounded-circle me-1" 
                                             onclick="editMf({{ json_encode($data) }})" 
+                                            title="Chỉnh sửa thông tin"
                                             data-toggle="modal" data-target="#updateMfModal">
                                         <i class="fas fa-edit"></i>
                                     </button>
                                     <button class="btn btn-sm btn-outline-danger rounded-circle" 
+                                            title="Xóa Biểu mẫu"
                                             onclick="confirmDelete('{{ route('pages.category.mf.delete', ['id' => $data->id]) }}')">
                                         <i class="fas fa-trash"></i>
                                     </button>
@@ -68,5 +70,26 @@
             window.location.href = url;
         }
     }
+</script>
+
+<style>
+    #mfTable tbody tr[data-href] {
+        cursor: pointer;
+        transition: background-color 0.15s ease-in-out;
+    }
+    #mfTable tbody tr[data-href]:hover {
+        background-color: #e0f2fe !important;
+    }
+</style>
+
+<script>
+    $(document).ready(function() {
+        $('#mfTable tbody').on('click', 'tr[data-href]', function(e) {
+            if ($(e.target).closest('td').is(':last-child') || $(e.target).closest('button, a, input, form, select').length) {
+                return;
+            }
+            window.location.href = $(this).data('href');
+        });
+    });
 </script>
 @append

@@ -1,4 +1,5 @@
 <?php
+
 require 'vendor/autoload.php';
 
 $apiKey = 'AIzaSyCmi_EvnyY1078N2M0HQJO4AUN8CLmzlhk';

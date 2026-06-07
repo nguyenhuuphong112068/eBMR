@@ -80,6 +80,7 @@
             borderMode: i.borderMode || 'visible',
             hideHeader: i.hideHeader || false,
             canAddRows: i.canAddRows || false,
+            addRowsCount: i.addRowsCount || 1,
             locked: i.locked || false,
             template_id: i.template_id || null,
             showPreview: i.showPreview || false,

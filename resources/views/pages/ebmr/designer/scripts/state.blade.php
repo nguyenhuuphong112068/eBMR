@@ -30,7 +30,36 @@
         let virtualBlocks = [];
 
         if (type === 'GF') {
-            // Biểu mẫu dùng chung (GF) không tự động khởi tạo block thông tin chung và header
+            // 1. GF HEADER (Section)
+            virtualBlocks.push({
+                id: 'sys_gf_sec_header',
+                type: 'section',
+                label: 'HEADER',
+                section_id: catId,
+                locked: true,
+                isVirtual: true
+            });
+
+            // 2. GF Header (Table)
+            let gfHeader = generateDefaultGfHeader();
+            gfHeader.id = 'sys_gf_tbl_header';
+            gfHeader.isVirtual = true;
+            virtualBlocks.push(gfHeader);
+
+            // 3. QUY TRÌNH PHÊ DUYỆT (Section)
+            virtualBlocks.push({
+                id: 'sys_gf_sec_approval',
+                type: 'section',
+                label: 'PHÊ DUYỆT',
+                section_id: catId,
+                locked: true,
+                isVirtual: true
+            });
+
+            // 4. Trình Ký (Table)
+            let sigTable = generateSignatureTable();
+            sigTable.id = 'sys_gf_tbl_signatures';
+            virtualBlocks.push(sigTable);
         } else {
             // 1. BMR HEADER (Section)
             virtualBlocks.push({
@@ -206,20 +235,34 @@
         let data = [
             // Row 1: SOP and Format No (Using cell properties for styling)
             [{
-                    content: `Reference SOP / Số SOP đối chiếu: ${t.sop}`,
+                    content: `Số SOP đối chiếu: ${t.sop}`,
                     rs: 1,
                     cs: 1,
                     textAlign: 'left',
                     fontStyle: 'italic',
-                    fontSize: '1.1rem'
+                    fontSize: '1rem',
+                    backgroundColor: '#dcdcdc'
                 },
                 {
-                    content: `Format no. / Số biểu mẫu: ${t.format}-${t.version}`,
+                    content: `Số biểu mẫu: ${t.format}-${t.version}`,
                     rs: 1,
                     cs: 1,
                     textAlign: 'right',
                     fontStyle: 'italic',
-                    fontSize: '1.1rem'
+                    fontSize: '1rem',
+                    backgroundColor: '#dcdcdc'
+                }
+            ],
+            // Gap row
+            [{
+                    content: '',
+                    rs: 1,
+                    cs: 2,
+                    backgroundColor: '#ffffff'
+                },
+                {
+                    content: '',
+                    hidden: true
                 }
             ],
             // Row 2: Main Title (UPPERCASE, Centered)
@@ -228,9 +271,10 @@
                     rs: 1,
                     cs: 2,
                     textAlign: 'center',
-                    fontSize: '1.4rem',
+                    fontSize: '1.2rem',
                     fontWeight: 'bold',
-                    textTransform: 'uppercase'
+                    textTransform: 'uppercase',
+                    backgroundColor: '#dcdcdc'
                 },
                 {
                     content: '',
@@ -243,11 +287,11 @@
             id: id,
             type: 'table',
             label: 'GF Header',
-            rows: 2,
+            rows: 3,
             cols: 2,
             columns: columns,
             data: data,
-            rowHeights: new Array(2).fill('auto'),
+            rowHeights: ['auto', '5px', 'auto'],
             borderMode: 'none',
             hideHeader: true,
             locked: true,
@@ -292,6 +336,65 @@
             }
         ];
 
+        const type = "{{ $template->type ?? 'BMR' }}";
+
+        if (type === 'MF') {
+            let data = [
+                // Row 1: Logo and Main Title
+                [{
+                        content: '<img src="/img/stella-pharm.jpg" style="max-height: 40px;">',
+                        rs: 1,
+                        cs: 1
+                    },
+                    {
+                        content: '<div style="font-size: 1.1rem; font-weight: bold; text-align: center;">BIỂU MẪU GỐC</div>',
+                        rs: 1,
+                        cs: 3
+                    },
+                    { content: '', hidden: true },
+                    { content: '', hidden: true }
+                ],
+                // Row 2: Edition & Effective Date
+                [{
+                        content: '<span style="font-size: 0.85rem;">Số ấn bản</span>',
+                        rs: 1,
+                        cs: 1
+                    },
+                    {
+                        content: '<strong style="color: red;">: ' + String(t.edition).padStart(2, '0') + '</strong>',
+                        rs: 1,
+                        cs: 1
+                    },
+                    {
+                        content: '<span style="font-size: 0.85rem;">Ngày hiệu lực</span>',
+                        rs: 1,
+                        cs: 1
+                    },
+                    {
+                        content: '<strong>: ' + t.effective_date + '</strong>',
+                        rs: 1,
+                        cs: 1
+                    }
+                ]
+            ];
+
+            return {
+                id: id,
+                type: 'table',
+                label: 'MF Header',
+                rows: 2,
+                cols: 4,
+                columns: columns,
+                data: data,
+                rowHeights: new Array(2).fill('auto'),
+                borderMode: 'visible',
+                hideHeader: true,
+                locked: true,
+                isBmrHeader: true,
+                section_id: "{{ $template->caterogy_id ?? 0 }}"
+            };
+        }
+
         let data = [
             // Row 1: Logo and Main Title
             [{
@@ -300,7 +403,7 @@
                     cs: 1
                 },
                 {
-                    content: '<div style="font-size: 1.1rem; font-weight: bold; text-align: center;">BATCH MANUFACTURING RECORD/ HỒ SƠ SẢN XUẤT GỐC</div>',
+                    content: '<div style="font-size: 1.1rem; font-weight: bold; text-align: center;">HỒ SƠ SẢN XUẤT GỐC</div>',
                     rs: 1,
                     cs: 3
                 },
@@ -315,7 +418,7 @@
             ],
             // Row 2: Product & Dosage unit
             [{
-                    content: '<span style="font-size: 0.85rem; font-style: italic;">Product/Sản phẩm</span>',
+                    content: '<span style="font-size: 0.85rem;">Sản phẩm</span>',
                     rs: 1,
                     cs: 1
                 },
@@ -325,7 +428,7 @@
                     cs: 1
                 },
                 {
-                    content: '<span style="font-size: 0.85rem; font-style: italic;">Dosage unit<br>Dạng bào chế</span>',
+                    content: '<span style="font-size: 0.85rem;">Dạng bào chế</span>',
                     rs: 1,
                     cs: 1
                 },
@@ -337,7 +440,7 @@
             ],
             // Row 3: BMR No & Grade
             [{
-                    content: '<span style="font-size: 0.85rem; font-style: italic;">BMR No./Số BMR</span>',
+                    content: '<span style="font-size: 0.85rem;">Số BMR</span>',
                     rs: 1,
                     cs: 1
                 },
@@ -347,7 +450,7 @@
                     cs: 1
                 },
                 {
-                    content: '<span style="font-size: 0.85rem; font-style: italic;">Grade/Phân loại</span>',
+                    content: '<span style="font-size: 0.85rem;">Phân loại</span>',
                     rs: 1,
                     cs: 1
                 },
@@ -359,7 +462,7 @@
             ],
             // Row 4: Version & Batch Size
             [{
-                    content: '<span style="font-size: 0.85rem; font-style: italic;">Version No./Số ấn bản</span>',
+                    content: '<span style="font-size: 0.85rem;">Số ấn bản</span>',
                     rs: 1,
                     cs: 1
                 },
@@ -369,7 +472,7 @@
                     cs: 1
                 },
                 {
-                    content: '<span style="font-size: 0.85rem; font-style: italic;">Batch size/Cỡ lô</span>',
+                    content: '<span style="font-size: 0.85rem;">Cỡ lô</span>',
                     rs: 1,
                     cs: 1
                 },
@@ -381,17 +484,18 @@
             ],
             // Row 5: Supersedes & Effective Date
             [{
-                    content: '<span style="font-size: 0.85rem; font-style: italic;">Supersedes/<br>Ấn bản thay thế</span>',
+                    content: '<span style="font-size: 0.85rem;">Ấn bản thay thế</span>',
                     rs: 1,
                     cs: 1
                 },
                 {
-                    content: '<strong>: ' + (t.pre_version !== '' ? String(t.pre_version).padStart(2, '0') : '00') + '</strong>',
+                    content: '<strong>: ' + (t.pre_version !== '' ? String(t.pre_version).padStart(2, '0') : '00') +
+                        '</strong>',
                     rs: 1,
                     cs: 1
                 },
                 {
-                    content: '<span style="font-size: 0.85rem; font-style: italic;">Effective date/Ngày hiệu lực</span>',
+                    content: '<span style="font-size: 0.85rem;">Ngày hiệu lực</span>',
                     rs: 1,
                     cs: 1
                 },
@@ -677,17 +781,27 @@
                 let unitVal = parseFloat(formula.total_amount_per_unit) || 0;
                 let batchVal = parseFloat(formula.total_amount_per_batch) || 0;
                 let percentVal = t.raw_batch_size > 0 ? (batchVal / t.raw_batch_size) * 100 : 0;
+                
+                let isCalculate = !(formula.not_calculator == 1);
 
-                sumUnit += unitVal;
-                sumPercent += percentVal;
-                sumBatch += batchVal;
+                if (isCalculate) {
+                    sumUnit += unitVal;
+                    sumPercent += percentVal;
+                    sumBatch += batchVal;
+                }
 
                 let unitText = '';
                 let batchText = '';
-                let percentText = percentVal > 0 ? Number(percentVal).toLocaleString('vi-VN', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                }) : '';
+                let percentText = '';
+                
+                if (isCalculate) {
+                    percentText = percentVal > 0 ? Number(percentVal).toLocaleString('vi-VN', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                    }) : '';
+                } else {
+                    percentText = 'NA';
+                }
 
                 if (formula.sub_amounts && formula.sub_amounts.length > 0) {
                     let unitParts = [];
@@ -722,6 +836,20 @@
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2
                     }) : '';
+                    
+                    // Xử lý hiển thị phép nhân cho batch size nếu có batch_qty
+                    if (batchVal > 0 && t.batch_qty > 0 && unitVal > 0 && t.raw_batch_size > 0) {
+                        let singleBatchVal = (unitVal * t.raw_batch_size) / t.avg_core;
+                        if (!singleBatchVal) singleBatchVal = batchVal / t.batch_qty;
+                        if (Math.abs(singleBatchVal * t.batch_qty - batchVal) < 0.1) {
+                            batchText = `${Number(batchVal).toLocaleString('vi-VN', {minimumFractionDigits: 2, maximumFractionDigits: 2})} = ${Number(singleBatchVal).toLocaleString('vi-VN', {minimumFractionDigits: 2, maximumFractionDigits: 2})} x ${t.batch_qty}`;
+                        }
+                    }
+                }
+                
+                if (!isCalculate) {
+                    if (unitText) unitText = `(${unitText})`;
+                    if (batchText) batchText = `(${batchText})`;
                 }
 
                 materials.forEach((mat, mIdx) => {
@@ -1047,7 +1175,8 @@
         // 1. Soạn thảo
         let authorSigContent = `<span class="text-success"><i class="fas fa-check-circle me-1"></i> Đã ký</span>`;
         if (createdBySignature) {
-            authorSigContent = `<img src="${createdBySignature}" style="max-height: 40px; max-width: 120px;" alt="Chữ ký">`;
+            authorSigContent =
+                `<img src="${createdBySignature}" style="max-height: 40px; max-width: 120px;" alt="Chữ ký">`;
         }
 
         data.push([{
@@ -1091,9 +1220,11 @@
                 if (wf.status === 'approved') {
                     dateText = formatDate(wf.created_at);
                     if (wf.signature_image) {
-                        sigText = `<img src="${wf.signature_image}" style="max-height: 40px; max-width: 120px;" alt="Chữ ký">`;
+                        sigText =
+                            `<img src="${wf.signature_image}" style="max-height: 40px; max-width: 120px;" alt="Chữ ký">`;
                     } else {
-                        sigText = `<span class="text-success" style="font-weight: bold;"><i class="fas fa-check-circle me-1"></i> Đã ký</span>`;
+                        sigText =
+                            `<span class="text-success" style="font-weight: bold;"><i class="fas fa-check-circle me-1"></i> Đã ký</span>`;
                     }
                 } else if (wf.status === 'rejected') {
                     sigText =

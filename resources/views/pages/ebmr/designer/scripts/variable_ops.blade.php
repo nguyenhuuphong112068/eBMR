@@ -3,7 +3,25 @@
     function insertDynamicField(defaultType = 'text') {
         const selectedCells = document.querySelectorAll('.selected-cell');
 
-        if (selectedCells.length > 0) {
+        let useBatch = false;
+        if (selectedCells.length > 1) {
+            useBatch = true;
+        } else if (selectedCells.length === 1) {
+            let hasCursorInCell = false;
+            const selForCheck = savedTextSelection ? [savedTextSelection] : (window.getSelection().rangeCount > 0 ? [window.getSelection().getRangeAt(0)] : []);
+            if (selForCheck.length > 0) {
+                let node = selForCheck[0].commonAncestorContainer;
+                if (node.nodeType === 3) node = node.parentNode;
+                if (node.closest && node.closest('td, th') === selectedCells[0]) {
+                    hasCursorInCell = true;
+                }
+            }
+            if (!hasCursorInCell) {
+                useBatch = true;
+            }
+        }
+
+        if (useBatch) {
             // MULTI-CELL BATCH CONVERSION
             saveState();
             selectedCells.forEach(td => {
@@ -27,7 +45,7 @@
                 let typeLabel = 'Dữ liệu';
                 if (defaultType === 'text') typeLabel = 'Văn bản';
                 else if (defaultType === 'number') typeLabel = 'Số';
-                else if (defaultType === 'date') typeLabel = 'Ngày';
+                else if (defaultType === 'date') typeLabel = 'Thời Gian';
                 else if (defaultType === 'signature') typeLabel = 'Chữ ký';
                 else if (defaultType === 'checkbox') typeLabel = 'Tick';
                 else if (defaultType === 'select') typeLabel = 'Lựa chọn';
@@ -64,7 +82,11 @@
                         hidden: false
                     };
                 } else {
-                    item.data[r][c].content = badgeHtml;
+                    if (item.data[r][c].content && item.data[r][c].content.trim() !== '') {
+                        item.data[r][c].content += badgeHtml;
+                    } else {
+                        item.data[r][c].content = badgeHtml;
+                    }
                 }
                 item.dirty = true;
             });
@@ -98,7 +120,7 @@
         let typeLabel = 'Dữ liệu';
         if (defaultType === 'text') typeLabel = 'Văn bản';
         else if (defaultType === 'number') typeLabel = 'Số';
-        else if (defaultType === 'date') typeLabel = 'Ngày';
+        else if (defaultType === 'date') typeLabel = 'Thời Gian';
         else if (defaultType === 'signature') typeLabel = 'Chữ ký';
         else if (defaultType === 'checkbox') typeLabel = 'Tick';
         else if (defaultType === 'select') typeLabel = 'Lựa chọn';
@@ -167,10 +189,22 @@
             if (ce) ce.dispatchEvent(new Event('input', {
                 bubbles: true
             }));
+            if (typeof syncBlockContent === 'function') {
+                syncBlockContent(span);
+            }
         } else {
             const html =
                 `<span contenteditable="false" class="ebmr-field-badge" data-field-id="${fieldId}" onclick="selectField(event, '${fieldId}')"></span>\u200B`;
             document.execCommand('insertHTML', false, html);
+            
+            // Try to sync content if possible
+            const sel = window.getSelection();
+            if (sel && sel.rangeCount > 0) {
+                const node = sel.getRangeAt(0).startContainer;
+                if (typeof syncBlockContent === 'function') {
+                    syncBlockContent(node.nodeType === 3 ? node.parentNode : node);
+                }
+            }
         }
 
         saveStateDebounced();
@@ -736,7 +770,26 @@
 
         // Check if there is an active table cell selection or selected cells
         const selectedCells = document.querySelectorAll('.selected-cell');
-        if (selectedCells.length > 0) {
+
+        let useBatch = false;
+        if (selectedCells.length > 1) {
+            useBatch = true;
+        } else if (selectedCells.length === 1) {
+            let hasCursorInCell = false;
+            const selForCheck = savedTextSelection ? [savedTextSelection] : (window.getSelection().rangeCount > 0 ? [window.getSelection().getRangeAt(0)] : []);
+            if (selForCheck.length > 0) {
+                let node = selForCheck[0].commonAncestorContainer;
+                if (node.nodeType === 3) node = node.parentNode;
+                if (node.closest && node.closest('td, th') === selectedCells[0]) {
+                    hasCursorInCell = true;
+                }
+            }
+            if (!hasCursorInCell) {
+                useBatch = true;
+            }
+        }
+
+        if (useBatch) {
             saveState();
             selectedCells.forEach(td => {
                 const block = td.closest('.block-item');
@@ -787,7 +840,11 @@
                         hidden: false
                     };
                 } else {
-                    item.data[r][c].content = cellBadgeHtml;
+                    if (item.data[r][c].content && item.data[r][c].content.trim() !== '') {
+                        item.data[r][c].content += cellBadgeHtml;
+                    } else {
+                        item.data[r][c].content = cellBadgeHtml;
+                    }
                 }
                 item.dirty = true;
             });
@@ -865,6 +922,9 @@
                 const ce = span.closest('[contenteditable="true"]');
                 if (ce) {
                     ce.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+                if (typeof syncBlockContent === 'function') {
+                    syncBlockContent(span);
                 }
                 saveStateDebounced();
                 renderBlocks();

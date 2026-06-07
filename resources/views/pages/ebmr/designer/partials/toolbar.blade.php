@@ -73,9 +73,16 @@
                 <i class="fas fa-balance-scale"></i>
             </button>
 
+            @if(!isset($template) || !in_array($template->type, ['MF', 'GF']))
             <button class="btn btn-toolbar-action text-info fw-bold" onmousedown="event.preventDefault();"
                 onclick="addSection()" title="Thêm Phân đoạn">
                 <i class="fas fa-layer-group"></i>
+            </button>
+            @endif
+
+            <button class="btn btn-toolbar-action text-success fw-bold" onmousedown="event.preventDefault();"
+                onclick="openMasterFormModal()" title="Nhập từ Biểu mẫu gốc (MF)">
+                <i class="fas fa-file-import"></i>
             </button>
 
             <button class="btn btn-toolbar-action text-warning fw-bold" onmousedown="event.preventDefault();"

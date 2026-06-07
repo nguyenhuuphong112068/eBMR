@@ -215,10 +215,16 @@
                         <input class="form-check-input" type="checkbox" id="hideHeaderCheck" ${!item.hideHeader ? 'checked' : ''} onchange="updateItemProp('hideHeader', !this.checked)">
                         <label class="form-check-label small fw-bold" for="hideHeaderCheck">Hiển thị hàng tiêu đề</label>
                     </div>
-                    <div class="form-check form-switch mb-3">
-                        <input class="form-check-input" type="checkbox" id="canAddRowsCheck" ${item.canAddRows ? 'checked' : ''} onchange="updateItemProp('canAddRows', this.checked)">
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="canAddRowsCheck" ${item.canAddRows ? 'checked' : ''} onchange="updateItemProp('canAddRows', this.checked); selectItem(selectedId);">
                         <label class="form-check-label small fw-bold text-primary" for="canAddRowsCheck"><i class="fas fa-plus-circle me-1"></i>Cho phép thêm dòng (Cấp 2)</label>
                     </div>
+                    ${item.canAddRows ? `
+                    <div class="mb-3 ps-3 border-start border-2 border-primary" style="margin-left: 0.5rem;">
+                        <label class="small text-muted mb-1">Số dòng mỗi lần thêm</label>
+                        <input type="number" class="form-control form-control-sm" min="1" value="${item.addRowsCount || 1}" onchange="updateItemProp('addRowsCount', parseInt(this.value) || 1)">
+                        <div class="form-text" style="font-size: 0.65rem;">Hệ thống sẽ nhân bản N dòng cuối.</div>
+                    </div>` : '<div class="mb-3"></div>'}
 
                     <label class="small fw-bold mb-2">Công cụ Bảng (${item.cols}x${item.rows})</label>
                     <div class="alert alert-info py-1 px-2 small mb-2" style="font-size: 0.7rem;">
@@ -2113,7 +2119,7 @@
                     <option value="number" ${field.type === 'number' ? 'selected' : ''}>Số liệu (Tính toán)</option>
                     <option value="checkbox" ${field.type === 'checkbox' ? 'selected' : ''}>Hộp kiểm tra (Tick)</option>
                     <option value="formula" ${field.type === 'formula' ? 'selected' : ''}>Công thức tự động (=)</option>
-                    <option value="date" ${field.type === 'date' ? 'selected' : ''}>Ngày tháng</option>
+                    <option value="date" ${field.type === 'date' ? 'selected' : ''}>Thời Gian</option>
                     <option value="signature" ${field.type === 'signature' ? 'selected' : ''}>Chữ ký điện tử</option>
                 </select>
             </div>
@@ -2171,6 +2177,30 @@
                                value="${field.validation.decimal_places !== null ? field.validation.decimal_places : ''}" 
                                oninput="syncFieldConfig('${fieldId}', 'validation.decimal_places', this.value); recalculateAllFormulas();">
                     </div>
+                </div>
+            `;
+        } else if (field.type === 'date') {
+            typeHtml += `
+                <div class="mb-3">
+                    <label class="small fw-bold text-primary mb-2"><i class="fas fa-clock me-1"></i>Định dạng thời gian</label>
+                    <select class="form-select form-select-sm border-primary" onchange="syncFieldConfig('${fieldId}', 'date_format', this.value)">
+                        <option value="dd/mm/yyyy" ${(!field.date_format || field.date_format === 'dd/mm/yyyy') ? 'selected' : ''}>Ngày (dd/mm/yyyy)</option>
+                        <option value="hh:mm dd/mm/yyyy" ${field.date_format === 'hh:mm dd/mm/yyyy' ? 'selected' : ''}>Giờ và Ngày (hh:mm dd/mm/yyyy)</option>
+                    </select>
+                </div>
+            `;
+        } else if (field.type === 'signature') {
+            typeHtml += `
+                <div class="mb-3">
+                    <div class="form-check form-switch mt-2">
+                        <input class="form-check-input" type="checkbox" id="checkIsChecker" 
+                               ${field.is_checker ? 'checked' : ''} 
+                               onchange="syncFieldConfig('${fieldId}', 'is_checker', this.checked)">
+                        <label class="form-check-label small fw-bold text-muted" for="checkIsChecker">
+                            <i class="fas fa-user-check me-1"></i>Chữ ký của Người kiểm tra
+                        </label>
+                    </div>
+                    <div class="form-text small" style="font-size: 0.65rem;">Người dùng cấp 2 sẽ phải nhập tài khoản và mật khẩu của họ để ký.</div>
                 </div>
             `;
         }
@@ -3094,12 +3124,15 @@
             }
         } else if (field.type === 'date') {
             inputType = 'text'; // Fallback for SweetAlert2 older versions
-            inputAttributes.type = 'date';
+            inputAttributes.type = field.date_format === 'hh:mm dd/mm/yyyy' ? 'datetime-local' : 'date';
 
             // Luôn luôn hiển thị giá trị input là ngày hiện tại (now)
             const d = new Date();
-            currentVal =
-                `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            if (field.date_format === 'hh:mm dd/mm/yyyy') {
+                currentVal = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+            } else {
+                currentVal = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            }
         } else if (field.type === 'text') {
             inputType = 'textarea';
             inputAttributes.rows = 4;
@@ -3186,13 +3219,13 @@
             didOpen: () => {
                 if (field.type === 'date') {
                     const input = Swal.getInput();
-                    if (input) input.type = 'date';
+                    if (input) input.type = field.date_format === 'hh:mm dd/mm/yyyy' ? 'datetime-local' : 'date';
                 }
             },
             onOpen: () => { // Hỗ trợ phiên bản SweetAlert2 cũ
                 if (field.type === 'date') {
                     const input = Swal.getInput();
-                    if (input) input.type = 'date';
+                    if (input) input.type = field.date_format === 'hh:mm dd/mm/yyyy' ? 'datetime-local' : 'date';
                 }
             }
         }).then((result) => {
@@ -3207,40 +3240,103 @@
 
                 // Định dạng lại YYYY-MM-DD từ datepicker thành DD/MM/YYYY để hiển thị và lưu thống nhất
                 if (field.type === 'date' && finalValue) {
-                    const parts = finalValue.split('-');
-                    if (parts.length === 3) {
-                        finalValue = `${parts[2]}/${parts[1]}/${parts[0]}`;
+                    if (field.date_format === 'hh:mm dd/mm/yyyy') {
+                        // datetime-local string format: "YYYY-MM-DDTHH:mm"
+                        const dtParts = finalValue.split('T');
+                        if (dtParts.length === 2) {
+                            const dateStr = dtParts[0];
+                            const timeStr = dtParts[1];
+                            const parts = dateStr.split('-');
+                            if (parts.length === 3) {
+                                finalValue = `${timeStr} ${parts[2]}/${parts[1]}/${parts[0]}`;
+                            }
+                        }
+                    } else {
+                        const parts = finalValue.split('-');
+                        if (parts.length === 3) {
+                            finalValue = `${parts[2]}/${parts[1]}/${parts[0]}`;
+                        }
                     }
                 }
 
-                // Đảm bảo cấu trúc đồng nhất với Server (cell_id = 'default' cho các biến đơn)
-                if (typeof window.executionValues[fieldId] !== 'object' || window.executionValues[
-                        fieldId] === null) {
-                    window.executionValues[fieldId] = {};
-                }
-                window.executionValues[fieldId]['default'] = finalValue;
-
-                // Ghi nhận thông tin người ký và thời gian tương tự tự động điền để phục vụ kiểm toán (BMR)
-                if (field.type === 'date') {
-                    if (!window.executionValues[fieldId]._meta) window.executionValues[fieldId]._meta = {};
-                    window.executionValues[fieldId]._meta['default'] = {
-                        by: '{{ session('user.fullName') ?? (session('user.username') ?? '') }}',
-                        at: new Date().toISOString()
-                    };
-                }
-
-                console.log("window.executionValues after update:", window.executionValues);
-
-                if (typeof window.recalculateAllFormulas === 'function') window.recalculateAllFormulas();
-                renderBlocks();
-                if (field.block_id && typeof syncLinkedCharts === 'function') {
-                    syncLinkedCharts(field.block_id + loopSuffix);
+                // Lấy giá trị cũ
+                const existing = (window.executionValues[fieldId] && window.executionValues[fieldId]['default'] !== undefined) 
+                                 ? window.executionValues[fieldId]['default'] : '';
+                
+                if (existing !== '' && existing !== finalValue) {
+                    Swal.fire({
+                        title: 'Lý do thay đổi',
+                        text: 'Vui lòng nhập lý do thay đổi dữ liệu:',
+                        input: 'textarea',
+                        inputPlaceholder: 'Nhập lý do thay đổi (bắt buộc)...',
+                        showCancelButton: true,
+                        confirmButtonText: 'Xác nhận',
+                        cancelButtonText: 'Hủy',
+                        inputValidator: (val) => {
+                            if (!val || !val.trim()) {
+                                return 'Vui lòng nhập lý do thay đổi dữ liệu!';
+                            }
+                        }
+                    }).then((reasonResult) => {
+                        if (reasonResult.isConfirmed) {
+                            applyVariableValue(fieldId, finalValue, reasonResult.value.trim(), field, loopSuffix);
+                        }
+                    });
+                } else {
+                    applyVariableValue(fieldId, finalValue, '', field, loopSuffix);
                 }
             }
         }).catch(err => {
             console.error("Error in modal promise:", err);
         });
     };
+
+    function applyVariableValue(fieldId, finalValue, reason, field, loopSuffix) {
+        if (typeof window.executionValues[fieldId] !== 'object' || window.executionValues[fieldId] === null) {
+            window.executionValues[fieldId] = {};
+        }
+
+        const oldVal = window.executionValues[fieldId]['default'] !== undefined ? window.executionValues[fieldId]['default'] : '';
+        window.executionValues[fieldId]['default'] = finalValue;
+
+        const now = new Date();
+        const formattedTime = now.toLocaleDateString('vi-VN') + ' ' + now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+        
+        if (!window.executionValues[fieldId]._meta) window.executionValues[fieldId]._meta = {};
+        if (!window.executionValues[fieldId]._meta['default']) window.executionValues[fieldId]._meta['default'] = {};
+        
+        window.executionValues[fieldId]._meta['default'].by = '{{ session("user.fullName") ?? (session("user.username") ?? "Người dùng thử") }}';
+        window.executionValues[fieldId]._meta['default'].at = formattedTime;
+        if (reason) {
+            window.executionValues[fieldId]._meta['default'].reason = reason;
+            window.executionValues[fieldId]._meta['default'].history_count = (window.executionValues[fieldId]._meta['default'].history_count || 0) + 1;
+            
+            if (!window.executionValues[fieldId]._meta['default'].history_list) {
+                window.executionValues[fieldId]._meta['default'].history_list = [];
+            }
+            window.executionValues[fieldId]._meta['default'].history_list.push({
+                val: finalValue,
+                old_val: oldVal,
+                reason: reason,
+                by: window.executionValues[fieldId]._meta['default'].by,
+                at: formattedTime
+            });
+        }
+
+        console.log("window.executionValues after update:", window.executionValues);
+
+        if (typeof window.recalculateAllFormulas === 'function') window.recalculateAllFormulas();
+        if (typeof window.renderBlocks === 'function') {
+            window.renderBlocks();
+        } else if (typeof renderBlocks === 'function') {
+            renderBlocks();
+        }
+        if (field && field.block_id && typeof window.syncLinkedCharts === 'function') {
+            window.syncLinkedCharts(field.block_id + (loopSuffix || ''));
+        } else if (field && field.block_id && typeof syncLinkedCharts === 'function') {
+            syncLinkedCharts(field.block_id + (loopSuffix || ''));
+        }
+    }
 
     /**
      * ABBREVIATION (DANH MỤC CHỮ VIẾT TẮT)
@@ -3505,9 +3601,14 @@
             loopSuffix = loopMatch[2];
         }
 
+        const field = fieldsConfig[originalId] || {};
         const now = new Date();
-        const timeString =
-            `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')} ${now.getDate().toString().padStart(2, '0')}/${(now.getMonth()+1).toString().padStart(2, '0')}/${now.getFullYear()}`;
+        let timeString = '';
+        if (field.date_format === 'hh:mm dd/mm/yyyy') {
+            timeString = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')} ${now.getDate().toString().padStart(2, '0')}/${(now.getMonth()+1).toString().padStart(2, '0')}/${now.getFullYear()}`;
+        } else {
+            timeString = `${now.getDate().toString().padStart(2, '0')}/${(now.getMonth()+1).toString().padStart(2, '0')}/${now.getFullYear()}`;
+        }
 
         if (!window.executionValues) window.executionValues = {};
         if (typeof window.executionValues[fieldId] !== 'object' || window.executionValues[fieldId] === null) {
@@ -3515,15 +3616,15 @@
         }
         window.executionValues[fieldId]['default'] = timeString;
 
+        const formattedTime = new Date().toLocaleDateString('vi-VN') + ' ' + new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
         if (!window.executionValues[fieldId]._meta) window.executionValues[fieldId]._meta = {};
         window.executionValues[fieldId]._meta['default'] = {
             by: '{{ session('user.fullName') ?? (session('user.username') ?? '') }}',
-            at: new Date().toISOString()
+            at: formattedTime
         };
 
         if (typeof window.recalculateAllFormulas === 'function') window.recalculateAllFormulas();
         if (typeof renderBlocks === 'function') renderBlocks();
-        const field = fieldsConfig[originalId];
         if (field && field.block_id && typeof syncLinkedCharts === 'function') {
             syncLinkedCharts(field.block_id + loopSuffix);
         }
@@ -3552,7 +3653,7 @@
         if (!window.executionValues[blockId]._meta) window.executionValues[blockId]._meta = {};
         window.executionValues[blockId]._meta[`${r}_${c}`] = {
             by: '{{ session('user.fullName') ?? (session('user.username') ?? '') }}',
-            at: new Date().toISOString()
+            at: now.toLocaleDateString('vi-VN') + ' ' + now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
         };
 
         if (typeof renderBlocks === 'function') renderBlocks();
@@ -3697,10 +3798,12 @@
 
         window.executionValues[blockId][`${r}_${c}`] = signatureVal;
 
+        const formattedTime = new Date().toLocaleDateString('vi-VN') + ' ' + new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+        
         if (!window.executionValues[blockId]._meta) window.executionValues[blockId]._meta = {};
         window.executionValues[blockId]._meta[`${r}_${c}`] = {
             by: currentUser,
-            at: new Date().toISOString()
+            at: formattedTime
         };
 
         if (typeof renderBlocks === 'function') renderBlocks();
@@ -3767,13 +3870,16 @@
                     if (!window.executionValues) window.executionValues = {};
                     if (!window.executionValues[blockId]) window.executionValues[blockId] = {};
 
-                    window.executionValues[blockId][`${r}_${c}`] = data.signature_image ? data.signature_image :
+                    const cellKey = (r === 'default' && c === 'default') ? 'default' : `${r}_${c}`;
+
+                    window.executionValues[blockId][cellKey] = data.signature_image ? data.signature_image :
                         data.fullName;
 
+                    const formattedTime = new Date().toLocaleDateString('vi-VN') + ' ' + new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
                     if (!window.executionValues[blockId]._meta) window.executionValues[blockId]._meta = {};
-                    window.executionValues[blockId]._meta[`${r}_${c}`] = {
+                    window.executionValues[blockId]._meta[cellKey] = {
                         by: data.fullName,
-                        at: new Date().toISOString()
+                        at: formattedTime
                     };
 
                     if (typeof renderBlocks === 'function') renderBlocks();
@@ -4069,12 +4175,137 @@
                         if (!window.executionValues) window.executionValues = {};
                         if (!window.executionValues[blockId]) window.executionValues[blockId] = {};
                         window.executionValues[blockId][cellKey] = result.value;
+                        
+                        const now = new Date();
+                        const formattedTime = now.toLocaleDateString('vi-VN') + ' ' + now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+                        if (!window.executionValues[blockId]._meta) window.executionValues[blockId]._meta = {};
+                        window.executionValues[blockId]._meta[cellKey] = {
+                            by: '{{ session("user.fullName") ?? (session("user.username") ?? "") }}',
+                            at: formattedTime
+                        };
+
                         if (typeof renderBlocks === 'function') renderBlocks();
                         if (typeof syncLinkedCharts === 'function') syncLinkedCharts(blockId);
                     }
                 });
             }
         };
+    }
+
+    window.handleCheckboxChange = function(fieldId, isChecked, element) {
+        if (!window.executionValues) window.executionValues = {};
+        
+        const existing = (window.executionValues[fieldId] && window.executionValues[fieldId]['default'] !== undefined) 
+                         ? window.executionValues[fieldId]['default'] : '';
+
+        if (existing !== '' && existing !== isChecked) {
+            if (element) {
+                element.checked = !isChecked; // revert visually
+            }
+            
+            Swal.fire({
+                title: 'Lý do thay đổi',
+                text: 'Vui lòng nhập lý do thay đổi dữ liệu:',
+                input: 'textarea',
+                inputPlaceholder: 'Nhập lý do thay đổi (bắt buộc)...',
+                showCancelButton: true,
+                confirmButtonText: 'Xác nhận',
+                cancelButtonText: 'Hủy',
+                inputValidator: (value) => {
+                    if (!value || !value.trim()) {
+                        return 'Vui lòng nhập lý do thay đổi dữ liệu!'
+                    }
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    if (element) element.checked = isChecked; // apply visually
+                    applyCheckboxChange(fieldId, isChecked, result.value.trim());
+                }
+            });
+        } else {
+            applyCheckboxChange(fieldId, isChecked, '');
+        }
+    };
+
+    function applyCheckboxChange(fieldId, isChecked, reason) {
+        if (typeof window.executionValues[fieldId] !== 'object' || window.executionValues[fieldId] === null) {
+            window.executionValues[fieldId] = {};
+        }
+        window.executionValues[fieldId]['default'] = isChecked;
+
+        const now = new Date();
+        const formattedTime = now.toLocaleDateString('vi-VN') + ' ' + now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+        
+        if (!window.executionValues[fieldId]._meta) window.executionValues[fieldId]._meta = {};
+        if (!window.executionValues[fieldId]._meta['default']) window.executionValues[fieldId]._meta['default'] = {};
+        
+        window.executionValues[fieldId]._meta['default'].by = '{{ session("user.fullName") ?? (session("user.username") ?? "") }}';
+        window.executionValues[fieldId]._meta['default'].at = formattedTime;
+        if (reason) {
+            window.executionValues[fieldId]._meta['default'].reason = reason;
+            window.executionValues[fieldId]._meta['default'].history_count = (window.executionValues[fieldId]._meta['default'].history_count || 0) + 1;
+        }
+
+        if (typeof window.recalculateAllFormulas === 'function') window.recalculateAllFormulas();
+        if (typeof window.renderBlocks === 'function') window.renderBlocks();
+    }
+
+    window.handleSelectChange = function(fieldId, value, element) {
+        if (!window.executionValues) window.executionValues = {};
+        
+        const existing = (window.executionValues[fieldId] && window.executionValues[fieldId]['default'] !== undefined) 
+                         ? window.executionValues[fieldId]['default'] : '';
+
+        if (existing !== '' && existing !== value) {
+            if (element) {
+                element.value = existing; // revert visually
+            }
+            
+            Swal.fire({
+                title: 'Lý do thay đổi',
+                text: 'Vui lòng nhập lý do thay đổi dữ liệu:',
+                input: 'textarea',
+                inputPlaceholder: 'Nhập lý do thay đổi (bắt buộc)...',
+                showCancelButton: true,
+                confirmButtonText: 'Xác nhận',
+                cancelButtonText: 'Hủy',
+                inputValidator: (val) => {
+                    if (!val || !val.trim()) {
+                        return 'Vui lòng nhập lý do thay đổi dữ liệu!'
+                    }
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    if (element) element.value = value; // apply visually
+                    applySelectChange(fieldId, value, result.value.trim());
+                }
+            });
+        } else {
+            applySelectChange(fieldId, value, '');
+        }
+    };
+
+    function applySelectChange(fieldId, value, reason) {
+        if (typeof window.executionValues[fieldId] !== 'object' || window.executionValues[fieldId] === null) {
+            window.executionValues[fieldId] = {};
+        }
+        window.executionValues[fieldId]['default'] = value;
+
+        const now = new Date();
+        const formattedTime = now.toLocaleDateString('vi-VN') + ' ' + now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+        
+        if (!window.executionValues[fieldId]._meta) window.executionValues[fieldId]._meta = {};
+        if (!window.executionValues[fieldId]._meta['default']) window.executionValues[fieldId]._meta['default'] = {};
+        
+        window.executionValues[fieldId]._meta['default'].by = '{{ session("user.fullName") ?? (session("user.username") ?? "") }}';
+        window.executionValues[fieldId]._meta['default'].at = formattedTime;
+        if (reason) {
+            window.executionValues[fieldId]._meta['default'].reason = reason;
+            window.executionValues[fieldId]._meta['default'].history_count = (window.executionValues[fieldId]._meta['default'].history_count || 0) + 1;
+        }
+
+        if (typeof window.recalculateAllFormulas === 'function') window.recalculateAllFormulas();
+        if (typeof window.renderBlocks === 'function') window.renderBlocks();
     }
 
     // --- Block Range Selection & Loop Modal Control ---
@@ -5095,4 +5326,85 @@
             window.viewNoteBadge(e, badge);
         }
     }, true);
+
+    window.showRunDataHistory = async function(event, recordId, blockId, cellId) {
+        if (event) event.stopPropagation();
+        
+        if (!recordId || recordId === 'undefined' || recordId === 'null') {
+            if (typeof Swal !== 'undefined') {
+                const valObj = window.executionValues[blockId];
+                let historyHtml = '<div class="text-muted small mb-3">Lịch sử chi tiết (chỉ lưu tạm thời trong chế độ Chạy thử):</div>';
+                historyHtml += '<div class="table-responsive"><table class="table table-bordered table-striped table-hover mb-0 text-center" style="font-size: 13px;">';
+                historyHtml += '<thead class="bg-light"><tr><th width="5%">Lần</th><th width="20%">Giá trị cũ</th><th width="20%">Giá trị mới</th><th width="25%">Lý do</th><th width="15%">Người đổi</th><th width="15%">Thời gian</th></tr></thead><tbody>';
+                
+                if (valObj && valObj._meta && valObj._meta[cellId] && valObj._meta[cellId].history_list && valObj._meta[cellId].history_list.length > 0) {
+                    valObj._meta[cellId].history_list.forEach((h, index) => {
+                        historyHtml += `<tr>
+                            <td>${index + 1}</td>
+                            <td>${escapeHtml(h.old_val || '')}</td>
+                            <td class="text-primary fw-bold">${escapeHtml(h.val || '')}</td>
+                            <td>${escapeHtml(h.reason || '')}</td>
+                            <td>${escapeHtml(h.by || '')}</td>
+                            <td>${escapeHtml(h.at || '')}</td>
+                        </tr>`;
+                    });
+                } else {
+                    historyHtml += `<tr><td colspan="6" class="text-muted">Chưa có thay đổi nào.</td></tr>`;
+                }
+                historyHtml += '</tbody></table></div>';
+
+                Swal.fire({
+                    title: '<i class="fas fa-history me-2"></i> LỊCH SỬ THAY ĐỔI DỮ LIỆU',
+                    html: historyHtml,
+                    width: '800px',
+                    showConfirmButton: false,
+                    showCloseButton: true,
+                    customClass: {
+                        popup: 'rounded-3'
+                    }
+                });
+            } else if (typeof toastr !== 'undefined') {
+                toastr.info('Lịch sử chi tiết chỉ được lưu vào cơ sở dữ liệu trong chế độ Thực thi thật.');
+            }
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/ebmr/run-data-history/${recordId}/${blockId}/${cellId}`);
+            const res = await response.json();
+            
+            if (res.success) {
+                const tbody = document.getElementById('historyTableBody');
+                if (!tbody) {
+                    if (typeof toastr !== 'undefined') toastr.error('Không tìm thấy bảng hiển thị lịch sử trên giao diện này.');
+                    return;
+                }
+                tbody.innerHTML = '';
+                
+                if (res.data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Không có lịch sử thay đổi</td></tr>';
+                } else {
+                    res.data.forEach(item => {
+                        tbody.innerHTML += `
+                            <tr>
+                                <td>${item.change_index}</td>
+                                <td>${item.old_value}</td>
+                                <td>${item.new_value}</td>
+                                <td>${item.reason || ''}</td>
+                                <td>${item.changed_by}</td>
+                                <td>${item.changed_at}</td>
+                            </tr>
+                        `;
+                    });
+                }
+                
+                if (typeof $ !== 'undefined') $('#runDataHistoryModal').modal('show');
+            } else {
+                if (typeof toastr !== 'undefined') toastr.error('Không thể lấy lịch sử dữ liệu');
+            }
+        } catch (err) {
+            console.error(err);
+            if (typeof toastr !== 'undefined') toastr.error('Lỗi kết nối máy chủ');
+        }
+    };
 </script>

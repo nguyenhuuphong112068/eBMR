@@ -6,10 +6,25 @@
     @php
         $hasTemplatesForCode = false;
         $codeParam = request('code');
+        $selectedCategoryItem = null;
         if ($codeParam) {
-            $hasTemplatesForCode = $templates->contains(function($t) use ($codeParam) {
+            $hasTemplatesForCode = $templates->contains(function ($t) use ($codeParam) {
                 return strtolower(trim($t->category_code)) === strtolower(trim($codeParam));
             });
+            if (isset($category_items)) {
+                $selectedCategoryItem = collect($category_items)->first(function ($item) use ($codeParam) {
+                    if (isset($item->intermediate_code)) {
+                        return strtolower(trim($item->intermediate_code)) === strtolower(trim($codeParam));
+                    }
+                    if (isset($item->code)) {
+                        return strtolower(trim($item->code)) === strtolower(trim($codeParam));
+                    }
+                    if (isset($item->finished_product_code)) {
+                        return strtolower(trim($item->finished_product_code)) === strtolower(trim($codeParam));
+                    }
+                    return false;
+                });
+            }
         }
     @endphp
     <div class="content-wrapper">
@@ -37,10 +52,49 @@
                                     </button>
                                 </div>
                                 @if (!request('code') || !$hasTemplatesForCode)
-                                    <button class="btn btn-outline-primary rounded-pill px-4 shadow-sm fw-bold"
-                                        onclick="openBtpListModal()">
-                                        <i class="fas fa-file-signature me-2"></i> Tạo mới
-                                    </button>
+                                    @if (request('code') && $selectedCategoryItem)
+                                        @php
+                                            $type = request('type', 'BMR');
+                                            $id = $selectedCategoryItem->id;
+                                            if ($type == 'GF' || $type == 'MF') {
+                                                $code = $selectedCategoryItem->code;
+                                                $name = addslashes($selectedCategoryItem->name);
+                                                $info =
+                                                    $type == 'GF'
+                                                        ? 'SOP: ' . $selectedCategoryItem->relatived_sop_no
+                                                        : 'Công đoạn: ' . $selectedCategoryItem->stage_name;
+                                                $onClick = "selectCategory($id, '$code', '$name', '$info')";
+                                            } elseif ($type == 'BPR') {
+                                                $code = $selectedCategoryItem->finished_product_code;
+                                                $name = addslashes($selectedCategoryItem->product_name);
+                                                $info = 'Cỡ lô: ' . $selectedCategoryItem->batch_qty;
+                                                $onClick = "selectCategory($id, '$code', '$name', '$info', {7: 1, 8: 1})";
+                                            } else {
+                                                $code = $selectedCategoryItem->intermediate_code;
+                                                $name = addslashes($selectedCategoryItem->product_name);
+                                                $info =
+                                                    'Cỡ lô: ' .
+                                                    $selectedCategoryItem->batch_size .
+                                                    ' ' .
+                                                    $selectedCategoryItem->unit_batch_size .
+                                                    ' | Dạng: ' .
+                                                    ($selectedCategoryItem->dosage_name ?? 'N/A');
+                                                $isHypothesis = $selectedCategoryItem->IsHypothesis ?? 0;
+                                                $batchQty = $selectedCategoryItem->batch_qty ?? 0;
+                                                $batchSize = $selectedCategoryItem->batch_size ?? 0;
+                                                $onClick = "selectCategory($id, '$code', '$name', '$info', {1: 1, 2: 1, 3: 1, 4: 1, 5: 1, 6: 1}, $isHypothesis, $batchQty, $batchSize)";
+                                            }
+                                        @endphp
+                                        <button class="btn btn-outline-primary rounded-pill px-4 shadow-sm fw-bold"
+                                            onclick="{!! $onClick !!}">
+                                            <i class="fas fa-file-signature me-2"></i> Tạo mới
+                                        </button>
+                                    @else
+                                        <button class="btn btn-outline-primary rounded-pill px-4 shadow-sm fw-bold"
+                                            onclick="openBtpListModal()">
+                                            <i class="fas fa-file-signature me-2"></i> Tạo mới
+                                        </button>
+                                    @endif
                                 @endif
                             </div>
                         </div>
@@ -66,7 +120,8 @@
                                     </thead>
                                     <tbody>
                                         @foreach ($templates as $t)
-                                            <tr class="{{ $t->status === 'expired' ? 'replaced-version-row' : ($t->status === 'active' ? 'active-version-row' : 'normal-version-row') }}">
+                                            <tr
+                                                class="{{ $t->status === 'expired' ? 'replaced-version-row' : ($t->status === 'active' ? 'active-version-row' : 'normal-version-row') }}">
                                                 <td class="fw-bold text-navy">{{ $t->category_code }}</td>
                                                 <td class="fw-bold text-primary">{{ $t->doc_code ?? '-' }}</td>
                                                 <td>{{ $t->category_name }}</td>
@@ -87,17 +142,22 @@
                                                 </td>
                                                 <td>
                                                     @if ($t->status === 'draft')
-                                                        <span class="badge bg-secondary"><i
-                                                                class="fas fa-edit me-1"></i>
+                                                        <span class="badge bg-secondary"><i class="fas fa-edit me-1"></i>
                                                             Nháp</span>
                                                     @elseif($t->status === 'submitted')
-                                                        <span class="badge bg-warning text-dark" style="cursor: pointer;" onclick="showWorkflowHistory('ebmr', {{ $t->id }})" title="Xem lịch sử duyệt"><i
-                                                                class="fas fa-clock me-1"></i> Chờ duyệt</span>
-                                                        @if($t->current_workflow_step)
-                                                            <div class="mt-1 small text-muted"><i class="fas fa-user-clock me-1"></i>{{ $t->current_workflow_step }}</div>
+                                                        <span class="badge bg-warning text-dark" style="cursor: pointer;"
+                                                            onclick="showWorkflowHistory('ebmr', {{ $t->id }})"
+                                                            title="Xem lịch sử duyệt"><i class="fas fa-clock me-1"></i> Chờ
+                                                            duyệt</span>
+                                                        @if ($t->current_workflow_step)
+                                                            <div class="mt-1 small text-muted"><i
+                                                                    class="fas fa-user-clock me-1"></i>{{ $t->current_workflow_step }}
+                                                            </div>
                                                         @endif
                                                     @elseif($t->status === 'approved')
-                                                        <span class="badge bg-success" style="cursor: pointer;" onclick="showWorkflowHistory('ebmr', {{ $t->id }})" title="Xem lịch sử duyệt"><i
+                                                        <span class="badge bg-success" style="cursor: pointer;"
+                                                            onclick="showWorkflowHistory('ebmr', {{ $t->id }})"
+                                                            title="Xem lịch sử duyệt"><i
                                                                 class="fas fa-check-circle me-1"></i> Đã duyệt</span>
                                                     @elseif($t->status === 'issued')
                                                         @if ($t->effective_date)
@@ -105,8 +165,7 @@
                                                                     class="fas fa-hourglass-half me-1"></i> Chờ hiệu
                                                                 lực</span>
                                                         @else
-                                                            <span class="badge bg-info"><i
-                                                                    class="fas fa-rocket me-1"></i>
+                                                            <span class="badge bg-info"><i class="fas fa-rocket me-1"></i>
                                                                 Đã ban hành</span>
                                                         @endif
                                                     @elseif($t->status === 'active')
@@ -204,13 +263,20 @@
                                                             <span class="badge bg-secondary"><i
                                                                     class="fas fa-edit me-1"></i> Nháp</span>
                                                         @elseif($t->status === 'submitted')
-                                                            <span class="badge bg-warning text-dark" style="cursor: pointer;" onclick="showWorkflowHistory('ebmr', {{ $t->id }})" title="Xem lịch sử duyệt"><i
+                                                            <span class="badge bg-warning text-dark"
+                                                                style="cursor: pointer;"
+                                                                onclick="showWorkflowHistory('ebmr', {{ $t->id }})"
+                                                                title="Xem lịch sử duyệt"><i
                                                                     class="fas fa-clock me-1"></i> Chờ duyệt</span>
-                                                            @if($t->current_workflow_step)
-                                                                <div class="mt-1 small text-muted"><i class="fas fa-user-clock me-1"></i>{{ $t->current_workflow_step }}</div>
+                                                            @if ($t->current_workflow_step)
+                                                                <div class="mt-1 small text-muted"><i
+                                                                        class="fas fa-user-clock me-1"></i>{{ $t->current_workflow_step }}
+                                                                </div>
                                                             @endif
                                                         @elseif($t->status === 'approved')
-                                                            <span class="badge bg-success" style="cursor: pointer;" onclick="showWorkflowHistory('ebmr', {{ $t->id }})" title="Xem lịch sử duyệt"><i
+                                                            <span class="badge bg-success" style="cursor: pointer;"
+                                                                onclick="showWorkflowHistory('ebmr', {{ $t->id }})"
+                                                                title="Xem lịch sử duyệt"><i
                                                                     class="fas fa-check-circle me-1"></i> Đã
                                                                 duyệt</span>
                                                         @elseif($t->status === 'issued')
@@ -228,7 +294,8 @@
                                                                     class="fas fa-check-double me-1"></i> Hiện hành</span>
                                                         @elseif($t->status === 'expired')
                                                             <span class="badge bg-light text-muted border"><i
-                                                                    class="fas fa-history me-1"></i> Đã được thay thế</span>
+                                                                    class="fas fa-history me-1"></i> Đã được thay
+                                                                thế</span>
                                                         @endif
                                                     </div>
                                                 </div>
@@ -342,7 +409,8 @@
                                                                 <i class="fas fa-eye me-1"></i> Xem hồ sơ
                                                             </a>
                                                             @if ($t->status === 'active' && !$t->has_pending_version)
-                                                                <button class="btn btn-sm btn-outline-warning rounded-pill px-3 py-1"
+                                                                <button
+                                                                    class="btn btn-sm btn-outline-warning rounded-pill px-3 py-1"
                                                                     onclick="duplicateTemplate({{ $t->id }})"
                                                                     title="Lên ấn bản">
                                                                     <i class="fas fa-copy me-1"></i> Lên ấn bản
@@ -507,8 +575,8 @@
                         <i class="fas fa-chevron-right"></i>
                     </button>
                 @endif
-                <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" role="document"
-                    style="max-width: 95%;">
+                <div class="modal-dialog {{ request('type') == 'MF' ? 'modal-lg' : 'modal-xl' }} modal-dialog-centered modal-dialog-scrollable" role="document"
+                    style="{{ request('type') == 'MF' ? '' : 'max-width: 95%;' }}">
                     <div class="modal-content border-0 shadow-lg">
                         <div class="modal-header">
                             <h5 class="modal-title font-weight-bold text-info" id="modalTitle">
@@ -521,20 +589,18 @@
                         </div>
                         <div class="modal-body p-4">
                             <div class="row align-items-center mb-3">
-                                <div class="col-md-6">
-                                    <div class="alert alert-cyan border-0 shadow-none mb-0 p-3">
-                                        <div class="d-flex align-items-center">
-                                            <i class="fas fa-info-circle fa-2x me-3 text-primary"></i>
-                                            <div class="w-100" style="min-width: 0;">
-                                                <h6 class="mb-1 fw-bold text-navy small">Sản phẩm đang chọn:</h6>
-                                                <div id="selectedBtpName" class="fs-6 text-primary fw-bold text-truncate">
-                                                    Chưa chọn sản phẩm</div>
-                                                <div id="selectedBtpInfo" class="small text-muted mt-1"
-                                                    style="font-size: 0.75rem;">Cỡ lô: - | Dạng bào chế: -</div>
-                                            </div>
+                                <div class="{{ request('type') == 'MF' ? 'col-md-8' : 'col-md-6' }}">
+                                    <div class="p-3 rounded border" style="background: linear-gradient(145deg, #ffffff, #f8f9fa); border-color: #e2e8f0 !important; border-left: 4px solid #0d6efd !important; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+                                        <div class="w-100" style="min-width: 0;">
+                                            <div class="text-uppercase fw-bold mb-1" style="color: #64748b; font-size: 0.65rem; letter-spacing: 0.5px;">Sản phẩm đang chọn</div>
+                                            <div id="selectedBtpName" class="text-primary fw-bolder text-truncate mb-1" style="font-size: 1.15rem; line-height: 1.3;">
+                                                Chưa chọn sản phẩm</div>
+                                            <div id="selectedBtpInfo" class="fw-semibold"
+                                                style="color: #475569; font-size: 0.85rem;">Cỡ lô: - | Dạng bào chế: -</div>
                                         </div>
                                     </div>
                                 </div>
+                                @if (request('type') != 'MF')
                                 <div class="col-md-3">
                                     <div class="form-group mb-0">
                                         <label
@@ -543,14 +609,15 @@
                                             name="doc_code" id="docCode" placeholder="Nhập số...">
                                     </div>
                                 </div>
-                                <div class="col-md-3">
+                                @endif
+                                <div class="{{ request('type') == 'MF' ? 'col-md-4' : 'col-md-3' }}">
                                     <div class="form-group mb-0">
                                         <label class="form-label fw-bold small">Phiên Bản <span
                                                 class="text-danger">*</span></label>
                                         <input type="number" class="form-control rounded-pill text-center fw-bold"
                                             name="version" id="version" required value="1" min="1">
-                                        <small class="text-muted d-block mt-1 text-center" style="font-size: 0.7rem;"><i
-                                                class="fas fa-magic me-1"></i> Tự động</small>
+                                        <small class="text-muted d-block mt-1 text-center" style="font-size: 0.7rem;">
+                                        </small>
                                     </div>
                                 </div>
                             </div>
@@ -1613,7 +1680,7 @@
             .normal-version-row {
                 background-color: #ffffff !important;
             }
-            
+
             .normal-version-row td {
                 background-color: #ffffff !important;
             }
@@ -1756,11 +1823,10 @@
             function selectCategory(id, code, name, info, stages = {}, isHypothesis = 0, batchQty = 0, batchSize = 0) {
                 $('#modalBtpList').modal('hide');
 
-                openCreateModal();
                 $('#caterogyId').val(id);
                 $('#templateType').val(new URLSearchParams(window.location.search).get('type') || 'BMR');
                 $('#selectedBtpName').html(code + ' - ' + name);
-                $('#selectedBtpInfo').html(`<i class="fas fa-info-circle me-1"></i> ${info}`);
+                $('#selectedBtpInfo').html(info);
                 window.currentBatchQty = batchQty;
                 window.currentBatchSize = batchSize;
 
@@ -1770,9 +1836,39 @@
                 $('#version').val('...').prop('disabled', true);
                 $.get('{{ route('pages.ebmr.getNextVersion') }}', {
                     category_id: id,
-                    type: $('#templateType').val()
+                    type: type
                 }, function(res) {
+                    if (type === 'MF') {
+                        // For MF, bypass the modal and create immediately
+                        const data = {
+                            _token: '{{ csrf_token() }}',
+                            id: '',
+                            caterogy_id: id,
+                            version: res.next_version,
+                            doc_code: '',
+                            type: type
+                        };
+
+                        $.post('{{ route('pages.ebmr.storeTemplateMetadata') }}', data, function(storeRes) {
+                            if (storeRes.success) {
+                                Swal.fire('Thành công', 'Đã tạo Biểu mẫu gốc thành công!', 'success').then(() => {
+                                    if (storeRes.new_id) {
+                                        window.location.href = `/ebmr/designer/${storeRes.new_id}`;
+                                    } else {
+                                        location.reload();
+                                    }
+                                });
+                            } else {
+                                Swal.fire('Lỗi', storeRes.message || 'Có lỗi xảy ra', 'error');
+                            }
+                        }).fail(function() {
+                            Swal.fire('Lỗi', 'Lỗi kết nối hoặc lỗi server.', 'error');
+                        });
+                        return;
+                    }
+
                     $('#version').val(res.next_version).prop('disabled', false);
+                    openCreateModal();
                 });
 
                 // Fetch ERP Recipe and auto-populate BOM table type 0
@@ -1862,7 +1958,7 @@
                             }
                         });
 
-                        $.post('{{ route("pages.ebmr.duplicateTemplate") }}', {
+                        $.post('{{ route('pages.ebmr.duplicateTemplate') }}', {
                             _token: '{{ csrf_token() }}',
                             id: id
                         }, function(res) {
@@ -1878,7 +1974,8 @@
                                 Swal.fire('Lỗi', res.message || 'Có lỗi xảy ra khi lên ấn bản.', 'error');
                             }
                         }).fail(function(xhr) {
-                            Swal.fire('Lỗi', xhr.responseJSON?.message || 'Không thể kết nối đến máy chủ.', 'error');
+                            Swal.fire('Lỗi', xhr.responseJSON?.message || 'Không thể kết nối đến máy chủ.',
+                                'error');
                         });
                     }
                 });
@@ -1899,6 +1996,10 @@
                     $('#statusDisplay').val(data.status);
 
                     if (data.type === 'BMR') {
+                        $('#selectedBtpName').html((data.product_code || '') + ' - ' + (data.product_name || ''));
+                        let info = 'Cỡ lô: ' + (data.batch_size || 0) + ' ' + (data.unit_batch_size || '') + ' | Dạng bào chế: ' + (data.dosage_form_name || '-');
+                        $('#selectedBtpInfo').html(info);
+
                         window.currentBatchQty = data.batch_qty || 0;
                         window.currentBatchSize = data.batch_size || 0;
                         $('#bmr_specific_fields').show();
@@ -1937,7 +2038,8 @@
                     }
 
                     // Apply read-only state to all form inputs
-                    $('#metadataForm').find('input:not([type="hidden"]), select, textarea').prop('disabled', isReadOnly);
+                    $('#metadataForm').find('input:not([type="hidden"]), select, textarea').prop('disabled',
+                        isReadOnly);
                     if (isReadOnly) {
                         $('#metadataForm button[type="submit"]').hide();
                     } else {

@@ -9,7 +9,7 @@ class ManuConditionModel extends Model
 {
     use HasFactory;
 
-    protected $table = 'manu_condition';
+    protected $table = 'room_manufactured_condition';
 
     protected $fillable = [
         'room_id',

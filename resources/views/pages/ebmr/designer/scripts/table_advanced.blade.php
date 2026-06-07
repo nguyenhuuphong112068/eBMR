@@ -123,6 +123,20 @@
 
         saveState();
         const item = items.find(i => i.id === selectedId);
+        
+        if (!item) {
+            if (window.jQuery) {
+                $('#splitModal').modal('hide');
+            } else {
+                const modalEl = document.getElementById('splitModal');
+                if (modalEl) {
+                    const modalInstance = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+                    modalInstance.hide();
+                }
+            }
+            return;
+        }
+
         const r = activeRowIdx - 1;
         const c = activeColIdx;
         const cell = item.data[r][c];

@@ -72,6 +72,7 @@ class IntermediateCategoryController extends Controller
                         'intermediate_code' => $request->intermediate_code,
                         'product_name_id' => $request->product_name_id,
                         'dosage_id' => $request->dosage_id,
+                        'classification' => $request->classification,
                         'batch_size' => $request->batch_size,
                         'unit_batch_size' => $request->unit_batch_size,
                         'batch_qty' => $request->batch_qty,
@@ -128,6 +129,7 @@ class IntermediateCategoryController extends Controller
                         'intermediate_code' => $request->intermediate_code,
                         'product_name_id' => $request->product_name_id,
                         'dosage_id' => $request->dosage_id,
+                        'classification' => $request->classification,
                         'batch_size' => $request->batch_size,
                         'unit_batch_size' => $request->unit_batch_size,
                         'batch_qty' => $request->batch_qty,
@@ -223,7 +225,7 @@ class IntermediateCategoryController extends Controller
 
         public function formulas(Request $request)
         {
-                $formulas = DB::table('preparation_formula')
+                $formulas = DB::table('formula_preparation')
                         ->where('intermediate_category_id', $request->id)
                         ->orderBy('id')
                         ->get();
@@ -234,7 +236,7 @@ class IntermediateCategoryController extends Controller
                                 ->orderBy('id')
                                 ->get();
                                 
-                        $formula->sub_amounts = DB::table('ingredient_amount')
+                        $formula->sub_amounts = DB::table('formula_ingredient_amount')
                                 ->where('preparation_formula_id', $formula->id)
                                 ->orderBy('id')
                                 ->get();

@@ -314,35 +314,48 @@
                     const cellWidth = (item.columns && item.columns[c] && item.columns[c].width) ? item.columns[c].width : 'auto';
                     const cellBg = (cell.backgroundColor) ? cell.backgroundColor : '';
 
+                    let isSoloBadge = false;
+                    if (cell.content) {
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = cell.content;
+                        const badges = tempDiv.querySelectorAll('.ebmr-field-badge');
+                        if (badges.length === 1) {
+                            badges[0].remove();
+                            if (tempDiv.textContent.trim() === '') {
+                                isSoloBadge = true;
+                            }
+                        }
+                    }
+
                     let displayContent = decorateContent(cell.content, null, loopSuffix);
                     if (displayContent === null || displayContent === 'null' || displayContent === undefined) {
                         displayContent = '';
                     }
                     
-                    let cellClass = "";
+                    let cellClass = isSoloBadge ? "solo-badge-cell " : "";
                     let onclickAttr = "";
                     let finalEditable = "false";
 
                     if (window.isExecutionMode) {
                         const runVal = runDataForBlock[`${r}_${c}`];
                         if (displayContent.includes('[Nhập dữ liệu]')) {
-                            cellClass = "execution-input-cell";
+                            cellClass += "execution-input-cell";
                             onclickAttr = `onclick="openExecutionInputModal('${blockKey}', ${r}, ${c}, 'text')"`;
                             displayContent = runVal ? runVal : `<span class="execution-badge input"><i class="fas fa-edit"></i> [Nhập dữ liệu]</span>`;
                         } else if (displayContent.includes('[Ký tên]')) {
-                            cellClass = "execution-input-cell";
+                            cellClass += "execution-input-cell";
                             onclickAttr = `onclick="openExecutionInputModal('${blockKey}', ${r}, ${c}, 'signature')"`;
                             displayContent = runVal ? getSignatureDisplayHtml(runVal, 'signature') : `<span class="execution-badge signature"><i class="fas fa-pen"></i> [Ký tên]</span>`;
                         } else if (displayContent.includes('[Tự động lấy thời gian]')) {
-                            cellClass = "execution-input-cell";
+                            cellClass += "execution-input-cell";
                             onclickAttr = `ondblclick="autoFillTime('${blockKey}', ${r}, ${c})" title="Nháy đúp chuột (Double-click) để lấy ngày giờ hệ thống"`;
                             displayContent = runVal ? runVal : `<span class="execution-badge time"><i class="fas fa-clock"></i> [Double-click lấy giờ]</span>`;
                         } else if (displayContent.includes('[Người thực hiện]')) {
-                            cellClass = "execution-input-cell";
+                            cellClass += "execution-input-cell";
                             onclickAttr = `onclick="autoFillExecutor('${blockKey}', ${r}, ${c})" title="Click để xác nhận người thực hiện"`;
                             displayContent = runVal ? getSignatureDisplayHtml(runVal, 'executor') : `<span class="execution-badge executor"><i class="fas fa-user-edit"></i> [Người thực hiện]</span>`;
                         } else if (displayContent.includes('[Người kiểm tra]')) {
-                            cellClass = "execution-input-cell";
+                            cellClass += "execution-input-cell";
                             onclickAttr = `onclick="openCheckerAuthModal('${blockKey}', ${r}, ${c})" title="Click để xác thực người kiểm tra"`;
                             displayContent = runVal ? getSignatureDisplayHtml(runVal, 'checker') : `<span class="execution-badge checker"><i class="fas fa-check-double"></i> [Người kiểm tra]</span>`;
                         }
@@ -354,7 +367,11 @@
                     if (window.isExecutionMode && runDataForBlock._meta && runDataForBlock._meta[`${r}_${c}`]) {
                         const meta = runDataForBlock._meta[`${r}_${c}`];
                         if (meta.by || meta.at) {
-                            metaHtml = `<div class="execution-meta">${meta.by || ''} ${meta.at || ''}</div>`;
+                            let historyBadge = '';
+                            if (meta.history_count && meta.history_count > 0) {
+                                historyBadge = `<span class="badge bg-warning text-dark ms-1" style="cursor:pointer;" onclick="showRunDataHistory(event, '${window.currentRecordId}', '${item.id}', '${r}_${c}')" title="Xem lịch sử thay đổi">Lịch sử (${meta.history_count})</span>`;
+                            }
+                            metaHtml = `<div class="execution-meta">${meta.by || ''} ${meta.at || ''} ${historyBadge}</div>`;
                         }
                     }
 
@@ -1157,7 +1174,11 @@
                     if (fieldData && fieldData._meta && fieldData._meta['default']) {
                         const meta = fieldData._meta['default'];
                         if (meta.by || meta.at) {
-                            metaHtml = `<div class="execution-meta" style="font-size: 7px; margin-top: 1px; text-align: center;">${meta.by || ''} ${meta.at || ''}</div>`;
+                            let historyBadge = '';
+                            if (meta.history_count && meta.history_count > 0) {
+                                historyBadge = `<span class="badge bg-warning text-dark ms-1" style="cursor:pointer;" onclick="showRunDataHistory(event, '${window.currentRecordId}', '${fieldId + loopSuffix}', 'default')" title="Xem lịch sử thay đổi">Lịch sử (${meta.history_count})</span>`;
+                            }
+                            metaHtml = `<div class="execution-meta" style="font-size: 16px; margin-top: 1px; text-align: center;">${meta.by || ''} ${meta.at || ''} ${historyBadge}</div>`;
                         }
                     }
 
@@ -1166,7 +1187,11 @@
                     if (field.type === 'signature') {
                         let clickAttr = '';
                         if (!window.isReadOnly) {
-                            clickAttr = `onclick="openExecutionInputModal('${fieldId + loopSuffix}', 'default', 'default', 'signature')"`;
+                            if (field.is_checker) {
+                                clickAttr = `onclick="openCheckerAuthModal('${fieldId + loopSuffix}', 'default', 'default')" title="Click để xác thực người kiểm tra"`;
+                            } else {
+                                clickAttr = `onclick="openExecutionInputModal('${fieldId + loopSuffix}', 'default', 'default', 'signature')"`;
+                            }
                         }
                         
                         let signatureHtml = '';
@@ -1177,20 +1202,24 @@
                                 signatureHtml = `<span class="badge bg-light text-success border" style="cursor: ${window.isReadOnly ? 'default' : 'pointer'}; font-weight: 600;" ${clickAttr}><i class="fas fa-check-circle me-1"></i>${val}</span>`;
                             }
                         } else {
-                            signatureHtml = `<span class="badge bg-light text-primary border" style="cursor: ${window.isReadOnly ? 'default' : 'pointer'};" ${clickAttr}><i class="fas fa-signature me-1"></i> [Ký tên]</span>`;
+                            if (field.is_checker) {
+                                signatureHtml = `<span class="badge bg-light text-warning border border-warning" style="cursor: ${window.isReadOnly ? 'default' : 'pointer'};" ${clickAttr}><i class="fas fa-check-double me-1"></i> [Người kiểm tra]</span>`;
+                            } else {
+                                signatureHtml = `<span class="badge bg-light text-primary border" style="cursor: ${window.isReadOnly ? 'default' : 'pointer'};" ${clickAttr}><i class="fas fa-signature me-1"></i> [Ký tên]</span>`;
+                            }
                         }
                         badge.innerHTML = `${signatureHtml}${metaHtml}`;
                         badge.className = 'ebmr-field-badge ebmr-field-value';
                     } else if (field.type === 'checkbox') {
                         badge.innerHTML =
-                            `<input type="checkbox" ${val ? 'checked' : ''} ${window.isReadOnly ? 'disabled' : ''} onchange="window.executionValues['${fieldId + loopSuffix}'] = this.checked; if(typeof window.recalculateAllFormulas === 'function') window.recalculateAllFormulas()">`;
+                            `<input type="checkbox" ${val ? 'checked' : ''} ${window.isReadOnly ? 'disabled' : ''} onchange="window.handleCheckboxChange('${fieldId + loopSuffix}', this.checked, this)">${metaHtml}`;
                         badge.className = 'ebmr-field-badge ebmr-field-value';
                     } else if (field.type === 'select') {
                         const dsType = field.dataSource ? field.dataSource.type : 'manual';
                         if (dsType === 'database') {
                             const ds = field.dataSource;
                             badge.innerHTML =
-                                `<select class="form-select-sm border-0 border-bottom bg-transparent dynamic-select" data-field-id="${fieldId + loopSuffix}" data-table="${ds.table || ''}" data-label="${ds.labelCol || ''}" data-value="${ds.valueCol || ''}" data-where="${ds.where || ''}" data-selected="${val}" ${window.isReadOnly ? 'disabled' : ''} onchange="window.executionValues['${fieldId + loopSuffix}'] = this.value; if(typeof window.recalculateAllFormulas === 'function') window.recalculateAllFormulas()"><option value="">-- Đang tải... --</option></select>${metaHtml}`;
+                                `<select class="form-select-sm border-0 border-bottom bg-transparent dynamic-select" data-field-id="${fieldId + loopSuffix}" data-table="${ds.table || ''}" data-label="${ds.labelCol || ''}" data-value="${ds.valueCol || ''}" data-where="${ds.where || ''}" data-selected="${val}" ${window.isReadOnly ? 'disabled' : ''} onchange="window.handleSelectChange('${fieldId + loopSuffix}', this.value, this)"><option value="">-- Đang tải... --</option></select>${metaHtml}`;
                         } else {
                             let optionsArr = [];
                             if (Array.isArray(field.options)) {
@@ -1199,11 +1228,11 @@
                                 optionsArr = field.options.split(/[,;\n]/).map(o => o.trim()).filter(o => o);
                             }
                             badge.innerHTML =
-                                `<select class="form-select-sm border-0 border-bottom bg-transparent" ${window.isReadOnly ? 'disabled' : ''} onchange="window.executionValues['${fieldId + loopSuffix}'] = this.value; if(typeof window.recalculateAllFormulas === 'function') window.recalculateAllFormulas()"><option value="">--</option>${optionsArr.map(o => `<option value="${o}" ${val === o ? 'selected' : ''}>${o}</option>`).join('')}</select>${metaHtml}`;
+                                `<select class="form-select-sm border-0 border-bottom bg-transparent" ${window.isReadOnly ? 'disabled' : ''} onchange="window.handleSelectChange('${fieldId + loopSuffix}', this.value)"><option value="">--</option>${optionsArr.map(o => `<option value="${o}" ${val === o ? 'selected' : ''}>${o}</option>`).join('')}</select>${metaHtml}`;
                         }
                         badge.className = 'ebmr-field-badge ebmr-field-value';
                     } else if (field.type === 'date') {
-                        const placeholder = field.label || 'Chọn ngày...';
+                        const placeholder = field.label || 'Chọn thời gian...';
                         const displayVal = val || '';
                         const isNow = (field.defaultValue && field.defaultValue.toLowerCase() === 'now');
                         const titleAttr = isNow ? 'title="Nhấp đúp chuột (Double-click) để lấy ngày giờ hệ thống"' : '';
@@ -1257,11 +1286,16 @@
  
                     // Xác định Icon dựa theo loại trường (field type)
                     if (field.type === 'signature') {
-                        icon = 'fa-signature';
-                        typeLabel = 'Chữ ký';
+                        if (field.is_checker) {
+                            icon = 'fa-check-double text-warning';
+                            typeLabel = 'Người kiểm tra';
+                        } else {
+                            icon = 'fa-signature';
+                            typeLabel = 'Chữ ký';
+                        }
                     } else if (field.type === 'date') {
-                        icon = 'fa-calendar-alt';
-                        typeLabel = 'Ngày';
+                        icon = 'fa-clock';
+                        typeLabel = 'Thời Gian';
                     } else if (field.type === 'checkbox') {
                         icon = 'fa-check-square';
                         typeLabel = 'Tick';

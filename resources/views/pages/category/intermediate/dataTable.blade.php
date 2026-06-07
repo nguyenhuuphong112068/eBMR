@@ -229,6 +229,7 @@
                                                 data-batch_qty="{{ $data->batch_qty }}"
                                                 data-unit_batch_qty="{{ $data->unit_batch_qty }}"
                                                 data-dosage_id="{{ $data->dosage_id }}"
+                                                data-classification="{{ $data->classification }}"
                                                 data-weight_1="{{ $data->weight_1 }}"
                                                 data-weight_2="{{ $data->weight_2 }}"
                                                 data-prepering="{{ $data->prepering }}"
@@ -447,6 +448,7 @@
                     modal.find('input[name="batch_qty"]').val(button.data('batch_qty'));
                     modal.find('select[name="unit_batch_qty"]').val(button.data('unit_batch_qty'));
                     modal.find('select[name="dosage_id"]').val(button.data('dosage_id'));
+                    modal.find('select[name="classification"]').val(button.data('classification'));
 
                     modal.find('input[name="weight_1"]').prop('checked', button.data('weight_1') == 1);
                     modal.find('input[name="weight_2"]').prop('checked', button.data('weight_2') == 1);
