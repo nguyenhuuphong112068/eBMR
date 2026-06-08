@@ -139,6 +139,8 @@
                                             }
                                         }
                                         // Generate new cell ID to be safe
+                                        delete cell.db_id;
+                                        delete cell.content_db_id;
                                         cell.id = 'cell_' + generateImportUUID();
                                     }
                                 });

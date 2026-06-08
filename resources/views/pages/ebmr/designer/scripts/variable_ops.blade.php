@@ -66,7 +66,9 @@
                         decimal_places: null
                     },
                     options: [],
-                    instruction: ''
+                    instruction: '',
+                    block_id: blockId,
+                    section_id: item.section_id || null
                 };
 
                 // Create the badge HTML

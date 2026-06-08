@@ -1212,7 +1212,7 @@
                         badge.className = 'ebmr-field-badge ebmr-field-value';
                     } else if (field.type === 'checkbox') {
                         badge.innerHTML =
-                            `<input type="checkbox" ${val ? 'checked' : ''} ${window.isReadOnly ? 'disabled' : ''} onchange="window.handleCheckboxChange('${fieldId + loopSuffix}', this.checked, this)">${metaHtml}`;
+                            `<div class="execution-checkbox-wrapper"><input type="checkbox" class="execution-checkbox" ${val ? 'checked' : ''} ${window.isReadOnly ? 'disabled' : ''} onchange="window.handleCheckboxChange('${fieldId + loopSuffix}', this.checked, this)">${metaHtml}</div>`;
                         badge.className = 'ebmr-field-badge ebmr-field-value';
                     } else if (field.type === 'select') {
                         const dsType = field.dataSource ? field.dataSource.type : 'manual';
@@ -1234,8 +1234,8 @@
                     } else if (field.type === 'date') {
                         const placeholder = field.label || 'Chọn thời gian...';
                         const displayVal = val || '';
-                        const isNow = (field.defaultValue && field.defaultValue.toLowerCase() === 'now');
-                        const titleAttr = isNow ? 'title="Nhấp đúp chuột (Double-click) để lấy ngày giờ hệ thống"' : '';
+                        const isNow = (field.autoSystemTime !== false);
+                        const titleAttr = isNow ? 'title="Nhấp chuột để tự động điền ngày giờ hệ thống"' : '';
                         
                         badge.innerHTML =
                             `<span class="execution-input-test" ${!window.isReadOnly ? `onclick="handleDateVariableClick(event, '${fieldId + loopSuffix}', ${isNow})"` : ''} style="cursor: ${window.isReadOnly ? 'default' : 'pointer'}; border-bottom: 1px dotted #1a73e8; min-width: 30px; display: inline-block; outline: none; position: relative;" ${titleAttr}>${displayVal || `<span style="color: #6c757d; font-style: italic;">${placeholder}</span>`}${metaHtml}</span>`;

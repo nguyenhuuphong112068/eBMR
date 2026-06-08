@@ -186,6 +186,8 @@
                     return {
                         ...cell,
                         content: cellContent, // Copy content/variables from the previous row as requested
+                        db_id: null,
+                        content_db_id: null,
                         is_dynamic: true 
                     };
                 });

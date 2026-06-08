@@ -244,7 +244,7 @@
                     backgroundColor: '#dcdcdc'
                 },
                 {
-                    content: `Số biểu mẫu: ${t.format}-${t.version}`,
+                    content: ` Số biểu mẫu: ${t.format}-${t.version}`,
                     rs: 1,
                     cs: 1,
                     textAlign: 'right',
@@ -253,18 +253,7 @@
                     backgroundColor: '#dcdcdc'
                 }
             ],
-            // Gap row
-            [{
-                    content: '',
-                    rs: 1,
-                    cs: 2,
-                    backgroundColor: '#ffffff'
-                },
-                {
-                    content: '',
-                    hidden: true
-                }
-            ],
+
             // Row 2: Main Title (UPPERCASE, Centered)
             [{
                     content: t.name,
@@ -351,8 +340,14 @@
                         rs: 1,
                         cs: 3
                     },
-                    { content: '', hidden: true },
-                    { content: '', hidden: true }
+                    {
+                        content: '',
+                        hidden: true
+                    },
+                    {
+                        content: '',
+                        hidden: true
+                    }
                 ],
                 // Row 2: Edition & Effective Date
                 [{
@@ -361,7 +356,8 @@
                         cs: 1
                     },
                     {
-                        content: '<strong style="color: red;">: ' + String(t.edition).padStart(2, '0') + '</strong>',
+                        content: '<strong style="color: red;">: ' + String(t.edition).padStart(2, '0') +
+                            '</strong>',
                         rs: 1,
                         cs: 1
                     },
@@ -781,7 +777,7 @@
                 let unitVal = parseFloat(formula.total_amount_per_unit) || 0;
                 let batchVal = parseFloat(formula.total_amount_per_batch) || 0;
                 let percentVal = t.raw_batch_size > 0 ? (batchVal / t.raw_batch_size) * 100 : 0;
-                
+
                 let isCalculate = !(formula.not_calculator == 1);
 
                 if (isCalculate) {
@@ -793,7 +789,7 @@
                 let unitText = '';
                 let batchText = '';
                 let percentText = '';
-                
+
                 if (isCalculate) {
                     percentText = percentVal > 0 ? Number(percentVal).toLocaleString('vi-VN', {
                         minimumFractionDigits: 2,
@@ -836,17 +832,18 @@
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2
                     }) : '';
-                    
+
                     // Xử lý hiển thị phép nhân cho batch size nếu có batch_qty
                     if (batchVal > 0 && t.batch_qty > 0 && unitVal > 0 && t.raw_batch_size > 0) {
                         let singleBatchVal = (unitVal * t.raw_batch_size) / t.avg_core;
                         if (!singleBatchVal) singleBatchVal = batchVal / t.batch_qty;
                         if (Math.abs(singleBatchVal * t.batch_qty - batchVal) < 0.1) {
-                            batchText = `${Number(batchVal).toLocaleString('vi-VN', {minimumFractionDigits: 2, maximumFractionDigits: 2})} = ${Number(singleBatchVal).toLocaleString('vi-VN', {minimumFractionDigits: 2, maximumFractionDigits: 2})} x ${t.batch_qty}`;
+                            batchText =
+                                `${Number(batchVal).toLocaleString('vi-VN', {minimumFractionDigits: 2, maximumFractionDigits: 2})} = ${Number(singleBatchVal).toLocaleString('vi-VN', {minimumFractionDigits: 2, maximumFractionDigits: 2})} x ${t.batch_qty}`;
                         }
                     }
                 }
-                
+
                 if (!isCalculate) {
                     if (unitText) unitText = `(${unitText})`;
                     if (batchText) batchText = `(${batchText})`;

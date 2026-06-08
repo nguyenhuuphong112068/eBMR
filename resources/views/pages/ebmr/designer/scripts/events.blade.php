@@ -227,6 +227,8 @@
                                                 else item.data[rIdx][targetC] = clipCell.content;
                                             } else {
                                                 item.data[rIdx][targetC] = {...clipCell.data};
+                                                delete item.data[rIdx][targetC].db_id;
+                                                delete item.data[rIdx][targetC].content_db_id;
                                             }
                                         }
                                     }

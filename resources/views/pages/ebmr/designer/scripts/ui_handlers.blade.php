@@ -2188,6 +2188,17 @@
                         <option value="hh:mm dd/mm/yyyy" ${field.date_format === 'hh:mm dd/mm/yyyy' ? 'selected' : ''}>Giờ và Ngày (hh:mm dd/mm/yyyy)</option>
                     </select>
                 </div>
+                <div class="mb-3">
+                    <div class="form-check form-switch mt-2">
+                        <input class="form-check-input" type="checkbox" id="checkAutoSystemTime_${fieldId}" 
+                               ${(field.autoSystemTime !== false) ? 'checked' : ''} 
+                               onchange="syncFieldConfig('${fieldId}', 'autoSystemTime', this.checked)">
+                        <label class="form-check-label small fw-bold text-muted" for="checkAutoSystemTime_${fieldId}">
+                            <i class="fas fa-bolt me-1 text-warning"></i>Tự động lấy giờ hệ thống
+                        </label>
+                    </div>
+                    <div class="form-text small" style="font-size: 0.65rem;">Nếu bật, nhấp chuột vào biến sẽ tự động điền giờ hiện tại thay vì mở form nhập liệu.</div>
+                </div>
             `;
         } else if (field.type === 'signature') {
             typeHtml += `
@@ -2237,22 +2248,7 @@
                 <div class="form-text small" style="font-size: 0.7rem;">Dùng để tính toán thử ngay trong trình thiết kế.</div>
             </div>
 
-            <div class="mb-3">
-                <label class="small fw-bold text-primary text-uppercase mb-2"><i class="fas fa-info-circle me-1"></i> Hướng dẫn ghi chép</label>
-                <textarea class="form-control form-control-sm border-primary" rows="2" placeholder="VD: Kiểm tra nhiệt độ trước khi ghi..." oninput="syncFieldConfig('${fieldId}', 'instruction', this.value)">${field.instruction || ''}</textarea>
-                <div class="form-text small" style="font-size: 0.7rem;">Hiện nội dung này trong modal khi người thực hiện nhập liệu.</div>
-            </div>
-
             <hr class="my-3">
-        `;
-
-        typeHtml += `
-            <div class="mb-3">
-                <div class="form-check form-switch ps-4 pt-1">
-                    <input class="form-check-input ms-n4" type="checkbox" id="fieldRequired" ${field.validation.required ? 'checked' : ''} onchange="syncFieldConfig('${fieldId}', 'validation.required', this.checked)">
-                    <label class="form-check-label small fw-bold" for="fieldRequired">Bắt buộc điền</label>
-                </div>
-            </div>
         `;
 
         if (field.type === 'number') {
@@ -2312,7 +2308,6 @@
                 </div>
             `;
         } else if (field.type === 'select') {
-
             const dsType = field.dataSource ? field.dataSource.type : 'manual';
             typeHtml += `
                 <div class="mb-3">
@@ -2352,6 +2347,28 @@
                 </div>`;
             }
         }
+
+        typeHtml += `
+
+
+            <div class="mb-3">
+                <label class="small fw-bold text-primary text-uppercase mb-2"><i class="fas fa-info-circle me-1"></i> Hướng dẫn ghi chép</label>
+                <textarea class="form-control form-control-sm border-primary" rows="2" placeholder="VD: Kiểm tra nhiệt độ trước khi ghi..." oninput="syncFieldConfig('${fieldId}', 'instruction', this.value)">${field.instruction || ''}</textarea>
+                <div class="form-text small" style="font-size: 0.7rem;">Hiện nội dung này trong modal khi người thực hiện nhập liệu.</div>
+            </div>
+
+            <hr class="my-3">
+        `;
+
+        typeHtml += `
+            <div class="mb-3">
+                <div class="form-check form-switch ps-4 pt-1">
+                    <input class="form-check-input ms-n4" type="checkbox" id="fieldRequired" ${field.validation.required ? 'checked' : ''} onchange="syncFieldConfig('${fieldId}', 'validation.required', this.checked)">
+                    <label class="form-check-label small fw-bold" for="fieldRequired">Bắt buộc điền</label>
+                </div>
+            </div>
+        `;
+
 
         typeHtml += `
             <div class="card bg-light border-0 shadow-none mb-3">
@@ -3554,7 +3571,6 @@
         }
     };
 
-    let dateClickTimer = null;
     window.handleDateVariableClick = function(event, fieldId, hasDefaultNow) {
         if (event) event.stopPropagation();
         if (!window.isExecutionMode) return;
@@ -3568,24 +3584,13 @@
             loopSuffix = loopMatch[2];
         }
 
-        // Kiểm tra hasDefaultNow động từ fieldsConfig đề phòng trường hợp sidebar thiết lập giá trị mặc định "now" mà chưa re-render block
         const field = fieldsConfig[originalId];
         const isNow = hasDefaultNow || (field && field.defaultValue && field.defaultValue.toLowerCase() === 'now');
 
-        if (!isNow) {
-            openVariableInputModal(fieldId);
-            return;
-        }
-
-        if (dateClickTimer) {
-            clearTimeout(dateClickTimer);
-            dateClickTimer = null;
+        if (isNow) {
             autoFillDateVariable(fieldId);
         } else {
-            dateClickTimer = setTimeout(() => {
-                dateClickTimer = null;
-                openVariableInputModal(fieldId);
-            }, 450);
+            openVariableInputModal(fieldId);
         }
     };
 
@@ -4619,9 +4624,13 @@
             } else if (newBlock.type === 'table' && newBlock.data) {
                 for (let r = 0; r < newBlock.data.length; r++) {
                     for (let c = 0; c < newBlock.data[r].length; c++) {
-                        if (newBlock.data[r][c] && newBlock.data[r][c].content) {
-                            newBlock.data[r][c].content = window.duplicateFieldBadgesInHtml(newBlock.data[r]
-                                [c].content, newBlockId, targetSectionId);
+                        if (newBlock.data[r][c] && typeof newBlock.data[r][c] === 'object') {
+                            delete newBlock.data[r][c].db_id;
+                            delete newBlock.data[r][c].content_db_id;
+                            if (newBlock.data[r][c].content) {
+                                newBlock.data[r][c].content = window.duplicateFieldBadgesInHtml(newBlock.data[r]
+                                    [c].content, newBlockId, targetSectionId);
+                            }
                         }
                     }
                 }
@@ -5134,11 +5143,15 @@
                     const r = parseInt(rStr) - 1;
                     const c = parseInt(cStr);
                     if (item.data && item.data[r] && item.data[r][c] !== undefined) {
+                        // Extract just the inner content, ignoring wrappers and resizers
+                        const wrapper = tdEl.querySelector('.cell-wrapper');
+                        const actualContent = wrapper ? wrapper.innerHTML : tdEl.innerHTML;
+                        
                         if (typeof item.data[r][c] === 'object' && item.data[r][c] !== null) {
-                            item.data[r][c].content = tdEl.innerHTML;
+                            item.data[r][c].content = actualContent;
                         } else {
                             item.data[r][c] = {
-                                content: tdEl.innerHTML,
+                                content: actualContent,
                                 rs: 1,
                                 cs: 1,
                                 hidden: false

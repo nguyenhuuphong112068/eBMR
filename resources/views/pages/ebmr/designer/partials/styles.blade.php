@@ -1451,6 +1451,64 @@
         white-space: nowrap;
     }
 
+    .execution-checkbox-wrapper {
+        display: inline-flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        vertical-align: middle;
+    }
+
+    .execution-checkbox {
+        appearance: none;
+        -webkit-appearance: none;
+        width: 22px;
+        height: 22px;
+        border: 2px solid #94a3b8;
+        border-radius: 4px;
+        background-color: #fff;
+        cursor: pointer;
+        position: relative;
+        transition: all 0.2s ease-in-out;
+        margin: 0;
+        box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);
+    }
+
+    .execution-checkbox:hover {
+        border-color: #3b82f6;
+    }
+
+    .execution-checkbox:checked {
+        background-color: #2563eb;
+        border-color: #2563eb;
+        box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+    }
+
+    .execution-checkbox:checked::after {
+        content: '';
+        position: absolute;
+        left: 7px;
+        top: 3px;
+        width: 5px;
+        height: 10px;
+        border: solid white;
+        border-width: 0 2px 2px 0;
+        transform: rotate(45deg);
+    }
+
+    .execution-checkbox:disabled {
+        background-color: #f1f5f9;
+        border-color: #cbd5e1;
+        cursor: not-allowed;
+    }
+
+    .execution-checkbox:checked:disabled {
+        background-color: #94a3b8;
+        border-color: #94a3b8;
+        box-shadow: none;
+    }
+
     /* Table Resizer Drag Handles */
     .col-resizer {
         position: absolute;
