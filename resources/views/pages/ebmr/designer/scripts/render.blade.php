@@ -338,25 +338,30 @@
 
                     if (window.isExecutionMode) {
                         const runVal = runDataForBlock[`${r}_${c}`];
-                        if (displayContent.includes('[Nhập dữ liệu]')) {
-                            cellClass += "execution-input-cell";
-                            onclickAttr = `onclick="openExecutionInputModal('${blockKey}', ${r}, ${c}, 'text')"`;
-                            displayContent = runVal ? runVal : `<span class="execution-badge input"><i class="fas fa-edit"></i> [Nhập dữ liệu]</span>`;
+                        const isNA = runDataForBlock._na_state && runDataForBlock._na_state[`${r}_${c}`];
+
+                        if (isNA) {
+                            cellClass += "cell-na-state strike-through-zone ";
+                            onclickAttr = '';
+                        } else if (displayContent.includes('[Nhập dữ liệu]')) {
+                            cellClass += "execution-input-cell ";
+                            onclickAttr = `onclick="if(event.ctrlKey || event.shiftKey) return; openExecutionInputModal('${blockKey}', ${r}, ${c}, 'text')"`;
+                            displayContent = runVal ? `<span style="color: #2563eb; font-weight: 500;">${runVal}</span>` : `<span class="execution-badge input"><i class="fas fa-edit"></i> [Nhập dữ liệu]</span>`;
                         } else if (displayContent.includes('[Ký tên]')) {
-                            cellClass += "execution-input-cell";
-                            onclickAttr = `onclick="openExecutionInputModal('${blockKey}', ${r}, ${c}, 'signature')"`;
+                            cellClass += "execution-input-cell ";
+                            onclickAttr = `onclick="if(event.ctrlKey || event.shiftKey) return; openExecutionInputModal('${blockKey}', ${r}, ${c}, 'signature')"`;
                             displayContent = runVal ? getSignatureDisplayHtml(runVal, 'signature') : `<span class="execution-badge signature"><i class="fas fa-pen"></i> [Ký tên]</span>`;
                         } else if (displayContent.includes('[Tự động lấy thời gian]')) {
-                            cellClass += "execution-input-cell";
-                            onclickAttr = `ondblclick="autoFillTime('${blockKey}', ${r}, ${c})" title="Nháy đúp chuột (Double-click) để lấy ngày giờ hệ thống"`;
-                            displayContent = runVal ? runVal : `<span class="execution-badge time"><i class="fas fa-clock"></i> [Double-click lấy giờ]</span>`;
+                            cellClass += "execution-input-cell ";
+                            onclickAttr = `ondblclick="if(event.ctrlKey || event.shiftKey) return; autoFillTime('${blockKey}', ${r}, ${c})" title="Nháy đúp chuột (Double-click) để lấy ngày giờ hệ thống"`;
+                            displayContent = runVal ? `<span style="color: #2563eb; font-weight: 500;">${runVal}</span>` : `<span class="execution-badge time"><i class="fas fa-clock"></i> [Double-click lấy giờ]</span>`;
                         } else if (displayContent.includes('[Người thực hiện]')) {
-                            cellClass += "execution-input-cell";
-                            onclickAttr = `onclick="autoFillExecutor('${blockKey}', ${r}, ${c})" title="Click để xác nhận người thực hiện"`;
+                            cellClass += "execution-input-cell ";
+                            onclickAttr = `onclick="if(event.ctrlKey || event.shiftKey) return; autoFillExecutor('${blockKey}', ${r}, ${c})" title="Click để xác nhận người thực hiện"`;
                             displayContent = runVal ? getSignatureDisplayHtml(runVal, 'executor') : `<span class="execution-badge executor"><i class="fas fa-user-edit"></i> [Người thực hiện]</span>`;
                         } else if (displayContent.includes('[Người kiểm tra]')) {
-                            cellClass += "execution-input-cell";
-                            onclickAttr = `onclick="openCheckerAuthModal('${blockKey}', ${r}, ${c})" title="Click để xác thực người kiểm tra"`;
+                            cellClass += "execution-input-cell ";
+                            onclickAttr = `onclick="if(event.ctrlKey || event.shiftKey) return; openCheckerAuthModal('${blockKey}', ${r}, ${c})" title="Click để xác thực người kiểm tra"`;
                             displayContent = runVal ? getSignatureDisplayHtml(runVal, 'checker') : `<span class="execution-badge checker"><i class="fas fa-check-double"></i> [Người kiểm tra]</span>`;
                         }
                     } else {
@@ -364,14 +369,25 @@
                     }
 
                     let metaHtml = '';
-                    if (window.isExecutionMode && runDataForBlock._meta && runDataForBlock._meta[`${r}_${c}`]) {
-                        const meta = runDataForBlock._meta[`${r}_${c}`];
-                        if (meta.by || meta.at) {
-                            let historyBadge = '';
-                            if (meta.history_count && meta.history_count > 0) {
-                                historyBadge = `<span class="badge bg-warning text-dark ms-1" style="cursor:pointer;" onclick="showRunDataHistory(event, '${window.currentRecordId}', '${item.id}', '${r}_${c}')" title="Xem lịch sử thay đổi">Lịch sử (${meta.history_count})</span>`;
-                            }
-                            metaHtml = `<div class="execution-meta">${meta.by || ''} ${meta.at || ''} ${historyBadge}</div>`;
+                    if (window.isExecutionMode) {
+                        const naMeta = runDataForBlock._na_state && runDataForBlock._na_state[`${r}_${c}_meta`];
+                        const meta = runDataForBlock._meta && runDataForBlock._meta[`${r}_${c}`];
+                        
+                        let historyBadge = '';
+                        if (meta && meta.history_count && meta.history_count > 0) {
+                            historyBadge = `<span class="badge bg-warning text-dark ms-1" style="cursor:pointer;" onclick="showRunDataHistory(event, '${window.currentRecordId}', '${item.id}', '${r}_${c}')" title="Xem lịch sử thay đổi">Lịch sử (${meta.history_count})</span>`;
+                        }
+                        
+                        let metaText = '';
+                        if (naMeta) {
+                            const reasonText = naMeta.reason || 'N/A';
+                            metaText = `<span style="color: #2563eb; font-weight: bold; margin-right: 4px;">${reasonText} -</span> ${naMeta.by || ''} ${naMeta.at || ''}`;
+                        } else if (meta && (meta.by || meta.at)) {
+                            metaText = `${meta.by || ''} ${meta.at || ''}`;
+                        }
+                        
+                        if (metaText || historyBadge) {
+                            metaHtml = `<div class="execution-meta">${metaText} ${historyBadge}</div>`;
                         }
                     }
 
@@ -1148,18 +1164,33 @@
 
                 // TRƯỜNG HỢP 1: Chế độ THỰC THI (Cho phép nhập thử để xem kết quả)
                 if (window.isExecutionMode) {
+
                     // Nếu là thẻ công thức, thực hiện tính toán ngay
                     if (field.type === 'formula') {
                         const dPlaces = (field.validation && field.validation.decimal_places !== null) ? field
                             .validation.decimal_places : 2;
                         const result = calculateFormula(field.formula || '', dPlaces, field.id, loopSuffix);
-                        badge.innerHTML = result;
+                        badge.innerHTML = `<span style="color: #2563eb; font-weight: 500;">${result}</span>`;
                         badge.className = 'ebmr-field-value formula-result';
                         badge.setAttribute('data-field-id', fieldId + loopSuffix); // Để recalculate tìm được
+                        
+                        const isNA = window.executionValues[`_na_state_${field.id}`] === true;
+                        if (isNA) {
+                            badge.className += ' cell-na-state strike-through-zone';
+                            badge.style.pointerEvents = 'none';
+                            badge.innerHTML = `<span style="opacity:0.4">${badge.innerHTML}</span>`;
+                        }
                         return;
                     }
 
-                    let val = window.executionValues[fieldId + loopSuffix] || '';
+                    let rawVal = window.executionValues[fieldId + loopSuffix];
+                    let val = '';
+                    if (rawVal !== undefined && rawVal !== null && rawVal !== '') {
+                        val = rawVal;
+                    } else if (field.defaultValue !== undefined && field.defaultValue !== null) {
+                        val = field.defaultValue;
+                    }
+
                     // Handle nested structure from DB (cell_id = 'default')
                     if (val && typeof val === 'object' && val.hasOwnProperty('default')) {
                         val = val.default;
@@ -1171,14 +1202,27 @@
 
                     let metaHtml = '';
                     const fieldData = window.executionValues[fieldId + loopSuffix];
-                    if (fieldData && fieldData._meta && fieldData._meta['default']) {
-                        const meta = fieldData._meta['default'];
-                        if (meta.by || meta.at) {
-                            let historyBadge = '';
-                            if (meta.history_count && meta.history_count > 0) {
-                                historyBadge = `<span class="badge bg-warning text-dark ms-1" style="cursor:pointer;" onclick="showRunDataHistory(event, '${window.currentRecordId}', '${fieldId + loopSuffix}', 'default')" title="Xem lịch sử thay đổi">Lịch sử (${meta.history_count})</span>`;
-                            }
-                            metaHtml = `<div class="execution-meta" style="font-size: 16px; margin-top: 1px; text-align: center;">${meta.by || ''} ${meta.at || ''} ${historyBadge}</div>`;
+                    const isNA = window.executionValues[`_na_state_${field.id}`] === true;
+                    
+                    if (window.isExecutionMode) {
+                        const naMeta = window.executionValues[`_na_state_${field.id}_meta`];
+                        const meta = fieldData && fieldData._meta && fieldData._meta['default'];
+                        
+                        let historyBadge = '';
+                        if (meta && meta.history_count && meta.history_count > 0) {
+                            historyBadge = `<span class="badge bg-warning text-dark ms-1" style="cursor:pointer;" onclick="showRunDataHistory(event, '${window.currentRecordId}', '${fieldId + loopSuffix}', 'default')" title="Xem lịch sử thay đổi">Lịch sử (${meta.history_count})</span>`;
+                        }
+                        
+                        let metaText = '';
+                        if (naMeta) {
+                            const reasonText = naMeta.reason || 'N/A';
+                            metaText = `<span style="color: #2563eb; font-weight: bold; margin-right: 4px;">${reasonText} -</span> ${naMeta.by || ''} ${naMeta.at || ''}`;
+                        } else if (meta && (meta.by || meta.at)) {
+                            metaText = `${meta.by || ''} ${meta.at || ''}`;
+                        }
+                        
+                        if (metaText || historyBadge) {
+                            metaHtml = `<div class="execution-meta" style="font-size: 10px; margin-top: 1px; text-align: center; white-space: nowrap;">${metaText} ${historyBadge}</div>`;
                         }
                     }
 
@@ -1211,8 +1255,16 @@
                         badge.innerHTML = `${signatureHtml}${metaHtml}`;
                         badge.className = 'ebmr-field-badge ebmr-field-value';
                     } else if (field.type === 'checkbox') {
+                        let isChecked = false;
+                        if (typeof val === 'boolean') {
+                            isChecked = val;
+                        } else if (val !== undefined && val !== null) {
+                            const valStr = String(val).toLowerCase().trim();
+                            isChecked = (valStr === '1' || valStr === 'true' || valStr === 'yes' || valStr === 'có' || valStr === 'checked');
+                        }
+
                         badge.innerHTML =
-                            `<div class="execution-checkbox-wrapper"><input type="checkbox" class="execution-checkbox" ${val ? 'checked' : ''} ${window.isReadOnly ? 'disabled' : ''} onchange="window.handleCheckboxChange('${fieldId + loopSuffix}', this.checked, this)">${metaHtml}</div>`;
+                            `<div class="execution-checkbox-wrapper"><input type="checkbox" class="execution-checkbox" ${isChecked ? 'checked' : ''} ${window.isReadOnly ? 'disabled' : ''} onchange="window.handleCheckboxChange('${fieldId + loopSuffix}', this.checked, this)">${metaHtml}</div>`;
                         badge.className = 'ebmr-field-badge ebmr-field-value';
                     } else if (field.type === 'select') {
                         const dsType = field.dataSource ? field.dataSource.type : 'manual';
@@ -1276,6 +1328,12 @@
                         badge.innerHTML =
                             `<span class="execution-input-test" ${!window.isReadOnly ? 'onclick="openVariableInputModal(\''+(fieldId + loopSuffix)+'\')"' : ''} style="cursor: ${window.isReadOnly ? 'default' : 'pointer'}; border-bottom: 1px dotted #1a73e8; min-width: 30px; display: inline-block; outline: none; position: relative; ${extraStyle}">${displayVal || `<span style="color: #6c757d; font-style: italic;">${placeholder}</span>`}${metaHtml}</span>${scaleBtnHtml}`;
                         badge.className = 'ebmr-field-badge ebmr-field-value';
+                    }
+                    
+                    if (isNA) {
+                        badge.className += ' cell-na-state strike-through-zone';
+                        badge.style.pointerEvents = 'none';
+                        badge.innerHTML = `<span style="opacity:0.4">${badge.innerHTML}</span>`;
                     }
                 }
                 // TRƯỜNG HỢP 2: Chế độ THIẾT KẾ (Hiển thị badge kèm icon loại dữ liệu)
@@ -1583,6 +1641,95 @@
                 }
             }
         });
+        
+        if (typeof window.evaluateAllConditions === 'function') {
+            window.evaluateAllConditions();
+        }
+    };
+
+    window.evaluateAllConditions = function() {
+        if (!window.isExecutionMode) return;
+        let hasChanges = false;
+
+        Object.values(fieldsConfig).forEach(field => {
+            if (field.na_condition && field.na_condition.target_id) {
+                const targetId = field.na_condition.target_id;
+                const operator = field.na_condition.operator || '=';
+                const targetValue = field.na_condition.value;
+
+                let runVal = null;
+                const targetField = Object.values(fieldsConfig).find(f => f.id === targetId || f.name === targetId || f.label === targetId);
+                
+                if (targetField && window.executionValues[targetField.id] !== undefined) {
+                    runVal = window.executionValues[targetField.id];
+                } else {
+                    items.forEach(item => {
+                        if (item.type === 'table' && item.data) {
+                            const blockKey = item.uuid || item.id;
+                            for (let tr = 0; tr < item.rows; tr++) {
+                                for (let tc = 0; tc < item.cols; tc++) {
+                                    if (item.data[tr][tc] && item.data[tr][tc].cellId === targetId) {
+                                        if (window.executionValues[blockKey] && window.executionValues[blockKey][`${tr}_${tc}`] !== undefined) {
+                                            runVal = window.executionValues[blockKey][`${tr}_${tc}`];
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+
+                if (runVal && typeof runVal === 'object' && runVal.hasOwnProperty('default')) {
+                    runVal = runVal.default;
+                } else if (runVal && typeof runVal === 'object' && !Array.isArray(runVal)) {
+                    const keys = Object.keys(runVal);
+                    if (keys.length > 0) runVal = runVal[keys[0]];
+                }
+
+                if (runVal !== null && runVal !== undefined) {
+                    let conditionMet = false;
+                    
+                    // Xử lý giá trị cho checkbox (boolean)
+                    let runValStr = String(runVal).trim().toLowerCase();
+                    let targetValStr = String(targetValue || '').trim().toLowerCase();
+                    
+                    console.log(`[evaluateAllConditions] ID: ${field.id}, targetId: ${targetId}, runVal:`, runVal, `targetValue:`, targetValue);
+
+                    if (typeof runVal === 'boolean') {
+                        runValStr = runVal ? 'true' : 'false';
+                    }
+                    if (targetValStr === '1' || targetValStr === 'yes' || targetValStr === 'có') targetValStr = 'true';
+                    if (targetValStr === '0' || targetValStr === 'no' || targetValStr === 'không') targetValStr = 'false';
+                    if (runValStr === '1' || runValStr === 'yes' || runValStr === 'có') runValStr = 'true';
+                    if (runValStr === '0' || runValStr === 'no' || runValStr === 'không') runValStr = 'false';
+
+                    console.log(`[evaluateAllConditions] runValStr: ${runValStr}, targetValStr: ${targetValStr}, operator: ${operator}`);
+
+                    if (operator === '=') {
+                        conditionMet = (runValStr === targetValStr);
+                    } else if (operator === '!=') {
+                        conditionMet = (runValStr !== targetValStr);
+                    }
+
+                    const naKey = `_na_state_${field.id}`;
+                    const isCurrentlyNA = window.executionValues[naKey];
+
+                    if (conditionMet && !isCurrentlyNA) {
+                        const user = '{{ session("user.fullName") ?? (session("user.username") ?? "Hệ thống (Auto)") }}';
+                        window.executionValues[naKey] = true;
+                        window.executionValues[`${naKey}_meta`] = { by: user, at: new Date().toLocaleString('vi-VN'), reason: 'ĐK Không áp dụng' };
+                        hasChanges = true;
+                    } else if (!conditionMet && isCurrentlyNA) {
+                        window.executionValues[naKey] = false;
+                        hasChanges = true;
+                    }
+                }
+            }
+        });
+
+        if (hasChanges) {
+            renderBlocks();
+        }
     };
 
     window.activeSectionLoopIndices = {};

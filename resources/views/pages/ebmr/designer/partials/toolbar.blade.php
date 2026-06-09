@@ -151,6 +151,13 @@
         </div>
 
         <div class="ms-auto d-flex gap-2">
+            <!-- Execution Mode Action -->
+            <button class="btn btn-sm btn-outline-danger px-3 d-none fw-bold" id="btn-na-zone"
+                onclick="markSelectedZoneAsNA()" style="border-radius: 20px;"
+                title="Đánh dấu Không áp dụng (N/A) cho vùng đang chọn">
+                <i class="fas fa-ban me-1"></i> N/A Vùng Chọn (Z)
+            </button>
+
             <!-- Designer / Execute Mode Toggle -->
             <!-- Designer / Execute Mode Toggle (Unified) -->
             <button type="button" id="btn-mode-toggle"

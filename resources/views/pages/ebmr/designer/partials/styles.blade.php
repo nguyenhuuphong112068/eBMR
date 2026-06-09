@@ -1451,6 +1451,31 @@
         white-space: nowrap;
     }
 
+    /* --- N/A (Không áp dụng) và Chọn Vùng (Execution Mode) --- */
+    .cell-na-state {
+        background-color: #f1f5f9 !important;
+        pointer-events: none !important;
+        opacity: 0.8;
+        position: relative;
+    }
+    /* Bỏ qua phần ghi đè N/A cũ, N/A mới sẽ render đè trực tiếp trong HTML */
+    
+    /* CSS cho đường gạch chéo Z (Diagonal Line Strike-through) */
+    .strike-through-zone {
+        background: linear-gradient(to top right, transparent calc(50% - 1px), #2563eb calc(50% - 1px), #2563eb calc(50% + 1px), transparent calc(50% + 1px)) !important;
+        background-color: #f8fafc !important;
+        pointer-events: none !important;
+        position: relative;
+    }
+    
+    /* Css chọn vùng trong chế độ thực thi (Khác với Designer) */
+    .cell-selected-execution {
+        outline: 2px solid #3b82f6 !important;
+        outline-offset: -2px;
+        background-color: rgba(59, 130, 246, 0.1) !important;
+        position: relative;
+    }
+
     .execution-checkbox-wrapper {
         display: inline-flex;
         flex-direction: column;

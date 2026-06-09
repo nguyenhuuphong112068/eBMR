@@ -51,6 +51,9 @@ Tài liệu này ghi lại toàn bộ các tính năng đã được triển kha
 - **Chèn Biểu mẫu chung (Linked Template/GF)**: Nhúng các mẫu đã soạn sẵn vào hồ sơ hiện tại.
 - **Bình luận (Commenting)**: Thêm bình luận vào từng vị trí văn bản hoặc block.
 - **Lịch sử thay đổi (Revision History)**: Ghi lại log chi tiết các thay đổi (Thêm/Xóa/Sửa) giữa các phiên bản lưu.
+- **Đánh dấu N/A (Không áp dụng) - Context Menu**: Trong chế độ Execution, right-click vào ô trong bảng để đánh dấu N/A.
+- **Đánh dấu N/A Vùng chọn (Gạch chéo Z)**: Quét vùng nhiều ô (bằng Shift/Ctrl + Click) và sử dụng công cụ "N/A Vùng Chọn" để gạch chéo. N/A hiển thị đè lên nội dung gốc, giữ nguyên dữ liệu bên dưới.
+- **Logic Điều kiện N/A (Conditional Logic)**: Cấu hình điều kiện phụ thuộc ở Sidebar (dành riêng cho các Biến số) để tự động đóng băng và hiển thị N/A đè lên biến số khi thực thi.
 
 ## 7. Chế độ Xem và Ngôn ngữ
 - **Chế độ Thiết kế vs. Chạy thử (Execution Mode)**: Chuyển đổi giữa việc soạn mẫu và giả lập ghi chép hồ sơ thực tế.

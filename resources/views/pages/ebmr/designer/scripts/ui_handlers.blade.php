@@ -268,6 +268,8 @@
                         </div>
                     </div>
 
+
+
                     <label class="small fw-bold mt-1 mb-2">Công cụ Bảng</label>
                     <div class="btn-group btn-group-sm w-100">
                         <button class="btn btn-outline-primary" id="mergeBtn" onclick="mergeSelectedCells()" title="Gộp các ô đã quét"><i class="fas fa-object-group"></i> Gộp ô</button>
@@ -2078,6 +2080,36 @@
     }
 
     /**
+     * Cập nhật điều kiện N/A cho ô hiện tại.
+     * @param {string} itemId - ID của khối bảng.
+     * @param {number} r - Chỉ số hàng.
+     * @param {number} c - Chỉ số cột.
+     * @param {string} prop - Tên thuộc tính trong na_condition (target_id, operator, value).
+     * @param {any} val - Giá trị mới.
+     */
+    function updateTableCellCondition(itemId, r, c, prop, val) {
+        const item = items.find(i => i.id === itemId);
+        if (!item) return;
+        item.dirty = true;
+
+        if (item.data && item.data[r] && item.data[r][c] !== undefined) {
+            if (typeof item.data[r][c] !== 'object') {
+                item.data[r][c] = {
+                    content: item.data[r][c],
+                    rs: 1,
+                    cs: 1,
+                    hidden: false
+                };
+            }
+            if (!item.data[r][c].na_condition) {
+                item.data[r][c].na_condition = { target_id: '', operator: '=', value: '' };
+            }
+            item.data[r][c].na_condition[prop] = val;
+            saveStateDebounced();
+        }
+    }
+
+    /**
      * Chọn một thẻ dữ liệu (Field) để cấu hình thuộc tính (loại dữ liệu, mã biến...).
      * @param {Event} event - Sự kiện click.
      * @param {string} fieldId - ID của thẻ dữ liệu.
@@ -2365,6 +2397,34 @@
                 <div class="form-check form-switch ps-4 pt-1">
                     <input class="form-check-input ms-n4" type="checkbox" id="fieldRequired" ${field.validation.required ? 'checked' : ''} onchange="syncFieldConfig('${fieldId}', 'validation.required', this.checked)">
                     <label class="form-check-label small fw-bold" for="fieldRequired">Bắt buộc điền</label>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="small fw-bold mt-2 mb-2"><i class="fas fa-ban me-1 text-secondary"></i> Điều kiện Không áp dụng (N/A)</label>
+                <div class="p-2 border rounded bg-light">
+                    <div class="mb-2">
+                        <label class="small text-muted mb-1">Mã ID Biến phụ thuộc</label>
+                        <input type="text" class="form-control form-control-sm" placeholder="Nhập ID biến (VD: tram_1)" 
+                               value="${(field.na_condition && field.na_condition.target_id) ? field.na_condition.target_id : ''}" 
+                               oninput="syncFieldConfig('${fieldId}', 'na_condition.target_id', this.value)">
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-5">
+                            <label class="small text-muted mb-1">Toán tử</label>
+                            <select class="form-select form-select-sm" onchange="syncFieldConfig('${fieldId}', 'na_condition.operator', this.value)">
+                                <option value="=" ${(field.na_condition && field.na_condition.operator === '=') ? 'selected' : ''}>Bằng (=)</option>
+                                <option value="!=" ${(field.na_condition && field.na_condition.operator === '!=') ? 'selected' : ''}>Khác (!=)</option>
+                            </select>
+                        </div>
+                        <div class="col-7">
+                            <label class="small text-muted mb-1">Giá trị</label>
+                            <input type="text" class="form-control form-control-sm" placeholder="Giá trị so sánh" 
+                                   value="${(field.na_condition && field.na_condition.value) ? field.na_condition.value : ''}" 
+                                   oninput="syncFieldConfig('${fieldId}', 'na_condition.value', this.value)">
+                        </div>
+                    </div>
+                    <div class="form-text small mt-2" style="font-size: 0.65rem;">Nếu điều kiện đúng, biến này sẽ tự động chuyển thành N/A khi thực thi.</div>
                 </div>
             </div>
         `;
@@ -5420,4 +5480,182 @@
             if (typeof toastr !== 'undefined') toastr.error('Lỗi kết nối máy chủ');
         }
     };
+
+    // ==========================================
+    // TÍNH NĂNG ĐÁNH DẤU N/A (KHÔNG ÁP DỤNG)
+    // ==========================================
+    let executionSelectedCells = [];
+    
+    // Gắn sự kiện chọn nhiều ô và context menu trong chế độ thực thi
+    document.addEventListener('DOMContentLoaded', () => {
+        const container = document.getElementById('editor-content');
+        if (!container) return;
+
+        // Context Menu khi right-click
+        container.addEventListener('contextmenu', (e) => {
+            if (!window.isExecutionMode) return;
+            const targetCell = e.target.closest('.execution-input-cell, td');
+            if (!targetCell) return;
+            
+            e.preventDefault();
+
+            // Nếu ô click không nằm trong danh sách đang chọn, chọn riêng ô đó
+            if (!executionSelectedCells.includes(targetCell)) {
+                clearExecutionSelection();
+                targetCell.classList.add('cell-selected-execution');
+                executionSelectedCells.push(targetCell);
+            }
+
+            // Hiển thị menu N/A tùy chỉnh
+            showNAMenu(e.pageX, e.pageY);
+        });
+
+        // Click để chọn vùng (Đơn giản hóa: ctrl/shift click hoặc drag)
+        container.addEventListener('click', (e) => {
+            if (!window.isExecutionMode) return;
+            hideNAMenu();
+
+            const targetCell = e.target.closest('td');
+            if (!targetCell) {
+                clearExecutionSelection();
+                return;
+            }
+
+            if (e.ctrlKey || e.shiftKey) {
+                // Multi-select
+                if (executionSelectedCells.includes(targetCell)) {
+                    targetCell.classList.remove('cell-selected-execution');
+                    executionSelectedCells = executionSelectedCells.filter(c => c !== targetCell);
+                } else {
+                    targetCell.classList.add('cell-selected-execution');
+                    executionSelectedCells.push(targetCell);
+                }
+            } else {
+                // Mặc định click không có phím bổ trợ sẽ vẫn làm hành động mặc định của cell (ví dụ mở modal nhập)
+                // Do đó chỉ xóa selection cũ đi
+                clearExecutionSelection();
+            }
+            toggleNAZoneButton();
+        });
+    });
+
+    function showNAMenu(x, y) {
+        let menu = document.getElementById('na-context-menu');
+        if (!menu) {
+            menu = document.createElement('div');
+            menu.id = 'na-context-menu';
+            menu.className = 'dropdown-menu shadow-sm p-1';
+            menu.style.position = 'absolute';
+            menu.style.zIndex = '9999';
+            menu.innerHTML = `
+                <button class="dropdown-item text-danger small fw-bold rounded" onclick="markSelectedZoneAsNA()">
+                    <i class="fas fa-ban me-2"></i> Đánh dấu Không áp dụng (N/A)
+                </button>
+                <button class="dropdown-item text-primary small fw-bold rounded mt-1" onclick="unmarkNAZone()">
+                    <i class="fas fa-undo me-2"></i> Hủy đánh dấu N/A
+                </button>
+            `;
+            document.body.appendChild(menu);
+        }
+        menu.style.left = x + 'px';
+        menu.style.top = y + 'px';
+        menu.classList.add('show');
+    }
+
+    function hideNAMenu() {
+        const menu = document.getElementById('na-context-menu');
+        if (menu) menu.classList.remove('show');
+    }
+
+    function clearExecutionSelection() {
+        executionSelectedCells.forEach(c => c.classList.remove('cell-selected-execution'));
+        executionSelectedCells = [];
+        toggleNAZoneButton();
+    }
+
+    function toggleNAZoneButton() {
+        const btn = document.getElementById('btn-na-zone');
+        if (!btn) return;
+        if (executionSelectedCells.length > 0 && window.isExecutionMode) {
+            btn.classList.remove('d-none');
+        } else {
+            btn.classList.add('d-none');
+        }
+    }
+
+    // Đánh dấu mảng các ô là N/A
+    window.markSelectedZoneAsNA = function() {
+        hideNAMenu();
+        if (executionSelectedCells.length === 0) return;
+
+        Swal.fire({
+            title: '<i class="fas fa-ban me-2 text-danger"></i>Xác nhận N/A',
+            html: `
+                <div class="text-start mb-3">Bạn có chắc chắn muốn đánh dấu vùng này là <strong>Không áp dụng (N/A)</strong>? Dữ liệu bên dưới sẽ không bị xóa nhưng sẽ được đánh dấu N/A.</div>
+                <div class="form-group text-start">
+                    <label for="na-reason" class="fw-bold mb-1">Lý do N/A (Tùy chọn):</label>
+                    <input type="text" id="na-reason" class="form-control" placeholder="Nhập lý do không áp dụng...">
+                </div>
+            `,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Đồng ý',
+            cancelButtonText: 'Hủy',
+            preConfirm: () => {
+                const reasonInput = document.getElementById('na-reason');
+                return reasonInput ? reasonInput.value.trim() : '';
+            }
+        }).then((result) => {
+            if (result.isConfirmed) {
+                const reason = result.value || 'N/A';
+                applyNAToCells(executionSelectedCells, true, reason);
+                clearExecutionSelection();
+                renderBlocks();
+                if (typeof toastr !== 'undefined') toastr.success('Đã đánh dấu N/A.');
+            }
+        });
+    };
+
+    window.unmarkNAZone = function() {
+        hideNAMenu();
+        if (executionSelectedCells.length === 0) return;
+        applyNAToCells(executionSelectedCells, false);
+        clearExecutionSelection();
+        renderBlocks();
+        if (typeof toastr !== 'undefined') toastr.info('Đã hủy đánh dấu N/A.');
+    }
+
+    function applyNAToCells(cells, isNA, reason = 'N/A') {
+        cells.forEach(cell => {
+            const blockItem = cell.closest('.block-item');
+            if (!blockItem) return;
+            const blockId = blockItem.getAttribute('data-id');
+            const row = parseInt(cell.getAttribute('data-row')) - 1; // data-row is 1-indexed
+            const col = parseInt(cell.getAttribute('data-col'));
+
+            if (!window.executionValues[blockId]) window.executionValues[blockId] = {};
+            const key = `${row}_${col}`;
+            
+            // Xử lý meta history nếu cần (Mô phỏng như thay đổi dữ liệu)
+            if (!window.executionValues[blockId]._meta) window.executionValues[blockId]._meta = {};
+            if (!window.executionValues[blockId]._meta[key]) window.executionValues[blockId]._meta[key] = { history_list: [], history_count: 0 };
+            
+            const user = '{{ session("user.fullName") ?? (session("user.username") ?? "Người dùng") }}';
+            const time = new Date().toLocaleString('vi-VN');
+
+            if (isNA) {
+                // Đánh dấu N/A
+                window.executionValues[blockId]._na_state = window.executionValues[blockId]._na_state || {};
+                window.executionValues[blockId]._na_state[key] = true;
+                window.executionValues[blockId]._na_state[`${key}_meta`] = { by: user, at: time, reason: reason };
+            } else {
+                // Hủy N/A
+                window.executionValues[blockId][key] = '';
+                if (window.executionValues[blockId]._na_state) {
+                    window.executionValues[blockId]._na_state[key] = false;
+                }
+            }
+        });
+    }
+
 </script>
