@@ -14,18 +14,37 @@
                     return;
                 }
 
+                // Kiểm tra xem click có ở sát lề ô không (dành cho chọn ô)
+                const rect = cell.getBoundingClientRect();
+                const isNearLeftEdge = (e.clientX - rect.left) < 15;
+                const isNearTopEdge = (e.clientY - rect.top) < 15;
+                const isNearEdge = isNearLeftEdge || isNearTopEdge;
+
+                // Nếu KHÔNG phải đang giữ Shift, KHÔNG click sát lề 
+                // => Xử lý như bôi đen văn bản bình thường (Native Text Selection)
+                if (!e.shiftKey && !isNearEdge) {
+                    clearSelection(); // Xóa chọn ô để tránh rối mắt khi gõ
+                    if (bId) selectItem(bId, false); // Vẫn báo cho panel biết đang ở block nào
+                    return; // Dừng lại ở đây, KHÔNG bật isSelecting để tránh đụng độ
+                }
+
+                // Bắt đầu chế độ chọn Ô (Cell Selection)
+                // Ngăn chặn native text selection flash khi kéo thả nhiều ô
+                if (isNearEdge) {
+                    e.preventDefault(); 
+                }
+
                 isSelecting = true;
                 startCell = cell;
                 activeRowIdx = parseInt(cell.dataset.row);
                 activeColIdx = parseInt(cell.dataset.col);
                 
-                // Only clear and restart selection if not shift-clicking an already selected range
+                // Chỉ reset vùng chọn nếu không phải đang shift-click vào ô đã chọn
                 if (!e.shiftKey || !cell.classList.contains('selected-cell')) {
                     clearSelection();
                     cell.classList.add('selected-cell');
                 }
                 
-                // Default: select table/item (we handle field selection on mouseup if it was a single click)
                 if (bId) selectItem(bId, false);
             } else if (!e.target.closest('#property-panel') && !e.target.closest('.editor-toolbar')) {
                 clearSelection();
@@ -353,6 +372,7 @@
             
             // Clean up other intrusive styles
             el.style.fontFamily = "'Inter', 'Roboto', sans-serif";
+            el.style.color = '#000000'; // Force black color
             if (el.style.lineHeight && parseFloat(el.style.lineHeight) < 1.5) el.style.lineHeight = '1.5';
         });
 
@@ -682,9 +702,9 @@
                 const sizeInPx = parseFloat(fontSize);
                 const sizeInPt = Math.round(sizeInPx * 0.75);
                 
-                const fontSizeInput = document.getElementById('customFontSize');
-                if (fontSizeInput && document.activeElement !== fontSizeInput) {
-                    fontSizeInput.value = sizeInPt;
+                const fontSizeDisplay = document.getElementById('fontSizeDisplay');
+                if (fontSizeDisplay) {
+                    fontSizeDisplay.innerText = sizeInPt;
                 }
             }
         }

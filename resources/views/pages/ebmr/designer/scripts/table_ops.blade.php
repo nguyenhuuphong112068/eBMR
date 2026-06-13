@@ -143,6 +143,9 @@
                             configObj = window.fieldsConfig;
                         }
                         
+                        // Clear the cache at the start of duplication to ensure accuracy
+                        window.__ebmrExistingFieldNamesCache = null;
+                        
                         if (configObj) {
                             const tempDiv = document.createElement('div');
                             tempDiv.innerHTML = cellContent;
@@ -164,10 +167,22 @@
                                     }
                                     
                                     newName = baseName + num;
-                                    while (Object.values(configObj).some(f => f && f.name === newName)) {
+                                    
+                                    // Optimize O(N^2) bottleneck by pre-computing existing names into a Set if not already done
+                                    if (!window.__ebmrExistingFieldNamesCache) {
+                                        window.__ebmrExistingFieldNamesCache = new Set();
+                                        for (const key in configObj) {
+                                            if (configObj[key] && configObj[key].name) {
+                                                window.__ebmrExistingFieldNamesCache.add(configObj[key].name);
+                                            }
+                                        }
+                                    }
+                                    
+                                    while (window.__ebmrExistingFieldNamesCache.has(newName)) {
                                         num++;
                                         newName = baseName + num;
                                     }
+                                    window.__ebmrExistingFieldNamesCache.add(newName);
                                     
                                     configObj[newId] = {
                                         ...oldConfig,

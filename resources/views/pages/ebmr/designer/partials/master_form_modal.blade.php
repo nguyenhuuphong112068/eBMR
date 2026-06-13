@@ -45,6 +45,61 @@
                     </table>
                 </div>
             </div>
+            </div>
+            <div class="modal-footer bg-white">
+                <button type="button" class="btn btn-secondary rounded-pill px-4" data-dismiss="modal">Hủy</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Component Import Modal -->
+<div class="modal fade" id="componentModal" tabindex="-1" role="dialog" aria-labelledby="componentModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content shadow-lg" style="border-radius: 12px; overflow: hidden;">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title font-weight-bold" id="componentModalLabel">
+                    <i class="fas fa-layer-group me-2"></i>Chèn Thành phần (Component)
+                </h5>
+                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close" style="opacity: 1;">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body bg-light p-0">
+                <div class="p-3 bg-white border-bottom d-flex align-items-center justify-content-between">
+                    <div>
+                        <h6 class="mb-1 text-dark fw-bold">Chọn thành phần để chèn</h6>
+                        <small class="text-muted">Các khối từ thành phần sẽ được sao chép vào công đoạn hiện tại của bạn.</small>
+                    </div>
+                    <div class="input-group" style="width: 250px;">
+                        <input type="text" id="componentSearch" class="form-control form-control-sm" placeholder="Tìm kiếm thành phần...">
+                        <div class="input-group-append">
+                            <span class="input-group-text bg-white text-muted"><i class="fas fa-search"></i></span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                    <table class="table table-hover table-striped mb-0" id="componentTable">
+                        <thead class="bg-white" style="position: sticky; top: 0; z-index: 10;">
+                            <tr>
+                                <th class="text-center" style="width: 50px;">#</th>
+                                <th>Tên thành phần</th>
+                                <th>Cập nhật lần cuối</th>
+                                <th class="text-center" style="width: 100px;">Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody id="componentListContainer">
+                            <tr>
+                                <td colspan="4" class="text-center py-4 text-muted">
+                                    <i class="fas fa-spinner fa-spin me-2"></i> Đang tải dữ liệu...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
             <div class="modal-footer bg-white">
                 <button type="button" class="btn btn-secondary rounded-pill px-4" data-dismiss="modal">Hủy</button>
             </div>

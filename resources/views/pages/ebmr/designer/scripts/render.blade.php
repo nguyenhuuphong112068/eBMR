@@ -32,9 +32,11 @@
 
     .row-actions {
         top: 50%;
-        left: 5px;
+        left: -32px;
         transform: translateY(-50%);
-        flex-direction: row;
+        flex-direction: column;
+        padding: 4px;
+        padding-right: 8px; /* Cầu nối hover để chuột không bị mất tiêu điểm */
     }
 
     .table-header-cell:hover .col-actions,
@@ -293,7 +295,7 @@
                         ${!window.isExecutionMode ? `<div class="col-resizer" onmousedown="initResize(event, '${item.id}', 'col', ${cIdx})"></div>` : ''}
                     </th>`;
                 }).join('')}
-                ${window.isExecutionMode && item.canAddRows ? '<th style="width: 30px; border: none; background: transparent;"></th>' : ''}
+                ${window.isExecutionMode && item.canAddRows ? '<th class="execution-delete-cell no-print" style="width: 30px; border: none; background: transparent;"></th>' : ''}
                 </tr></thead>`;
             }
 
@@ -348,7 +350,7 @@
                             onclickAttr = `onclick="if(event.ctrlKey || event.shiftKey) return; openExecutionInputModal('${blockKey}', ${r}, ${c}, 'text')"`;
                             displayContent = runVal ? `<span style="color: #2563eb; font-weight: 500;">${runVal}</span>` : `<span class="execution-badge input"><i class="fas fa-edit"></i> [Nhập dữ liệu]</span>`;
                         } else if (displayContent.includes('[Ký tên]')) {
-                            cellClass += "execution-input-cell ";
+                            cellClass += "execution-input-cell execution-input-cell--sig ";
                             onclickAttr = `onclick="if(event.ctrlKey || event.shiftKey) return; openExecutionInputModal('${blockKey}', ${r}, ${c}, 'signature')"`;
                             displayContent = runVal ? getSignatureDisplayHtml(runVal, 'signature') : `<span class="execution-badge signature"><i class="fas fa-pen"></i> [Ký tên]</span>`;
                         } else if (displayContent.includes('[Tự động lấy thời gian]')) {
@@ -356,11 +358,11 @@
                             onclickAttr = `ondblclick="if(event.ctrlKey || event.shiftKey) return; autoFillTime('${blockKey}', ${r}, ${c})" title="Nháy đúp chuột (Double-click) để lấy ngày giờ hệ thống"`;
                             displayContent = runVal ? `<span style="color: #2563eb; font-weight: 500;">${runVal}</span>` : `<span class="execution-badge time"><i class="fas fa-clock"></i> [Double-click lấy giờ]</span>`;
                         } else if (displayContent.includes('[Người thực hiện]')) {
-                            cellClass += "execution-input-cell ";
+                            cellClass += "execution-input-cell execution-input-cell--sig ";
                             onclickAttr = `onclick="if(event.ctrlKey || event.shiftKey) return; autoFillExecutor('${blockKey}', ${r}, ${c})" title="Click để xác nhận người thực hiện"`;
                             displayContent = runVal ? getSignatureDisplayHtml(runVal, 'executor') : `<span class="execution-badge executor"><i class="fas fa-user-edit"></i> [Người thực hiện]</span>`;
                         } else if (displayContent.includes('[Người kiểm tra]')) {
-                            cellClass += "execution-input-cell ";
+                            cellClass += "execution-input-cell execution-input-cell--sig ";
                             onclickAttr = `onclick="if(event.ctrlKey || event.shiftKey) return; openCheckerAuthModal('${blockKey}', ${r}, ${c})" title="Click để xác thực người kiểm tra"`;
                             displayContent = runVal ? getSignatureDisplayHtml(runVal, 'checker') : `<span class="execution-badge checker"><i class="fas fa-check-double"></i> [Người kiểm tra]</span>`;
                         }
@@ -421,13 +423,13 @@
                 if (window.isExecutionMode && item.canAddRows) {
                     const isDynamicRow = item.data[r] && item.data[r][0] && item.data[r][0].is_dynamic;
                     if (isDynamicRow) {
-                        deleteCell = `<td class="execution-delete-cell" style="width: 30px; border: none; background: transparent; vertical-align: middle;">
+                        deleteCell = `<td class="execution-delete-cell no-print" style="width: 30px; border: none; background: transparent; vertical-align: middle;">
                                                                 <button class="btn btn-link text-danger p-0" title="Xóa dòng" onclick="executeDeleteTableRow('${item.id}', ${r})">
                                                                     <i class="fas fa-times-circle"></i>
                                                                 </button>
                                                               </td>`;
                     } else {
-                        deleteCell = `<td style="width: 30px; border: none; background: transparent;"></td>`;
+                        deleteCell = `<td class="execution-delete-cell no-print" style="width: 30px; border: none; background: transparent;"></td>`;
                     }
                 }
                 rowsHtml += `<tr>${cellsHtml}${deleteCell}</tr>`;
@@ -437,7 +439,7 @@
             if (item.canAddRows) {
                 const btnLabel = window.isExecutionMode ? 'THÊM DÒNG CUỐI' : 'THỬ THÊM DÒNG (CẤP 2)';
                 addRowBtn = `
-                                            <div class="mt-2 text-start">
+                                            <div class="mt-2 text-start no-print">
                                                 <button class="btn btn-xs btn-outline-primary py-0 px-2 fw-bold" style="font-size: 0.65rem; border-radius: 4px;" onclick="executeAddTableRow('${item.id}')">
                                                     <i class="fas fa-plus me-1"></i> ${btnLabel}
                                                 </button>
@@ -570,7 +572,7 @@
                                                 </button>
                                              </div>` : ''}
                                              <i class="fas fa-link fa-2x text-primary mb-2 ${isPreviewing ? 'd-none' : ''}"></i>
-                                             <div class="fw-bold text-navy ${isPreviewing ? 'mb-2 border-bottom pb-2 w-100' : ''}">Biểu mẫu chung: ${item.label || 'Đang tải...'}</div>
+                                             <div class="fw-bold text-navy ${isPreviewing ? 'd-none' : ''}">Biểu mẫu chung: ${item.label || 'Đang tải...'}</div>
                                              ${!isPreviewing ? `<div class="small text-muted mt-1">Nội dung sẽ được tự động chèn vào khi ban hành/thực thi</div>` : ''}
                                              ${previewContent}
                                            </div>`;
@@ -862,6 +864,16 @@
                         badge.style.top = '0';
                         badge.style.left = '15px';
                         badge.style.zIndex = '5';
+                        if (!window.isReadOnly) {
+                            badge.style.cursor = 'pointer';
+                            badge.title = "Nhấp để chỉnh sửa cài đặt lặp nhóm";
+                            badge.onclick = (e) => {
+                                e.stopPropagation();
+                                if (typeof window.editLoopGroup === 'function') {
+                                    window.editLoopGroup(group.loop_group_id);
+                                }
+                            };
+                        }
                         badge.innerHTML = `<i class="fas fa-redo me-1"></i> Lặp nhóm: ${group.loop_count} lần`;
                         loopGroupWrapper.appendChild(badge);
 
@@ -1264,7 +1276,7 @@
                         }
 
                         badge.innerHTML =
-                            `<div class="execution-checkbox-wrapper"><input type="checkbox" class="execution-checkbox" ${isChecked ? 'checked' : ''} ${window.isReadOnly ? 'disabled' : ''} onchange="window.handleCheckboxChange('${fieldId + loopSuffix}', this.checked, this)">${metaHtml}</div>`;
+                            `<span class="execution-checkbox-wrapper"><input type="checkbox" class="execution-checkbox" ${isChecked ? 'checked' : ''} ${window.isReadOnly ? 'disabled' : ''} onchange="window.handleCheckboxChange('${fieldId + loopSuffix}', this.checked, this)">${metaHtml}</span>`;
                         badge.className = 'ebmr-field-badge ebmr-field-value';
                     } else if (field.type === 'select') {
                         const dsType = field.dataSource ? field.dataSource.type : 'manual';
@@ -1658,19 +1670,37 @@
                 const targetValue = field.na_condition.value;
 
                 let runVal = null;
-                const targetField = Object.values(fieldsConfig).find(f => f.id === targetId || f.name === targetId || f.label === targetId);
+                const searchId = String(targetId).trim().toLowerCase();
+                const targetField = Object.values(fieldsConfig).find(f => 
+                    String(f.id).trim().toLowerCase() === searchId || 
+                    String(f.name).trim().toLowerCase() === searchId || 
+                    String(f.label || '').trim().toLowerCase() === searchId
+                );
                 
-                if (targetField && window.executionValues[targetField.id] !== undefined) {
-                    runVal = window.executionValues[targetField.id];
-                } else {
+                if (targetField) {
+                    if (window.executionValues[targetField.id] !== undefined) {
+                        runVal = window.executionValues[targetField.id];
+                    } else if (targetField.defaultValue !== undefined && targetField.defaultValue !== null) {
+                        runVal = targetField.defaultValue;
+                    }
+                }
+                
+                if (runVal === null || runVal === undefined) {
                     items.forEach(item => {
                         if (item.type === 'table' && item.data) {
                             const blockKey = item.uuid || item.id;
                             for (let tr = 0; tr < item.rows; tr++) {
                                 for (let tc = 0; tc < item.cols; tc++) {
-                                    if (item.data[tr][tc] && item.data[tr][tc].cellId === targetId) {
+                                    if (item.data[tr][tc] && String(item.data[tr][tc].cellId || '').trim().toLowerCase() === searchId) {
                                         if (window.executionValues[blockKey] && window.executionValues[blockKey][`${tr}_${tc}`] !== undefined) {
                                             runVal = window.executionValues[blockKey][`${tr}_${tc}`];
+                                        } else if (item.data[tr][tc].defaultValue !== undefined) {
+                                            runVal = item.data[tr][tc].defaultValue;
+                                        } else {
+                                            // Fallback to text content if no value set
+                                            const tempDiv = document.createElement('div');
+                                            tempDiv.innerHTML = item.data[tr][tc].content || '';
+                                            runVal = tempDiv.textContent.trim();
                                         }
                                     }
                                 }

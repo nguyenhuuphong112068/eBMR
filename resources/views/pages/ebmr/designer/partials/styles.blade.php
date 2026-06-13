@@ -202,6 +202,40 @@
         cursor: text;
         outline: none;
         transition: 0.2s;
+        position: relative;
+    }
+
+    /* Vùng biên trái và trên để hiện mũi tên đen quét khối (giống Word) */
+    .mini-table th[contenteditable="true"]::before,
+    .mini-table td[contenteditable="true"]::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 15px;
+        height: 100%;
+        cursor: default; /* Default pointer (mũi tên đen) */
+        z-index: 5;
+    }
+    
+    .mini-table th[contenteditable="true"]::after,
+    .mini-table td[contenteditable="true"]::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 10px;
+        cursor: default;
+        z-index: 5;
+    }
+
+    /* ===== Format Painter Active: Ép cursor trên MỌI phần tử ===== */
+    body.format-painter-active,
+    body.format-painter-active *,
+    body.format-painter-active *::before,
+    body.format-painter-active *::after {
+        cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 512 512'%3E%3Cpath fill='%231a73e8' d='M352 64h-48V32a32 32 0 0 0-64 0v32H32A32 32 0 0 0 0 96v96a32 32 0 0 0 32 32h288a32 32 0 0 0 32-32v-16h32a16 16 0 0 1 16 16v32a16 16 0 0 1-16 16H272a48 48 0 0 0-48 48v176a48 48 0 0 0 96 0V288h64a80 80 0 0 0 80-80v-32a112 112 0 0 0-112-112z'/%3E%3C/svg%3E") 0 20, crosshair !important;
     }
 
     .mini-table th[contenteditable="true"]:focus,
@@ -418,9 +452,7 @@
     }
 
     #editor-content p {
-        font-size: 14pt !important;
         margin-bottom: 0.5rem;
-        color: #000 !important;
     }
 
     .static-text-display[contenteditable="true"]:focus {
@@ -581,7 +613,7 @@
         border: 1px solid #dadce0;
         min-width: 20px;
         min-height: 20px;
-        overflow: hidden;
+        overflow: visible !important;
         word-wrap: break-word;
     }
 
@@ -620,7 +652,7 @@
     @media print {
         @page {
             size: A4 portrait;
-            margin: 0;
+            margin: 10mm 10mm;
         }
 
         body.printing-landscape @page {
@@ -632,10 +664,159 @@
             margin: 0 !important;
             width: 100% !important;
             padding: 0 !important;
+            border: none !important;
+            display: block !important;
         }
 
-        .no-print {
+        .no-print, .editor-toolbar, .leftNAV, .topNAV, .outline-sidebar, .properties-sidebar, 
+        .test-mode-badge, .print-blank-btn, #sidebar-col, #outline-col, .criteria-sidebar, 
+        .navbar, .main-sidebar, .page-break-divider, #comment-gutter,
+        .editor-ruler, #outline-minimized, .section-group-wrapper > .add-block-row,
+        .main-header, aside.main-sidebar, .control-sidebar {
             display: none !important;
+        }
+        
+        #canvas-col {
+            width: 100% !important;
+            max-width: 100% !important;
+            flex: 0 0 100% !important;
+            padding: 0 !important;
+        }
+        
+        #designer-workspace {
+            padding: 0 !important;
+            padding-right: 0 !important;
+            display: block !important;
+            width: 100% !important;
+        }
+        
+        /* Reset margin-left của AdminLTE content-wrapper (bằng sidebar width) */
+        .content-wrapper {
+            margin-left: 0 !important;
+        }
+        
+        /* Ẩn tất cả viền vàng của field badge */
+        .ebmr-field-badge,
+        .ebmr-field-badge.active,
+        .ebmr-field-badge.ebmr-field-value {
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+            border-radius: 0 !important;
+        }
+        
+        .ebmr-field-badge .badge-drag-handle,
+        .ebmr-field-badge .badge-left-handle,
+        .ebmr-field-badge .badge-right-handle {
+            display: none !important;
+        }
+
+        /* ============ BIẾN SỐ TRONG BẢNG (TABLE CELL) ============ */
+        /* Cell có biến số: căn đáy và padding nhỏ */
+        .execution-input-cell {
+            vertical-align: bottom !important;
+            padding: 2px 4px !important;
+            position: relative !important;
+        }
+        
+        /* Span bên trong cell: gạch chân chiếm hết chiều rộng, nằm ở dưới */
+        .execution-input-cell > span:not(.execution-checkbox-wrapper) {
+            color: transparent !important;
+            border-bottom: 1.5px solid #000 !important;
+            border-top: none !important;
+            border-left: none !important;
+            border-right: none !important;
+            display: block !important;
+            width: 100% !important;
+            min-height: 16px !important;
+            background: transparent !important;
+            box-shadow: none !important;
+        }
+
+        /* ============ BIẾN SỐ SELECT / DROPDOWN ============ */
+        .execution-input-cell select,
+        .ebmr-field-badge select,
+        .ebmr-field-badge .form-select-sm,
+        select.form-select-sm {
+            color: transparent !important;
+            background: transparent !important;
+            border: none !important;
+            border-bottom: 1.5px solid #000 !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+            -webkit-appearance: none !important;
+            appearance: none !important;
+            width: 100% !important;
+            display: block !important;
+            min-height: 16px !important;
+        }
+
+        /* Ẩn arrow mũi tên của select */
+        .execution-input-cell select option,
+        .ebmr-field-badge select option {
+            display: none !important;
+        }
+
+        /* ============ BIẾN SỐ INLINE (SPAN) ============ */
+        .execution-input-test, .execution-badge {
+            border: none !important;
+            border-bottom: 1.5px solid #000 !important;
+            color: transparent !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+            width: 100% !important;
+            display: block !important;
+            min-height: 18px !important;
+            text-shadow: none !important;
+        }
+
+        .execution-input-test *, .execution-badge * {
+            color: transparent !important;
+            visibility: hidden !important;
+        }
+        
+        .execution-badge i, .execution-input-test::before {
+            display: none !important;
+        }
+
+        /* ============ BIẾN SỐ KÝ TÊN ============ */
+        .execution-input-cell--sig {
+            height: 60px !important;
+            min-height: 60px !important;
+            vertical-align: bottom !important;
+        }
+        .execution-input-cell--sig > span {
+            min-height: 55px !important;
+            height: 55px !important;
+            display: block !important;
+            width: 100% !important;
+            border-bottom: 1.5px solid #000 !important;
+        }
+
+        /* ============ CHECKBOX ============ */
+        input[type="checkbox"].execution-checkbox,
+        .execution-checkbox-wrapper input[type="checkbox"] {
+            border: 1px solid #000 !important;
+            border-radius: 2px !important;
+            -webkit-appearance: checkbox !important;
+            appearance: checkbox !important;
+            color: initial !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            width: 14px !important;
+            height: 14px !important;
+            margin: 0 !important;
+            background: #fff !important;
+            display: inline-block !important;
+        }
+        
+        .execution-checkbox-wrapper {
+            border-bottom: none !important;
+            background: transparent !important;
+            display: block !important;
+            width: auto !important;
         }
     }
 
@@ -1386,6 +1567,14 @@
 
     .execution-mode-active .test-mode-badge {
         display: block;
+    }
+
+    .print-blank-btn {
+        display: none;
+    }
+    .execution-mode-active .print-blank-btn {
+        display: flex;
+        align-items: center;
     }
 
     .execution-input-test:empty::before {

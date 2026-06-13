@@ -257,16 +257,18 @@ class EbmrExecutionController extends Controller
 
         $template = DB::table('ebmr_templates')
             ->leftJoin('user_management', 'ebmr_templates.owner_id', '=', 'user_management.id')
+            ->leftJoin('designations', 'user_management.designation_id', '=', 'designations.id')
             ->where('ebmr_templates.id', $record->template_id)
-            ->select('ebmr_templates.*', 'user_management.fullName as owner_name', 'user_management.signature_image as owner_signature')
+            ->select('ebmr_templates.*', 'user_management.fullName as owner_name', 'user_management.signature_image as owner_signature', 'designations.name as owner_designation')
             ->first();
         if (!$template) return redirect()->back()->with('error', 'Mẫu hồ sơ không tồn tại.');
 
         $template->workflows = DB::table('ebmr_template_workflows')
             ->leftJoin('user_management', 'ebmr_template_workflows.user_id', '=', 'user_management.id')
+            ->leftJoin('designations', 'user_management.designation_id', '=', 'designations.id')
             ->where('template_id', $template->id)
             ->orderBy('step_order')
-            ->select('ebmr_template_workflows.*', 'user_management.fullName', 'user_management.groupName as title', 'user_management.deparment as department_name', 'user_management.signature_image as signature_image')
+            ->select('ebmr_template_workflows.*', 'user_management.fullName', 'user_management.groupName as title', 'user_management.deparment as department_name', 'user_management.signature_image as signature_image', 'designations.name as designation_name')
             ->get();
 
         if ($template->type === 'GF') {
@@ -494,7 +496,14 @@ class EbmrExecutionController extends Controller
 
             $cellId = ($rd->cell_id && $rd->cell_id !== 'default') ? $rd->cell_id : 'default';
             // Giải mã raw_value (data cũ chưa mã hoá sẽ tự fallback)
-            $executionValues->$blockUuid->$cellId = RunDataEncryptionService::decrypt($rd->raw_value);
+            $decryptedVal = RunDataEncryptionService::decrypt($rd->raw_value);
+            if (is_string($decryptedVal) && (str_starts_with(trim($decryptedVal), '{') || str_starts_with(trim($decryptedVal), '['))) {
+                $decoded = json_decode($decryptedVal, true);
+                if (json_last_error() === JSON_ERROR_NONE) {
+                    $decryptedVal = $decoded;
+                }
+            }
+            $executionValues->$blockUuid->$cellId = $decryptedVal;
 
             // Lưu metadata
             $executionValues->$blockUuid->_meta->$cellId = (object)[
@@ -573,7 +582,9 @@ class EbmrExecutionController extends Controller
                             }
                         }
 
-                        Log::info("Saving cell: " . $cellId . " = " . $rawValue);
+                        $rawValueStr = (is_array($rawValue) || is_object($rawValue)) ? json_encode($rawValue) : (string)$rawValue;
+
+                        Log::info("Saving cell: " . $cellId . " = " . $rawValueStr);
                         DB::table('ebmr_run_data')->updateOrInsert(
                             [
                                 'record_id' => $validated['record_id'],
@@ -584,7 +595,7 @@ class EbmrExecutionController extends Controller
                                 'filled_by' => $userId,
                                 'filled_at' => $now,
                                 'value'     => RunDataEncryptionService::encryptJson([$cellId => $rawValue]),
-                                'raw_value' => RunDataEncryptionService::encrypt((string)$rawValue),
+                                'raw_value' => RunDataEncryptionService::encrypt($rawValueStr),
                                 'updated_at' => $now,
                                 'updated_by' => $userName,
                             ]
@@ -597,7 +608,7 @@ class EbmrExecutionController extends Controller
                                 'block_uuid' => $blockUuid,
                                 'cell_id' => $cellId,
                                 'old_raw_value' => $existing->raw_value,
-                                'new_raw_value' => RunDataEncryptionService::encrypt((string)$rawValue),
+                                'new_raw_value' => RunDataEncryptionService::encrypt($rawValueStr),
                                 'reason' => $reason,
                                 'changed_by' => $userName,
                                 'changed_at' => $now,

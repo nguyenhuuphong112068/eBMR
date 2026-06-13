@@ -241,6 +241,7 @@
                     </ul>
                 </li>
 
+
                 <!-- Droplist Menu Hồ sơ Gốc  -->
                 <li class="nav-item has-treeview {{ str_contains(url()->current(), 'category') ? 'menu-open' : '' }}">
                     <a href="#"
@@ -253,6 +254,15 @@
                     </a>
 
                     <ul class="nav nav-treeview">
+
+
+                        <li class="nav-item">
+                            <a href="{{ route('pages.ebmr.templates') }}?type=CO" class="nav-link">
+                                <i class="far fa-circle nav-icon"></i>
+                                <p>Danh sách Thành Phần</p>
+                            </a>
+                        </li>
+
                         <li class="nav-item">
                             <a href="{{ route('pages.category.gf.list') }}" class="nav-link">
                                 <i class="far fa-circle nav-icon"></i>

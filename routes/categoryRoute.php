@@ -5,6 +5,7 @@ use App\Http\Controllers\Pages\Category\IntermediateCategoryController;
 use App\Http\Controllers\Pages\Category\ProductCategoryController;
 use App\Http\Controllers\Pages\Category\GfCategoryController;
 use App\Http\Controllers\Pages\Category\MfCategoryController;
+use App\Http\Controllers\Pages\Category\CoCategoryController;
 
 use App\Http\Middleware\CheckLogin;
 use Illuminate\Support\Facades\Route;
@@ -58,6 +59,16 @@ Route::prefix('/category')
                 Route::prefix('/mf')
                         ->name('mf.')
                         ->controller(MfCategoryController::class)
+                        ->group(function () {
+                                Route::get('', 'index')->name('list');
+                                Route::post('store', 'store')->name('store');
+                                Route::post('update', 'update')->name('update');
+                                Route::get('delete', 'delete')->name('delete');
+                        });
+
+                Route::prefix('/co')
+                        ->name('co.')
+                        ->controller(CoCategoryController::class)
                         ->group(function () {
                                 Route::get('', 'index')->name('list');
                                 Route::post('store', 'store')->name('store');

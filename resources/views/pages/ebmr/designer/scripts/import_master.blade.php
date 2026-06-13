@@ -70,6 +70,70 @@
         });
     });
 
+    $('#componentSearch').on('keyup', function() {
+        const value = $(this).val().toLowerCase();
+        $('.component-row').filter(function() {
+            $(this).toggle($(this).find('.template-name').text().toLowerCase().indexOf(value) > -1)
+        });
+    });
+
+    function openComponentModal() {
+        $('#componentModal').modal('show');
+        $('#componentListContainer').html(`
+            <tr>
+                <td colspan="4" class="text-center py-4 text-muted">
+                    <i class="fas fa-spinner fa-spin me-2"></i> Đang tải dữ liệu thành phần...
+                </td>
+            </tr>
+        `);
+
+        // Fetch templates
+        fetch('/ebmr/get-templates')
+            .then(res => res.json())
+            .then(data => {
+                let html = '';
+                // Filter only Components (type = CO)
+                const coTemplates = data.filter(t => t.type === 'CO');
+                
+                if (coTemplates.length === 0) {
+                    html = `
+                        <tr>
+                            <td colspan="4" class="text-center py-4 text-muted">
+                                <i class="fas fa-info-circle me-2"></i> Không có Thành phần nào trong hệ thống.
+                            </td>
+                        </tr>
+                    `;
+                } else {
+                    coTemplates.forEach((t, index) => {
+                        const date = new Date(t.updated_at).toLocaleString('vi-VN');
+                        html += `
+                            <tr class="component-row">
+                                <td class="text-center align-middle">${index + 1}</td>
+                                <td class="align-middle fw-bold text-primary template-name">${t.name}</td>
+                                <td class="align-middle text-muted small">${date}</td>
+                                <td class="text-center align-middle">
+                                    <button class="btn btn-sm btn-info rounded-pill px-3 fw-bold text-white" onclick="importMasterForm(${t.id}, '${t.name.replace(/'/g, "\\'")}')">
+                                        <i class="fas fa-download me-1"></i> Chèn
+                                    </button>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                }
+                $('#componentListContainer').html(html);
+            })
+            .catch(err => {
+                console.error(err);
+                $('#componentListContainer').html(`
+                    <tr>
+                        <td colspan="4" class="text-center py-4 text-danger">
+                            <i class="fas fa-exclamation-triangle me-2"></i> Lỗi khi tải dữ liệu!
+                        </td>
+                    </tr>
+                `);
+            });
+    }
+
     // Import logic (Deep Copy)
     function importMasterForm(templateId, templateName) {
         if (!confirm(`Bạn có chắc chắn muốn nhập dữ liệu từ biểu mẫu "${templateName}" vào công đoạn hiện tại không?`)) {

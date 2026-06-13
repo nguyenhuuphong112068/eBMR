@@ -124,6 +124,13 @@
         childNodes.forEach(node => {
             if (node.nodeType !== Node.ELEMENT_NODE) return;
 
+            // Ép tất cả các phần tử con bên trong node về màu đen
+            const allElements = node.querySelectorAll('*');
+            allElements.forEach(el => {
+                el.style.color = '#000000';
+            });
+            node.style.color = '#000000';
+
             const tagName = node.tagName.toLowerCase();
 
             // Xử lý Tiêu đề (Headings) và Đoạn văn (Paragraphs)
@@ -289,22 +296,16 @@
     /**
      * Vẽ danh sách các khối Word ra màn hình xem trước
      */
-    function renderWordBlocksList(searchQuery = '') {
+    function renderWordBlocksList() {
         const listContainer = document.getElementById('wordBlocksPreviewList');
         if (!listContainer) return;
 
         listContainer.innerHTML = '';
-        const query = searchQuery.trim().toLowerCase();
 
         let visibleCount = 0;
         let selectedCount = 0;
 
         windowParsedBlocks.forEach((block, index) => {
-            // Lọc kết quả tìm kiếm
-            if (query && !block.plainText.toLowerCase().includes(query) && !block.label.toLowerCase().includes(query)) {
-                return;
-            }
-
             visibleCount++;
             if (block.selected) {
                 selectedCount++;
@@ -453,8 +454,13 @@
                 windowParsedBlocks.forEach(block => {
                     block.selected = checked;
                 });
-                const query = document.getElementById('searchWordBlocks').value;
-                renderWordBlocksList(query);
+                renderWordBlocksList();
+                
+                // Re-apply search highlight if there is a search query
+                const searchInput = document.getElementById('searchWordBlocks');
+                if (searchInput && searchInput.value) {
+                    searchInput.dispatchEvent(new Event('input'));
+                }
             });
         }
 
@@ -462,7 +468,61 @@
         const searchInput = document.getElementById('searchWordBlocks');
         if (searchInput) {
             searchInput.addEventListener('input', (e) => {
-                renderWordBlocksList(e.target.value);
+                const query = e.target.value.trim().toLowerCase();
+                const cards = document.querySelectorAll('.word-block-card');
+                let firstMatch = null;
+                
+                cards.forEach((card, index) => {
+                    const block = windowParsedBlocks[index];
+                    
+                    // Khôi phục viền mặc định
+                    if (block.selected) {
+                        card.style.borderLeft = '5px solid #007bff';
+                        card.style.borderRight = 'none';
+                        card.style.backgroundColor = '#f1f8ff';
+                    } else {
+                        card.style.borderLeft = '5px solid #dee2e6';
+                        card.style.borderRight = 'none';
+                        card.style.backgroundColor = '#fff';
+                    }
+                    
+                    if (!query) return;
+                    
+                    const textContent = (block.plainText || '').toLowerCase() + ' ' + (block.label || '').toLowerCase();
+                    if (textContent.includes(query)) {
+                        card.style.borderRight = '5px solid #ffc107'; // Thêm viền vàng bên phải để nhận diện
+                        card.style.backgroundColor = '#fffccc';
+                        if (!firstMatch) firstMatch = card;
+                    }
+                });
+                
+                if (firstMatch) {
+                    firstMatch.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            });
+            
+            // Xử lý keydown ENTER để chuyển tới next match
+            let currentMatchIndex = -1;
+            searchInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const query = e.target.value.trim().toLowerCase();
+                    if (!query) return;
+                    
+                    const matches = [];
+                    document.querySelectorAll('.word-block-card').forEach((card, index) => {
+                        const block = windowParsedBlocks[index];
+                        const textContent = (block.plainText || '').toLowerCase() + ' ' + (block.label || '').toLowerCase();
+                        if (textContent.includes(query)) {
+                            matches.push(card);
+                        }
+                    });
+                    
+                    if (matches.length > 0) {
+                        currentMatchIndex = (currentMatchIndex + 1) % matches.length;
+                        matches[currentMatchIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                }
             });
         }
 
@@ -504,6 +564,12 @@
 
                         if (selectAllCheckbox) {
                             selectAllCheckbox.checked = (selectedCount === windowParsedBlocks.length);
+                        }
+                        
+                        // Re-apply search highlight if there is a search query
+                        const searchInput = document.getElementById('searchWordBlocks');
+                        if (searchInput && searchInput.value) {
+                            searchInput.dispatchEvent(new Event('input'));
                         }
                     }
                 }

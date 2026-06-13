@@ -84,6 +84,14 @@
         <div class="test-mode-badge">
             <i class="fas fa-flask me-2"></i> Đang ở chế độ Chạy thử (Preview)
         </div>
+        
+        <!-- Nút In nổi góc trên bên phải -->
+        @if(isset($template) && $template->status === 'active')
+        <button class="btn shadow-lg print-blank-btn" onclick="printBlankForm()" title="In Biểu mẫu trắng" 
+            style="position: fixed; top: 90px; right: 30px; z-index: 1050; border-radius: 50px; padding: 10px 20px; background-color: #28a745; color: white; font-weight: bold; cursor: pointer; pointer-events: auto;">
+            <i class="fas fa-print me-2"></i> In Biểu mẫu trắng
+        </button>
+        @endif
     </div>
 
     <!-- ============================================================

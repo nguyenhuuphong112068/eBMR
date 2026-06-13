@@ -25,6 +25,9 @@ class EbmrTemplateController extends Controller
         if ($type === 'MF') {
             $title = 'Biểu Mẫu Gốc';
         }
+        if ($type === 'CO') {
+            $title = 'Danh Sách Thành Phần';
+        }
 
         session(['title' => $title]);
 
@@ -44,6 +47,9 @@ class EbmrTemplateController extends Controller
             $templatesQuery->leftJoin('finished_product_category', 'ebmr_templates.caterogy_id', '=', 'finished_product_category.id')
                 ->leftJoin('product_name', 'finished_product_category.product_name_id', '=', 'product_name.id')
                 ->addSelect('finished_product_category.finished_product_code as category_code', 'product_name.name as category_name');
+        } elseif ($type === 'CO') {
+            $templatesQuery->leftJoin('co_category', 'ebmr_templates.caterogy_id', '=', 'co_category.id')
+                ->addSelect('co_category.code as category_code', 'co_category.name as category_name');
         } else { // BMR
             $templatesQuery->leftJoin('intermediate_category', 'ebmr_templates.caterogy_id', '=', 'intermediate_category.id')
                 ->leftJoin('product_name', 'intermediate_category.product_name_id', '=', 'product_name.id')
@@ -126,6 +132,8 @@ class EbmrTemplateController extends Controller
         $category_items = [];
         if ($type === 'GF') {
             $category_items = DB::table('gf_category')->where('active', 1)->get();
+        } elseif ($type === 'CO') {
+            $category_items = DB::table('co_category')->where('active', 1)->get();
         } elseif ($type === 'MF') {
             $category_items = DB::table('mf_category')->where('active', 1)->get();
         } elseif ($type === 'BPR') {
@@ -443,6 +451,68 @@ class EbmrTemplateController extends Controller
             'id' => $id,
         ]);
     }
+    public function storeCoCategory(Request $request)
+    {
+        $validated = $request->validate([
+            'code' => 'required|string|max:255|unique:co_category,code',
+            'name' => 'required|string|max:255',
+        ]);
+
+        $avatarPath = null;
+        if ($request->hasFile('avatar')) {
+            $file = $request->file('avatar');
+            $filename = time() . '_' . $file->getClientOriginalName();
+            $file->move(public_path('upLoadData/img/co_avatars'), $filename);
+            $avatarPath = 'upLoadData/img/co_avatars/' . $filename;
+        }
+
+        $caterogyId = DB::table('co_category')->insertGetId([
+            'code' => $validated['code'],
+            'name' => $validated['name'],
+            'is_private' => $request->has('is_private') ? 1 : 0,
+            'avatar' => $avatarPath,
+            'active' => 1,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // Auto create template
+        $templateId = DB::table('ebmr_templates')->insertGetId([
+            'caterogy_id' => $caterogyId,
+            'version' => 1,
+            'type' => 'CO',
+            'status' => 'draft',
+            'owner_id' => session('user')['userId'] ?? null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // Auto create section block for CO
+        $sectionIdStr = $caterogyId . '_CO';
+        DB::table('ebmr_template_blocks')->insert([
+            'template_id' => $templateId,
+            'section_id' => $sectionIdStr,
+            'type' => 'section',
+            'label' => 'section_0',
+            'order' => 0,
+            'properties' => json_encode([
+                'id' => 'blk_sec_'.uniqid(),
+                'type' => 'section',
+                'label' => 'Nội Dung',
+                'stage_code' => 'CO',
+                'section_id' => $sectionIdStr
+            ]),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Tạo danh mục thành phần thành công',
+            'id' => $caterogyId,
+            'template_id' => $templateId
+        ]);
+    }
 
     /**
      * Update only effective date
@@ -545,7 +615,7 @@ class EbmrTemplateController extends Controller
     public function getTemplates()
     {
         $templates = DB::table('ebmr_templates')
-            ->select('ebmr_templates.id', 'ebmr_templates.updated_at', 'ebmr_templates.log_history', 'ebmr_templates.type', 'ebmr_templates.caterogy_id')
+            ->select('ebmr_templates.id', 'ebmr_templates.updated_at', 'ebmr_templates.log_history', 'ebmr_templates.type', 'ebmr_templates.caterogy_id', 'ebmr_templates.status')
             ->orderBy('ebmr_templates.updated_at', 'desc')
             ->get();
 
@@ -633,9 +703,22 @@ class EbmrTemplateController extends Controller
         // Dynamically override fieldsConfig from testing criteria
         $fieldsConfig = $this->overrideFieldsConfigWithTesting($fieldsConfig, $testingCriteria);
 
+        // Fetch template info to allow client to generate virtual header
+        $baseTemplate = DB::table('ebmr_templates')->where('id', $id)->first();
+        $query = DB::table('ebmr_templates')->where('ebmr_templates.id', $id);
+        if ($baseTemplate && $baseTemplate->type === 'CO') {
+            $query->leftJoin('co_category', 'ebmr_templates.caterogy_id', '=', 'co_category.id')
+                  ->select('ebmr_templates.*', 'co_category.code as category_code', 'co_category.name as category_name');
+        } else {
+            $query->leftJoin('gf_category', 'ebmr_templates.caterogy_id', '=', 'gf_category.id')
+                  ->select('ebmr_templates.*', 'gf_category.code as category_code', 'gf_category.name as category_name');
+        }
+        $templateInfo = $query->first();
+
         return response()->json([
             'blocks' => $resultBlocks,
             'fields' => $fieldsConfig,
+            'template' => $templateInfo,
         ]);
     }
 

@@ -22,8 +22,9 @@ class EbmrDesignerController extends Controller
             if ($id) {
                 $template = DB::table('ebmr_templates')
                     ->leftJoin('user_management', 'ebmr_templates.owner_id', '=', 'user_management.id')
+                    ->leftJoin('designations', 'user_management.designation_id', '=', 'designations.id')
                     ->where('ebmr_templates.id', $id)
-                    ->select('ebmr_templates.*', 'user_management.fullName as owner_name', 'user_management.signature_image as owner_signature')
+                    ->select('ebmr_templates.*', 'user_management.fullName as owner_name', 'user_management.signature_image as owner_signature', 'designations.name as owner_designation')
                     ->first();
                 if ($template) {
                     // Update session title based on type
@@ -38,6 +39,9 @@ class EbmrDesignerController extends Controller
                     if ($type === 'MF') {
                         $title = 'Thiết kế biểu mẫu gốc';
                     }
+                    if ($type === 'CO') {
+                        $title = 'Thiết kế Thành phần';
+                    }
 
                     // Get category extra info for header display
                     if ($type === 'GF') {
@@ -45,6 +49,10 @@ class EbmrDesignerController extends Controller
                         $template->category_code = $cat->code ?? '';
                         $template->category_name = $cat->name ?? '';
                         $template->relatived_sop_no = $cat->relatived_sop_no ?? '';
+                    } elseif ($type === 'CO') {
+                        $cat = DB::table('co_category')->where('id', $template->caterogy_id)->first();
+                        $template->category_code = $cat->code ?? '';
+                        $template->category_name = $cat->name ?? '';
                     } elseif ($type === 'MF') {
                         $cat = DB::table('mf_category')->where('id', $template->caterogy_id)->first();
                         $template->category_code = $cat->code ?? '';
@@ -302,9 +310,10 @@ class EbmrDesignerController extends Controller
 
                     $workflows = DB::table('ebmr_template_workflows')
                         ->leftJoin('user_management', 'ebmr_template_workflows.user_id', '=', 'user_management.id')
+                        ->leftJoin('designations', 'user_management.designation_id', '=', 'designations.id')
                         ->where('template_id', $id)
                         ->orderBy('step_order')
-                        ->select('ebmr_template_workflows.*', 'user_management.fullName', 'user_management.groupName as title', 'user_management.deparment as department_name', 'user_management.signature_image as signature_image')
+                        ->select('ebmr_template_workflows.*', 'user_management.fullName', 'user_management.groupName as title', 'user_management.deparment as department_name', 'user_management.signature_image as signature_image', 'designations.name as designation_name')
                         ->get();
                     $template->workflows = $workflows;
 

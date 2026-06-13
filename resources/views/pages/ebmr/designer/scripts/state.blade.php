@@ -60,6 +60,8 @@
             let sigTable = generateSignatureTable();
             sigTable.id = 'sys_gf_tbl_signatures';
             virtualBlocks.push(sigTable);
+        } else if (type === 'CO') {
+            // Không sinh virtual block nào cho Component
         } else {
             // 1. BMR HEADER (Section)
             virtualBlocks.push({
@@ -1094,6 +1096,7 @@
         const createdByName = "{{ $template->owner_name ?? '' }}";
         const createdAtStr = "{{ $template->created_at ?? '' }}";
         const createdBySignature = "{{ $template->owner_signature ?? '' }}";
+        const createdByDesignation = "{{ $template->owner_designation ?? '' }}";
 
         let columns = [{
                 label: '-',
@@ -1183,7 +1186,7 @@
                 textAlign: 'left'
             },
             {
-                content: `<div>Người lập</div><div class="mt-2">${createdByName}</div>`,
+                content: `<div class="mt-2" style="font-weight: 500;">${createdByName}</div><div class="small text-muted">${createdByDesignation}</div>`,
                 rs: 1,
                 cs: 1,
                 textAlign: 'left'
@@ -1210,7 +1213,7 @@
                 if (wf.role === 'reviewer') roleText = 'Người kiểm tra';
 
                 let nameText =
-                    `<div>${wf.title || wf.department_name || ''}</div><div class="mt-2">${wf.fullName || ''}</div>`;
+                    `<div class="mt-2" style="font-weight: 500;">${wf.fullName || ''}</div><div class="small text-muted">${wf.designation_name || ''}</div>`;
 
                 let dateText = '';
                 let sigText = '';

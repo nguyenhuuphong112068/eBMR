@@ -35,8 +35,8 @@
                         <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
                             <h5 class="mb-0 text-navy fw-bold">
                                 <i
-                                    class="fas {{ request('type') == 'GF' ? 'fa-layer-group' : (request('type') == 'BPR' ? 'fa-box-open' : (request('type') == 'MF' ? 'fa-file-invoice' : 'fa-file-medical')) }} me-2"></i>
-                                {{ request('type') == 'GF' ? 'Danh Sách Biểu Mẫu Dùng Chung' : (request('type') == 'BPR' ? 'Danh Sách Hồ Sơ Đóng Gói' : (request('type') == 'MF' ? 'Danh Sách Biểu Mẫu Gốc' : 'Danh Sách Hồ Sơ Sản Xuất BMR')) }}
+                                    class="fas {{ request('type') == 'GF' ? 'fa-layer-group' : (request('type') == 'BPR' ? 'fa-box-open' : (request('type') == 'MF' ? 'fa-file-invoice' : (request('type') == 'CO' ? 'fa-cube' : 'fa-file-medical'))) }} me-2"></i>
+                                {{ request('type') == 'GF' ? 'Danh Sách Biểu Mẫu Dùng Chung' : (request('type') == 'BPR' ? 'Danh Sách Hồ Sơ Đóng Gói' : (request('type') == 'MF' ? 'Danh Sách Biểu Mẫu Gốc' : (request('type') == 'CO' ? 'Danh Sách Thành Phần' : 'Danh Sách Hồ Sơ Sản Xuất BMR'))) }}
                             </h5>
                             <div class="d-flex align-items-center gap-3">
                                 <!-- View Toggle Button Group -->
@@ -90,10 +90,17 @@
                                             <i class="fas fa-file-signature me-2"></i> Tạo mới
                                         </button>
                                     @else
-                                        <button class="btn btn-outline-primary rounded-pill px-4 shadow-sm fw-bold"
-                                            onclick="openBtpListModal()">
-                                            <i class="fas fa-file-signature me-2"></i> Tạo mới
-                                        </button>
+                                        @if ($current_type === 'CO')
+                                            <button class="btn btn-outline-primary rounded-pill px-4 shadow-sm fw-bold"
+                                                onclick="openCreateCoCategoryModal()">
+                                                <i class="fas fa-file-signature me-2"></i> Tạo mới
+                                            </button>
+                                        @else
+                                            <button class="btn btn-outline-primary rounded-pill px-4 shadow-sm fw-bold"
+                                                onclick="openBtpListModal()">
+                                                <i class="fas fa-file-signature me-2"></i> Tạo mới
+                                            </button>
+                                        @endif
                                     @endif
                                 @endif
                             </div>
@@ -206,11 +213,13 @@
                                                                 title="Thiết kế nội dung">
                                                                 <i class="fas fa-pencil-ruler"></i> Thiết kế
                                                             </a>
+                                                            @if ($current_type !== 'CO')
                                                             <button class="btn btn-sm btn-white text-success"
                                                                 onclick="openWorkflowModal({{ $t->id }})"
                                                                 title="Trình ký">
                                                                 <i class="fas fa-paper-plane"></i> Gửi duyệt
                                                             </button>
+                                                            @endif
                                                         @else
                                                             <a href="{{ route('pages.ebmr.designer', $t->id) }}?mode=review"
                                                                 class="btn btn-sm btn-white text-primary"
@@ -397,11 +406,13 @@
                                                                 title="Thiết kế nội dung">
                                                                 <i class="fas fa-pencil-ruler me-1"></i> Thiết kế
                                                             </a>
+                                                            @if ($current_type !== 'CO')
                                                             <button class="btn btn-sm btn-success rounded-pill px-3 py-1"
                                                                 onclick="openWorkflowModal({{ $t->id }})"
                                                                 title="Trình ký">
                                                                 <i class="fas fa-paper-plane me-1"></i> Gửi duyệt
                                                             </button>
+                                                            @endif
                                                         @else
                                                             <a href="{{ route('pages.ebmr.designer', $t->id) }}?mode=review"
                                                                 class="btn btn-sm btn-primary text-white rounded-pill px-3 py-1"
@@ -438,6 +449,57 @@
             </div>
         </div>
 
+        <!-- Modal Tạo Mới Danh Mục Thành Phần (CO) -->
+        <div class="modal fade" id="modalCreateCoCategory" tabindex="-1" role="dialog" aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+                <div class="modal-content border-0 shadow-lg">
+                    <div class="modal-header">
+                        <h5 class="modal-title font-weight-bold text-info">
+                            <i class="fas fa-plus-circle me-2"></i> Tạo Mới Danh Mục Thành Phần
+                        </h5>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <form id="formCreateCoCategory" enctype="multipart/form-data">
+                        @csrf
+                        <div class="modal-body p-4">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label fw-bold">Mã Thành Phần <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control" name="code" required placeholder="Nhập mã thành phần...">
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label fw-bold">Tên Thành Phần <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control" name="name" required placeholder="Nhập tên thành phần...">
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label fw-bold">Sử dụng chung</label>
+                                    <div class="custom-control custom-switch custom-switch-lg">
+                                        <input type="checkbox" class="custom-control-input" id="co_is_private" name="is_private" value="1">
+                                        <label class="custom-control-label fw-bold text-navy" for="co_is_private" style="cursor: pointer;">
+                                            Chia sẻ cho nhiều người dùng chung
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label fw-bold">Ảnh đại diện</label>
+                                    <input type="file" class="form-control" name="avatar" accept="image/*">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer bg-light p-3">
+                            <button type="button" class="btn btn-white rounded-pill px-4" data-dismiss="modal">Hủy bỏ</button>
+                            <button type="submit" class="btn btn-primary rounded-pill px-4 shadow-sm text-white">
+                                <i class="fas fa-save me-2 text-white"></i> Lưu thành phần
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        @if ($current_type !== 'CO')
         <!-- Modal 1: Danh Sách Bán Thành Phẩm -->
         <div class="modal fade" id="modalBtpList" tabindex="-1" role="dialog" aria-hidden="true">
             <div class="modal-dialog modal-xl modal-dialog-centered" role="document">
@@ -556,6 +618,7 @@
                 </div>
             </div>
         </div>
+        @endif
 
         <form id="metadataForm" class="m-0">
             @csrf
@@ -1819,6 +1882,38 @@
             function openBtpListModal() {
                 $('#modalBtpList').modal('show');
             }
+
+            function openCreateCoCategoryModal() {
+                $('#modalCreateCoCategory').modal('show');
+            }
+
+            $(document).ready(function() {
+                $('#formCreateCoCategory').submit(function(e) {
+                    e.preventDefault();
+                    let formData = new FormData(this);
+                    
+                    $.ajax({
+                        url: '{{ route('pages.ebmr.storeCoCategory') }}',
+                        type: 'POST',
+                        data: formData,
+                        processData: false,
+                        contentType: false,
+                        success: function(res) {
+                            if (res.success) {
+                                Swal.fire('Thành công', res.message, 'success').then(() => {
+                                    window.location.reload();
+                                });
+                            } else {
+                                Swal.fire('Lỗi', res.message, 'error');
+                            }
+                        },
+                        error: function(err) {
+                            console.error(err);
+                            Swal.fire('Lỗi', 'Có lỗi xảy ra khi tạo danh mục', 'error');
+                        }
+                    });
+                });
+            });
 
             function selectCategory(id, code, name, info, stages = {}, isHypothesis = 0, batchQty = 0, batchSize = 0) {
                 $('#modalBtpList').modal('hide');

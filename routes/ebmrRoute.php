@@ -6,11 +6,11 @@ use App\Http\Controllers\EbmrExecutionController;
 use App\Http\Controllers\EbmrIssuanceController;
 use App\Http\Controllers\EbmrTemplateController;
 use Illuminate\Support\Facades\Route;
-
 Route::group(['prefix' => 'ebmr', 'as' => 'pages.ebmr.'], function () {
     // 1. Template Management
     Route::get('/templates', [EbmrTemplateController::class, 'index'])->name('templates');
     Route::post('/templates/metadata', [EbmrTemplateController::class, 'storeMetadata'])->name('storeTemplateMetadata');
+    Route::post('/templates/co-category', [EbmrTemplateController::class, 'storeCoCategory'])->name('storeCoCategory');
     Route::post('/templates/duplicate', [EbmrTemplateController::class, 'duplicateTemplate'])->name('duplicateTemplate');
     Route::post('/templates/effective-date', [EbmrTemplateController::class, 'updateEffectiveDate'])->name('updateEffectiveDate');
     Route::get('/templates/{id}/data', [EbmrTemplateController::class, 'getMetadata'])->name('getTemplateMetadata');

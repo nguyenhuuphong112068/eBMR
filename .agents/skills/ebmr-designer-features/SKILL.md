@@ -7,6 +7,51 @@ description: Danh sách toàn bộ các tính năng hiện có của eBMR Design
 
 Tài liệu này ghi lại toàn bộ các tính năng đã được triển khai trong trình soạn thảo hồ sơ (Designer) của hệ thống eBMR. Khi có tính năng mới được tạo ra, Agent **PHẢI** cập nhật ngay vào file này.
 
+---
+
+## Cấu trúc Thanh Công Cụ (Toolbar)
+
+Toolbar được tổ chức theo kiểu **Ribbon** gồm 2 hàng, mỗi hàng chia thành các **nhóm chức năng** với nhãn nhỏ bên dưới.
+
+### Hàng 1 — Hành động chính
+
+| Nhóm | Chức năng |
+|---|---|
+| **Lịch Sử** | Undo (Ctrl+Z), Redo (Ctrl+Y) |
+| **Định Dạng** | Sao chép định dạng (Format Painter), Xóa định dạng \| Copy khối, Cut khối, Paste khối \| Chèn Bảng (Grid), Gộp ô, Tách ô |
+| **Chèn** | Mô tả (static-text), BM Chung, Bảng KT KL TB, Thêm Phân đoạn, Nhập từ MF, Lặp nhóm khối \| Nhập từ Word \| Ký hiệu đặc biệt (modal), Liên kết PDF, Hủy liên kết |
+| **Biến Số** | Chèn Biến số (dropdown: text/number/date/signature/checkbox/select/formula), Dán Biến số, Liên kết Tiêu chuẩn, Danh sách Biến số |
+| **Hồ Sơ** | Mở hồ sơ, Lịch sử thay đổi, In hồ sơ, Thuộc tính tài liệu |
+
+Góc phải (ms-auto): N/A Vùng Chọn (ẩn mặc định), Chuyển chế độ (Thiết kế/Chạy thử), Thay đổi chế độ xem, Lưu hồ sơ.
+
+### Hàng 2 — Định dạng văn bản
+
+| Nhóm | Chức năng |
+|---|---|
+| **Kiểu & Cỡ** | Kiểu tài liệu (H1–H4, Đoạn văn), Giảm cỡ, Cỡ chữ (dropdown), Tăng cỡ |
+| **Định Dạng** | B, I, U, S, Chỉ trên (X²), Chỉ dưới (X₂), Đổi kiểu chữ (Aa), Màu chữ |
+| **Căn Lề** | Canh trái, giữa, phải, đều; Hướng chữ (ngang/dọc xuống/dọc lên) |
+| **Danh Sách & Ghi Chú** | Bullet list (nhiều ký tự), Danh sách số; Thêm ghi chú, Bình luận, Hiện/Ẩn bình luận, Split View |
+| **Ký Hiệu & Ảnh** | Quick symbols (α β γ Δ ° ± ≤ ≥ µ ©), Chữ viết tắt, Chèn hình ảnh |
+
+### CSS quan trọng của Toolbar
+```css
+.toolbar-group          { display:flex; flex-direction:column; align-items:center; padding:0 3px; }
+.toolbar-group-btns     { display:flex; align-items:center; gap:2px; }
+.toolbar-group-label    { font-size:9px; color:#94a3b8; text-transform:uppercase; margin-top:3px; }
+.toolbar-group-sep      { width:1px; background:#e2e8f0; align-self:stretch; margin:0 5px; }
+.toolbar-mini-sep       { display:inline-block; width:1px; height:18px; background:#e2e8f0; margin:0 3px; }
+```
+
+### Tính năng ĐÃ BỎ
+- ~~Hỗ trợ Tiếng Anh / Song ngữ / Dịch AI~~: Bị xóa. Hệ thống chỉ dùng Tiếng Việt.
+  - ~~`setLanguageMode()`~~ trong `persistence.blade.php`
+  - ~~`translateCurrentDocument()`~~ trong `persistence.blade.php`
+  - `window.currentLangMode` được giữ lại nhưng hardcode = `'vi'`.
+
+---
+
 ## 1. Cấu trúc và Quản lý Block (Khối)
 - **Hệ thống Block-based**: Hồ sơ được cấu thành từ các khối độc lập (Section, Table, Variable, Content).
 - **Thêm Phân đoạn (Section)**: Chia hồ sơ thành các giai đoạn sản xuất (Stage/Section).
@@ -19,9 +64,9 @@ Tài liệu này ghi lại toàn bộ các tính năng đã được triển kha
 - **Màu sắc**: Bảng màu chủ đề và màu tùy chỉnh cho văn bản.
 - **Căn lề**: Trái, giữa, phải, căn đều.
 - **Danh sách**: Dạng dấu chấm (Unordered) và đánh số (Ordered).
-- **Sao chép định dạng (Format Painter)**: Sao chép style từ đoạn này sang đoạn khác.
-- **Xóa định dạng (Clear Formatting)**: Trả văn bản về trạng thái mặc định.
-- **Ký hiệu đặc biệt (Symbols)**: Chèn ký hiệu Toán học, Hy Lạp và các ký tự đặc biệt khác.
+- **Sao chép định dạng (Format Painter)**: Sao chép style từ đoạn này sang đoạn khác. Hỗ trợ **single-click** (áp dụng 1 lần, tự tắt) và **double-click** (khoá chế độ, dán nhiều lần, nhấn Esc để tắt). Lấy đúng `inline style` từ DOM thay vì `getComputedStyle`. Sync về model qua `oninput()`.
+- **Xóa định dạng (Clear Formatting)**: Trả văn bản về trạng thái mặc định. Sync model qua `oninput()`.
+- **Ký hiệu đặc biệt (Symbols)**: Chèn ký hiệu Toán học, Hy Lạp và các ký tự đặc biệt khác (modal đầy đủ hoặc quick dropdown).
 
 ## 3. Quản lý Biến số (Variables)
 - **Loại biến hỗ trợ**:
@@ -52,18 +97,16 @@ Tài liệu này ghi lại toàn bộ các tính năng đã được triển kha
 - **Bình luận (Commenting)**: Thêm bình luận vào từng vị trí văn bản hoặc block.
 - **Lịch sử thay đổi (Revision History)**: Ghi lại log chi tiết các thay đổi (Thêm/Xóa/Sửa) giữa các phiên bản lưu.
 - **Đánh dấu N/A (Không áp dụng) - Context Menu**: Trong chế độ Execution, right-click vào ô trong bảng để đánh dấu N/A.
-- **Đánh dấu N/A Vùng chọn (Gạch chéo Z)**: Quét vùng nhiều ô (bằng Shift/Ctrl + Click) và sử dụng công cụ "N/A Vùng Chọn" để gạch chéo. N/A hiển thị đè lên nội dung gốc, giữ nguyên dữ liệu bên dưới.
-- **Logic Điều kiện N/A (Conditional Logic)**: Cấu hình điều kiện phụ thuộc ở Sidebar (dành riêng cho các Biến số) để tự động đóng băng và hiển thị N/A đè lên biến số khi thực thi.
+- **Đánh dấu N/A Vùng chọn (Gạch chéo Z)**: Quét vùng nhiều ô (bằng Shift/Ctrl + Click) và sử dụng công cụ "N/A Vùng Chọn" để gạch chéo.
+- **Logic Điều kiện N/A (Conditional Logic)**: Cấu hình điều kiện phụ thuộc ở Sidebar để tự động đóng băng và hiển thị N/A.
 
-## 7. Chế độ Xem và Ngôn ngữ
+## 7. Chế độ Xem
 - **Chế độ Thiết kế vs. Chạy thử (Execution Mode)**: Chuyển đổi giữa việc soạn mẫu và giả lập ghi chép hồ sơ thực tế.
-- **Hỗ trợ Đa ngôn ngữ**: 
-    - Tiếng Việt (Gốc)
-    - Tiếng Anh (Dịch)
-    - Song ngữ (Xem đồng thời)
-- **Dịch thuật AI**: Tích hợp tính năng dịch toàn bộ hồ sơ bằng AI.
+- **Chế độ Xem Tất cả vs. Xem 1 Phân đoạn**: Toggle giữa xem toàn bộ hồ sơ hoặc chỉ xem phân đoạn đang làm.
+- **Split View**: Chia đôi màn hình soạn thảo.
+- **Ngôn ngữ**: Chỉ Tiếng Việt (tính năng đa ngôn ngữ đã bị loại bỏ).
 
 ## 8. In ấn và Lưu trữ
-- **Lưu (Save)**: Lưu trạng thái hồ sơ vào Database.
+- **Lưu (Save)**: Lưu trạng thái hồ sơ vào Database (incremental save – chỉ gửi các block bị dirty).
 - **Mở hồ sơ (Open)**: Danh sách các mẫu đã có để chỉnh sửa tiếp.
 - **In hồ sơ (Print)**: Định dạng tối ưu cho việc in ấn văn bản hành chính.

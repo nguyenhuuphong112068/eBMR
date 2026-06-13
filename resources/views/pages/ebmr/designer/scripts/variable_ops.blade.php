@@ -711,6 +711,9 @@
             configObj = window.fieldsConfig;
         }
         if (!configObj) return html;
+        
+        // Clear the cache at the start of duplication to ensure accuracy
+        window.__ebmrExistingFieldNamesCache = null;
 
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = html;
@@ -733,10 +736,22 @@
                 }
                 
                 newName = baseName + num;
-                while (Object.values(configObj).some(f => f && f.name === newName)) {
+                
+                // Optimize O(N^2) bottleneck by pre-computing existing names into a Set if not already done
+                if (!window.__ebmrExistingFieldNamesCache) {
+                    window.__ebmrExistingFieldNamesCache = new Set();
+                    for (const key in configObj) {
+                        if (configObj[key] && configObj[key].name) {
+                            window.__ebmrExistingFieldNamesCache.add(configObj[key].name);
+                        }
+                    }
+                }
+                
+                while (window.__ebmrExistingFieldNamesCache.has(newName)) {
                     num++;
                     newName = baseName + num;
                 }
+                window.__ebmrExistingFieldNamesCache.add(newName);
                 
                 configObj[newId] = {
                     ...oldConfig,
@@ -769,6 +784,9 @@
         }
 
         const oldConfig = window.copiedVariableConfig;
+        
+        // Clear the cache at the start of duplication to ensure accuracy
+        window.__ebmrExistingFieldNamesCache = null;
 
         // Check if there is an active table cell selection or selected cells
         const selectedCells = document.querySelectorAll('.selected-cell');
@@ -819,10 +837,22 @@
                 }
                 
                 cellName = cellBaseName + cellNum;
-                while (Object.values(fieldsConfig).some(f => f && f.name === cellName)) {
+                
+                // Optimize O(N^2) bottleneck by pre-computing existing names into a Set if not already done
+                if (!window.__ebmrExistingFieldNamesCache) {
+                    window.__ebmrExistingFieldNamesCache = new Set();
+                    for (const key in fieldsConfig) {
+                        if (fieldsConfig[key] && fieldsConfig[key].name) {
+                            window.__ebmrExistingFieldNamesCache.add(fieldsConfig[key].name);
+                        }
+                    }
+                }
+                
+                while (window.__ebmrExistingFieldNamesCache.has(cellName)) {
                     cellNum++;
                     cellName = cellBaseName + cellNum;
                 }
+                window.__ebmrExistingFieldNamesCache.add(cellName);
 
                 fieldsConfig[cellId] = {
                     ...oldConfig,
@@ -882,10 +912,22 @@
                 }
                 
                 newName = baseName + num;
-                while (Object.values(fieldsConfig).some(f => f && f.name === newName)) {
+                
+                // Optimize O(N^2) bottleneck by pre-computing existing names into a Set if not already done
+                if (!window.__ebmrExistingFieldNamesCache) {
+                    window.__ebmrExistingFieldNamesCache = new Set();
+                    for (const key in fieldsConfig) {
+                        if (fieldsConfig[key] && fieldsConfig[key].name) {
+                            window.__ebmrExistingFieldNamesCache.add(fieldsConfig[key].name);
+                        }
+                    }
+                }
+                
+                while (window.__ebmrExistingFieldNamesCache.has(newName)) {
                     num++;
                     newName = baseName + num;
                 }
+                window.__ebmrExistingFieldNamesCache.add(newName);
 
                 let detectedBlockId = selectedId;
                 let detectedSectionId = window.activeSectionId;
@@ -963,10 +1005,22 @@
                             }
                             
                             newName = baseName + num;
-                            while (Object.values(fieldsConfig).some(f => f && f.name === newName)) {
+                            
+                            // Optimize O(N^2) bottleneck by pre-computing existing names into a Set if not already done
+                            if (!window.__ebmrExistingFieldNamesCache) {
+                                window.__ebmrExistingFieldNamesCache = new Set();
+                                for (const key in fieldsConfig) {
+                                    if (fieldsConfig[key] && fieldsConfig[key].name) {
+                                        window.__ebmrExistingFieldNamesCache.add(fieldsConfig[key].name);
+                                    }
+                                }
+                            }
+                            
+                            while (window.__ebmrExistingFieldNamesCache.has(newName)) {
                                 num++;
                                 newName = baseName + num;
                             }
+                            window.__ebmrExistingFieldNamesCache.add(newName);
 
                             fieldsConfig[newId] = {
                                 ...oldConfig,

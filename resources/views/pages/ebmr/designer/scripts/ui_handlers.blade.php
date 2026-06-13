@@ -2,7 +2,7 @@
     // Auto-detect Review Mode from URL
     document.addEventListener('DOMContentLoaded', () => {
         const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.get('mode') === 'review') {
+        if (urlParams.get('mode') === 'review' || window.isReadOnly) {
             // Set to full view mode
             window.isViewAllMode = true;
             window.activeSectionId = null;
@@ -13,6 +13,153 @@
             // Toast notification already handled in setDesignerMode
         }
     });
+
+    /**
+     * In biểu mẫu trắng: mở cửa sổ mới chỉ chứa nội dung form, không có sidebar/header.
+     */
+    function printBlankForm() {
+        const pageContent = document.getElementById('document-page');
+        if (!pageContent) { window.print(); return; }
+
+        // Lấy tên biểu mẫu
+        const titleEl = document.querySelector('.page-a4 h1, .page-a4 h2, .page-a4 .form-title');
+        const formTitle = titleEl ? titleEl.textContent.trim() : 'Biểu mẫu trắng';
+
+        // Thu thập các stylesheet đang hoạt động
+        const styles = Array.from(document.styleSheets).map(ss => {
+            try {
+                return Array.from(ss.cssRules).map(r => r.cssText).join('\n');
+            } catch(e) { return ''; }
+        }).join('\n');
+
+        // Clone nội dung trang
+        const cloned = pageContent.cloneNode(true);
+
+        // Xóa các element không cần in
+        const toRemove = cloned.querySelectorAll(
+            '.no-print, .print-blank-btn, .test-mode-badge, .btn-read-scale, ' +
+            '.ebmr-note-badge, .page-break-divider, [data-no-print], ' +
+            '.add-block-row, .execution-delete-cell, .block-tools, .resize-h, .resize-v, ' +
+            '.badge-drag-handle, .ebmr-property-badge, .type-section'
+        );
+        toRemove.forEach(el => el.remove());
+
+        // Chuyển select thành span gạch chân
+        cloned.querySelectorAll('select').forEach(sel => {
+            const span = document.createElement('span');
+            span.style.cssText = 'display:block; width:100%; border-bottom:1.5px solid #000; height:55px; min-height:55px; color:transparent;';
+            
+            const td = sel.closest('td');
+            if (td) {
+                td.style.cssText = 'height:60px; min-height:60px; vertical-align:bottom;';
+            }
+            
+            sel.parentNode.replaceChild(span, sel);
+        });
+
+        // Chuyển execution-input-test và execution-badge thành gạch chân
+        cloned.querySelectorAll('.execution-input-test, .execution-badge:not(.execution-checkbox-wrapper)').forEach(el => {
+            if (el.tagName === 'INPUT' && el.type === 'checkbox') return; // giữ checkbox
+            el.style.cssText = 'display:block; width:100%; border:none; border-bottom:1.5px solid #000; height:55px; min-height:55px; color:transparent; background:transparent; box-shadow:none; border-radius:0;';
+            // Xóa text bên trong nhưng giữ chiều rộng
+            el.innerHTML = '&nbsp;';
+            
+            // Căn đáy cho thẻ cha (td) để các gạch chân nằm ngang hàng
+            const td = el.closest('td');
+            if (td) {
+                td.style.cssText = 'height:60px; min-height:60px; vertical-align:bottom;';
+            }
+        });
+
+        // Xóa viền vàng badge
+        cloned.querySelectorAll('.ebmr-field-badge').forEach(b => {
+            b.style.cssText = 'background:transparent; border:none; box-shadow:none; padding:0; border-radius:0; display:block; width:100%;';
+        });
+
+        const printWindow = window.open('', '_blank', 'width=900,height=700');
+        printWindow.document.write(`
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>${formTitle}</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Mầu in của app */
+        ${styles}
+
+        /* Tối ưu lề in bản in biểu mẫu trắng, tránh mất chữ 2 bên */
+        @page { 
+            size: A4 portrait; 
+            margin: 5mm 5mm !important; 
+        }
+        
+        body { 
+            font-family: 'Arimon', 'Arial', sans-serif !important; 
+            font-size: 12.5px; 
+            color: #000; 
+            margin: 0 !important; 
+            padding: 0 !important; 
+            background: #fff !important;
+        }
+        
+        /* Đảm bảo toàn bộ nội dung hiển thị hết mà không bị tràn hay mất lề */
+        .page-a4 { 
+            width: 100% !important; 
+            max-width: 100% !important; 
+            margin: 0 !important; 
+            padding: 10mm 10mm !important; /* Lề trong an toàn giúp đẩy nội dung vào trong vùng in được */
+            border: none !important; 
+            box-shadow: none !important; 
+            background: transparent !important;
+            box-sizing: border-box !important;
+        }
+
+        table { 
+            border-collapse: collapse; 
+            width: 100% !important; 
+            table-layout: fixed !important; 
+            word-break: break-word !important;
+        }
+        
+        table td, table th { 
+            border: 1px solid #000 !important; 
+            padding: 4px 6px !important; 
+            word-wrap: break-word !important;
+        }
+        
+        img { 
+            max-width: 100% !important; 
+            height: auto !important; 
+        }
+
+        /* Thiết lập ngắt trang tự động cho dòng */
+        tr { 
+            page-break-inside: avoid !important; 
+        }
+        
+        /* Loại bỏ các lề thừa của div hoặc container */
+        div, p, span { 
+            max-width: 100% !important;
+        }
+        
+        /* Nhập liệu từ bảng */
+        .execution-input-cell { 
+            vertical-align: bottom; 
+            padding: 2px 4px !important; 
+        }
+    </style>
+</head>
+<body>
+    ${cloned.outerHTML}
+    <script>
+        window.onload = function() { window.print(); window.close(); };
+    <\/script>
+</body>
+</html>`);
+        printWindow.document.close();
+    }
+
 
     /**
      * Chuyển đổi giữa chế độ Thiết kế và Chế độ Chạy thử.
@@ -293,32 +440,9 @@
                     </div>
                 </div>
 
-                <hr class="my-3">
-                <div class="mb-3">
-                    <label class="small fw-bold text-muted text-uppercase mb-2"><i class="fas fa-robot me-1"></i>Dịch thuật AI</label>
-                    <div class="alert alert-light border py-2 mb-2 small" style="font-size: 0.75rem; background-color: #f8fafc;">
-                        Cập nhật nội dung Tiếng Anh dựa trên bản Tiếng Việt hiện tại của khối này.
-                    </div>
-                    <button class="btn btn-primary btn-sm w-100 mb-2" onclick="translateBlockWithAI('${item.id}', true)">
-                        <i class="fas fa-language me-1"></i> Dịch lại toàn bộ bảng
-                    </button>
-                    ${(activeRowIdx > 0 && activeColIdx >= 0) ? `
-                        <button class="btn btn-outline-primary btn-sm w-100" onclick="translateBlockWithAI('${item.id}', false)">
-                            <i class="fas fa-magic me-1"></i> Dịch lại ô đang chọn
-                        </button>
-                    ` : ''}
-                </div>
             `;
         } else if (item.type === 'static-text') {
-            html += `
-                <hr class="my-3">
-                <div class="mb-3">
-                    <label class="small fw-bold text-muted text-uppercase mb-2"><i class="fas fa-robot me-1"></i>Dịch thuật AI</label>
-                    <button class="btn btn-primary btn-sm w-100" onclick="translateBlockWithAI('${item.id}', true)">
-                        <i class="fas fa-language me-1"></i> Dịch lại khối này
-                    </button>
-                </div>
-            `;
+            html += ``;
         } else if (item.type === 'section') {
             // Section has no sidebar configuration
         }
@@ -858,18 +982,49 @@
         const selectionNode = selection.anchorNode;
         const activeCell = selectionNode ? (selectionNode.nodeType === 3 ? selectionNode.parentElement : selectionNode)
             .closest('.mini-table td') : null;
+        
+        // Cần lấy editable block TRƯỚC khi gọi execCommand vì execCommand có thể thay thế node, làm mất DOM hierarchy
+        const currentEditable = activeCell || (selectionNode ? (selectionNode.nodeType === 3 ? selectionNode
+            .parentElement : selectionNode).closest('[contenteditable="true"]') : null);
+
+        // Helper to robustly toggle superscript/subscript
+        const handleSupSubToggle = (cmd, val) => {
+            if (cmd !== 'superscript' && cmd !== 'subscript') {
+                document.execCommand(cmd, false, val);
+                return;
+            }
+            const targetTag = cmd === 'superscript' ? 'SUP' : 'SUB';
+            const parentElement = selectionNode && selectionNode.nodeType === 3 ? selectionNode.parentElement : selectionNode;
+            const existingTag = parentElement ? parentElement.closest('sup, sub') : null;
+            
+            if (existingTag && currentEditable && currentEditable.contains(existingTag)) {
+                if (existingTag.tagName === targetTag) {
+                    const fragment = document.createDocumentFragment();
+                    while (existingTag.firstChild) {
+                        fragment.appendChild(existingTag.firstChild);
+                    }
+                    existingTag.parentNode.replaceChild(fragment, existingTag);
+                } else {
+                    const newTag = document.createElement(targetTag);
+                    while (existingTag.firstChild) {
+                        newTag.appendChild(existingTag.firstChild);
+                    }
+                    existingTag.parentNode.replaceChild(newTag, existingTag);
+                }
+            } else {
+                document.execCommand(cmd, false, val);
+            }
+        };
 
         if (selectedText.length > 0) {
-            document.execCommand(command, false, value);
+            handleSupSubToggle(command, value);
 
             // Force data sync for the active cell/block
-            const editable = activeCell || (selectionNode ? (selectionNode.nodeType === 3 ? selectionNode
-                .parentElement : selectionNode).closest('[contenteditable="true"]') : null);
-            if (editable && editable.oninput) {
-                editable.oninput();
+            if (currentEditable && currentEditable.oninput) {
+                currentEditable.oninput();
             }
             // Mark item as dirty if we're in a specific block
-            const blockItem = editable ? editable.closest('.block-item') : null;
+            const blockItem = currentEditable ? currentEditable.closest('.block-item') : null;
             if (blockItem) {
                 const item = items.find(i => i.id === blockItem.getAttribute('data-id'));
                 if (item) item.dirty = true;
@@ -994,6 +1149,61 @@
                         }
                         if (domProp) cell.style[domProp] = val;
                     }
+                    
+                    // --- Dọn dẹp thẻ nội bộ để đảm bảo format toàn ô (td) có hiệu lực ---
+                    if (domProp && ['foreColor', 'bold', 'italic', 'underline', 'strikethrough', 'justifyLeft', 'justifyCenter', 'justifyRight', 'justifyFull'].includes(command)) {
+                        let selectors = [];
+                        if (command === 'foreColor') selectors = ['font[color]', '[style*="color"]'];
+                        else if (command === 'bold') selectors = ['b', 'strong', '[style*="font-weight"]'];
+                        else if (command === 'italic') selectors = ['i', 'em', '[style*="font-style"]'];
+                        else if (['underline', 'strikethrough'].includes(command)) selectors = ['u', 'strike', 's', '[style*="text-decoration"]'];
+                        else if (command.startsWith('justify')) selectors = ['[style*="text-align"]', 'center'];
+
+                        const innerNodes = cell.querySelectorAll(selectors.join(', '));
+                        innerNodes.forEach(node => {
+                            if (!node.classList.contains('ebmr-field-badge')) {
+                                const tag = node.tagName.toLowerCase();
+                                if (['b', 'strong', 'i', 'em', 'u', 'strike', 's', 'center'].includes(tag)) {
+                                    // Loại bỏ thẻ nhưng giữ lại nội dung bên trong
+                                    const parent = node.parentNode;
+                                    while (node.firstChild) parent.insertBefore(node.firstChild, node);
+                                    parent.removeChild(node);
+                                } else if (tag === 'font' && command === 'foreColor') {
+                                    // Unwrap thẻ font hoàn toàn thay vì chỉ xóa thuộc tính color (tránh lỗi trình duyệt tự fallback về màu đen)
+                                    const parent = node.parentNode;
+                                    while (node.firstChild) parent.insertBefore(node.firstChild, node);
+                                    parent.removeChild(node);
+                                } else {
+                                    // Xoá style tương ứng
+                                    if (command === 'foreColor') node.style.color = '';
+                                    else if (command === 'bold') node.style.fontWeight = '';
+                                    else if (command === 'italic') node.style.fontStyle = '';
+                                    else if (['underline', 'strikethrough'].includes(command)) node.style.textDecoration = '';
+                                    else if (command.startsWith('justify')) node.style.textAlign = '';
+                                    
+                                    if (node.getAttribute('style') === '') {
+                                        // Nếu span không còn style nào khác, unwrap luôn cho sạch HTML
+                                        const parent = node.parentNode;
+                                        if (node.tagName.toLowerCase() === 'span') {
+                                            while (node.firstChild) parent.insertBefore(node.firstChild, node);
+                                            parent.removeChild(node);
+                                        } else {
+                                            node.removeAttribute('style');
+                                        }
+                                    }
+                                }
+                            }
+                        });
+
+                        // Cập nhật lại HTML model sau khi dọn dẹp
+                        const wrapper = cell.querySelector('.cell-wrapper');
+                        if (r > 0) {
+                            const rIdx = r - 1;
+                            if (item.data && item.data[rIdx] && item.data[rIdx][c]) {
+                                item.data[rIdx][c].content = wrapper ? wrapper.innerHTML : cell.innerHTML;
+                            }
+                        }
+                    }
                 }
             });
             saveStateDebounced();
@@ -1085,7 +1295,10 @@
         }
 
         // Fallback for simple cursor focus (no selection)
-        document.execCommand(command, false, value);
+        handleSupSubToggle(command, value);
+        if (currentEditable && currentEditable.oninput) {
+            currentEditable.oninput();
+        }
         saveStateDebounced();
     }
 
@@ -1098,6 +1311,7 @@
         const html = (e.clipboardData || window.clipboardData).getData('text/html');
         if (html && html.includes('ebmr-field-badge')) {
             e.preventDefault();
+            e.stopImmediatePropagation(); // Ngăn chặn sự kiện truyền tới events.blade.php
             saveState();
             if (typeof window.duplicateFieldBadgesInHtml === 'function') {
                 const duplicatedHtml = window.duplicateFieldBadgesInHtml(html);
@@ -1109,24 +1323,28 @@
             return;
         }
 
-        e.preventDefault();
+        // Nếu là bảng copy từ Excel/Word thì để events.blade.php xử lý
+        if (html && html.includes('<table')) {
+            return;
+        }
 
-        // Get plain text from clipboard
+        // Kiểm tra xem events.blade.php có nên xử lý text này thành grid không (chứa tab)
         let text = (e.clipboardData || window.clipboardData).getData('text');
+        if (text && target.closest('.mini-table td') && text.includes('\t')) {
+            // Có chứa tab, khả năng là copy từ Excel dưới dạng plain text -> Để events xử lý grid
+            return;
+        }
+
+        e.preventDefault();
+        e.stopImmediatePropagation();
 
         // Logic: Replace single newlines with a space (reflow), but keep double newlines (paragraphs)
-        // 1. Normalize line endings
         text = text.replace(/\r\n/g, '\n');
-        // 2. Protect double newlines (paragraphs) by temporarily replacing them with a unique marker
         text = text.replace(/\n\n+/g, '[[PARAGRAPH_BREAK]]');
-        // 3. Replace remaining single newlines (the unwanted ones) with a space
         text = text.replace(/\n/g, ' ');
-        // 4. Restore paragraph breaks
         text = text.replace(/\[\[PARAGRAPH_BREAK\]\]/g, '\n\n');
-        // 5. Clean up multiple spaces
         text = text.replace(/[ ]+/g, ' ');
 
-        // Insert the cleaned text
         document.execCommand("insertText", false, text.trim());
     });
 
@@ -1179,6 +1397,13 @@
         const indicator = document.getElementById('textColorIndicator');
         if (indicator) indicator.style.background = color;
 
+        // Khôi phục vùng chọn trước khi áp dụng màu
+        if (savedTextSelection) {
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(savedTextSelection);
+        }
+
         const selectedCells = document.querySelectorAll('.selected-cell');
         if (selectedCells.length > 0) {
             saveState();
@@ -1216,6 +1441,40 @@
                 }
                 // Direct DOM update to keep selection
                 cell.style.color = color;
+
+                // Dọn dẹp các thẻ font hoặc style màu bên trong ô để đảm bảo màu của ô (td) được áp dụng đồng nhất
+                const innerColorNodes = cell.querySelectorAll('font[color], [style*="color"]');
+                innerColorNodes.forEach(node => {
+                    if (!node.classList.contains('ebmr-field-badge')) {
+                        if (node.tagName.toLowerCase() === 'font') {
+                            // Unwrap thẻ font hoàn toàn thay vì chỉ xóa thuộc tính color (tránh lỗi trình duyệt tự fallback về màu đen)
+                            const parent = node.parentNode;
+                            while (node.firstChild) parent.insertBefore(node.firstChild, node);
+                            parent.removeChild(node);
+                        } else {
+                            node.style.color = '';
+                            if (node.getAttribute('style') === '') {
+                                // Nếu span không còn style nào khác, unwrap luôn cho sạch HTML
+                                const parent = node.parentNode;
+                                if (node.tagName.toLowerCase() === 'span') {
+                                    while (node.firstChild) parent.insertBefore(node.firstChild, node);
+                                    parent.removeChild(node);
+                                } else {
+                                    node.removeAttribute('style');
+                                }
+                            }
+                        }
+                    }
+                });
+
+                // Lấy nội dung bên trong .cell-wrapper để tránh bị bọc lồng nhau (nesting) khi lưu
+                const wrapper = cell.querySelector('.cell-wrapper');
+                if (item && r > 0) {
+                    const rIdx = r - 1;
+                    if (item.data && item.data[rIdx] && item.data[rIdx][c]) {
+                        item.data[rIdx][c].content = wrapper ? wrapper.innerHTML : cell.innerHTML;
+                    }
+                }
             });
             saveStateDebounced();
             return;
@@ -1295,6 +1554,48 @@
             });
             selectedCells.forEach(cell => {
                 cell.style.fontSize = pt + 'pt';
+                
+                // Dọn dẹp inner font-size để đảm bảo style td được áp dụng đồng nhất
+                const innerNodes = cell.querySelectorAll('font[size], [style*="font-size"]');
+                innerNodes.forEach(node => {
+                    if (!node.classList.contains('ebmr-field-badge')) {
+                        if (node.tagName.toLowerCase() === 'font') {
+                            const parent = node.parentNode;
+                            while (node.firstChild) parent.insertBefore(node.firstChild, node);
+                            parent.removeChild(node);
+                        }
+                        else {
+                            node.style.fontSize = '';
+                            if (node.getAttribute('style') === '') {
+                                const parent = node.parentNode;
+                                // Không unwrap P, DIV, B, I, U, v.v. chỉ unwrap SPAN rỗng
+                                if (node.tagName.toLowerCase() === 'span') {
+                                    while (node.firstChild) parent.insertBefore(node.firstChild, node);
+                                    parent.removeChild(node);
+                                } else {
+                                    node.removeAttribute('style');
+                                }
+                            }
+                        }
+                    }
+                });
+                
+                // Cập nhật lại HTML đã dọn dẹp vào model
+                const rStr = cell.dataset.row;
+                const cStr = cell.dataset.col;
+                const r = parseInt(rStr);
+                const c = parseInt(cStr);
+                const table = cell.closest('.mini-table');
+                const blockItem = table ? table.closest('.block-item') : null;
+                const itemId = blockItem ? blockItem.getAttribute('data-id') : null;
+                const item = items.find(i => i.id === itemId);
+                const wrapper = cell.querySelector('.cell-wrapper');
+                if (item && r > 0) {
+                    const rIdx = r - 1;
+                    if (item.data && item.data[rIdx] && item.data[rIdx][c]) {
+                        item.data[rIdx][c].content = wrapper ? wrapper.innerHTML : cell.innerHTML;
+                    }
+                }
             });
             saveStateDebounced();
             return;
@@ -1315,6 +1616,20 @@
             font.style.fontSize = pt + 'pt';
         }
 
+        // Force data sync for the active cell/block
+        const selection = window.getSelection();
+        const selectionNode = selection.anchorNode;
+        const editable = selectionNode ? (selectionNode.nodeType === 3 ? selectionNode.parentElement : selectionNode).closest('[contenteditable="true"]') : null;
+        if (editable && editable.oninput) {
+            editable.oninput();
+        }
+
+        const blockItem = editable ? editable.closest('.block-item') : null;
+        if (blockItem) {
+            const item = items.find(i => i.id === blockItem.getAttribute('data-id'));
+            if (item) item.dirty = true;
+        }
+
         if (typeof saveStateDebounced === 'function') saveStateDebounced();
     }
 
@@ -1323,6 +1638,11 @@
      * @param {string} direction - Hướng chữ ('horizontal', 'vertical-down', 'vertical-up').
      */
     window.changeTextDirection = function(direction) {
+        if (savedTextSelection) {
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(savedTextSelection);
+        }
         const selection = window.getSelection();
         const selectedCells = document.querySelectorAll('.selected-cell');
         const selectionNode = selection.anchorNode;
@@ -2570,7 +2890,7 @@
         fetch('{{ route('pages.ebmr.getTemplates') }}')
             .then(res => res.json())
             .then(data => {
-                allGfs = data.filter(t => t.type === 'GF');
+                allGfs = data.filter(t => t.type === 'GF' && t.status === 'active');
                 renderGfList(allGfs);
                 listLoading.classList.add('d-none');
                 list.classList.remove('d-none');
@@ -2693,7 +3013,7 @@
         // Use cache if available
         if (window.gfPreviewCache && window.gfPreviewCache[templateId]) {
             renderGfPreviewContent(container, window.gfPreviewCache[templateId], window.gfFieldsCache ? window
-                .gfFieldsCache[templateId] : {});
+                .gfFieldsCache[templateId] : {}, window.gfTemplateCache ? window.gfTemplateCache[templateId] : null);
             return;
         }
 
@@ -2702,12 +3022,15 @@
             .then(data => {
                 const blocks = data.blocks || data;
                 const fields = data.fields || {};
+                const template = data.template || null;
 
                 if (!window.gfPreviewCache) window.gfPreviewCache = {};
                 if (!window.gfFieldsCache) window.gfFieldsCache = {};
+                if (!window.gfTemplateCache) window.gfTemplateCache = {};
 
                 window.gfPreviewCache[templateId] = blocks;
                 window.gfFieldsCache[templateId] = fields;
+                window.gfTemplateCache[templateId] = template;
 
                 // Merge into global fieldsConfig to support formulas and execution mode logic
                 let targetFieldsConfig = null;
@@ -2719,7 +3042,7 @@
                 }
                 Object.assign(targetFieldsConfig, fields);
 
-                renderGfPreviewContent(container, blocks, fields);
+                renderGfPreviewContent(container, blocks, fields, template);
             })
             .catch(err => {
                 console.error("GF Preview Error:", err);
@@ -2732,8 +3055,9 @@
      * @param {HTMLElement} container - Vùng hiển thị xem trước.
      * @param {Array} blocks - Danh sách các khối nội dung của GF.
      * @param {Object} fields - Cấu hình biến số của GF.
+     * @param {Object} template - Thông tin template metadata.
      */
-    function renderGfPreviewContent(container, blocks, fields = {}) {
+    function renderGfPreviewContent(container, blocks, fields = {}, template = null) {
         if (!blocks || blocks.length === 0) {
             container.innerHTML =
                 '<div class="text-muted small italic text-center py-3">Biểu mẫu này chưa có nội dung.</div>';
@@ -2741,7 +3065,44 @@
         }
 
         let html = '';
-        blocks.forEach(b => {
+        let displayBlocks = [...blocks];
+        
+        // Render header block for GF and BPR automatically
+        if (template && (template.type === 'GF' || template.type === 'BPR')) {
+            const t = {
+                sop: template.relatived_sop_no || '',
+                format: template.category_code || '',
+                version: template.version || '1',
+                name: template.category_name || template.name || '',
+                caterogy_id: template.caterogy_id || 0
+            };
+            
+            displayBlocks.unshift({
+                id: 'blk_header_' + Date.now(),
+                type: 'table',
+                label: 'GF Header',
+                rows: 3,
+                cols: 2,
+                columns: [
+                    { label: 'C1', type: 'text', width: '60%' },
+                    { label: 'C2', type: 'text', width: '40%' }
+                ],
+                data: [
+                    [{ content: `Số SOP đối chiếu: ${t.sop}`, rs: 1, cs: 1, textAlign: 'left', fontStyle: 'italic', fontSize: '1rem', backgroundColor: '#dcdcdc' },
+                     { content: ` Số biểu mẫu: ${t.format}-${t.version}`, rs: 1, cs: 1, textAlign: 'right', fontStyle: 'italic', fontSize: '1rem', backgroundColor: '#dcdcdc' }],
+                    [{ content: t.name, rs: 1, cs: 2, textAlign: 'center', fontSize: '1.2rem', fontWeight: 'bold', textTransform: 'uppercase', backgroundColor: '#dcdcdc' },
+                     { content: '', hidden: true }]
+                ],
+                rowHeights: ['auto', '5px', 'auto'],
+                borderMode: 'none',
+                hideHeader: true,
+                locked: true,
+                isGfHeader: true,
+                section_id: t.caterogy_id
+            });
+        }
+
+        displayBlocks.forEach(b => {
             if (b.type === 'static-text') {
                 const content = typeof decorateContent === 'function' ? decorateContent(b.content || '',
                     fields) : (b.content || '');
@@ -2921,143 +3282,494 @@
             title: window.isViewAllMode ? 'Chế độ xem tất cả' : 'Chế độ xem 1 phân đoạn'
         });
     }
-    // --- Format Painter Logic ---
+    // --- Format Painter Logic (Google Docs style) ---
     let isFormatPainterActive = false;
+    let formatPainterLocked = false; // double-click: painter stays active
     let storedFormat = null;
 
     /**
-     * Bật/Tắt công cụ Sao chép định dạng (Format Painter).
-     * Cách hoạt động: 
-     * 1. Khi bật: Lấy tất cả style (màu, font, bold...) tại vị trí con trỏ hoặc khối hiện tại.
-     * 2. Lưu các style này vào biến `storedFormat`.
-     * 3. Khi người dùng click hoặc quét vùng khác, áp dụng style này và tự động tắt công cụ.
+     * Lấy định dạng thực của node văn bản đang được bôi đen.
+     * Ưu tiên inline style trên <span>, <font>, <b>, <i>, <u>... thay vì getComputedStyle().
      */
+    function _captureTextFormat() {
+        const selection = window.getSelection();
+        if (selection.rangeCount === 0) return null;
+
+        const range = selection.getRangeAt(0);
+        const container = range.commonAncestorContainer;
+        let el = container.nodeType === 3 ? container.parentElement : container;
+
+        // Collect inline styles by walking up to editable boundary
+        let bold = false, italic = false, underline = false, strikethrough = false;
+        let fontSize = '', color = '', bgColor = '';
+
+        // queryCommandState reflects the selection state accurately
+        bold = document.queryCommandState('bold');
+        italic = document.queryCommandState('italic');
+        underline = document.queryCommandState('underline');
+        strikethrough = document.queryCommandState('strikeThrough');
+
+        // Walk up the DOM to find explicit font-size / color overrides
+        let node = el;
+        while (node && node.getAttribute && node.getAttribute('contenteditable') !== 'true') {
+            const cs = window.getComputedStyle(node);
+            if (!fontSize && node.style && node.style.fontSize) fontSize = node.style.fontSize;
+            if (!color && node.style && node.style.color) color = node.style.color;
+            if (!bgColor && node.style && node.style.backgroundColor && node.style.backgroundColor !== 'rgba(0, 0, 0, 0)') {
+                bgColor = node.style.backgroundColor;
+            }
+            node = node.parentElement;
+        }
+
+        // Fallback to computed style if nothing found inline
+        if (!fontSize || !color) {
+            const cs = window.getComputedStyle(el);
+            if (!fontSize) fontSize = cs.fontSize;
+            if (!color) color = cs.color;
+        }
+
+        // Chuẩn hóa fontSize: nếu đang là px (từ computed style) thì chuyển về pt
+        if (fontSize && fontSize.endsWith('px')) {
+            const pxVal = parseFloat(fontSize);
+            // 1pt ≈ 1.333px  →  1px ≈ 0.75pt
+            fontSize = Math.round(pxVal * 0.75) + 'pt';
+        }
+
+        return {
+            type: 'text',
+            bold, italic, underline, strikethrough,
+            fontSize,
+            color,
+            bgColor
+        };
+    }
+
+    /**
+     * Bật/Tắt công cụ Sao chép định dạng (Format Painter) – giống Google Docs:
+     * - Single click: bật một lần, tự tắt sau khi áp dụng.
+     * - Double click (gọi lại trong 400ms): bật liên tục cho đến khi click nút lần nữa hoặc nhấn Esc.
+     */
+    let _painterClickTimer = null;
     function toggleFormatPainter() {
         if (isFormatPainterActive) {
             disableFormatPainter();
             return;
         }
 
-        // 1. Get Style from current cursor position or selection
-        const selection = window.getSelection();
-        let targetEl = null;
+        // Detect double-click
+        if (_painterClickTimer) {
+            clearTimeout(_painterClickTimer);
+            _painterClickTimer = null;
+            formatPainterLocked = true;
+        } else {
+            formatPainterLocked = false;
+            _painterClickTimer = setTimeout(() => { _painterClickTimer = null; }, 400);
+        }
 
+        const selection = window.getSelection();
+        const selectedText = selection.toString().trim();
+        let targetEl = null;
         if (selection.rangeCount > 0) {
-            // Even if no text is selected, anchorNode tells us where the cursor is
             targetEl = selection.anchorNode.nodeType === 3 ? selection.anchorNode.parentElement : selection.anchorNode;
         }
 
-        if (targetEl && (targetEl.closest('[contenteditable="true"]') || targetEl.getAttribute('contenteditable') ===
-                'true')) {
-            const styles = window.getComputedStyle(targetEl);
-            storedFormat = {
-                type: 'text',
-                bold: document.queryCommandState('bold'),
-                italic: document.queryCommandState('italic'),
-                underline: document.queryCommandState('underline'),
-                fontSize: styles.fontSize,
-                color: styles.color,
-                fontWeight: styles.fontWeight,
-                fontStyle: styles.fontStyle
-            };
-        } else if (selectedId) {
+        storedFormat = null;
+
+        // --- Priority 1: Text selected inside contenteditable ---
+        if (selectedText.length > 0 && targetEl && targetEl.closest('[contenteditable="true"]')) {
+            storedFormat = _captureTextFormat();
+        }
+        // --- Priority 2: Single active table cell selected (even without text selection) ---
+        else if (typeof activeRowIdx !== 'undefined' && selectedId) {
+            const item = items.find(i => i.id === selectedId);
+            if (item && item.type === 'table') {
+                const rIdx = activeRowIdx - 1;
+                const cIdx = activeColIdx;
+                if (rIdx >= 0 && item.data[rIdx] && item.data[rIdx][cIdx] && typeof item.data[rIdx][cIdx] === 'object') {
+                    const cell = item.data[rIdx][cIdx];
+                    storedFormat = {
+                        type: 'cell',
+                        backgroundColor: cell.backgroundColor || '',
+                        textAlign: cell.textAlign || '',
+                        fontWeight: cell.fontWeight || '',
+                        fontStyle: cell.fontStyle || '',
+                        textDecoration: cell.textDecoration || '',
+                        fontSize: cell.fontSize || '',
+                        textColor: cell.textColor || '',
+                        textTransform: cell.textTransform || '',
+                        borderTop: cell.borderTop || '',
+                        borderBottom: cell.borderBottom || '',
+                        borderLeft: cell.borderLeft || '',
+                        borderRight: cell.borderRight || '',
+                        writingMode: cell.writingMode || ''
+                    };
+                }
+                // Header cell (row 0)
+                else if (activeRowIdx === 0 && item.columns[cIdx]) {
+                    const col = item.columns[cIdx];
+                    storedFormat = {
+                        type: 'cell',
+                        backgroundColor: (col.style && col.style.backgroundColor) || '',
+                        textAlign: (col.style && col.style.textAlign) || '',
+                        fontWeight: (col.style && col.style.fontWeight) || '',
+                        fontStyle: (col.style && col.style.fontStyle) || '',
+                        textDecoration: '',
+                        fontSize: (col.style && col.style.fontSize) || '',
+                        textColor: (col.style && col.style.color) || '',
+                        textTransform: '',
+                        borderTop: '', borderBottom: '', borderLeft: '', borderRight: '',
+                        writingMode: ''
+                    };
+                }
+            }
+        }
+        // --- Priority 3: Block selected ---
+        else if (selectedId) {
             const item = items.find(i => i.id === selectedId);
             if (item) {
                 storedFormat = {
                     type: 'block',
-                    backgroundColor: item.backgroundColor,
-                    textAlign: item.textAlign,
-                    fontSize: item.fontSize,
-                    borderMode: item.borderMode
+                    backgroundColor: item.backgroundColor || '',
+                    textAlign: item.textAlign || '',
+                    fontSize: item.fontSize || '',
+                    borderMode: item.borderMode || ''
                 };
             }
         }
 
         if (storedFormat) {
             enableFormatPainter();
+            // Toast
+            const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 1800 });
+            Toast.fire({ icon: 'info', title: formatPainterLocked ? '🖌️ Sao chép định dạng (đã khoá – nhấn Esc để thoát)' : '🖌️ Đã lấy định dạng – click vào đích để dán' });
         } else {
-            Swal.fire('Thông báo', 'Đặt con trỏ vào văn bản hoặc chọn khối để sao chép định dạng', 'info');
+            Swal.fire('Thông báo', 'Đặt con trỏ vào văn bản hoặc chọn ô/khối để sao chép định dạng', 'info');
         }
     }
 
-    /**
-     * Kích hoạt chế độ Sao chép định dạng, đổi con trỏ chuột thành dạng copy.
-     */
+    // SVG cursor hình cây chổi sơn (paint-roller) dùng khi Format Painter đang hoạt động
+    const _painterCursorSVG = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 512 512'%3E%3Cpath fill='%231a73e8' d='M352 64h-48V32a32 32 0 0 0-64 0v32H32A32 32 0 0 0 0 96v96a32 32 0 0 0 32 32h288a32 32 0 0 0 32-32v-16h32a16 16 0 0 1 16 16v32a16 16 0 0 1-16 16H272a48 48 0 0 0-48 48v176a48 48 0 0 0 96 0V288h64a80 80 0 0 0 80-80v-32a112 112 0 0 0-112-112z'/%3E%3C/svg%3E") 0 20, crosshair`;
+
+    // Snapshot selection khi mousedown để mouseup có thể lấy lại chính xác
+    let _painterSelectionSnapshot = null;
+    function _handlePainterMouseDown(e) {
+        // Đặt lại snapshot khi bắt đầu drag bôi đen mới
+        _painterSelectionSnapshot = null;
+    }
+    function _handlePainterSelectionChange() {
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0 && sel.toString().trim().length > 0) {
+            _painterSelectionSnapshot = sel.getRangeAt(0).cloneRange();
+        }
+    }
+
     function enableFormatPainter() {
         isFormatPainterActive = true;
+        _painterSelectionSnapshot = null;
         const btn = document.getElementById('btn-format-painter');
         if (btn) {
             btn.style.backgroundColor = '#e8f0fe';
             btn.style.color = '#1a73e8';
+            btn.style.boxShadow = '0 0 0 2px #1a73e8';
+            btn.title = formatPainterLocked ? 'Sao chép định dạng (đã khoá – nhấn Esc để dừng)' : 'Sao chép định dạng (đang hoạt động)';
         }
-        document.body.style.cursor = 'copy'; // Visual indicator
-
-        // Use a persistent listener for the next interaction
-        // We listen for mouseup to detect the "highlight" (selection) completion
+        document.body.classList.add('format-painter-active');
+        document.addEventListener('mousedown', _handlePainterMouseDown);
+        document.addEventListener('selectionchange', _handlePainterSelectionChange);
         document.addEventListener('mouseup', handlePainterMouseUp);
+        document.addEventListener('keydown', handlePainterKeydown);
     }
 
-    /**
-     * Hủy bỏ chế độ Sao chép định dạng.
-     */
     function disableFormatPainter() {
         isFormatPainterActive = false;
+        formatPainterLocked = false;
+        storedFormat = null;
+        _painterSelectionSnapshot = null;
         const btn = document.getElementById('btn-format-painter');
         if (btn) {
             btn.style.backgroundColor = '';
             btn.style.color = '';
+            btn.style.boxShadow = '';
+            btn.title = 'Sao chép định dạng';
         }
-        document.body.style.cursor = 'default';
+        document.body.classList.remove('format-painter-active');
+        document.removeEventListener('mousedown', _handlePainterMouseDown);
+        document.removeEventListener('selectionchange', _handlePainterSelectionChange);
         document.removeEventListener('mouseup', handlePainterMouseUp);
+        document.removeEventListener('keydown', handlePainterKeydown);
+    }
+
+    function handlePainterKeydown(e) {
+        if (e.key === 'Escape') disableFormatPainter();
     }
 
     /**
-     * Xử lý khi người dùng thả chuột để áp dụng định dạng đã sao chép vào vùng chọn mới.
-     * @param {MouseEvent} e - Sự kiện chuột.
+     * Áp dụng format text vào vùng text đang chọn.
+     * Nếu không có selection, không làm gì (yêu cầu bôi đen trước khi dán text format).
      */
+    function _applyTextFormat(fmt) {
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) return false;
+        const selectedText = sel.toString().trim();
+        if (selectedText.length === 0) return false;
+
+        const selNode = sel.anchorNode;
+        const editable = selNode ? (selNode.nodeType === 3 ? selNode.parentElement : selNode).closest('[contenteditable="true"]') : null;
+        if (!editable) return false;
+
+        // 1. Xóa format hiện tại của vùng chọn
+        document.execCommand('removeFormat', false, null);
+
+        // 2. Áp dụng lại từng thuộc tính
+        if (fmt.bold) document.execCommand('bold', false, null);
+        if (fmt.italic) document.execCommand('italic', false, null);
+        if (fmt.underline) document.execCommand('underline', false, null);
+        if (fmt.strikethrough) document.execCommand('strikeThrough', false, null);
+        if (fmt.color && fmt.color !== 'rgb(0, 0, 0)') document.execCommand('foreColor', false, fmt.color);
+
+        if (fmt.fontSize) {
+            document.execCommand('fontSize', false, '7');
+            const fonts = editable.querySelectorAll('font[size="7"]');
+            fonts.forEach(font => {
+                font.removeAttribute('size');
+                font.style.fontSize = fmt.fontSize;
+            });
+        }
+
+        // Nếu ô bảng (td) đang giữ font-size riêng thì cũng cập nhật luôn
+        const td = editable.closest('td');
+        if (td && fmt.fontSize) {
+            td.style.fontSize = fmt.fontSize;
+            // Dọn dẹp các inline font-size bên trong để tránh xung đột
+            td.querySelectorAll('[style*="font-size"]').forEach(node => {
+                if (!node.classList.contains('ebmr-field-badge')) node.style.fontSize = '';
+            });
+        }
+
+        // 3. Sync về model
+        if (editable.oninput) editable.oninput();
+        const blockItem = editable.closest('.block-item');
+        if (blockItem) {
+            const item = items.find(i => i.id === blockItem.getAttribute('data-id'));
+            if (item) item.dirty = true;
+        }
+        saveStateDebounced();
+        return true;
+    }
+
     function handlePainterMouseUp(e) {
         if (!isFormatPainterActive || !storedFormat) return;
 
-        // Ignore if clicking the painter button itself or toolbar
+        // Ignore clicks on toolbar itself (except the painter button)
         if (e.target.closest('.editor-toolbar')) {
-            if (!e.target.closest('#btn-format-painter')) disableFormatPainter();
+            if (e.target.closest('#btn-format-painter')) {
+                // Re-toggle handled by toggleFormatPainter
+            } else {
+                disableFormatPainter();
+            }
             return;
         }
 
-        const selection = window.getSelection();
-        const selectedText = selection.toString().trim();
+        let applied = false;
 
-        if (storedFormat.type === 'text' && selectedText.length > 0) {
-            // User has highlighted text, apply styles!
+        // ============================================================
+        // TYPE: text → dán vào vùng text đang được bôi đen
+        // ============================================================
+        if (storedFormat.type === 'text') {
+            // Ưu tiên dùng snapshot (lưu trong quá trình bôi đen), fallback sang getSelection hiện tại
+            let targetRange = _painterSelectionSnapshot;
+            if (!targetRange) {
+                const sel = window.getSelection();
+                if (sel && sel.rangeCount > 0 && sel.toString().trim().length > 0) {
+                    targetRange = sel.getRangeAt(0);
+                }
+            }
 
-            // Note: execCommand is a bit temperamental with "forcing" styles.
-            // We use a small delay to ensure the selection is finalized.
-            setTimeout(() => {
-                if (storedFormat.bold) document.execCommand('bold', false, null);
-                if (storedFormat.italic) document.execCommand('italic', false, null);
-                if (storedFormat.underline) document.execCommand('underline', false, null);
+            if (targetRange && targetRange.toString().trim().length > 0) {
+                // Khôi phục selection rồi áp dụng format
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(targetRange);
+                applied = _applyTextFormat(storedFormat);
+                if (!formatPainterLocked) disableFormatPainter();
+                else {
+                    const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 1200 });
+                    Toast.fire({ icon: 'success', title: 'Đã dán định dạng' });
+                }
+                return;
+            }
 
-                // For font size and color, we apply them directly
-                if (storedFormat.color) document.execCommand('foreColor', false, storedFormat.color);
+            // Không bôi đen: thử áp dụng vào ô bảng (định dạng cấp ô)
+            const td = e.target.closest('td[data-row]');
+            if (td) {
+                const block = td.closest('.block-item');
+                if (block) {
+                    const item = items.find(i => i.id === block.dataset.id);
+                    if (item && item.type === 'table') {
+                        const r = parseInt(td.dataset.row) - 1;
+                        const c = parseInt(td.dataset.col);
+                        if (r >= 0 && item.data[r] && typeof item.data[r][c] === 'object') {
+                            const tc = item.data[r][c];
+                            if (storedFormat.bold !== undefined) tc.fontWeight = storedFormat.bold ? 'bold' : '';
+                            if (storedFormat.italic !== undefined) tc.fontStyle = storedFormat.italic ? 'italic' : '';
+                            if (storedFormat.underline !== undefined) tc.textDecoration = storedFormat.underline ? 'underline' : '';
+                            if (storedFormat.fontSize) tc.fontSize = storedFormat.fontSize;
+                            if (storedFormat.color && storedFormat.color !== 'rgb(0, 0, 0)') tc.textColor = storedFormat.color;
+                            
+                            // Dọn dẹp nội dung bên trong để format của td không bị các thẻ con ghi đè
+                            tc.content = _cleanUpHtmlContent(tc.content, storedFormat);
+                            
+                            renderBlocks(); saveStateDebounced(); applied = true;
+                        }
+                    }
+                }
+            }
+        }
+        // ============================================================
+        // TYPE: cell → dán vào ô bảng đích (click vào ô, hoặc nhiều ô được chọn)
+        // ============================================================
+        else if (storedFormat.type === 'cell') {
+            const selectedCells = document.querySelectorAll('.selected-cell');
 
-                disableFormatPainter();
-                saveStateDebounced();
-            }, 10);
-        } else if (storedFormat.type === 'block') {
+            const applyToCell = (targetCell) => {
+                targetCell.backgroundColor = storedFormat.backgroundColor;
+                targetCell.textAlign = storedFormat.textAlign;
+                targetCell.fontWeight = storedFormat.fontWeight;
+                targetCell.fontStyle = storedFormat.fontStyle;
+                targetCell.textDecoration = storedFormat.textDecoration;
+                targetCell.fontSize = storedFormat.fontSize;
+                targetCell.textColor = storedFormat.textColor;
+                targetCell.textTransform = storedFormat.textTransform;
+                targetCell.borderTop = storedFormat.borderTop;
+                targetCell.borderBottom = storedFormat.borderBottom;
+                targetCell.borderLeft = storedFormat.borderLeft;
+                targetCell.borderRight = storedFormat.borderRight;
+                if (storedFormat.writingMode) targetCell.writingMode = storedFormat.writingMode;
+                
+                // Dọn dẹp thẻ con
+                targetCell.content = _cleanUpHtmlContent(targetCell.content, storedFormat);
+            };
+
+            if (selectedCells.length > 1) {
+                // Nhiều ô được chọn → áp dụng cho tất cả
+                saveState();
+                selectedCells.forEach(td => {
+                    const block = td.closest('.block-item');
+                    if (!block) return;
+                    const item = items.find(i => i.id === block.dataset.id);
+                    if (!item || item.type !== 'table') return;
+                    const r = parseInt(td.dataset.row) - 1;
+                    const c = parseInt(td.dataset.col);
+                    if (r >= 0 && item.data[r] && typeof item.data[r][c] === 'object') applyToCell(item.data[r][c]);
+                });
+                renderBlocks(); saveStateDebounced(); applied = true;
+            } else {
+                // Click vào 1 ô cụ thể
+                const td = e.target.closest('td[data-row]');
+                if (td) {
+                    const block = td.closest('.block-item');
+                    if (block) {
+                        const item = items.find(i => i.id === block.dataset.id);
+                        if (item && item.type === 'table') {
+                            const r = parseInt(td.dataset.row) - 1;
+                            const c = parseInt(td.dataset.col);
+                            if (r >= 0 && item.data[r] && item.data[r][c]) {
+                                if (typeof item.data[r][c] !== 'object') {
+                                    item.data[r][c] = { content: item.data[r][c] || '', rs: 1, cs: 1, hidden: false };
+                                }
+                                applyToCell(item.data[r][c]);
+                                renderBlocks(); saveStateDebounced(); applied = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // ============================================================
+        // TYPE: block → dán vào khối (block)
+        // ============================================================
+        else if (storedFormat.type === 'block') {
             const block = e.target.closest('.block-item');
             if (block) {
-                const id = block.dataset.id;
-                const item = items.find(i => i.id === id);
+                const item = items.find(i => i.id === block.dataset.id);
                 if (item) {
                     item.backgroundColor = storedFormat.backgroundColor;
                     item.textAlign = storedFormat.textAlign;
                     item.fontSize = storedFormat.fontSize;
                     item.borderMode = storedFormat.borderMode;
-                    renderBlocks();
-                    saveStateDebounced();
-                    disableFormatPainter();
+                    renderBlocks(); saveStateDebounced(); applied = true;
                 }
             }
+        }
+
+        if (applied) {
+            if (!formatPainterLocked) {
+                disableFormatPainter();
+            } else {
+                const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 1200 });
+                Toast.fire({ icon: 'success', title: 'Đã dán định dạng – chọn tiếp vùng khác' });
+            }
+        } else {
+            // Nếu không áp dụng được và không lock → tắt
+            // Nếu không áp dụng được và không lock → tắt
+            if (!formatPainterLocked) disableFormatPainter();
+        }
+    }
+
+    /**
+     * Dọn dẹp nội dung HTML bên trong ô bảng để tránh các thẻ định dạng cũ
+     * (như font-size, color, b, i, u) ghi đè lên định dạng cấp độ ô (td).
+     */
+    function _cleanUpHtmlContent(htmlStr, fmt) {
+        if (!htmlStr) return '';
+        const div = document.createElement('div');
+        div.innerHTML = htmlStr;
+
+        if (fmt.fontSize !== undefined) {
+            div.querySelectorAll('[style*="font-size"], font[size]').forEach(n => {
+                if (!n.classList.contains('ebmr-field-badge')) {
+                    n.style.fontSize = '';
+                    n.removeAttribute('size');
+                    if (n.tagName.toLowerCase() === 'font' && !n.getAttribute('color') && !n.getAttribute('face')) {
+                        _unwrapNode(n);
+                    } else if (n.tagName.toLowerCase() === 'span' && !n.getAttribute('style')) {
+                        _unwrapNode(n);
+                    }
+                }
+            });
+        }
+        if (fmt.color !== undefined || fmt.textColor !== undefined) {
+            div.querySelectorAll('[style*="color"], font[color]').forEach(n => {
+                if (!n.classList.contains('ebmr-field-badge')) {
+                    n.style.color = '';
+                    n.removeAttribute('color');
+                    if (n.tagName.toLowerCase() === 'font' && !n.getAttribute('size') && !n.getAttribute('face')) {
+                        _unwrapNode(n);
+                    } else if (n.tagName.toLowerCase() === 'span' && !n.getAttribute('style')) {
+                        _unwrapNode(n);
+                    }
+                }
+            });
+        }
+        if (fmt.bold !== undefined || fmt.fontWeight !== undefined) {
+            div.querySelectorAll('b, strong').forEach(n => _unwrapNode(n));
+            div.querySelectorAll('[style*="font-weight"]').forEach(n => n.style.fontWeight = '');
+        }
+        if (fmt.italic !== undefined || fmt.fontStyle !== undefined) {
+            div.querySelectorAll('i, em').forEach(n => _unwrapNode(n));
+            div.querySelectorAll('[style*="font-style"]').forEach(n => n.style.fontStyle = '');
+        }
+        if (fmt.underline !== undefined || fmt.textDecoration !== undefined) {
+            div.querySelectorAll('u').forEach(n => _unwrapNode(n));
+            div.querySelectorAll('[style*="text-decoration"]').forEach(n => n.style.textDecoration = '');
+        }
+
+        return div.innerHTML;
+
+        function _unwrapNode(node) {
+            const p = node.parentNode;
+            while (node.firstChild) p.insertBefore(node.firstChild, node);
+            p.removeChild(node);
         }
     }
 
@@ -3068,6 +3780,18 @@
         const selection = window.getSelection();
         if (selection.rangeCount > 0 && selection.toString().trim().length > 0) {
             document.execCommand('removeFormat', false, null);
+            
+            const selectionNode = selection.anchorNode;
+            const editable = selectionNode ? (selectionNode.nodeType === 3 ? selectionNode.parentElement : selectionNode).closest('[contenteditable="true"]') : null;
+            if (editable && editable.oninput) {
+                editable.oninput();
+            }
+            const blockItem = editable ? editable.closest('.block-item') : null;
+            if (blockItem) {
+                const item = items.find(i => i.id === blockItem.getAttribute('data-id'));
+                if (item) item.dirty = true;
+            }
+            saveStateDebounced();
         } else if (selectedId) {
             const item = items.find(i => i.id === selectedId);
             if (item) {
@@ -4476,6 +5200,27 @@
         $('#blockLoopModal').modal('show');
     };
 
+    window.editLoopGroup = function(groupId) {
+        if (!groupId) return;
+        
+        const blocksInGroup = items.filter(i => i.loop_group_id === groupId);
+        if (blocksInGroup.length === 0) return;
+
+        window.selectedBlockRange = {
+            startId: blocksInGroup[0].id,
+            endId: blocksInGroup[blocksInGroup.length - 1].id
+        };
+        
+        selectedId = null;
+        renderBlocks();
+        
+        const existingLoopCount = blocksInGroup[0].loop_count || 3;
+        const input = document.getElementById('blockLoopCount');
+        if (input) input.value = existingLoopCount;
+        
+        $('#blockLoopModal').modal('show');
+    };
+
     window.applyBlockLoopGroup = function() {
         const rangeIds = window.getSelectedBlockRangeIds();
         if (rangeIds.length === 0) return;
@@ -4817,6 +5562,11 @@
      * Áp dụng chuyển đổi kiểu chữ tự động dựa trên trạng thái selection của người dùng.
      */
     window.applyTextChangeCase = function(caseType) {
+        if (savedTextSelection) {
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(savedTextSelection);
+        }
         const selection = window.getSelection();
         const selectedText = selection.toString().trim();
         const selectedCells = document.querySelectorAll('.selected-cell');

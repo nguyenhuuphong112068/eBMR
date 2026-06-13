@@ -17,6 +17,7 @@
         @include('pages.ebmr.designer.partials.canvas') {{-- Nhúng vùng làm việc chính (Canvas) nơi hiển thị trang giấy A4 --}}
         @include('pages.ebmr.designer.partials.criteria_sidebar') {{-- Nhúng thanh trượt liên kết tiêu chuẩn --}}
         @include('pages.ebmr.designer.partials.properties_sidebar') {{-- Nhúng thanh quản lý thuộc tính tài liệu --}}
+
     </div>
 
     <script> {{-- Khởi tạo các biến Javascript toàn cục từ dữ liệu phía Backend (Laravel) --}}
@@ -54,4 +55,5 @@
     @include('pages.ebmr.designer.scripts.scale_reader') {{-- Tích hợp đọc dữ liệu từ Cân Điện Tử qua RS-232 --}}
     @include('pages.ebmr.designer.scripts.properties') {{-- Xử lý Document Properties đồng bộ --}}
     @include('pages.ebmr.designer.scripts.split_view') {{-- Tính năng chia đôi màn hình (Split View) so sánh tài liệu --}}
+
 @endsection
