@@ -145,7 +145,7 @@
                     <i class="fas fa-file-import"></i>
                 </button>
                 <button class="btn btn-toolbar-action text-info fw-bold" onmousedown="event.preventDefault();"
-                    onclick="openComponentModal()" title="Chèn Thành phần (CO)">
+                    onclick="toggleComponentSidebar()" title="Chèn Thành phần (CO)">
                     <i class="fas fa-layer-group"></i>
                 </button>
                 <button class="btn btn-toolbar-action text-warning fw-bold" onmousedown="event.preventDefault();"

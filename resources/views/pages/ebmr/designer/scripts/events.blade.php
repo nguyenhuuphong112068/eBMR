@@ -3,6 +3,7 @@
         // 1. Selection Logic
         document.addEventListener('mousedown', (e) => {
             if (window.isExecutionMode) return; // Chặn chọn khối ở chế độ ghi chép
+            if (window.isSelectVarMode) return; // Chặn chọn khối/ô khi đang bắt biến
 
             const cell = e.target.closest('td, th');
             if (cell && cell.closest('.mini-table')) {
@@ -675,6 +676,7 @@
         const mainContent = document.getElementById('mainContent');
         if (mainContent) {
             mainContent.onclick = (e) => {
+                if (window.isSelectVarMode) return; // Chặn clear selection khi đang bắt biến
                 if (!e.target.closest('.block-item') && !e.target.closest('#property-panel') && !e.target.closest('.editor-toolbar') && !e.target.closest('.insert-divider')) {
                     selectedId = null;
                     document.querySelectorAll('.insert-menu').forEach(m => m.classList.remove('show'));

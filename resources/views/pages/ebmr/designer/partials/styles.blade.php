@@ -2617,4 +2617,123 @@
         color: #fff;
         text-decoration: underline;
     }
+
+    /* Đánh dấu các biến đang được dùng trong công thức */
+    .formula-var-highlight {
+        outline: 3px solid #6366f1 !important;
+        outline-offset: -3px;
+        background-color: #e0e7ff !important;
+        transition: all 0.2s;
+        box-shadow: 0 0 10px rgba(99, 102, 241, 0.5) !important;
+        z-index: 100 !important;
+        position: relative;
+    }
+
+    /* Bắt biến từ màn hình (Click-to-Select) */
+    body.select-var-mode-active .ebmr-field-badge {
+        outline: 2px dashed #ffc107 !important;
+        outline-offset: 2px;
+        cursor: crosshair !important;
+        position: relative;
+        z-index: 1000;
+        transition: all 0.2s;
+        box-shadow: 0 0 8px rgba(255, 193, 7, 0.6) !important;
+    }
+    
+    body.select-var-mode-active .ebmr-field-badge:hover {
+        outline: 3px solid #28a745 !important;
+        transform: scale(1.1);
+        z-index: 1001;
+        box-shadow: 0 0 12px rgba(40, 167, 69, 0.8) !important;
+    }
+
+    /* CSS cho Checkbox tự động (disabled nhưng giữ nguyên màu như checkbox thường) */
+    .execution-checkbox-wrapper input[type="checkbox"]:disabled {
+        opacity: 1 !important;
+        cursor: not-allowed !important;
+    }
+    
+    .execution-checkbox-wrapper input[type="checkbox"]:checked:disabled {
+        background-color: #0d6efd !important;
+        border-color: #0d6efd !important;
+    }
+
+    /* Components Sidebar */
+    .components-sidebar {
+        position: fixed;
+        top: 60px;
+        left: 0;
+        width: 280px;
+        height: calc(100vh - 60px);
+        z-index: 1040;
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+    }
+    
+    .components-sidebar.show {
+        transform: translateX(0);
+    }
+    
+    .component-drag-item {
+        cursor: grab;
+        transition: all 0.2s;
+    }
+    .component-drag-item:active {
+        cursor: grabbing;
+    }
+    .component-drag-item:hover {
+        background-color: #f1f5f9;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    }
+    
+    /* Make all insert-dividers prominent drop zones while dragging */
+    body.component-dragging .insert-divider {
+        height: 30px !important;
+        background-color: rgba(2, 132, 199, 0.05) !important;
+        border: 2px dashed rgba(2, 132, 199, 0.3) !important;
+        margin: 8px 0 !important;
+        border-radius: 4px;
+        transition: all 0.2s;
+    }
+    
+    body.component-dragging .insert-divider::before {
+        content: "Thả Thành phần vào đây";
+        display: block;
+        text-align: center;
+        color: rgba(2, 132, 199, 0.6);
+        font-weight: 500;
+        font-size: 11px;
+        line-height: 26px;
+    }
+    
+    body.component-dragging .insert-divider .insert-click-zone,
+    body.component-dragging .insert-divider .insert-btn,
+    body.component-dragging .insert-divider .insert-menu {
+        display: none !important;
+    }
+    
+    /* Make the last divider expand to fill bottom empty space */
+    body.component-dragging .insert-divider:last-child {
+        min-height: 150px !important;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    body.component-dragging .insert-divider:last-child::before {
+        content: "Thả Thành phần vào cuối văn bản";
+    }
+
+    /* Drag over insert divider */
+    .insert-divider.drag-over-active {
+        opacity: 1 !important;
+        background-color: rgba(2, 132, 199, 0.2) !important;
+        border: 2px dashed #0284c7 !important;
+        transform: scale(1.02);
+    }
+    
+    .insert-divider.drag-over-active::before {
+        color: #0284c7;
+        font-weight: bold;
+    }
 </style>

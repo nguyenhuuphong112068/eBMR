@@ -1018,6 +1018,28 @@
     function addInsertionDivider(container, idx) {
         const divider = document.createElement('div');
         divider.className = 'insert-divider';
+        divider.ondragover = (e) => {
+            // Check body class instead of types for better cross-browser support
+            if (document.body.classList.contains('component-dragging')) {
+                e.preventDefault();
+                divider.classList.add('drag-over-active');
+            }
+        };
+        divider.ondragleave = (e) => {
+            divider.classList.remove('drag-over-active');
+        };
+        divider.ondrop = (e) => {
+            e.preventDefault();
+            divider.classList.remove('drag-over-active');
+            const componentId = e.dataTransfer.getData('componentId');
+            const componentName = e.dataTransfer.getData('componentName');
+            if (componentId) {
+                // Determine actual insert index taking into account section definitions etc if needed.
+                // idx here is the block's array index.
+                importMasterForm(componentId, componentName, idx);
+            }
+        };
+
         divider.innerHTML = `
             <div class="insert-click-zone" title="Click đúp để gõ văn bản tại đây" ondblclick="quickAddText(event, ${idx})"></div>
             <button class="insert-btn" title="Chèn vào đây"><i class="fas fa-plus"></i></button>
@@ -1228,9 +1250,9 @@
                         let metaText = '';
                         if (naMeta) {
                             const reasonText = naMeta.reason || 'N/A';
-                            metaText = `<span style="color: #2563eb; font-weight: bold; margin-right: 4px;">${reasonText} -</span> ${naMeta.by || ''} ${naMeta.at || ''}`;
+                            metaText = `<span style="color: #2563eb; font-weight: bold; margin-right: 4px;">${reasonText} -</span> ${naMeta.at || ''}<br><span style="font-size: 9px; color: #6c757d;">${naMeta.by || ''}</span>`;
                         } else if (meta && (meta.by || meta.at)) {
-                            metaText = `${meta.by || ''} ${meta.at || ''}`;
+                            metaText = `${meta.at || ''}<br><span style="font-size: 9px; color: #6c757d;">${meta.by || ''}</span>`;
                         }
                         
                         if (metaText || historyBadge) {
@@ -1268,15 +1290,30 @@
                         badge.className = 'ebmr-field-badge ebmr-field-value';
                     } else if (field.type === 'checkbox') {
                         let isChecked = false;
-                        if (typeof val === 'boolean') {
-                            isChecked = val;
-                        } else if (val !== undefined && val !== null) {
-                            const valStr = String(val).toLowerCase().trim();
-                            isChecked = (valStr === '1' || valStr === 'true' || valStr === 'yes' || valStr === 'có' || valStr === 'checked');
+                        let disabledAttr = window.isReadOnly ? 'disabled' : '';
+
+                        if (field.formula && window.isExecutionMode) {
+                            // Tự động tick theo công thức
+                            const result = calculateFormula(field.formula || '', 2, field.id, loopSuffix);
+                            isChecked = parseFloat(result) > 0;
+                            disabledAttr = 'disabled'; // Khóa không cho tick tay
+                            
+                            // Cập nhật giá trị vào executionValues để đồng bộ
+                            if (typeof window.executionValues[fieldId + loopSuffix] !== 'object' || window.executionValues[fieldId + loopSuffix] === null) {
+                                window.executionValues[fieldId + loopSuffix] = {};
+                            }
+                            window.executionValues[fieldId + loopSuffix]['default'] = isChecked;
+                        } else {
+                            if (typeof val === 'boolean') {
+                                isChecked = val;
+                            } else if (val !== undefined && val !== null) {
+                                const valStr = String(val).toLowerCase().trim();
+                                isChecked = (valStr === '1' || valStr === 'true' || valStr === 'yes' || valStr === 'có' || valStr === 'checked');
+                            }
                         }
 
                         badge.innerHTML =
-                            `<span class="execution-checkbox-wrapper"><input type="checkbox" class="execution-checkbox" ${isChecked ? 'checked' : ''} ${window.isReadOnly ? 'disabled' : ''} onchange="window.handleCheckboxChange('${fieldId + loopSuffix}', this.checked, this)">${metaHtml}</span>`;
+                            `<span class="execution-checkbox-wrapper"><input type="checkbox" class="execution-checkbox" ${isChecked ? 'checked' : ''} ${disabledAttr} onchange="window.handleCheckboxChange('${fieldId + loopSuffix}', this.checked, this)">${metaHtml}</span>`;
                         badge.className = 'ebmr-field-badge ebmr-field-value';
                     } else if (field.type === 'select') {
                         const dsType = field.dataSource ? field.dataSource.type : 'manual';
@@ -1513,9 +1550,11 @@
     const parseNumberSafe = function(val) {
         if (val === undefined || val === null || val === '') return 0;
         if (typeof val === 'number') return val;
+        if (typeof val === 'boolean') return val ? 1 : 0;
         // Loại bỏ thẻ HTML và dấu phẩy phân cách phần nghìn
         const clean = String(val).replace(/<[^>]*>/g, '').replace(/,/g, '').trim();
-        return parseFloat(clean) || 0;
+        const parsed = parseFloat(clean);
+        return isNaN(parsed) ? 0 : parsed;
     };
 
     /**

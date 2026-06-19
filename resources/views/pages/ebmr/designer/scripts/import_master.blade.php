@@ -70,91 +70,140 @@
         });
     });
 
-    $('#componentSearch').on('keyup', function() {
+    $('#componentSidebarSearch').on('keyup', function() {
         const value = $(this).val().toLowerCase();
-        $('.component-row').filter(function() {
+        $('.component-drag-item').filter(function() {
             $(this).toggle($(this).find('.template-name').text().toLowerCase().indexOf(value) > -1)
         });
     });
 
-    function openComponentModal() {
-        $('#componentModal').modal('show');
-        $('#componentListContainer').html(`
-            <tr>
-                <td colspan="4" class="text-center py-4 text-muted">
-                    <i class="fas fa-spinner fa-spin me-2"></i> Đang tải dữ liệu thành phần...
-                </td>
-            </tr>
+    let componentSidebarOpen = false;
+
+    function toggleComponentSidebar() {
+        const sidebar = document.getElementById('componentsSidebar');
+        if (!sidebar) return;
+        
+        componentSidebarOpen = !componentSidebarOpen;
+        if (componentSidebarOpen) {
+            sidebar.classList.remove('d-none');
+            // Give it a tiny delay to ensure d-none is removed before triggering CSS transition
+            setTimeout(() => sidebar.classList.add('show'), 10);
+            loadComponentsSidebar();
+        } else {
+            sidebar.classList.remove('show');
+            setTimeout(() => sidebar.classList.add('d-none'), 300); // wait for transition
+        }
+    }
+
+    function loadComponentsSidebar() {
+        const listContainer = $('#componentsSidebarList');
+        listContainer.html(`
+            <div class="text-center py-4 text-muted small">
+                <div class="spinner-border spinner-border-sm text-info me-2"></div> Đang tải...
+            </div>
         `);
 
-        // Fetch templates
         fetch('/ebmr/get-templates')
             .then(res => res.json())
             .then(data => {
                 let html = '';
-                // Filter only Components (type = CO)
                 const coTemplates = data.filter(t => t.type === 'CO');
                 
                 if (coTemplates.length === 0) {
                     html = `
-                        <tr>
-                            <td colspan="4" class="text-center py-4 text-muted">
-                                <i class="fas fa-info-circle me-2"></i> Không có Thành phần nào trong hệ thống.
-                            </td>
-                        </tr>
+                        <div class="text-center py-4 text-muted small">
+                            <i class="fas fa-info-circle me-2"></i> Không có Thành phần nào.
+                        </div>
                     `;
                 } else {
                     coTemplates.forEach((t, index) => {
                         const date = new Date(t.updated_at).toLocaleString('vi-VN');
                         html += `
-                            <tr class="component-row">
-                                <td class="text-center align-middle">${index + 1}</td>
-                                <td class="align-middle fw-bold text-primary template-name">${t.name}</td>
-                                <td class="align-middle text-muted small">${date}</td>
-                                <td class="text-center align-middle">
-                                    <button class="btn btn-sm btn-info rounded-pill px-3 fw-bold text-white" onclick="importMasterForm(${t.id}, '${t.name.replace(/'/g, "\\'")}')">
-                                        <i class="fas fa-download me-1"></i> Chèn
-                                    </button>
-                                </td>
-                            </tr>
+                            <div class="card p-2 shadow-sm border-0 mb-2 component-drag-item" 
+                                 draggable="true" 
+                                 ondragstart="onComponentDragStart(event, ${t.id}, '${t.name.replace(/'/g, "\\'")}')"
+                                 title="Kéo thả thẻ này vào dải phân cách giữa các khối trên văn bản">
+                                <div class="d-flex align-items-center">
+                                    <div class="bg-light text-primary rounded px-2 py-1 me-2" style="font-size: 0.8em;">
+                                        <i class="fas fa-grip-vertical text-muted"></i>
+                                    </div>
+                                    <div class="flex-grow-1 overflow-hidden">
+                                        <div class="fw-bold text-dark template-name text-truncate" style="font-size: 0.85em;">${t.name}</div>
+                                        <div class="text-muted" style="font-size: 0.65em;">Cập nhật: ${date}</div>
+                                    </div>
+                                </div>
+                            </div>
                         `;
                     });
                 }
-                $('#componentListContainer').html(html);
+                listContainer.html(html);
             })
             .catch(err => {
                 console.error(err);
-                $('#componentListContainer').html(`
-                    <tr>
-                        <td colspan="4" class="text-center py-4 text-danger">
-                            <i class="fas fa-exclamation-triangle me-2"></i> Lỗi khi tải dữ liệu!
-                        </td>
-                    </tr>
+                listContainer.html(`
+                    <div class="text-center py-4 text-danger small">
+                        <i class="fas fa-exclamation-triangle me-2"></i> Lỗi tải dữ liệu!
+                    </div>
                 `);
             });
     }
 
+    function onComponentDragStart(event, templateId, templateName) {
+        event.dataTransfer.setData('componentId', templateId);
+        event.dataTransfer.setData('componentName', templateName);
+        event.dataTransfer.effectAllowed = 'copy';
+        // Add a visual class to indicate dragging is active
+        document.body.classList.add('component-dragging');
+    }
+    
+    document.addEventListener('dragend', function() {
+        document.body.classList.remove('component-dragging');
+        // Clear drag over styles
+        document.querySelectorAll('.insert-divider').forEach(el => el.classList.remove('drag-over-active'));
+    });
+
     // Import logic (Deep Copy)
-    function importMasterForm(templateId, templateName) {
-        if (!confirm(`Bạn có chắc chắn muốn nhập dữ liệu từ biểu mẫu "${templateName}" vào công đoạn hiện tại không?`)) {
+    function importMasterForm(templateId, templateName, insertIndex = -1) {
+        if (!confirm(`Bạn có chắc chắn muốn chèn dữ liệu từ biểu mẫu/thành phần "${templateName}" vào công đoạn hiện tại không?`)) {
             return;
         }
 
-        const btn = event.currentTarget;
-        const originalContent = btn.innerHTML;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang tải...';
-        btn.disabled = true;
+        // When called from drag-drop, there's no button context
+        const btn = (typeof event !== 'undefined' && event && event.currentTarget && event.currentTarget.tagName === 'BUTTON')
+            ? event.currentTarget
+            : null;
+
+        let originalContent = '';
+        if (btn) {
+            originalContent = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang tải...';
+            btn.disabled = true;
+        } else {
+            Swal.fire({
+                title: 'Đang tải dữ liệu...',
+                text: 'Vui lòng chờ trong giây lát',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+        }
 
         fetch(`/ebmr/templates/${templateId}/blocks`)
-            .then(res => res.json())
+            .then(res => {
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return res.json();
+            })
             .then(data => {
-                btn.innerHTML = originalContent;
-                btn.disabled = false;
+                if (btn) {
+                    btn.innerHTML = originalContent;
+                    btn.disabled = false;
+                }
 
-                if (data.success && data.blocks) {
+                if (data && data.blocks) {
                     const importedBlocks = data.blocks;
-                    const importedConfig = data.fieldsConfig || {};
-                    const targetSectionId = window.activeSectionId || (window.items.find(i => i.type === 'section')?.section_id) || 'section_0';
+                    const importedConfig = data.fields || {};
+                    const targetSectionId = window.activeSectionId || (Array.isArray(items) ? (items.find(i => i.type === 'section')?.section_id) : null) || 'section_0';
 
                     // 1. Map old field IDs (variables) to new UUIDs to prevent collisions
                     let fieldMap = {};
@@ -171,9 +220,8 @@
                     // 3. Process blocks
                     let importedCount = 0;
                     importedBlocks.forEach(b => {
-                        // Skip if block is header or section definition, unless it's a generic section
-                        // Usually MF has 1 section. We will override it with targetSectionId.
-                        if (b.type === 'section') return; // Skip section blocks from MF, we just want content
+                        // Skip section blocks from CO/MF, we just want content
+                        if (b.type === 'section') return;
 
                         let newBlock = JSON.parse(JSON.stringify(b)); // Deep clone
                         let newBlockId = blockMap[b.id];
@@ -185,7 +233,6 @@
                         // Replace field IDs in content (for static-text or table cells)
                         if (newBlock.content) {
                             for (let oldKey in fieldMap) {
-                                // Replace data-field-id="oldKey" and @{{oldKey}}
                                 let regex = new RegExp(oldKey, 'g');
                                 newBlock.content = newBlock.content.replace(regex, fieldMap[oldKey]);
                             }
@@ -221,8 +268,12 @@
                             }
                         }
 
-                        // Add to global items
-                        window.items.push(newBlock);
+                        // Add to global items at the correct position
+                        if (insertIndex >= 0) {
+                            items.splice(insertIndex + importedCount, 0, newBlock);
+                        } else {
+                            items.push(newBlock);
+                        }
                         importedCount++;
                     });
 
@@ -233,33 +284,40 @@
                         
                         config.id = newKey;
                         config.section_id = targetSectionId;
-                        // Map block_id if it exists, otherwise leave null
+                        // Map block_id if it exists
                         if (config.block_id && blockMap[config.block_id]) {
                             config.block_id = blockMap[config.block_id];
                         }
                         
-                        window.fieldsConfig[newKey] = config;
+                        fieldsConfig[newKey] = config;
                     }
 
                     if (importedCount > 0) {
-                        // Save state, re-render, and close modal
                         saveState();
                         renderBlocks();
                         updateVariableSummary();
                         $('#masterFormModal').modal('hide');
-                        toastr.success(`Đã nhập thành công ${importedCount} khối dữ liệu từ Biểu mẫu gốc!`);
+                        if (typeof componentSidebarOpen !== 'undefined' && componentSidebarOpen) toggleComponentSidebar();
+                        Swal.close();
+                        toastr.success(`Đã chèn thành công ${importedCount} khối dữ liệu từ "${templateName}"!`);
                     } else {
-                        toastr.warning('Biểu mẫu gốc này không có nội dung nào để nhập.');
+                        Swal.close();
+                        toastr.warning('Mẫu này không có nội dung nào để chèn (chỉ có section/header).');
                     }
                 } else {
-                    toastr.error('Lỗi khi tải dữ liệu cấu trúc của biểu mẫu.');
+                    Swal.close();
+                    toastr.error('Không tìm thấy nội dung trong biểu mẫu này.');
                 }
             })
             .catch(err => {
-                console.error(err);
-                btn.innerHTML = originalContent;
-                btn.disabled = false;
-                toastr.error('Lỗi kết nối khi tải biểu mẫu.');
+                console.error('importMasterForm error:', err);
+                if (btn) {
+                    btn.innerHTML = originalContent;
+                    btn.disabled = false;
+                } else {
+                    Swal.close();
+                }
+                toastr.error('Lỗi kết nối khi tải dữ liệu: ' + err.message);
             });
     }
 </script>

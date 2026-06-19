@@ -629,6 +629,8 @@ class EbmrTemplateController extends Controller
                     ->leftJoin('product_name', 'finished_product_category.product_name_id', '=', 'product_name.id')
                     ->where('finished_product_category.id', $t->caterogy_id)
                     ->value('product_name.name') ?? 'N/A';
+            } elseif ($t->type === 'CO') {
+                $t->name = DB::table('co_category')->where('id', $t->caterogy_id)->value('name') ?? 'N/A';
             } else {
                 $t->name = DB::table('intermediate_category')
                     ->leftJoin('product_name', 'intermediate_category.product_name_id', '=', 'product_name.id')

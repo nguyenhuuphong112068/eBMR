@@ -17,7 +17,7 @@
         @include('pages.ebmr.designer.partials.canvas') {{-- Nhúng vùng làm việc chính (Canvas) nơi hiển thị trang giấy A4 --}}
         @include('pages.ebmr.designer.partials.criteria_sidebar') {{-- Nhúng thanh trượt liên kết tiêu chuẩn --}}
         @include('pages.ebmr.designer.partials.properties_sidebar') {{-- Nhúng thanh quản lý thuộc tính tài liệu --}}
-
+        @include('pages.ebmr.designer.partials.components_sidebar') {{-- Nhúng thanh thành phần kéo thả --}}
     </div>
 
     <script> {{-- Khởi tạo các biến Javascript toàn cục từ dữ liệu phía Backend (Laravel) --}}

@@ -2351,6 +2351,48 @@
 
     // Dynamic Fields Data Handling
 
+    window.isSelectVarMode = false;
+    window.targetFormulaFieldId = null;
+
+    window.toggleSelectVarMode = function(fieldId) {
+        window.isSelectVarMode = !window.isSelectVarMode;
+        const btn = document.getElementById(`btn-select-var-${fieldId}`);
+        
+        if (window.isSelectVarMode) {
+            window.targetFormulaFieldId = fieldId;
+            if (btn) {
+                btn.innerHTML = '<i class="fas fa-times me-1"></i> Đang bắt biến... (Nhấn Hủy)';
+                btn.classList.remove('btn-outline-warning');
+                btn.classList.add('btn-warning', 'text-dark');
+            }
+            document.body.classList.add('select-var-mode-active');
+        } else {
+            window.targetFormulaFieldId = null;
+            if (btn) {
+                btn.innerHTML = '<i class="fas fa-hand-pointer me-1"></i> Bắt biến từ màn hình';
+                btn.classList.remove('btn-warning', 'text-dark');
+                btn.classList.add('btn-outline-warning');
+            }
+            document.body.classList.remove('select-var-mode-active');
+        }
+    };
+
+    window.highlightFormulaVars = function(formulaStr) {
+        document.querySelectorAll('.formula-var-highlight').forEach(el => el.classList.remove('formula-var-highlight'));
+        if (!formulaStr) return;
+        
+        let match;
+        const regex = /\(([^)]+)\)/g;
+        while ((match = regex.exec(formulaStr)) !== null) {
+            const idOrName = match[1];
+            const targetField = Object.values(fieldsConfig).find(f => f.name === idOrName || f.label === idOrName || f.id === idOrName);
+            if (targetField) {
+                const badges = document.querySelectorAll(`.ebmr-field-badge[data-field-id="${targetField.id}"]`);
+                badges.forEach(badge => badge.classList.add('formula-var-highlight'));
+            }
+        }
+    };
+
     /**
      * Cập nhật một thuộc tính cụ thể của ô trong bảng (ví dụ: cellId, defaultValue).
      * @param {string} itemId - ID của khối bảng.
@@ -2438,6 +2480,34 @@
         if (event) event.stopPropagation();
         if (window.isExecutionMode) return;
 
+        if (window.isSelectVarMode) {
+            if (event) event.preventDefault();
+            const targetField = fieldsConfig[fieldId];
+            if (!targetField) return;
+            const input = document.getElementById(`formula-input-${window.targetFormulaFieldId}`);
+            if (input) {
+                const varName = targetField.name || targetField.label || fieldId;
+                const appendText = `(${varName})`;
+                input.value = input.value ? `${input.value} ${appendText}` : appendText;
+                syncFieldConfig(window.targetFormulaFieldId, 'formula', input.value);
+                
+                // Cập nhật giá trị hiển thị preview nếu có
+                const preview = document.getElementById('formula-friendly-preview');
+                if(preview) {
+                    preview.innerText = input.value.replace(/\(([^)]+)\)/g, (match, id) => {
+                        const target = Object.values(fieldsConfig).find(f => f.name === id || f.label === id);
+                        return target ? (target.label || id) : id;
+                    });
+                }
+                
+                // Trả focus về ô input, thiết lập auto height
+                input.focus();
+                input.style.height = 'auto'; 
+                input.style.height = (input.scrollHeight) + 'px';
+            }
+            return; // Chặn luồng chọn biến thông thường
+        }
+
         selectedFieldId = fieldId;
         selectedId = null;
 
@@ -2497,6 +2567,7 @@
                         <select class="form-select border-primary" style="max-width: 60%;" id="formula-var-helper" onchange="if(this.value) { const input = document.getElementById('formula-input-${fieldId}'); input.value += '(' + this.value + ')'; syncFieldConfig('${fieldId}', 'formula', input.value); this.value=''; }">
                             ${numberFieldsOptions}
                         </select>
+                        <button class="btn btn-outline-warning" type="button" onclick="toggleSelectVarMode('${fieldId}')" id="btn-select-var-${fieldId}" title="Nhấn để chọn biến từ màn hình"><i class="fas fa-hand-pointer"></i></button>
                         <button class="btn btn-outline-primary" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += ' + '; syncFieldConfig('${fieldId}', 'formula', input.value);">+</button>
                         <button class="btn btn-outline-primary" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += ' - '; syncFieldConfig('${fieldId}', 'formula', input.value);">-</button>
                         <button class="btn btn-outline-primary" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += ' * '; syncFieldConfig('${fieldId}', 'formula', input.value);">×</button>
@@ -2505,7 +2576,10 @@
                     <textarea id="formula-input-${fieldId}" class="form-control form-control-sm border-primary font-monospace" 
                               style="overflow:hidden; resize:none;"
                               placeholder="VD: (var_1) - (var_2)" 
+                              onfocus="highlightFormulaVars(this.value)"
+                              onblur="highlightFormulaVars('')"
                               oninput="syncFieldConfig('${fieldId}', 'formula', this.value); this.style.height = 'auto'; this.style.height = (this.scrollHeight) + 'px'; 
+                                       highlightFormulaVars(this.value);
                                        const preview = document.getElementById('formula-friendly-preview');
                                        if(preview) preview.innerText = this.value.replace(/\\\(([^)]+)\\\)/g, (match, id) => {
                                            const target = Object.values(fieldsConfig).find(f => f.name === id || f.label === id);
@@ -2564,6 +2638,39 @@
                         </label>
                     </div>
                     <div class="form-text small" style="font-size: 0.65rem;">Người dùng cấp 2 sẽ phải nhập tài khoản và mật khẩu của họ để ký.</div>
+                </div>
+            `;
+        } else if (field.type === 'checkbox') {
+            typeHtml += `
+                <div class="mb-3">
+                    <label class="small fw-bold text-primary mb-1"><i class="fas fa-calculator me-1"></i>Công thức tự động Tick (Tùy chọn)</label>
+                    <div class="mb-2">
+                        <button class="btn btn-sm btn-outline-warning w-100 fw-bold" type="button" onclick="toggleSelectVarMode('${fieldId}')" id="btn-select-var-${fieldId}">
+                            <i class="fas fa-hand-pointer me-1"></i> Bắt biến từ màn hình
+                        </button>
+                    </div>
+                    <textarea id="formula-input-${fieldId}" class="form-control form-control-sm border-primary font-monospace" 
+                              style="overflow:hidden; resize:none;"
+                              placeholder="VD: (tick1) * (tick2)" 
+                              onfocus="highlightFormulaVars(this.value)"
+                              onblur="highlightFormulaVars('')"
+                              oninput="syncFieldConfig('${fieldId}', 'formula', this.value); this.style.height = 'auto'; this.style.height = (this.scrollHeight) + 'px';
+                                       highlightFormulaVars(this.value);
+                                       const preview = document.getElementById('formula-friendly-preview');
+                                       if(preview) preview.innerText = this.value.replace(/\\\(([^)]+)\\\)/g, (match, id) => {
+                                           const target = Object.values(fieldsConfig).find(f => f.name === id || f.label === id);
+                                           return target ? (target.label || id) : id;
+                                       });">${field.formula || ''}</textarea>
+                    
+                    <div class="mt-1 p-1 bg-light border rounded small mb-2" style="font-size: 0.75rem;">
+                        <span class="text-muted">Xem trước (Nhãn):</span> 
+                        <span id="formula-friendly-preview" class="text-primary fw-bold">${(field.formula || '').replace(/\(([^)]+)\)/g, (match, id) => {
+                            const target = Object.values(fieldsConfig).find(f => f.name === id || f.label === id);
+                            return target ? (target.label || id) : id;
+                        })}</span>
+                    </div>
+                    
+                    <div class="form-text small" style="font-size: 0.65rem;">Nếu công thức > 0, ô này sẽ tự động được Tick. Nếu để trống, người dùng tự Tick.</div>
                 </div>
             `;
         }
