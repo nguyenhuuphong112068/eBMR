@@ -220,6 +220,82 @@
         border-color: #0ea5e9 !important;
         box-shadow: 0 4px 12px rgba(14, 165, 233, 0.08);
     }
+
+    /* ========================================
+       KHỐI NGẮT TRANG (PAGE BREAK)
+    ======================================== */
+
+    /* Wrapper block-item cho page-break: không có viền, padding thoáng */
+    .block-item.type-page-break {
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        padding: 4px 0 !important;
+        margin: 4px 0 !important;
+        cursor: default;
+    }
+
+    .page-break-block {
+        position: relative;
+        width: 100%;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        user-select: none;
+    }
+
+    /* Dải màu nền rộng toàn bộ chiều ngang */
+    .page-break-band {
+        height: 12px;
+        background: #f1f3f4 !important;
+        margin-top: 20px !important;
+        margin-bottom: 20px !important;
+        margin-left: -41px !important;
+        margin-right: -41px !important;
+        border-top: 1px solid #ddd;
+        border-bottom: 1px solid #ddd;
+        box-shadow: inset 0 4px 6px -4px rgba(0, 0, 0, 0.1), inset 0 -4px 6px -4px rgba(0, 0, 0, 0.1);
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .page-break-badge {
+        background-color: #cbd5e1 !important;
+        color: white !important;
+        font-size: 0.65rem !important;
+        font-weight: 800 !important;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        padding: 4px 16px;
+        border-radius: 50rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border: none;
+        box-shadow: none;
+    }
+
+    .page-break-badge i {
+        font-size: 0.7rem;
+        color: white !important;
+    }
+
+    /* Khi in: bắt buộc ngắt trang thật, ẩn toàn bộ nội dung hiển thị */
+    @media print {
+        .type-page-break .page-break-block {
+            display: none !important;
+        }
+        .type-page-break {
+            page-break-after: always !important;
+            break-after: page !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            height: 0 !important;
+        }
+    }
 </style>
 <script>
     /**
@@ -613,17 +689,29 @@
             }, 50);
         }
 
+        // --- XỬ LÝ KHỐI NGẮT TRANG (PAGE BREAK) ---
+        else if (item.type === 'page-break') {
+            const label = item.label || 'Ngắt trang';
+            const execNote = window.isExecutionMode ? ' — Bước mới' : '';
+            content = `<div class="page-break-block">
+                <div class="page-break-band">
+                </div>
+            </div>`;
+        }
+
         // --- THANH HÀNH ĐỘNG (XÓA, DI CHUYỂN) ---
+        const isPageBreak = item.type === 'page-break';
         const actions = (item.locked || window.isReadOnly || window.isExecutionMode) ? '' : `
                                 <div class="block-actions">
                                     <button class="btn btn-sm btn-light border shadow-sm text-danger" onclick="removeItem('${item.id}')"><i class="fas fa-trash"></i></button>
+                                    ${!isPageBreak ? `
                                     <button class="btn btn-sm btn-light border shadow-sm" onclick="moveItem(${idx}, -1)"><i class="fas fa-chevron-up"></i></button>
-                                    <button class="btn btn-sm btn-light border shadow-sm" onclick="moveItem(${idx}, 1)"><i class="fas fa-chevron-down"></i></button>
+                                    <button class="btn btn-sm btn-light border shadow-sm" onclick="moveItem(${idx}, 1)"><i class="fas fa-chevron-down"></i></button>` : ''}
                                 </div>`;
 
         div.innerHTML = `
                                 ${actions}
-                                ${item.type !== 'static-text' && item.type !== 'section' && !window.isExecutionMode && item.label && item.label !== 'null' && !item.isGfHeader && !item.isBmrHeader && !item.isAbbreviationTable ? `<span class="block-label">${item.label} ${item.locked ? '<i class="fas fa-lock ms-1 small"></i>' : ''}</span>` : ''}
+                                ${item.type !== 'static-text' && item.type !== 'section' && item.type !== 'page-break' && !window.isExecutionMode && item.label && item.label !== 'null' && !item.isGfHeader && !item.isBmrHeader && !item.isAbbreviationTable ? `<span class="block-label">${item.label} ${item.locked ? '<i class="fas fa-lock ms-1 small"></i>' : ''}</span>` : ''}
                                 ${content}
                             `;
         return div;
@@ -702,7 +790,7 @@
                         pageBreak.className = 'page-break-divider my-4 d-flex align-items-center justify-content-center';
                         const parts = (itemSectionId || '').split('_');
                         const labelText = parts.length > 1 ? `Công đoạn ${parts[parts.length-1]}` : 'Phân đoạn mới';
-                        pageBreak.innerHTML = `<span class="bg-light px-3 py-1 rounded-pill small fw-bold text-muted border"><i class="fas fa-file-alt me-2"></i>${labelText}</span>`;
+                        pageBreak.innerHTML = ``;
                         container.appendChild(pageBreak);
                     }
 

@@ -194,6 +194,39 @@
         if (isExecute) {
             // Bỏ chọn khối hiện tại khi chạy thử
             selectedId = null;
+        } else {
+            // Xóa các dòng được sinh ra trong lúc chạy thử
+            if (typeof items !== 'undefined') {
+                items.forEach(item => {
+                    if (item.type === 'table' && item.data) {
+                        const originalData = [];
+                        const originalHeights = [];
+                        let removedCount = 0;
+                        for (let r = 0; r < item.data.length; r++) {
+                            const row = item.data[r];
+                            let isDynamic = false;
+                            for (let c = 0; c < row.length; c++) {
+                                if (row[c] && row[c].is_dynamic) {
+                                    isDynamic = true;
+                                    break;
+                                }
+                            }
+                            if (!isDynamic) {
+                                originalData.push(row);
+                                originalHeights.push(item.rowHeights ? item.rowHeights[r] : 'auto');
+                            } else {
+                                removedCount++;
+                            }
+                        }
+                        if (removedCount > 0) {
+                            item.data = originalData;
+                            item.rowHeights = originalHeights;
+                            item.rows = originalData.length;
+                            item.dirty = true;
+                        }
+                    }
+                });
+            }
         }
 
         // Render lại hồ sơ để áp dụng các thay đổi logic (ví dụ: ẩn nút thêm khối)
@@ -560,10 +593,10 @@
             id: id,
             type: type,
             section_id: sectionId,
-            label: (type === 'static-text' ? 'Ghi chú' : 'Tiêu đề ' + type),
+            label: (type === 'static-text' ? 'Ghi chú' : (type === 'page-break' ? 'Ngắt trang' : 'Tiêu đề ' + type)),
             content: defaultContent,
             columns: [],
-            borderMode: type === 'static-text' ? 'none' : 'visible',
+            borderMode: (type === 'static-text' || type === 'page-break') ? 'none' : 'visible',
             dirty: true
         };
 
@@ -6345,41 +6378,24 @@
     
     // Gắn sự kiện chọn nhiều ô và context menu trong chế độ thực thi
     document.addEventListener('DOMContentLoaded', () => {
-        const container = document.getElementById('editor-content');
-        if (!container) return;
+        // Gắn sự kiện click để đóng design context menu khi click ra ngoài
+        document.addEventListener('click', (e) => {
+            hideDesignContextMenu();
 
-        // Context Menu khi right-click
-        container.addEventListener('contextmenu', (e) => {
-            if (!window.isExecutionMode) return;
-            const targetCell = e.target.closest('.execution-input-cell, td');
-            if (!targetCell) return;
-            
-            e.preventDefault();
-
-            // Nếu ô click không nằm trong danh sách đang chọn, chọn riêng ô đó
-            if (!executionSelectedCells.includes(targetCell)) {
-                clearExecutionSelection();
-                targetCell.classList.add('cell-selected-execution');
-                executionSelectedCells.push(targetCell);
-            }
-
-            // Hiển thị menu N/A tùy chỉnh
-            showNAMenu(e.pageX, e.pageY);
-        });
-
-        // Click để chọn vùng (Đơn giản hóa: ctrl/shift click hoặc drag)
-        container.addEventListener('click', (e) => {
+            // Xử lý click chọn ô trong execution mode
             if (!window.isExecutionMode) return;
             hideNAMenu();
-
+            const container = document.getElementById('editor-content');
+            if (!container || !container.contains(e.target)) {
+                clearExecutionSelection();
+                return;
+            }
             const targetCell = e.target.closest('td');
             if (!targetCell) {
                 clearExecutionSelection();
                 return;
             }
-
             if (e.ctrlKey || e.shiftKey) {
-                // Multi-select
                 if (executionSelectedCells.includes(targetCell)) {
                     targetCell.classList.remove('cell-selected-execution');
                     executionSelectedCells = executionSelectedCells.filter(c => c !== targetCell);
@@ -6388,12 +6404,49 @@
                     executionSelectedCells.push(targetCell);
                 }
             } else {
-                // Mặc định click không có phím bổ trợ sẽ vẫn làm hành động mặc định của cell (ví dụ mở modal nhập)
-                // Do đó chỉ xóa selection cũ đi
                 clearExecutionSelection();
             }
             toggleNAZoneButton();
         });
+    });
+
+    // Gắn contextmenu lên document (không phụ thuộc vào editor-content tồn tại hay chưa)
+    document.addEventListener('contextmenu', (e) => {
+        const container = document.getElementById('editor-content');
+        // Chỉ xử lý khi click nằm trong editor-content
+        if (!container || !container.contains(e.target)) return;
+
+        // ── CHẾ ĐỘ THIẾT KẾ: context menu cho Ngắt trang ──
+        if (!window.isExecutionMode) {
+            e.preventDefault();
+            const blockEl = e.target.closest('.block-item');
+            const isOnPageBreak = blockEl && blockEl.classList.contains('type-page-break');
+            let insertIdx = null;
+            if (blockEl) {
+                const blockId = blockEl.getAttribute('data-id');
+                const idx = items.findIndex(i => i.id === blockId);
+                insertIdx = idx !== -1 ? idx + 1 : null;
+            }
+            // Dùng clientX/clientY vì menu dùng position: fixed
+            showDesignContextMenu(e.clientX, e.clientY, isOnPageBreak, blockEl, insertIdx);
+            return;
+        }
+
+        // ── CHẾ ĐỘ CHẠY THỬ: context menu N/A ──
+        const targetCell = e.target.closest('.execution-input-cell, td');
+        if (!targetCell) return;
+
+        e.preventDefault();
+
+        // Nếu ô click không nằm trong danh sách đang chọn, chọn riêng ô đó
+        if (!executionSelectedCells.includes(targetCell)) {
+            clearExecutionSelection();
+            targetCell.classList.add('cell-selected-execution');
+            executionSelectedCells.push(targetCell);
+        }
+
+        // Hiển thị menu N/A tùy chỉnh (cũng dùng clientX/clientY)
+        showNAMenu(e.clientX, e.clientY);
     });
 
     function showNAMenu(x, y) {
@@ -6423,6 +6476,94 @@
         const menu = document.getElementById('na-context-menu');
         if (menu) menu.classList.remove('show');
     }
+
+    // ──────────────────────────────────────────────────────────────────
+    // CONTEXT MENU CHẾ ĐỘ THIẾT KẾ (Ngắt trang)
+    // ──────────────────────────────────────────────────────────────────
+    function showDesignContextMenu(x, y, isOnPageBreak, blockEl, insertIdx) {
+        let menu = document.getElementById('design-context-menu');
+        if (!menu) {
+            menu = document.createElement('div');
+            menu.id = 'design-context-menu';
+            menu.className = 'dropdown-menu shadow p-1';
+            menu.style.cssText = 'position:fixed; z-index:99999; min-width:220px; border-radius:8px;';
+            document.body.appendChild(menu);
+        }
+
+        menu.innerHTML = '';
+
+        // Tiêu đề menu
+        const title = document.createElement('div');
+        title.className = 'dropdown-header small text-muted text-uppercase fw-bold px-2 pb-1';
+        title.innerHTML = '<i class="fas fa-cut me-1"></i> Ngắt trang';
+        menu.appendChild(title);
+
+        const divider1 = document.createElement('div');
+        divider1.className = 'dropdown-divider my-1';
+        menu.appendChild(divider1);
+
+        if (!isOnPageBreak) {
+            // Chèn ngắt trang sau block đang click
+            const btnInsert = document.createElement('button');
+            btnInsert.className = 'dropdown-item rounded mb-1 small fw-bold';
+            btnInsert.innerHTML = '<i class="fas fa-cut me-2 text-secondary"></i> Chèn Ngắt trang tại đây';
+            btnInsert.onclick = () => {
+                hideDesignContextMenu();
+                saveState();
+                addItem('page-break', insertIdx);
+            };
+            menu.appendChild(btnInsert);
+        } else {
+            // Xóa ngắt trang đang được click
+            const btnRemove = document.createElement('button');
+            btnRemove.className = 'dropdown-item rounded mb-1 small fw-bold text-danger';
+            btnRemove.innerHTML = '<i class="fas fa-trash me-2"></i> Xóa Ngắt trang này';
+            btnRemove.onclick = () => {
+                hideDesignContextMenu();
+                if (blockEl) {
+                    const blockId = blockEl.getAttribute('data-id');
+                    removePageBreak(blockId);
+                }
+            };
+            menu.appendChild(btnRemove);
+        }
+
+        // Căn chỉnh tọa độ để menu không bị tràn màn hình
+        menu.style.left = x + 'px';
+        menu.style.top = y + 'px';
+        menu.classList.add('show');
+
+        // Tự đóng khi click ra ngoài
+        const closeOnOutside = (ev) => {
+            if (!menu.contains(ev.target)) {
+                hideDesignContextMenu();
+                document.removeEventListener('click', closeOnOutside, true);
+            }
+        };
+        setTimeout(() => document.addEventListener('click', closeOnOutside, true), 50);
+    }
+
+    function hideDesignContextMenu() {
+        const menu = document.getElementById('design-context-menu');
+        if (menu) menu.classList.remove('show');
+    }
+
+    /**
+     * Xóa một khối "Ngắt trang" khỏi thiết kế.
+     * @param {string} itemId - ID của khối cần xóa.
+     */
+    function removePageBreak(itemId) {
+        const idx = items.findIndex(i => i.id === itemId && i.type === 'page-break');
+        if (idx === -1) {
+            toastr.warning('Không tìm thấy khối Ngắt trang');
+            return;
+        }
+        saveState();
+        items.splice(idx, 1);
+        renderBlocks();
+        toastr.info('Đã xóa Ngắt trang');
+    }
+    window.removePageBreak = removePageBreak;
 
     function clearExecutionSelection() {
         executionSelectedCells.forEach(c => c.classList.remove('cell-selected-execution'));

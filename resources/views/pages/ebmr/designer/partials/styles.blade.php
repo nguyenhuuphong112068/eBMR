@@ -675,6 +675,20 @@
         .main-header, aside.main-sidebar, .control-sidebar {
             display: none !important;
         }
+
+        /* KHỐI NGẮT TRANG: ẩn đường giao diện, nhưng GIỮ block-item để CSS page-break hoạt động */
+        .type-page-break .page-break-block {
+            display: none !important;
+        }
+        .type-page-break {
+            page-break-after: always !important;
+            break-after: page !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            height: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+        }
         
         #canvas-col {
             width: 100% !important;
@@ -2687,24 +2701,22 @@
         box-shadow: 0 2px 5px rgba(0,0,0,0.05);
     }
     
-    /* Make all insert-dividers prominent drop zones while dragging */
+    /* Make all insert-dividers prominent drop zones while dragging without changing layout height */
     body.component-dragging .insert-divider {
-        height: 30px !important;
         background-color: rgba(2, 132, 199, 0.05) !important;
-        border: 2px dashed rgba(2, 132, 199, 0.3) !important;
-        margin: 8px 0 !important;
         border-radius: 4px;
         transition: all 0.2s;
     }
     
     body.component-dragging .insert-divider::before {
-        content: "Thả Thành phần vào đây";
+        content: "Thả vào đây";
         display: block;
         text-align: center;
-        color: rgba(2, 132, 199, 0.6);
-        font-weight: 500;
-        font-size: 11px;
-        line-height: 26px;
+        color: rgba(2, 132, 199, 0.8);
+        font-weight: 600;
+        font-size: 10px;
+        line-height: 12px;
+        background: transparent;
     }
     
     body.component-dragging .insert-divider .insert-click-zone,
@@ -2712,16 +2724,22 @@
     body.component-dragging .insert-divider .insert-menu {
         display: none !important;
     }
-    
-    /* Make the last divider expand to fill bottom empty space */
+
+    /* Mở rộng khe cuối cùng để dễ thả vào cuối trang mà không làm nhảy các khối bên trên */
     body.component-dragging .insert-divider:last-child {
-        min-height: 150px !important;
+        height: 150px !important;
+        padding-top: 10px;
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: center;
+        background-color: rgba(2, 132, 199, 0.05) !important;
+        border: 2px dashed rgba(2, 132, 199, 0.3) !important;
     }
     body.component-dragging .insert-divider:last-child::before {
-        content: "Thả Thành phần vào cuối văn bản";
+        content: "Thả vào cuối trang";
+        font-size: 14px;
+        line-height: 20px;
+        margin-top: 20px;
     }
 
     /* Drag over insert divider */

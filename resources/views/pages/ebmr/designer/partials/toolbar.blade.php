@@ -140,6 +140,10 @@
                     <i class="fas fa-layer-group"></i>
                 </button>
                 @endif
+                <button class="btn btn-toolbar-action text-secondary fw-bold" onmousedown="event.preventDefault();"
+                    onclick="addItem('page-break')" title="Chèn Ngắt trang (Page Break) — Phân tách bước/trang">
+                    <i class="fas fa-cut"></i>
+                </button>
                 <button class="btn btn-toolbar-action text-success fw-bold" onmousedown="event.preventDefault();"
                     onclick="openMasterFormModal()" title="Nhập từ Biểu mẫu gốc (MF)">
                     <i class="fas fa-file-import"></i>
