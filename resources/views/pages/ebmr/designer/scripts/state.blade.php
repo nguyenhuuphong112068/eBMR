@@ -769,6 +769,7 @@
                 sumPercent = 0,
                 sumBatch = 0;
             let notesHtml = '';
+            let cellNoteCounter = 0;
 
             typeFormulas.forEach(formula => {
                 const stt = (++count);
@@ -835,13 +836,15 @@
                         maximumFractionDigits: 2
                     }) : '';
 
-                    // Xử lý hiển thị phép nhân cho batch size nếu có batch_qty
-                    if (batchVal > 0 && t.batch_qty > 0 && unitVal > 0 && t.raw_batch_size > 0) {
+                    if (formula.number_of_lots > 1 && formula.amounts_of_lots > 0) {
+                        let amountOfLotsVal = parseFloat(formula.amounts_of_lots);
+                        batchText = `${Number(batchVal).toLocaleString('vi-VN', {minimumFractionDigits: 2, maximumFractionDigits: 2})} = ${Number(amountOfLotsVal).toLocaleString('vi-VN', {minimumFractionDigits: 2, maximumFractionDigits: 4})} x ${formula.number_of_lots}`;
+                    } else if (batchVal > 0 && t.batch_qty > 0 && unitVal > 0 && t.raw_batch_size > 0) {
                         let singleBatchVal = (unitVal * t.raw_batch_size) / t.avg_core;
                         if (!singleBatchVal) singleBatchVal = batchVal / t.batch_qty;
                         if (Math.abs(singleBatchVal * t.batch_qty - batchVal) < 0.1) {
                             batchText =
-                                `${Number(batchVal).toLocaleString('vi-VN', {minimumFractionDigits: 2, maximumFractionDigits: 2})} = ${Number(singleBatchVal).toLocaleString('vi-VN', {minimumFractionDigits: 2, maximumFractionDigits: 2})} x ${t.batch_qty}`;
+                                `${Number(batchVal).toLocaleString('vi-VN', {minimumFractionDigits: 2, maximumFractionDigits: 2})} = ${Number(singleBatchVal).toLocaleString('vi-VN', {minimumFractionDigits: 2, maximumFractionDigits: 4})} x ${t.batch_qty}`;
                         }
                     }
                 }
@@ -851,7 +854,55 @@
                     if (batchText) batchText = `(${batchText})`;
                 }
 
+                let cellNotesForm = formula.cell_notes || {};
+                if (typeof cellNotesForm === 'string') {
+                    try { cellNotesForm = JSON.parse(cellNotesForm); } catch(e) { cellNotesForm = {}; }
+                }
+                if (cellNotesForm.total_amount_per_unit) {
+                    cellNoteCounter++;
+                    unitText += `<sup>(*${cellNoteCounter})</sup>`;
+                    notesHtml += `<div class="mb-1"><i class="fas fa-info-circle me-1" style="color: #17a2b8;"></i> <strong style="color: #17a2b8;">(*${cellNoteCounter}):</strong> ${cellNotesForm.total_amount_per_unit.replace(/\n/g, '<br>')}</div>`;
+                }
+                if (cellNotesForm.total_amount_per_batch) {
+                    cellNoteCounter++;
+                    batchText += `<sup>(*${cellNoteCounter})</sup>`;
+                    notesHtml += `<div class="mb-1"><i class="fas fa-info-circle me-1" style="color: #17a2b8;"></i> <strong style="color: #17a2b8;">(*${cellNoteCounter}):</strong> ${cellNotesForm.total_amount_per_batch.replace(/\n/g, '<br>')}</div>`;
+                }
+
                 materials.forEach((mat, mIdx) => {
+                    let cellNotesMat = mat.cell_notes || {};
+                    if (typeof cellNotesMat === 'string') {
+                        try { cellNotesMat = JSON.parse(cellNotesMat); } catch(e) { cellNotesMat = {}; }
+                    }
+
+                    let codeContent = (mat.code || '').replace(/\n/g, '<br>');
+                    if (cellNotesMat.code) {
+                        cellNoteCounter++;
+                        codeContent += `<sup>(*${cellNoteCounter})</sup>`;
+                        notesHtml += `<div class="mb-1"><i class="fas fa-info-circle me-1" style="color: #17a2b8;"></i> <strong style="color: #17a2b8;">(*${cellNoteCounter}):</strong> ${cellNotesMat.code.replace(/\n/g, '<br>')}</div>`;
+                    }
+                    
+                    let nameContent = (mat.name || '').replace(/\n/g, '<br>');
+                    if (cellNotesMat.name) {
+                        cellNoteCounter++;
+                        nameContent += `<sup>(*${cellNoteCounter})</sup>`;
+                        notesHtml += `<div class="mb-1"><i class="fas fa-info-circle me-1" style="color: #17a2b8;"></i> <strong style="color: #17a2b8;">(*${cellNoteCounter}):</strong> ${cellNotesMat.name.replace(/\n/g, '<br>')}</div>`;
+                    }
+
+                    let manufContent = (mat.manufacturer || '').replace(/\n/g, '<br>');
+                    if (cellNotesMat.manufacturer) {
+                        cellNoteCounter++;
+                        manufContent += `<sup>(*${cellNoteCounter})</sup>`;
+                        notesHtml += `<div class="mb-1"><i class="fas fa-info-circle me-1" style="color: #17a2b8;"></i> <strong style="color: #17a2b8;">(*${cellNoteCounter}):</strong> ${cellNotesMat.manufacturer.replace(/\n/g, '<br>')}</div>`;
+                    }
+
+                    let specContent = (mat.Spec || '').replace(/\n/g, '<br>');
+                    if (cellNotesMat.Spec) {
+                        cellNoteCounter++;
+                        specContent += `<sup>(*${cellNoteCounter})</sup>`;
+                        notesHtml += `<div class="mb-1"><i class="fas fa-info-circle me-1" style="color: #17a2b8;"></i> <strong style="color: #17a2b8;">(*${cellNoteCounter}):</strong> ${cellNotesMat.Spec.replace(/\n/g, '<br>')}</div>`;
+                    }
+
                     if (mIdx === 0) {
                         data.push([{
                                 content: String(stt),
@@ -861,13 +912,13 @@
                                 fontWeight: 'bold'
                             },
                             {
-                                content: mat.code || '',
+                                content: codeContent,
                                 rs: 1,
                                 cs: 1,
                                 textAlign: 'center'
                             },
                             {
-                                content: mat.name || '',
+                                content: nameContent,
                                 rs: 1,
                                 cs: 1,
                                 textAlign: 'left'
@@ -879,13 +930,13 @@
                                 textAlign: 'center'
                             },
                             {
-                                content: mat.Spec || '',
+                                content: specContent,
                                 rs: 1,
                                 cs: 1,
                                 textAlign: 'center'
                             },
                             {
-                                content: mat.manufacturer || '',
+                                content: manufContent,
                                 rs: 1,
                                 cs: 1,
                                 textAlign: 'left'
@@ -915,13 +966,13 @@
                                 hidden: true
                             },
                             {
-                                content: mat.code || '',
+                                content: codeContent,
                                 rs: 1,
                                 cs: 1,
                                 textAlign: 'center'
                             },
                             {
-                                content: mat.name || '',
+                                content: nameContent,
                                 rs: 1,
                                 cs: 1,
                                 textAlign: 'left'
@@ -931,13 +982,13 @@
                                 hidden: true
                             },
                             {
-                                content: mat.Spec || '',
+                                content: specContent,
                                 rs: 1,
                                 cs: 1,
                                 textAlign: 'center'
                             },
                             {
-                                content: mat.manufacturer || '',
+                                content: manufContent,
                                 rs: 1,
                                 cs: 1,
                                 textAlign: 'left'

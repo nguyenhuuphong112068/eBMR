@@ -262,6 +262,35 @@
         justify-content: center;
     }
 
+    .execution-input-cell--sig:hover {
+        background-color: #f0fdf4 !important;
+        cursor: pointer;
+    }
+
+    /* N/A State Styling */
+    .cell-na-state {
+        position: relative;
+    }
+    .cell-na-state::after {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(0,0,0,0.06) 10px, rgba(0,0,0,0.06) 20px);
+        pointer-events: none;
+        z-index: 5;
+    }
+    .cell-na-state .cell-wrapper {
+        opacity: 0.4;
+        pointer-events: none !important;
+    }
+    .cell-na-state .ebmr-field-badge,
+    .cell-na-state input,
+    .cell-na-state select,
+    .cell-na-state textarea,
+    .cell-na-state .execution-badge {
+        pointer-events: none !important;
+    }
+
     .page-break-badge {
         background-color: #cbd5e1 !important;
         color: white !important;
@@ -325,6 +354,7 @@
         const div = document.createElement('div');
         div.className = `block-item type-${item.type} ${selectedId === item.id ? 'active' : ''} ${isRangeMember ? 'selected-range-member' : ''} ${window.isExecutionMode ? 'execution-mode' : ''}`;
         div.setAttribute('data-id', item.id);
+        div.setAttribute('data-block-key', blockKey);
 
         if (item.marginLeft) div.style.marginLeft = item.marginLeft;
         if (item.marginRight) div.style.marginRight = item.marginRight;
@@ -418,29 +448,35 @@
                         const runVal = runDataForBlock[`${r}_${c}`];
                         const isNA = runDataForBlock._na_state && runDataForBlock._na_state[`${r}_${c}`];
 
+                        // Bỏ qua logic cũ nếu trong ô có chứa thẻ biến số động (tránh ghi đè toàn bộ nội dung ô)
+                        const hasDynamicFields = cell.content && cell.content.includes('ebmr-field-badge');
+                        
+                        if (!hasDynamicFields) {
+                            if (displayContent.includes('[Nhập dữ liệu]')) {
+                                cellClass += "execution-input-cell ";
+                                onclickAttr = isNA ? '' : `onclick="if(event.ctrlKey || event.shiftKey) return; openExecutionInputModal('${blockKey}', ${r}, ${c}, 'text')"`;
+                                displayContent = runVal ? `<span style="color: #2563eb; font-weight: 500;">${runVal}</span>` : `<span class="execution-badge input"><i class="fas fa-edit"></i> [Nhập dữ liệu]</span>`;
+                            } else if (displayContent.includes('[Ký tên]')) {
+                                cellClass += "execution-input-cell execution-input-cell--sig ";
+                                onclickAttr = isNA ? '' : `onclick="if(event.ctrlKey || event.shiftKey) return; openExecutionInputModal('${blockKey}', ${r}, ${c}, 'signature')"`;
+                                displayContent = runVal ? getSignatureDisplayHtml(runVal, 'signature') : `<span class="execution-badge signature"><i class="fas fa-pen"></i> [Ký tên]</span>`;
+                            } else if (displayContent.includes('[Tự động lấy thời gian]')) {
+                                cellClass += "execution-input-cell ";
+                                onclickAttr = isNA ? '' : `ondblclick="if(event.ctrlKey || event.shiftKey) return; autoFillTime('${blockKey}', ${r}, ${c})" title="Nháy đúp chuột (Double-click) để lấy ngày giờ hệ thống"`;
+                                displayContent = runVal ? `<span style="color: #2563eb; font-weight: 500;">${runVal}</span>` : `<span class="execution-badge time"><i class="fas fa-clock"></i> [Double-click lấy giờ]</span>`;
+                            } else if (displayContent.includes('[Người thực hiện]')) {
+                                cellClass += "execution-input-cell execution-input-cell--sig ";
+                                onclickAttr = isNA ? '' : `onclick="if(event.ctrlKey || event.shiftKey) return; autoFillExecutor('${blockKey}', ${r}, ${c})" title="Click để xác nhận người thực hiện"`;
+                                displayContent = runVal ? getSignatureDisplayHtml(runVal, 'executor') : `<span class="execution-badge executor"><i class="fas fa-user-edit"></i> [Người thực hiện]</span>`;
+                            } else if (displayContent.includes('[Người kiểm tra]')) {
+                                cellClass += "execution-input-cell execution-input-cell--sig ";
+                                onclickAttr = isNA ? '' : `onclick="if(event.ctrlKey || event.shiftKey) return; openCheckerAuthModal('${blockKey}', ${r}, ${c})" title="Click để xác thực người kiểm tra"`;
+                                displayContent = runVal ? getSignatureDisplayHtml(runVal, 'checker') : `<span class="execution-badge checker"><i class="fas fa-check-double"></i> [Người kiểm tra]</span>`;
+                            }
+                        }
+
                         if (isNA) {
                             cellClass += "cell-na-state strike-through-zone ";
-                            onclickAttr = '';
-                        } else if (displayContent.includes('[Nhập dữ liệu]')) {
-                            cellClass += "execution-input-cell ";
-                            onclickAttr = `onclick="if(event.ctrlKey || event.shiftKey) return; openExecutionInputModal('${blockKey}', ${r}, ${c}, 'text')"`;
-                            displayContent = runVal ? `<span style="color: #2563eb; font-weight: 500;">${runVal}</span>` : `<span class="execution-badge input"><i class="fas fa-edit"></i> [Nhập dữ liệu]</span>`;
-                        } else if (displayContent.includes('[Ký tên]')) {
-                            cellClass += "execution-input-cell execution-input-cell--sig ";
-                            onclickAttr = `onclick="if(event.ctrlKey || event.shiftKey) return; openExecutionInputModal('${blockKey}', ${r}, ${c}, 'signature')"`;
-                            displayContent = runVal ? getSignatureDisplayHtml(runVal, 'signature') : `<span class="execution-badge signature"><i class="fas fa-pen"></i> [Ký tên]</span>`;
-                        } else if (displayContent.includes('[Tự động lấy thời gian]')) {
-                            cellClass += "execution-input-cell ";
-                            onclickAttr = `ondblclick="if(event.ctrlKey || event.shiftKey) return; autoFillTime('${blockKey}', ${r}, ${c})" title="Nháy đúp chuột (Double-click) để lấy ngày giờ hệ thống"`;
-                            displayContent = runVal ? `<span style="color: #2563eb; font-weight: 500;">${runVal}</span>` : `<span class="execution-badge time"><i class="fas fa-clock"></i> [Double-click lấy giờ]</span>`;
-                        } else if (displayContent.includes('[Người thực hiện]')) {
-                            cellClass += "execution-input-cell execution-input-cell--sig ";
-                            onclickAttr = `onclick="if(event.ctrlKey || event.shiftKey) return; autoFillExecutor('${blockKey}', ${r}, ${c})" title="Click để xác nhận người thực hiện"`;
-                            displayContent = runVal ? getSignatureDisplayHtml(runVal, 'executor') : `<span class="execution-badge executor"><i class="fas fa-user-edit"></i> [Người thực hiện]</span>`;
-                        } else if (displayContent.includes('[Người kiểm tra]')) {
-                            cellClass += "execution-input-cell execution-input-cell--sig ";
-                            onclickAttr = `onclick="if(event.ctrlKey || event.shiftKey) return; openCheckerAuthModal('${blockKey}', ${r}, ${c})" title="Click để xác thực người kiểm tra"`;
-                            displayContent = runVal ? getSignatureDisplayHtml(runVal, 'checker') : `<span class="execution-badge checker"><i class="fas fa-check-double"></i> [Người kiểm tra]</span>`;
                         }
                     } else {
                         finalEditable = (item.locked || window.isReadOnly) ? 'false' : 'true';
@@ -1344,7 +1380,7 @@
                         }
                         
                         if (metaText || historyBadge) {
-                            metaHtml = `<div class="execution-meta" style="font-size: 10px; margin-top: 1px; text-align: center; white-space: nowrap;">${metaText} ${historyBadge}</div>`;
+                            metaHtml = `<div class="execution-meta execution-meta-variable" style="font-size: 10px; margin-top: 2px; text-align: center; white-space: nowrap; line-height: 1.1; pointer-events: none;">${metaText} <span style="pointer-events: auto;">${historyBadge}</span></div>`;
                         }
                     }
 
@@ -1374,7 +1410,7 @@
                                 signatureHtml = `<span class="badge bg-light text-primary border" style="cursor: ${window.isReadOnly ? 'default' : 'pointer'};" ${clickAttr}><i class="fas fa-signature me-1"></i> [Ký tên]</span>`;
                             }
                         }
-                        badge.innerHTML = `${signatureHtml}${metaHtml}`;
+                        badge.innerHTML = `${signatureHtml}`;
                         badge.className = 'ebmr-field-badge ebmr-field-value';
                     } else if (field.type === 'checkbox') {
                         let isChecked = false;
@@ -1401,14 +1437,14 @@
                         }
 
                         badge.innerHTML =
-                            `<span class="execution-checkbox-wrapper"><input type="checkbox" class="execution-checkbox" ${isChecked ? 'checked' : ''} ${disabledAttr} onchange="window.handleCheckboxChange('${fieldId + loopSuffix}', this.checked, this)">${metaHtml}</span>`;
+                            `<span class="execution-checkbox-wrapper"><input type="checkbox" class="execution-checkbox" ${isChecked ? 'checked' : ''} ${disabledAttr} onchange="window.handleCheckboxChange('${fieldId + loopSuffix}', this.checked, this)"></span>`;
                         badge.className = 'ebmr-field-badge ebmr-field-value';
                     } else if (field.type === 'select') {
                         const dsType = field.dataSource ? field.dataSource.type : 'manual';
                         if (dsType === 'database') {
                             const ds = field.dataSource;
                             badge.innerHTML =
-                                `<select class="form-select-sm border-0 border-bottom bg-transparent dynamic-select" data-field-id="${fieldId + loopSuffix}" data-table="${ds.table || ''}" data-label="${ds.labelCol || ''}" data-value="${ds.valueCol || ''}" data-where="${ds.where || ''}" data-selected="${val}" ${window.isReadOnly ? 'disabled' : ''} onchange="window.handleSelectChange('${fieldId + loopSuffix}', this.value, this)"><option value="">-- Đang tải... --</option></select>${metaHtml}`;
+                                `<select class="form-select-sm border-0 border-bottom bg-transparent dynamic-select" data-field-id="${fieldId + loopSuffix}" data-table="${ds.table || ''}" data-label="${ds.labelCol || ''}" data-value="${ds.valueCol || ''}" data-where="${ds.where || ''}" data-selected="${val}" ${window.isReadOnly ? 'disabled' : ''} onchange="window.handleSelectChange('${fieldId + loopSuffix}', this.value, this)"><option value="">-- Đang tải... --</option></select>`;
                         } else {
                             let optionsArr = [];
                             if (Array.isArray(field.options)) {
@@ -1417,7 +1453,7 @@
                                 optionsArr = field.options.split(/[,;\n]/).map(o => o.trim()).filter(o => o);
                             }
                             badge.innerHTML =
-                                `<select class="form-select-sm border-0 border-bottom bg-transparent" ${window.isReadOnly ? 'disabled' : ''} onchange="window.handleSelectChange('${fieldId + loopSuffix}', this.value)"><option value="">--</option>${optionsArr.map(o => `<option value="${o}" ${val === o ? 'selected' : ''}>${o}</option>`).join('')}</select>${metaHtml}`;
+                                `<select class="form-select-sm border-0 border-bottom bg-transparent" ${window.isReadOnly ? 'disabled' : ''} onchange="window.handleSelectChange('${fieldId + loopSuffix}', this.value)"><option value="">--</option>${optionsArr.map(o => `<option value="${o}" ${val === o ? 'selected' : ''}>${o}</option>`).join('')}</select>`;
                         }
                         badge.className = 'ebmr-field-badge ebmr-field-value';
                     } else if (field.type === 'date') {
@@ -1427,7 +1463,7 @@
                         const titleAttr = isNow ? 'title="Nhấp chuột để tự động điền ngày giờ hệ thống"' : '';
                         
                         badge.innerHTML =
-                            `<span class="execution-input-test" ${!window.isReadOnly ? `onclick="handleDateVariableClick(event, '${fieldId + loopSuffix}', ${isNow})"` : ''} style="cursor: ${window.isReadOnly ? 'default' : 'pointer'}; border-bottom: 1px dotted #1a73e8; min-width: 30px; display: inline-block; outline: none; position: relative;" ${titleAttr}>${displayVal || `<span style="color: #6c757d; font-style: italic;">${placeholder}</span>`}${metaHtml}</span>`;
+                            `<span class="execution-input-test" ${!window.isReadOnly ? `onclick="handleDateVariableClick(event, '${fieldId + loopSuffix}', ${isNow})"` : ''} style="cursor: ${window.isReadOnly ? 'default' : 'pointer'}; border-bottom: 1px dotted #1a73e8; min-width: 30px; display: inline-block; outline: none; position: relative;" ${titleAttr}>${displayVal || `<span style="color: #6c757d; font-style: italic;">${placeholder}</span>`}</span>`;
                         badge.className = 'ebmr-field-badge ebmr-field-value';
                     } else {
                         // Các loại khác: Văn bản, Số
@@ -1463,7 +1499,7 @@
                             : '';
 
                         badge.innerHTML =
-                            `<span class="execution-input-test" ${!window.isReadOnly ? 'onclick="openVariableInputModal(\''+(fieldId + loopSuffix)+'\')"' : ''} style="cursor: ${window.isReadOnly ? 'default' : 'pointer'}; border-bottom: 1px dotted #1a73e8; min-width: 30px; display: inline-block; outline: none; position: relative; ${extraStyle}">${displayVal || `<span style="color: #6c757d; font-style: italic;">${placeholder}</span>`}${metaHtml}</span>${scaleBtnHtml}`;
+                            `<span class="execution-input-test" ${!window.isReadOnly ? 'onclick="openVariableInputModal(\''+(fieldId + loopSuffix)+'\')"' : ''} style="cursor: ${window.isReadOnly ? 'default' : 'pointer'}; border-bottom: 1px dotted #1a73e8; min-width: 30px; display: inline-block; outline: none; position: relative; ${extraStyle}">${displayVal || `<span style="color: #6c757d; font-style: italic;">${placeholder}</span>`}</span>${scaleBtnHtml}`;
                         badge.className = 'ebmr-field-badge ebmr-field-value';
                     }
                     
@@ -1471,6 +1507,23 @@
                         badge.className += ' cell-na-state strike-through-zone';
                         badge.style.pointerEvents = 'none';
                         badge.innerHTML = `<span style="opacity:0.4">${badge.innerHTML}</span>`;
+                    }
+                    
+                    if (metaHtml) {
+                        const wrapper = document.createElement('div');
+                        wrapper.className = 'ebmr-field-with-meta';
+                        wrapper.style.display = 'inline-flex';
+                        wrapper.style.flexDirection = 'column';
+                        wrapper.style.alignItems = 'center';
+                        wrapper.style.verticalAlign = 'middle';
+                        wrapper.style.margin = '0 2px';
+                        
+                        // Move badge into wrapper
+                        badge.parentNode.insertBefore(wrapper, badge);
+                        wrapper.appendChild(badge);
+                        
+                        // Add meta below badge
+                        wrapper.insertAdjacentHTML('beforeend', metaHtml);
                     }
                 }
                 // TRƯỜNG HỢP 2: Chế độ THIẾT KẾ (Hiển thị badge kèm icon loại dữ liệu)
@@ -1505,7 +1558,7 @@
                         const testResult = calculateFormula(field.formula || '', dPlaces, field.id);
  
                         // Resolve IDs to Labels for display
-                        const formulaDisplay = (field.formula || '').replace(/\(([^)]+)\)/g, (match, id) => {
+                        const formulaDisplay = (field.formula || '').replace(/\(([^()]+)\)/g, (match, id) => {
                             const targetField = Object.values(fieldsConfig).find(f => f.name === id || f
                                 .label === id);
                             return targetField ? (targetField.label || id) : id;
@@ -1660,6 +1713,7 @@
             calculatingFields.add(targetFieldId);
         }
 
+        let processed = formula;
         try {
             const valMap = {};
             const dPlaces = (decimalPlaces !== null && decimalPlaces !== '') ? parseInt(decimalPlaces) : 2;
@@ -1728,7 +1782,7 @@
 
             // BƯỚC 3: Thay thế các định danh trong công thức bằng giá trị thực tế
             // Ví dụ: "(kl_tong) - (kl_bao)" -> "100 - 5"
-            let processed = formula.replace(/\(([^)]+)\)/g, (match, id) => {
+            processed = formula.replace(/\(([^()]+)\)/g, (match, id) => {
                 const trimmedId = id.trim();
                 const loopedKey = trimmedId + loopSuffix;
                 if (valMap[loopedKey] !== undefined) {
@@ -1738,13 +1792,21 @@
             });
 
             // BƯỚC 4: Tính toán biểu thức toán học cơ bản bằng hàm Function (an toàn hơn eval một chút)
-            const result = new Function(`return ${processed}`)();
+            const result = new Function(`
+                const MAX = Math.max; const max = Math.max;
+                const MIN = Math.min; const min = Math.min;
+                const AVG = function(...args) { return args.length ? args.reduce((a,b)=>a+b,0)/args.length : 0; }; const avg = AVG;
+                const ROUND = function(val, dec) { const p = Math.pow(10, dec||0); return Math.round(val * p) / p; }; const round = ROUND;
+                return ${processed};
+            `)();
             // Định dạng kết quả hiển thị (phân tách hàng nghìn, số chữ số thập phân theo thiết lập)
             return (typeof result === 'number') ? result.toLocaleString('en-US', {
                 minimumFractionDigits: dPlaces,
                 maximumFractionDigits: dPlaces
             }) : result;
         } catch (e) {
+            // Không in ra console.error để tránh làm người dùng hoang mang khi họ gõ sai công thức
+            // console.warn('Cú pháp công thức chưa hoàn thiện hoặc bị sai:', formula);
             return '#ERR'; // Trả về lỗi nếu công thức không hợp lệ
         } finally {
             if (targetFieldId) {

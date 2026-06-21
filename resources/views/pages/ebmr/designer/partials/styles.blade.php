@@ -1368,8 +1368,8 @@
         box-shadow: 0 2px 4px rgba(217, 119, 6, 0.1);
         user-select: none;
         white-space: nowrap;
-        margin: 2px;
-        min-width: 80px;
+        margin: 2px 1px;
+        min-width: 30px;
         text-align: center;
         position: relative !important;
     }
@@ -2640,6 +2640,17 @@
         transition: all 0.2s;
         box-shadow: 0 0 10px rgba(99, 102, 241, 0.5) !important;
         z-index: 100 !important;
+        position: relative;
+    }
+
+    /* Đánh dấu biến mục tiêu (ô kết quả) của công thức */
+    .formula-target-highlight {
+        outline: 3px solid #10b981 !important;
+        outline-offset: -3px;
+        background-color: #d1fae5 !important;
+        transition: all 0.2s;
+        box-shadow: 0 0 10px rgba(16, 185, 129, 0.5) !important;
+        z-index: 101 !important;
         position: relative;
     }
 

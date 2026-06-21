@@ -315,7 +315,7 @@
         if (panel) panel.classList.remove('d-none');
         if (typeof updateRulerForCurrentBlock === 'function') updateRulerForCurrentBlock();
 
-        let html = `
+        let basicHtml = `
             <div class="mb-3 border-bottom pb-3">
                 <label class="form-label small fw-bold text-muted text-uppercase mb-2">Đổ màu khối / Ô chọn</label>
                 <div class="dropdown">
@@ -345,7 +345,7 @@
         `;
 
         if (item.type === 'table' || item.type === 'static-text') {
-            html += `
+            basicHtml += `
                 <div class="mb-3">
                     <label class="small fw-bold mb-2">Chế độ viền</label>
                     <div class="border-selector-grid d-flex flex-wrap gap-2">
@@ -388,8 +388,9 @@
             `;
         }
 
+        let toolsHtml = '';
         if (item.type === 'table') {
-            html += `
+            toolsHtml += `
                 <div class="mb-3">
                     <div class="form-check form-switch mb-1">
                         <input class="form-check-input" type="checkbox" id="hideHeaderCheck" ${!item.hideHeader ? 'checked' : ''} onchange="updateItemProp('hideHeader', !this.checked)">
@@ -406,6 +407,7 @@
                         <div class="form-text" style="font-size: 0.65rem;">Hệ thống sẽ nhân bản N dòng cuối.</div>
                     </div>` : '<div class="mb-3"></div>'}
 
+                    <hr class="text-muted opacity-25 my-3">
                     <label class="small fw-bold mb-2">Công cụ Bảng (${item.cols}x${item.rows})</label>
                     <div class="alert alert-info py-1 px-2 small mb-2" style="font-size: 0.7rem;">
                         Đang chọn: Hàng ${activeRowIdx === 0 ? 'Tiêu đề' : activeRowIdx}, Cột ${activeColIdx + 1}
@@ -429,7 +431,8 @@
                         </button>
                     </div>
 
-                    <label class="small fw-bold mt-3 mb-2">Cài đặt ô đang chọn</label>
+                    <hr class="text-muted opacity-25 my-3">
+                    <label class="small fw-bold mb-2">Cài đặt ô đang chọn</label>
                     <div class="row g-2 mb-3">
                         <div class="col-6">
                             <label class="small text-muted mb-1">Mã ID ô</label>
@@ -448,15 +451,15 @@
                         </div>
                     </div>
 
-
-
-                    <label class="small fw-bold mt-1 mb-2">Công cụ Bảng</label>
+                    <hr class="text-muted opacity-25 my-3">
+                    <label class="small fw-bold mb-2">Công cụ Bảng</label>
                     <div class="btn-group btn-group-sm w-100">
                         <button class="btn btn-outline-primary" id="mergeBtn" onclick="mergeSelectedCells()" title="Gộp các ô đã quét"><i class="fas fa-object-group"></i> Gộp ô</button>
                         <button class="btn btn-outline-primary" id="splitBtn" onclick="openSplitModal()" title="Tách ô chuyên sâu"><i class="fas fa-columns"></i> Tách ô</button>
                     </div>
 
-                    <label class="small fw-bold mt-3 mb-2">Kích thước ô</label>
+                    <hr class="text-muted opacity-25 my-3">
+                    <label class="small fw-bold mb-2">Kích thước ô</label>
                     <div class="row g-2 mb-2">
                         <div class="col-6">
                             <div class="input-group input-group-sm">
@@ -472,14 +475,71 @@
                         </div>
                     </div>
                 </div>
-
             `;
-        } else if (item.type === 'static-text') {
-            html += ``;
-        } else if (item.type === 'section') {
-            // Section has no sidebar configuration
         }
-        body.innerHTML = html;
+
+        let finalHtml = '';
+        if (item.type === 'table') {
+            finalHtml = `
+                <ul class="nav nav-tabs nav-fill mb-3 border-bottom-0" id="tablePropTabs" role="tablist" style="font-size: 0.8rem;">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active fw-bold text-primary px-1 py-2" id="table-basic-tab" data-bs-target="#table-prop-basic" type="button" role="tab" aria-controls="table-prop-basic" aria-selected="true" style="background-color: #f8f9fa; border-top: 3px solid #0d6efd; border-radius: 0;">
+                            <i class="fas fa-sliders-h d-block mb-1" style="font-size: 1.1rem;"></i> Cơ bản
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link fw-bold text-success px-1 py-2" id="table-tool-tab" data-bs-target="#table-prop-tool" type="button" role="tab" aria-controls="table-prop-tool" aria-selected="false" style="background-color: #f8f9fa; border-top: 3px solid transparent; border-radius: 0;" onfocus="this.style.borderTopColor='#198754'" onblur="this.style.borderTopColor='transparent'">
+                            <i class="fas fa-table d-block mb-1" style="font-size: 1.1rem;"></i> Công cụ bảng
+                        </button>
+                    </li>
+                </ul>
+                <div class="tab-content" id="tablePropTabsContent">
+                    <div class="tab-pane fade show active" id="table-prop-basic" role="tabpanel" aria-labelledby="table-basic-tab">
+                        ${basicHtml}
+                    </div>
+                    <div class="tab-pane fade" id="table-prop-tool" role="tabpanel" aria-labelledby="table-tool-tab">
+                        ${toolsHtml}
+                    </div>
+                </div>
+            `;
+        } else {
+            finalHtml = basicHtml;
+        }
+
+        if (item.type === 'section') {
+            // Section has no sidebar configuration
+            finalHtml = '';
+        }
+        body.innerHTML = finalHtml;
+
+        // Thêm event listener cho tab sau khi HTML đã được render
+        if (item.type === 'table') {
+            document.querySelectorAll('#tablePropTabs button.nav-link').forEach(tab => {
+                tab.addEventListener('click', event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const targetBtn = event.currentTarget;
+                    
+                    document.querySelectorAll('#tablePropTabs button.nav-link').forEach(b => {
+                        b.classList.remove('active', 'bg-white');
+                        b.style.borderTopColor = 'transparent';
+                    });
+                    
+                    targetBtn.classList.add('active', 'bg-white');
+                    if (targetBtn.id === 'table-basic-tab') targetBtn.style.borderTopColor = '#0d6efd';
+                    if (targetBtn.id === 'table-tool-tab') targetBtn.style.borderTopColor = '#198754';
+
+                    document.querySelectorAll('#tablePropTabsContent .tab-pane').forEach(p => {
+                        p.classList.remove('show', 'active');
+                    });
+                    const targetPaneId = targetBtn.getAttribute('data-bs-target');
+                    const targetPane = document.querySelector(targetPaneId);
+                    if (targetPane) {
+                        targetPane.classList.add('show', 'active');
+                    }
+                });
+            });
+        }
 
         // Initialize dynamic dropdowns for Bootstrap 4
         if (window.jQuery) {
@@ -2410,16 +2470,24 @@
         }
     };
 
-    window.highlightFormulaVars = function(formulaStr) {
+    window.highlightFormulaVars = function(formulaStr, targetFieldId = null) {
         document.querySelectorAll('.formula-var-highlight').forEach(el => el.classList.remove('formula-var-highlight'));
+        document.querySelectorAll('.formula-target-highlight').forEach(el => el.classList.remove('formula-target-highlight'));
+        if (!formulaStr && !targetFieldId) return;
+
+        if (targetFieldId) {
+            const targetBadges = document.querySelectorAll(`.ebmr-field-badge[data-field-id="${targetFieldId}"]`);
+            targetBadges.forEach(badge => badge.classList.add('formula-target-highlight'));
+        }
+
         if (!formulaStr) return;
         
         let match;
-        const regex = /\(([^)]+)\)/g;
+        const regex = /\(([^()]+)\)/g;
         while ((match = regex.exec(formulaStr)) !== null) {
             const idOrName = match[1];
             const targetField = Object.values(fieldsConfig).find(f => f.name === idOrName || f.label === idOrName || f.id === idOrName);
-            if (targetField) {
+            if (targetField && targetField.id !== targetFieldId) {
                 const badges = document.querySelectorAll(`.ebmr-field-badge[data-field-id="${targetField.id}"]`);
                 badges.forEach(badge => badge.classList.add('formula-var-highlight'));
             }
@@ -2566,71 +2634,183 @@
             if (isSidebarMinimized) toggleSidebar(false);
         }
 
+        
+        
         let typeHtml = `
+            <ul class="nav nav-tabs nav-fill mb-3 border-bottom-0" id="propTabs" role="tablist" style="font-size: 0.8rem;">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active fw-bold text-primary px-1 py-2" id="basic-tab" data-bs-target="#prop-basic" type="button" role="tab" aria-controls="prop-basic" aria-selected="true" style="background-color: #f8f9fa; border-top: 3px solid #0d6efd; border-radius: 0;">
+                        <i class="fas fa-sliders-h d-block mb-1" style="font-size: 1.1rem;"></i> Cơ bản
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link fw-bold text-success px-1 py-2" id="logic-tab" data-bs-target="#prop-logic" type="button" role="tab" aria-controls="prop-logic" aria-selected="false" style="background-color: #f8f9fa; border-top: 3px solid transparent; border-radius: 0;" onfocus="this.style.borderTopColor='#198754'" onblur="this.style.borderTopColor='transparent'">
+                        <i class="fas fa-calculator d-block mb-1" style="font-size: 1.1rem;"></i> Công thức
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link fw-bold text-warning px-1 py-2" id="advanced-tab" data-bs-target="#prop-advanced" type="button" role="tab" aria-controls="prop-advanced" aria-selected="false" style="background-color: #f8f9fa; border-top: 3px solid transparent; border-radius: 0;" onfocus="this.style.borderTopColor='#ffc107'" onblur="this.style.borderTopColor='transparent'">
+                        <i class="fas fa-tools d-block mb-1" style="font-size: 1.1rem;"></i> Mở rộng
+                    </button>
+                </li>
+            </ul>
+
+            <div class="tab-content p-2" id="propTabsContent">
+                <!-- TẤP 1: CƠ BẢN -->
+                <div class="tab-pane fade show active" id="prop-basic" role="tabpanel" aria-labelledby="basic-tab">
+                    <div class="mb-3">
+                        <label class="small fw-bold mb-2">Loại dữ liệu</label>
+                        <select class="form-select form-select-sm border-primary" onchange="syncFieldConfig('${fieldId}', 'type', this.value)">
+                            <option value="text" ${field.type === 'text' ? 'selected' : ''}>Văn bản tự do</option>
+                            <option value="number" ${field.type === 'number' ? 'selected' : ''}>Số liệu (Tính toán)</option>
+                            <option value="checkbox" ${field.type === 'checkbox' ? 'selected' : ''}>Hộp kiểm tra (Tick)</option>
+                            <option value="formula" ${field.type === 'formula' ? 'selected' : ''}>Công thức tự động (=)</option>
+                            <option value="date" ${field.type === 'date' ? 'selected' : ''}>Thời Gian</option>
+                            <option value="signature" ${field.type === 'signature' ? 'selected' : ''}>Chữ ký điện tử</option>
+                            <option value="select" ${field.type === 'select' ? 'selected' : ''}>Chọn từ danh sách (Dropdown)</option>
+                        </select>
+                    </div>
+                    <hr class="text-muted opacity-25 my-3">
+                    <div class="mb-3">
+                        <label class="small fw-bold text-muted text-uppercase mb-2">Tên thẻ (Nhãn hiển thị)</label>
+                        <input type="text" class="form-control form-control-sm" value="${field.label || ''}" oninput="syncFieldConfig('${fieldId}', 'label', this.value)">
+                        <div class="form-text small" style="font-size: 0.7rem;">Hiển thị cho người dùng. VD: Số lượng.</div>
+                    </div>
+                    <hr class="text-muted opacity-25 my-3">
+                    <div class="mb-3">
+                        <label class="small fw-bold text-muted text-uppercase mb-1"><i class="fas fa-fingerprint me-1"></i>Mã biến số (ID)</label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-light border-end-0">@</span>
+                            <input type="text" class="form-control border-start-0 font-monospace" value="${field.name || ''}" 
+                                   oninput="syncFieldConfig('${fieldId}', 'name', this.value)">
+                        </div>
+                        <div class="form-text small" style="font-size: 0.65rem;">Viết liền không dấu. VD: sl, kl_tong.</div>
+                    </div>
+                    <hr class="text-muted opacity-25 my-3">
+                    <div class="mb-2">
+                        <label class="small fw-bold text-muted text-uppercase mb-2">Giá trị mặc định</label>
+                        <input type="text" class="form-control form-control-sm" value="${field.defaultValue || ''}" placeholder="VD: 4.6" oninput="syncFieldConfig('${fieldId}', 'defaultValue', this.value); recalculateAllFormulas();">
+                        <div class="form-text small" style="font-size: 0.7rem;">Dùng để chạy thử ngay trong trình thiết kế.</div>
+                    </div>
+                </div>
+        `;
+
+        let logicHtml = `
             <div class="mb-3">
-                <label class="small fw-bold mb-2">Loại dữ liệu</label>
-                <select class="form-select form-select-sm" onchange="syncFieldConfig('${fieldId}', 'type', this.value)">
-                    <option value="text" ${field.type === 'text' ? 'selected' : ''}>Văn bản tự do</option>
-                    <option value="number" ${field.type === 'number' ? 'selected' : ''}>Số liệu (Tính toán)</option>
-                    <option value="checkbox" ${field.type === 'checkbox' ? 'selected' : ''}>Hộp kiểm tra (Tick)</option>
-                    <option value="formula" ${field.type === 'formula' ? 'selected' : ''}>Công thức tự động (=)</option>
-                    <option value="date" ${field.type === 'date' ? 'selected' : ''}>Thời Gian</option>
-                    <option value="signature" ${field.type === 'signature' ? 'selected' : ''}>Chữ ký điện tử</option>
+                <label class="small fw-bold text-success text-uppercase mb-2"><i class="fas fa-ban me-1"></i> Điều kiện Không áp dụng (N/A)</label>
+                <div class="p-2 border border-success border-opacity-50 rounded bg-light">
+                    <div class="mb-2">
+                        <label class="small fw-bold text-muted mb-1" style="font-size: 0.75em;">Mã ID Biến phụ thuộc</label>
+                        <input type="text" class="form-control form-control-sm border-success" placeholder="Nhập ID biến (VD: tram_1)" 
+                               value="${(field.na_condition && field.na_condition.target_id) ? field.na_condition.target_id : ''}" 
+                               oninput="syncFieldConfig('${fieldId}', 'na_condition.target_id', this.value)">
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-5">
+                            <label class="small fw-bold text-muted mb-1" style="font-size: 0.75em;">Toán tử</label>
+                            <select class="form-select form-select-sm border-success" onchange="syncFieldConfig('${fieldId}', 'na_condition.operator', this.value)">
+                                <option value="=" ${(field.na_condition && field.na_condition.operator === '=') ? 'selected' : ''}>Bằng (=)</option>
+                                <option value="!=" ${(field.na_condition && field.na_condition.operator === '!=') ? 'selected' : ''}>Khác (!=)</option>
+                            </select>
+                        </div>
+                        <div class="col-7">
+                            <label class="small fw-bold text-muted mb-1" style="font-size: 0.75em;">Giá trị</label>
+                            <input type="text" class="form-control form-control-sm border-success" placeholder="Giá trị so sánh" 
+                                   value="${(field.na_condition && field.na_condition.value) ? field.na_condition.value : ''}" 
+                                   oninput="syncFieldConfig('${fieldId}', 'na_condition.value', this.value)">
+                        </div>
+                    </div>
+                    <div class="form-text small mt-2" style="font-size: 0.65rem;">Nếu điều kiện đúng, biến này sẽ tự động chuyển thành N/A.</div>
+                </div>
+            </div>
+        `;
+        let advancedHtml = `
+            <div class="mb-3">
+                <label class="small fw-bold text-muted text-uppercase mb-1"><i class="fas fa-star text-warning me-1"></i>Thông số quan trọng (Critical Var)</label>
+                <select class="form-select form-select-sm border-warning shadow-sm" onchange="syncFieldConfig('${fieldId}', 'important_var_id', this.value)">
+                    <option value="">-- Không --</option>
+                    ${(window.importantVars || []).map(v => `<option value="${v.id}" ${field.important_var_id == v.id ? 'selected' : ''}>${v.name} (${v.description || ''})</option>`).join('')}
                 </select>
+                <div class="form-text small" style="font-size: 0.65rem;">Gắn cờ CPP/CMA để lọc báo cáo.</div>
+            </div>
+            <hr class="text-muted opacity-25 my-3">
+            <div class="mb-3">
+                <label class="small fw-bold text-primary text-uppercase mb-2"><i class="fas fa-info-circle me-1"></i> Hướng dẫn ghi chép</label>
+                <textarea class="form-control form-control-sm border-primary" rows="3" placeholder="VD: Kiểm tra nhiệt độ trước khi ghi..." oninput="syncFieldConfig('${fieldId}', 'instruction', this.value)">${field.instruction || ''}</textarea>
+                <div class="form-text small" style="font-size: 0.7rem;">Hiện nội dung này khi người thực hiện bấm vào ô nhập.</div>
+            </div>
+            <hr class="text-muted opacity-25 my-3">
+            <div class="mb-3">
+                <div class="form-check form-switch ps-4 pt-1">
+                    <input class="form-check-input ms-n4" type="checkbox" id="fieldRequired" ${field.validation.required ? 'checked' : ''} onchange="syncFieldConfig('${fieldId}', 'validation.required', this.checked)">
+                    <label class="form-check-label small fw-bold" for="fieldRequired">Bắt buộc điền</label>
+                </div>
+            </div>
+            <hr class="text-muted opacity-25 my-3">
+            <div class="card bg-light border-0 shadow-none mb-3">
+                <div class="card-body p-3">
+                    <label class="small fw-bold mb-2"><i class="fas fa-arrows-alt-h me-1"></i>Kích thước (CSS)</label>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <label class="small text-muted" style="font-size: 0.75em;">Chiều rộng (px)</label>
+                            <input type="number" class="form-control form-control-sm" placeholder="Mặc định" min="50"
+                                   value="${(field.style && field.style.width) ? parseInt(field.style.width) : ''}" 
+                                   oninput="const val = this.value ? this.value + 'px' : ''; syncFieldConfig('${fieldId}', 'style.width', val); const badge = document.querySelector('.ebmr-field-badge[data-field-id=\'${fieldId}\']'); if(badge) { if(val) badge.style.setProperty('width', val, 'important'); else badge.style.removeProperty('width'); }">
+                        </div>
+                        <div class="col-6">
+                            <label class="small text-muted" style="font-size: 0.75em;">Lề trái (px)</label>
+                            <input type="number" class="form-control form-control-sm" placeholder="Mặc định" min="0"
+                                   value="${(field.style && field.style.marginLeft) ? parseInt(field.style.marginLeft) : ''}" 
+                                   oninput="const val = this.value ? this.value + 'px' : ''; syncFieldConfig('${fieldId}', 'style.marginLeft', val); const badge = document.querySelector('.ebmr-field-badge[data-field-id=\'${fieldId}\']'); if(badge) { if(val) badge.style.setProperty('margin-left', val, 'important'); else badge.style.removeProperty('margin-left'); }">
+                        </div>
+                    </div>
+                </div>
             </div>
         `;
 
-        if (field.type === 'formula') {
-            // Find all numeric fields available in the document to help user
-            let numberFieldsOptions = '<option value="">-- Chọn biến số --</option>';
-            Object.values(fieldsConfig).forEach(f => {
-                if (f.type === 'number' || f.type === 'formula') {
-                    // Tránh vòng lặp (không tự thêm chính nó)
-                    if (f.id !== fieldId) {
-                        const displayName = f.label ? `${f.label} = ${f.name}` : f.name;
-                        numberFieldsOptions += `<option value="${f.name}">${displayName}</option>`;
-                    }
+        let numberFieldsOptions = '<option value="">-- Chọn biến số --</option>';
+        Object.values(fieldsConfig).forEach(f => {
+            if (f.type === 'number' || f.type === 'formula' || f.type === 'checkbox') {
+                if (f.id !== fieldId) {
+                    const displayName = f.label ? `${f.label} = ${f.name}` : f.name;
+                    numberFieldsOptions += `<option value="${f.name}">${displayName}</option>`;
                 }
-            });
+            }
+        });
 
-            typeHtml += `
+        if (field.type === 'formula') {
+
+            logicHtml += `
+                <hr class="text-muted opacity-25 my-3">
                 <div class="mb-3">
-                    <label class="small fw-bold text-primary mb-1"><i class="fas fa-calculator me-1"></i>Công thức tính</label>
+                    <label class="small fw-bold text-success mb-2"><i class="fas fa-calculator me-1"></i>Công thức tính toán</label>
                     <div class="input-group input-group-sm mb-2">
-                        <select class="form-select border-primary" style="max-width: 60%;" id="formula-var-helper" onchange="if(this.value) { const input = document.getElementById('formula-input-${fieldId}'); input.value += '(' + this.value + ')'; syncFieldConfig('${fieldId}', 'formula', input.value); this.value=''; }">
+                        <select class="form-select border-success" style="max-width: 60%;" id="formula-var-helper" onchange="if(this.value) { const input = document.getElementById('formula-input-${fieldId}'); input.value += '(' + this.value + ')'; syncFieldConfig('${fieldId}', 'formula', input.value); this.value=''; }">
                             ${numberFieldsOptions}
                         </select>
                         <button class="btn btn-outline-warning" type="button" onclick="toggleSelectVarMode('${fieldId}')" id="btn-select-var-${fieldId}" title="Nhấn để chọn biến từ màn hình"><i class="fas fa-hand-pointer"></i></button>
-                        <button class="btn btn-outline-primary" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += ' + '; syncFieldConfig('${fieldId}', 'formula', input.value);">+</button>
-                        <button class="btn btn-outline-primary" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += ' - '; syncFieldConfig('${fieldId}', 'formula', input.value);">-</button>
-                        <button class="btn btn-outline-primary" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += ' * '; syncFieldConfig('${fieldId}', 'formula', input.value);">×</button>
-                        <button class="btn btn-outline-primary" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += ' / '; syncFieldConfig('${fieldId}', 'formula', input.value);">÷</button>
+                        <button class="btn btn-outline-success" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += ' + '; syncFieldConfig('${fieldId}', 'formula', input.value);">+</button>
+                        <button class="btn btn-outline-success" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += ' - '; syncFieldConfig('${fieldId}', 'formula', input.value);">-</button>
+                        <button class="btn btn-outline-success" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += ' * '; syncFieldConfig('${fieldId}', 'formula', input.value);">×</button>
+                        <button class="btn btn-outline-success" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += ' / '; syncFieldConfig('${fieldId}', 'formula', input.value);">÷</button>
                     </div>
-                    <textarea id="formula-input-${fieldId}" class="form-control form-control-sm border-primary font-monospace" 
-                              style="overflow:hidden; resize:none;"
+                    <div class="input-group input-group-sm mb-2">
+                        <button class="btn btn-outline-success" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += 'AVG('; syncFieldConfig('${fieldId}', 'formula', input.value); input.focus();" title="Trung bình cộng">AVG()</button>
+                        <button class="btn btn-outline-success" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += 'MAX('; syncFieldConfig('${fieldId}', 'formula', input.value); input.focus();" title="Giá trị lớn nhất">MAX()</button>
+                        <button class="btn btn-outline-success" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += 'MIN('; syncFieldConfig('${fieldId}', 'formula', input.value); input.focus();" title="Giá trị nhỏ nhất">MIN()</button>
+                        <button class="btn btn-outline-secondary" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += ', '; syncFieldConfig('${fieldId}', 'formula', input.value); input.focus();" title="Dấu phẩy ngăn cách">,</button>
+                        <button class="btn btn-outline-secondary" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += ')'; syncFieldConfig('${fieldId}', 'formula', input.value); input.focus();" title="Đóng ngoặc">)</button>
+                    </div>
+                    <textarea id="formula-input-${fieldId}" class="form-control form-control-sm border-success font-monospace" 
+                              style="overflow:hidden; resize:none; min-height: 60px;"
                               placeholder="VD: (var_1) - (var_2)" 
-                              onfocus="highlightFormulaVars(this.value)"
+                              onfocus="highlightFormulaVars(this.value, '${fieldId}')"
                               onblur="highlightFormulaVars('')"
                               oninput="syncFieldConfig('${fieldId}', 'formula', this.value); this.style.height = 'auto'; this.style.height = (this.scrollHeight) + 'px'; 
-                                       highlightFormulaVars(this.value);
-                                       const preview = document.getElementById('formula-friendly-preview');
-                                       if(preview) preview.innerText = this.value.replace(/\\\(([^)]+)\\\)/g, (match, id) => {
-                                           const target = Object.values(fieldsConfig).find(f => f.name === id || f.label === id);
-                                           return target ? (target.label || id) : id;
-                                       });">${field.formula || ''}</textarea>
-                    
-                    <div class="mt-1 p-1 bg-light border rounded small" style="font-size: 0.75rem;">
-                        <span class="text-muted">Xem trước (Nhãn):</span> 
-                        <span id="formula-friendly-preview" class="text-primary fw-bold">${(field.formula || '').replace(/\(([^)]+)\)/g, (match, id) => {
-                            const target = Object.values(fieldsConfig).find(f => f.name === id || f.label === id);
-                            return target ? (target.label || id) : id;
-                        })}</span>
-                    </div>
+                                       highlightFormulaVars(this.value, '${fieldId}');">${field.formula || ''}</textarea>
 
-                    <div class="form-text small" style="font-size: 0.65rem;">Chọn biến số từ thanh công cụ trên, hoặc tự gõ. Biến số phải đặt trong ngoặc đơn, VD: (var_1) + (var_2)</div>
-                    
-                    <div class="mt-2">
-                        <label class="small fw-bold text-muted" style="font-size: 0.75em;">Làm tròn số thập phân</label>
+                    <div class="mt-3 p-2 bg-light rounded">
+                        <label class="small fw-bold text-muted mb-1" style="font-size: 0.75em;">Làm tròn số thập phân</label>
                         <input type="number" class="form-control form-control-sm" min="0" max="6" 
                                placeholder="VD: 2" 
                                value="${field.validation.decimal_places !== null ? field.validation.decimal_places : ''}" 
@@ -2639,16 +2819,17 @@
                 </div>
             `;
         } else if (field.type === 'date') {
-            typeHtml += `
+            logicHtml += `
+                <hr class="text-muted opacity-25 my-3">
                 <div class="mb-3">
-                    <label class="small fw-bold text-primary mb-2"><i class="fas fa-clock me-1"></i>Định dạng thời gian</label>
-                    <select class="form-select form-select-sm border-primary" onchange="syncFieldConfig('${fieldId}', 'date_format', this.value)">
+                    <label class="small fw-bold text-success mb-2"><i class="fas fa-clock me-1"></i>Định dạng thời gian</label>
+                    <select class="form-select form-select-sm border-success" onchange="syncFieldConfig('${fieldId}', 'date_format', this.value)">
                         <option value="dd/mm/yyyy" ${(!field.date_format || field.date_format === 'dd/mm/yyyy') ? 'selected' : ''}>Ngày (dd/mm/yyyy)</option>
                         <option value="hh:mm dd/mm/yyyy" ${field.date_format === 'hh:mm dd/mm/yyyy' ? 'selected' : ''}>Giờ và Ngày (hh:mm dd/mm/yyyy)</option>
                     </select>
                 </div>
-                <div class="mb-3">
-                    <div class="form-check form-switch mt-2">
+                <div class="mb-3 p-2 bg-light rounded border border-success border-opacity-25">
+                    <div class="form-check form-switch">
                         <input class="form-check-input" type="checkbox" id="checkAutoSystemTime_${fieldId}" 
                                ${(field.autoSystemTime !== false) ? 'checked' : ''} 
                                onchange="syncFieldConfig('${fieldId}', 'autoSystemTime', this.checked)">
@@ -2656,98 +2837,64 @@
                             <i class="fas fa-bolt me-1 text-warning"></i>Tự động lấy giờ hệ thống
                         </label>
                     </div>
-                    <div class="form-text small" style="font-size: 0.65rem;">Nếu bật, nhấp chuột vào biến sẽ tự động điền giờ hiện tại thay vì mở form nhập liệu.</div>
+                    <div class="form-text small mt-1" style="font-size: 0.65rem;">Người dùng chỉ cần click chuột, hệ thống sẽ tự điền giờ hiện tại.</div>
                 </div>
             `;
         } else if (field.type === 'signature') {
-            typeHtml += `
-                <div class="mb-3">
-                    <div class="form-check form-switch mt-2">
+            logicHtml += `
+                <hr class="text-muted opacity-25 my-3">
+                <div class="mb-3 p-3 bg-light rounded border border-success border-opacity-25 text-center">
+                    <i class="fas fa-user-check text-success fa-2x mb-2"></i>
+                    <div class="form-check form-switch d-inline-block text-start w-100">
                         <input class="form-check-input" type="checkbox" id="checkIsChecker" 
                                ${field.is_checker ? 'checked' : ''} 
                                onchange="syncFieldConfig('${fieldId}', 'is_checker', this.checked)">
-                        <label class="form-check-label small fw-bold text-muted" for="checkIsChecker">
-                            <i class="fas fa-user-check me-1"></i>Chữ ký của Người kiểm tra
+                        <label class="form-check-label small fw-bold text-muted ms-1" for="checkIsChecker">
+                            Chữ ký Người kiểm tra
                         </label>
                     </div>
-                    <div class="form-text small" style="font-size: 0.65rem;">Người dùng cấp 2 sẽ phải nhập tài khoản và mật khẩu của họ để ký.</div>
+                    <div class="form-text small mt-2 text-start" style="font-size: 0.65rem;">Người dùng cấp cao sẽ phải nhập Mật khẩu cấp 2 của họ để ký điện tử.</div>
                 </div>
             `;
         } else if (field.type === 'checkbox') {
-            typeHtml += `
-                <div class="mb-3">
-                    <label class="small fw-bold text-primary mb-1"><i class="fas fa-calculator me-1"></i>Công thức tự động Tick (Tùy chọn)</label>
-                    <div class="mb-2">
-                        <button class="btn btn-sm btn-outline-warning w-100 fw-bold" type="button" onclick="toggleSelectVarMode('${fieldId}')" id="btn-select-var-${fieldId}">
-                            <i class="fas fa-hand-pointer me-1"></i> Bắt biến từ màn hình
+            logicHtml += `
+                <hr class="text-muted opacity-25 my-3">
+                <div class="mb-3 p-2 bg-light rounded border border-success border-opacity-25">
+                    <label class="small fw-bold text-success mb-2"><i class="fas fa-calculator me-1"></i>Công thức tự động Tick</label>
+                    <div class="input-group input-group-sm mb-2">
+                        <select class="form-select border-success" style="max-width: 60%;" id="formula-var-helper-checkbox" onchange="if(this.value) { const input = document.getElementById('formula-input-${fieldId}'); input.value += '(' + this.value + ')'; syncFieldConfig('${fieldId}', 'formula', input.value); this.value=''; }">
+                            ${numberFieldsOptions}
+                        </select>
+                        <button class="btn btn-warning fw-bold" type="button" onclick="toggleSelectVarMode('${fieldId}')" id="btn-select-var-${fieldId}" title="Bắt biến từ màn hình">
+                            <i class="fas fa-hand-pointer"></i>
                         </button>
                     </div>
-                    <textarea id="formula-input-${fieldId}" class="form-control form-control-sm border-primary font-monospace" 
-                              style="overflow:hidden; resize:none;"
-                              placeholder="VD: (tick1) * (tick2)" 
-                              onfocus="highlightFormulaVars(this.value)"
+                    <div class="input-group input-group-sm mb-2">
+                        <button class="btn btn-outline-success" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += ' + '; syncFieldConfig('${fieldId}', 'formula', input.value);">+</button>
+                        <button class="btn btn-outline-success" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += ' - '; syncFieldConfig('${fieldId}', 'formula', input.value);">-</button>
+                        <button class="btn btn-outline-success" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += ' * '; syncFieldConfig('${fieldId}', 'formula', input.value);">×</button>
+                        <button class="btn btn-outline-success" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += ' / '; syncFieldConfig('${fieldId}', 'formula', input.value);">÷</button>
+                        <button class="btn btn-outline-success" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += ' == '; syncFieldConfig('${fieldId}', 'formula', input.value);">==</button>
+                    </div>
+                    <textarea id="formula-input-${fieldId}" class="form-control form-control-sm border-success font-monospace" 
+                              style="overflow:hidden; resize:none; min-height: 60px;"
+                              placeholder="VD: (var1) == (var2)" 
+                              onfocus="highlightFormulaVars(this.value, '${fieldId}')"
                               onblur="highlightFormulaVars('')"
                               oninput="syncFieldConfig('${fieldId}', 'formula', this.value); this.style.height = 'auto'; this.style.height = (this.scrollHeight) + 'px';
-                                       highlightFormulaVars(this.value);
-                                       const preview = document.getElementById('formula-friendly-preview');
-                                       if(preview) preview.innerText = this.value.replace(/\\\(([^)]+)\\\)/g, (match, id) => {
-                                           const target = Object.values(fieldsConfig).find(f => f.name === id || f.label === id);
-                                           return target ? (target.label || id) : id;
-                                       });">${field.formula || ''}</textarea>
+                                       highlightFormulaVars(this.value, '${fieldId}');">${field.formula || ''}</textarea>
                     
-                    <div class="mt-1 p-1 bg-light border rounded small mb-2" style="font-size: 0.75rem;">
-                        <span class="text-muted">Xem trước (Nhãn):</span> 
-                        <span id="formula-friendly-preview" class="text-primary fw-bold">${(field.formula || '').replace(/\(([^)]+)\)/g, (match, id) => {
-                            const target = Object.values(fieldsConfig).find(f => f.name === id || f.label === id);
-                            return target ? (target.label || id) : id;
-                        })}</span>
-                    </div>
-                    
-                    <div class="form-text small" style="font-size: 0.65rem;">Nếu công thức > 0, ô này sẽ tự động được Tick. Nếu để trống, người dùng tự Tick.</div>
+                    <div class="form-text small" style="font-size: 0.65rem;">Nếu công thức &gt; 0 hoặc TRUE, ô này sẽ tự động được Tick.</div>
                 </div>
             `;
-        }
-
-        typeHtml += `
-            <div class="mb-3">
-                <label class="small fw-bold text-muted text-uppercase mb-1"><i class="fas fa-fingerprint me-1"></i>Mã biến số (ID trong công thức)</label>
-                <div class="input-group input-group-sm">
-                    <span class="input-group-text bg-light border-end-0">@</span>
-                    <input type="text" class="form-control border-start-0 font-monospace" value="${field.name || ''}" 
-                           oninput="syncFieldConfig('${fieldId}', 'name', this.value)">
-                </div>
-                <div class="form-text small" style="font-size: 0.65rem;">Viết liền không dấu. VD: sl, kl_tong.</div>
-            </div>
-
-            <div class="mb-3">
-                <label class="small fw-bold text-muted text-uppercase mb-1"><i class="fas fa-star text-warning me-1"></i>Thông số quan trọng (Critical Var)</label>
-                <select class="form-select form-select-sm border-warning shadow-sm" onchange="syncFieldConfig('${fieldId}', 'important_var_id', this.value)">
-                    <option value="">-- Không --</option>
-                    ${(window.importantVars || []).map(v => `<option value="${v.id}" ${field.important_var_id == v.id ? 'selected' : ''}>${v.name} (${v.description || ''})</option>`).join('')}
-                </select>
-                <div class="form-text small" style="font-size: 0.65rem;">Gắn cờ CPP/CMA để lọc báo cáo thông số quan trọng.</div>
-            </div>
-
-            <div class="mb-3">
-                <label class="small fw-bold text-muted text-uppercase mb-2">Tên thẻ (Nhãn hiển thị)</label>
-                <input type="text" class="form-control form-control-sm" value="${field.label || ''}" oninput="syncFieldConfig('${fieldId}', 'label', this.value)">
-                <div class="form-text small" style="font-size: 0.7rem;">Hiển thị cho người dùng. VD: Số lượng.</div>
-            </div>
-
-            <div class="mb-3">
-                <label class="small fw-bold text-muted text-uppercase mb-2">Giá trị mặc định (Dùng chạy thử)</label>
-                <input type="text" class="form-control form-control-sm" value="${field.defaultValue || ''}" placeholder="VD: 4.6" oninput="syncFieldConfig('${fieldId}', 'defaultValue', this.value); recalculateAllFormulas();">
-                <div class="form-text small" style="font-size: 0.7rem;">Dùng để tính toán thử ngay trong trình thiết kế.</div>
-            </div>
-
-            <hr class="my-3">
-        `;
-
-        if (field.type === 'number') {
-            typeHtml += `
-                <div class="card bg-light border-0 shadow-none mb-3">
-                    <div class="card-body p-3">
-                        <label class="small fw-bold mb-2"><i class="fas fa-balance-scale me-1"></i> Giới hạn giá trị</label>
+        } else if (field.type === 'number') {
+            logicHtml += `
+                <hr class="text-muted opacity-25 my-3">
+                <div class="card border-success border-opacity-25 shadow-none mb-3">
+                    <div class="card-header bg-light py-1">
+                        <label class="small fw-bold text-success mb-0"><i class="fas fa-balance-scale me-1"></i> Giới hạn giá trị (Min/Max)</label>
+                    </div>
+                    <div class="card-body p-2">
                         <div class="row g-2 mb-2">
                             <div class="col-6">
                                 <label class="small text-muted" style="font-size: 0.75em;">Tối thiểu (Min)</label>
@@ -2758,33 +2905,34 @@
                                 <input type="number" class="form-control form-control-sm" placeholder="VD: 81.0" value="${field.validation.max !== null ? field.validation.max : ''}" oninput="syncFieldConfig('${fieldId}', 'validation.max', this.value)">
                             </div>
                         </div>
-                        <div class="mt-2">
+                        <div class="mt-2 pt-2 border-top">
                             <label class="small text-muted" style="font-size: 0.75em;">Chữ số thập phân</label>
                             <input type="number" class="form-control form-control-sm" min="0" max="6" placeholder="Bỏ trống nếu là số nguyên" value="${field.validation.decimal_places !== null ? field.validation.decimal_places : ''}" oninput="syncFieldConfig('${fieldId}', 'validation.decimal_places', this.value)">
                         </div>
-                        <div class="form-check form-switch ps-4 pt-1 mt-2">
-                            <input class="form-check-input ms-n4" type="checkbox" id="fieldAllowOutOfBounds" ${field.validation && field.validation.allow_out_of_bounds ? 'checked' : ''} onchange="syncFieldConfig('${fieldId}', 'validation.allow_out_of_bounds', this.checked)">
+                        <div class="form-check form-switch pt-2 mt-2 border-top">
+                            <input class="form-check-input" type="checkbox" id="fieldAllowOutOfBounds" ${field.validation && field.validation.allow_out_of_bounds ? 'checked' : ''} onchange="syncFieldConfig('${fieldId}', 'validation.allow_out_of_bounds', this.checked)">
                             <label class="form-check-label small text-muted" style="font-size: 0.75em;" for="fieldAllowOutOfBounds">Cho phép nhập ngoài giới hạn?</label>
                         </div>
                     </div>
                 </div>
-
-                <!-- KẾT NỐI CÂN ĐIỆN TỬ -->
+            `;
+            
+            advancedHtml += `
                 <div class="card border-0 shadow-none mb-3" style="background: linear-gradient(135deg, #fef2f2, #fee2e2); border: 1px solid #fecaca !important;">
                     <div class="card-body p-3">
                         <div class="d-flex align-items-center gap-2 mb-2">
                             <i class="fas fa-balance-scale text-danger"></i>
-                            <label class="small fw-bold mb-0 text-danger-emphasis">Kết nối Cân điện tử (RS-232)</label>
+                            <label class="small fw-bold mb-0 text-danger-emphasis">Kết nối Cân điện tử</label>
                         </div>
-                        <div class="form-check form-switch ps-4 mb-2">
-                            <input class="form-check-input ms-n4" type="checkbox" id="scaleEnabledCheck_${fieldId}"
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="scaleEnabledCheck_${fieldId}"
                                    ${field.scaleEnabled ? 'checked' : ''}
                                    onchange="syncFieldConfig('${fieldId}', 'scaleEnabled', this.checked); document.getElementById('scaleBrandRow_${fieldId}').classList.toggle('d-none', !this.checked);">
                             <label class="form-check-label small fw-bold" for="scaleEnabledCheck_${fieldId}">
-                                Cho phép đọc từ cân điện tử
+                                Bật RS-232 / Web Serial
                             </label>
                         </div>
-                        <div id="scaleBrandRow_${fieldId}" class="${field.scaleEnabled ? '' : 'd-none'}">
+                        <div id="scaleBrandRow_${fieldId}" class="${field.scaleEnabled ? '' : 'd-none'} p-2 bg-white rounded border border-danger border-opacity-25">
                             <label class="small text-muted mb-1" style="font-size: 0.72rem;">Hãng cân mặc định</label>
                             <select class="form-select form-select-sm" onchange="syncFieldConfig('${fieldId}', 'scalePreset', this.value)">
                                 <option value="and"     ${(field.scalePreset || 'and') === 'and'      ? 'selected' : ''}>⚖️ A&D (AND)</option>
@@ -2792,47 +2940,45 @@
                                 <option value="sartorius" ${(field.scalePreset) === 'sartorius'       ? 'selected' : ''}>🔬 Sartorius</option>
                                 <option value="custom"  ${(field.scalePreset) === 'custom'            ? 'selected' : ''}>⚙️ Tùy chỉnh</option>
                             </select>
-                            <div class="form-text" style="font-size: 0.65rem;">
-                                Nút <i class="fas fa-balance-scale text-danger"></i> sẽ xuất hiện cạnh ô nhập liệu ở chế độ Thực thi.
-                            </div>
                         </div>
                     </div>
                 </div>
             `;
         } else if (field.type === 'select') {
             const dsType = field.dataSource ? field.dataSource.type : 'manual';
-            typeHtml += `
+            logicHtml += `
+                <hr class="text-muted opacity-25 my-3">
                 <div class="mb-3">
-                    <label class="small fw-bold text-muted text-uppercase mb-2"><i class="fas fa-database me-1"></i> Nguồn dữ liệu</label>
-                    <select class="form-select form-select-sm mb-2" onchange="syncFieldConfig('${fieldId}', 'dataSource.type', this.value); selectField(null, '${fieldId}')">
-                        <option value="manual" ${dsType === 'manual' ? 'selected' : ''}>Nhập thủ công</option>
-                        <option value="database" ${dsType === 'database' ? 'selected' : ''}>Lấy từ cơ sở dữ liệu</option>
+                    <label class="small fw-bold text-success text-uppercase mb-2"><i class="fas fa-database me-1"></i> Nguồn dữ liệu Dropdown</label>
+                    <select class="form-select form-select-sm mb-2 border-success" onchange="syncFieldConfig('${fieldId}', 'dataSource.type', this.value); selectField(null, '${fieldId}')">
+                        <option value="manual" ${dsType === 'manual' ? 'selected' : ''}>Nhập thủ công (Tự định nghĩa)</option>
+                        <option value="database" ${dsType === 'database' ? 'selected' : ''}>Lấy tự động từ CSDL (Database)</option>
                     </select>
             `;
 
             if (dsType === 'manual') {
-                typeHtml += `
+                logicHtml += `
                     <textarea class="form-control form-control-sm" rows="3" placeholder="Ví dụ: Đạt, Tốt, Không đạt" oninput="syncFieldConfig('${fieldId}', 'options', this.value)">${Array.isArray(field.options) ? field.options.join(', ') : (field.options || '')}</textarea>
                     <div class="form-text small" style="font-size: 0.7rem;">Mỗi lựa chọn cách nhau bởi dấu phẩy (,).</div>
                 </div>`;
             } else {
                 const ds = field.dataSource || {};
-                typeHtml += `
-                    <div class="border rounded p-2 bg-light">
+                logicHtml += `
+                    <div class="border border-success border-opacity-50 rounded p-2 bg-light">
                         <div class="mb-2">
-                            <label class="small text-muted" style="font-size: 0.75em;">Tên Bảng (Table)</label>
-                            <input type="text" class="form-control form-control-sm" placeholder="VD: deparments" value="${ds.table || ''}" oninput="syncFieldConfig('${fieldId}', 'dataSource.table', this.value)">
+                            <label class="small fw-bold text-muted" style="font-size: 0.75em;">Tên Bảng (Table DB)</label>
+                            <input type="text" class="form-control form-control-sm border-success" placeholder="VD: deparments" value="${ds.table || ''}" oninput="syncFieldConfig('${fieldId}', 'dataSource.table', this.value)">
                         </div>
                         <div class="mb-2">
-                            <label class="small text-muted" style="font-size: 0.75em;">Cột hiển thị (Label)</label>
-                            <input type="text" class="form-control form-control-sm" placeholder="VD: name" value="${ds.labelCol || ''}" oninput="syncFieldConfig('${fieldId}', 'dataSource.labelCol', this.value)">
+                            <label class="small fw-bold text-muted" style="font-size: 0.75em;">Cột hiển thị (Label Col)</label>
+                            <input type="text" class="form-control form-control-sm border-success" placeholder="VD: name" value="${ds.labelCol || ''}" oninput="syncFieldConfig('${fieldId}', 'dataSource.labelCol', this.value)">
                         </div>
                         <div class="mb-2">
-                            <label class="small text-muted" style="font-size: 0.75em;">Cột giá trị (Value) - Tùy chọn</label>
-                            <input type="text" class="form-control form-control-sm" placeholder="Mặc định lấy Cột hiển thị" value="${ds.valueCol || ''}" oninput="syncFieldConfig('${fieldId}', 'dataSource.valueCol', this.value)">
+                            <label class="small fw-bold text-muted" style="font-size: 0.75em;">Cột giá trị lưu trữ (Value Col)</label>
+                            <input type="text" class="form-control form-control-sm" placeholder="Mặc định lấy bằng Cột hiển thị" value="${ds.valueCol || ''}" oninput="syncFieldConfig('${fieldId}', 'dataSource.valueCol', this.value)">
                         </div>
                         <div class="mb-2">
-                            <label class="small text-muted" style="font-size: 0.75em;">Điều kiện Where (Tùy chọn)</label>
+                            <label class="small fw-bold text-muted" style="font-size: 0.75em;">Lọc Where (Tùy chọn)</label>
                             <input type="text" class="form-control form-control-sm" placeholder="VD: active=1" value="${ds.where || ''}" oninput="syncFieldConfig('${fieldId}', 'dataSource.where', this.value)">
                         </div>
                     </div>
@@ -2840,86 +2986,70 @@
             }
         }
 
-        typeHtml += `
-
-
-            <div class="mb-3">
-                <label class="small fw-bold text-primary text-uppercase mb-2"><i class="fas fa-info-circle me-1"></i> Hướng dẫn ghi chép</label>
-                <textarea class="form-control form-control-sm border-primary" rows="2" placeholder="VD: Kiểm tra nhiệt độ trước khi ghi..." oninput="syncFieldConfig('${fieldId}', 'instruction', this.value)">${field.instruction || ''}</textarea>
-                <div class="form-text small" style="font-size: 0.7rem;">Hiện nội dung này trong modal khi người thực hiện nhập liệu.</div>
-            </div>
-
-            <hr class="my-3">
-        `;
-
-        typeHtml += `
-            <div class="mb-3">
-                <div class="form-check form-switch ps-4 pt-1">
-                    <input class="form-check-input ms-n4" type="checkbox" id="fieldRequired" ${field.validation.required ? 'checked' : ''} onchange="syncFieldConfig('${fieldId}', 'validation.required', this.checked)">
-                    <label class="form-check-label small fw-bold" for="fieldRequired">Bắt buộc điền</label>
+        if (logicHtml) {
+            typeHtml += `
+                <!-- TẤP 2: CÔNG THỨC -->
+                <div class="tab-pane fade" id="prop-logic" role="tabpanel" aria-labelledby="logic-tab">
+                    ${logicHtml}
                 </div>
-            </div>
-
-            <div class="mb-3">
-                <label class="small fw-bold mt-2 mb-2"><i class="fas fa-ban me-1 text-secondary"></i> Điều kiện Không áp dụng (N/A)</label>
-                <div class="p-2 border rounded bg-light">
-                    <div class="mb-2">
-                        <label class="small text-muted mb-1">Mã ID Biến phụ thuộc</label>
-                        <input type="text" class="form-control form-control-sm" placeholder="Nhập ID biến (VD: tram_1)" 
-                               value="${(field.na_condition && field.na_condition.target_id) ? field.na_condition.target_id : ''}" 
-                               oninput="syncFieldConfig('${fieldId}', 'na_condition.target_id', this.value)">
-                    </div>
-                    <div class="row g-2">
-                        <div class="col-5">
-                            <label class="small text-muted mb-1">Toán tử</label>
-                            <select class="form-select form-select-sm" onchange="syncFieldConfig('${fieldId}', 'na_condition.operator', this.value)">
-                                <option value="=" ${(field.na_condition && field.na_condition.operator === '=') ? 'selected' : ''}>Bằng (=)</option>
-                                <option value="!=" ${(field.na_condition && field.na_condition.operator === '!=') ? 'selected' : ''}>Khác (!=)</option>
-                            </select>
-                        </div>
-                        <div class="col-7">
-                            <label class="small text-muted mb-1">Giá trị</label>
-                            <input type="text" class="form-control form-control-sm" placeholder="Giá trị so sánh" 
-                                   value="${(field.na_condition && field.na_condition.value) ? field.na_condition.value : ''}" 
-                                   oninput="syncFieldConfig('${fieldId}', 'na_condition.value', this.value)">
-                        </div>
-                    </div>
-                    <div class="form-text small mt-2" style="font-size: 0.65rem;">Nếu điều kiện đúng, biến này sẽ tự động chuyển thành N/A khi thực thi.</div>
-                </div>
-            </div>
-        `;
-
+            `;
+        }
 
         typeHtml += `
-            <div class="card bg-light border-0 shadow-none mb-3">
-                <div class="card-body p-3">
-                    <label class="small fw-bold mb-2"><i class="fas fa-arrows-alt-h me-1"></i>Kích thước & Vị trí</label>
-                    <div class="row g-2 mb-2">
-                        <div class="col-6">
-                            <label class="small text-muted" style="font-size: 0.75em;">Chiều rộng (px)</label>
-                            <input type="number" class="form-control form-control-sm" placeholder="Mặc định" min="50"
-                                   value="${(field.style && field.style.width) ? parseInt(field.style.width) : ''}" 
-                                   oninput="const val = this.value ? this.value + 'px' : ''; syncFieldConfig('${fieldId}', 'style.width', val); const badge = document.querySelector('.ebmr-field-badge[data-field-id=\\'${fieldId}\\']'); if(badge) { if(val) badge.style.setProperty('width', val, 'important'); else badge.style.removeProperty('width'); }">
-                        </div>
-                        <div class="col-6">
-                            <label class="small text-muted" style="font-size: 0.75em;">Lề trái (px)</label>
-                            <input type="number" class="form-control form-control-sm" placeholder="Mặc định" min="0"
-                                   value="${(field.style && field.style.marginLeft) ? parseInt(field.style.marginLeft) : ''}" 
-                                   oninput="const val = this.value ? this.value + 'px' : ''; syncFieldConfig('${fieldId}', 'style.marginLeft', val); const badge = document.querySelector('.ebmr-field-badge[data-field-id=\\'${fieldId}\\']'); if(badge) { if(val) badge.style.setProperty('margin-left', val, 'important'); else badge.style.removeProperty('margin-left'); }">
-                        </div>
-                    </div>
+                <!-- TẤP 3: MỞ RỘNG -->
+                <div class="tab-pane fade" id="prop-advanced" role="tabpanel" aria-labelledby="advanced-tab">
+                    ${advancedHtml}
                 </div>
-            </div>
-        `;
+            </div> <!-- End Tab Content -->
 
-        typeHtml += `
-            <div class="mt-4 text-center">
-                <button class="btn btn-sm btn-outline-primary w-100 mb-2" onclick="copyVariable('${fieldId}')"><i class="fas fa-copy me-1"></i> Sao chép cấu hình</button>
-                <button class="btn btn-sm btn-outline-danger w-100" onclick="deleteDynamicField('${fieldId}')"><i class="fas fa-trash-alt me-1"></i> Xóa biến số</button>
+            <div class="mt-2 text-center p-2 border-top bg-light">
+                <button class="btn btn-sm btn-outline-primary w-100 mb-2" onclick="copyVariable('${fieldId}')"><i class="fas fa-copy me-1"></i> Sao chép biến này</button>
+                <button class="btn btn-sm btn-outline-danger w-100" onclick="deleteDynamicField('${fieldId}')"><i class="fas fa-trash-alt me-1"></i> Xóa bỏ hoàn toàn</button>
             </div>
         `;
 
         body.innerHTML = typeHtml;
+
+        // Thêm event listener cho tab sau khi HTML đã được render (Xử lý thủ công để đảm bảo hoạt động 100%)
+        document.querySelectorAll('#propTabs button.nav-link').forEach(tab => {
+            tab.addEventListener('click', event => {
+                event.preventDefault();
+                event.stopPropagation();
+                const targetBtn = event.currentTarget;
+                
+                // 1. Reset tất cả các tab
+                document.querySelectorAll('#propTabs button.nav-link').forEach(b => {
+                    b.classList.remove('active', 'bg-white');
+                    b.style.borderTopColor = 'transparent';
+                });
+                
+                // 2. Active tab được click
+                targetBtn.classList.add('active', 'bg-white');
+                if (targetBtn.id === 'basic-tab') targetBtn.style.borderTopColor = '#0d6efd';
+                if (targetBtn.id === 'logic-tab') targetBtn.style.borderTopColor = '#198754';
+                if (targetBtn.id === 'advanced-tab') targetBtn.style.borderTopColor = '#ffc107';
+
+                // 3. Đổi nội dung tab (Pane)
+                document.querySelectorAll('#propTabsContent .tab-pane').forEach(p => {
+                    p.classList.remove('show', 'active');
+                });
+                const targetPaneId = targetBtn.getAttribute('data-bs-target');
+                const targetPane = document.querySelector(targetPaneId);
+                if (targetPane) {
+                    targetPane.classList.add('show', 'active');
+                    
+                    // Auto-resize tất cả textarea bên trong tab này khi vừa hiện ra
+                    setTimeout(() => {
+                        targetPane.querySelectorAll('textarea').forEach(ta => {
+                            if (ta.style.overflow === 'hidden' && ta.value) {
+                                ta.style.height = 'auto';
+                                ta.style.height = ta.scrollHeight + 'px';
+                            }
+                        });
+                    }, 50);
+                }
+            });
+        });
 
         // Auto-adjust height for formula textarea
         setTimeout(() => {
@@ -6455,8 +6585,8 @@
             menu = document.createElement('div');
             menu.id = 'na-context-menu';
             menu.className = 'dropdown-menu shadow-sm p-1';
-            menu.style.position = 'absolute';
-            menu.style.zIndex = '9999';
+            menu.style.position = 'fixed';
+            menu.style.zIndex = '99999';
             menu.innerHTML = `
                 <button class="dropdown-item text-danger small fw-bold rounded" onclick="markSelectedZoneAsNA()">
                     <i class="fas fa-ban me-2"></i> Đánh dấu Không áp dụng (N/A)
@@ -6581,10 +6711,11 @@
         }
     }
 
-    // Đánh dấu mảng các ô là N/A
     window.markSelectedZoneAsNA = function() {
         hideNAMenu();
         if (executionSelectedCells.length === 0) return;
+
+        const cellsToMark = [...executionSelectedCells];
 
         Swal.fire({
             title: '<i class="fas fa-ban me-2 text-danger"></i>Xác nhận N/A',
@@ -6606,7 +6737,7 @@
         }).then((result) => {
             if (result.isConfirmed) {
                 const reason = result.value || 'N/A';
-                applyNAToCells(executionSelectedCells, true, reason);
+                applyNAToCells(cellsToMark, true, reason);
                 clearExecutionSelection();
                 renderBlocks();
                 if (typeof toastr !== 'undefined') toastr.success('Đã đánh dấu N/A.');
@@ -6627,7 +6758,7 @@
         cells.forEach(cell => {
             const blockItem = cell.closest('.block-item');
             if (!blockItem) return;
-            const blockId = blockItem.getAttribute('data-id');
+            const blockId = blockItem.getAttribute('data-block-key') || blockItem.getAttribute('data-id');
             const row = parseInt(cell.getAttribute('data-row')) - 1; // data-row is 1-indexed
             const col = parseInt(cell.getAttribute('data-col'));
 

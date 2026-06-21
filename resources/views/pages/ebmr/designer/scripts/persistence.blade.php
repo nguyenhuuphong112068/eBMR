@@ -41,6 +41,10 @@
     }
 
     function saveTemplate() {
+        if (window.isSelectVarMode && typeof window.toggleSelectVarMode === 'function') {
+            window.toggleSelectVarMode(window.targetFormulaFieldId);
+        }
+        
         if (window.isExecutionMode) {
             Swal.fire({
                 icon: 'warning',

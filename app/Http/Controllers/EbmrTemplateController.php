@@ -388,8 +388,15 @@ class EbmrTemplateController extends Controller
                             'role' => $bomItem['role'] ?? null,
                             'total_amount_per_unit' => $bomItem['total_amount_per_unit'] ?: null,
                             'total_amount_per_batch' => $batchVal ?: null,
+                            'number_of_lots' => $bomItem['number_of_lots'] ?? 1,
+                            'amounts_of_lots' => $bomItem['amounts_of_lots'] ?: null,
                             'not_calculator' => isset($bomItem['not_calculator']) ? 1 : 0,
                         ];
+
+                        $bomCellNotes = isset($bomItem['cell_notes']) && is_array($bomItem['cell_notes']) 
+                            ? array_filter($bomItem['cell_notes'], fn($v) => trim((string)$v) !== '') 
+                            : [];
+                        $formulaData['cell_notes'] = !empty($bomCellNotes) ? json_encode($bomCellNotes, JSON_UNESCAPED_UNICODE) : null;
 
                         if ($formulaId && in_array($formulaId, $existingFormulaIds)) {
                             // Cập nhật dòng có sẵn
@@ -410,12 +417,17 @@ class EbmrTemplateController extends Controller
 
                         foreach ($materials as $mat) {
                             if (!empty($mat['code']) || !empty($mat['name'])) {
+                                $matCellNotes = isset($mat['cell_notes']) && is_array($mat['cell_notes']) 
+                                    ? array_filter($mat['cell_notes'], fn($v) => trim((string)$v) !== '') 
+                                    : [];
+
                                 DB::table('formula_materials')->insert([
                                     'preparation_formula_id' => $formulaId,
                                     'code' => $mat['code'] ?? null,
                                     'name' => $mat['name'] ?? null,
                                     'manufacturer' => $mat['manufacturer'] ?? null,
                                     'Spec' => $mat['Spec'] ?? null,
+                                    'cell_notes' => !empty($matCellNotes) ? json_encode($matCellNotes, JSON_UNESCAPED_UNICODE) : null,
                                     'created_at' => now(),
                                 ]);
                             }

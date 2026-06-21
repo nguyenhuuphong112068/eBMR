@@ -24,7 +24,10 @@
                 // Nếu KHÔNG phải đang giữ Shift, KHÔNG click sát lề 
                 // => Xử lý như bôi đen văn bản bình thường (Native Text Selection)
                 if (!e.shiftKey && !isNearEdge) {
-                    clearSelection(); // Xóa chọn ô để tránh rối mắt khi gõ
+                    activeRowIdx = parseInt(cell.dataset.row);
+                    activeColIdx = parseInt(cell.dataset.col);
+                    clearSelection();
+                    cell.classList.add('selected-cell');
                     if (bId) selectItem(bId, false); // Vẫn báo cho panel biết đang ở block nào
                     return; // Dừng lại ở đây, KHÔNG bật isSelecting để tránh đụng độ
                 }
@@ -150,6 +153,14 @@
                     const isWriting = isInput || e.target.closest('[contenteditable="true"]');
                     const hasMultiSelection = selectedCells.length > 0;
 
+                    // Allow native text copy/cut if text is highlighted
+                    if (isWriting && ['c', 'x'].includes(key)) {
+                        const selText = window.getSelection().toString();
+                        if (selText && selText.length > 0) {
+                            return; // Do not intercept, let browser copy the text
+                        }
+                    }
+
                     // If NOT writing in a text box/input, or if we have a table selection, handle cell-level operations
                     if (!isWriting || (hasMultiSelection && !isInput)) {
                         const targetCell = hasMultiSelection ? selectedCells[0] : e.target.closest('td, th');
@@ -229,31 +240,69 @@
                             e.preventDefault();
                             saveState();
                             
-                            const startR = parseInt(targetCell.dataset.row);
-                            const startC = parseInt(targetCell.dataset.col);
-                            
-                            cellClipboard.forEach((rowData, rOff) => {
-                                const targetR = startR + rOff;
-                                rowData.forEach((clipCell, cOff) => {
-                                    const targetC = startC + cOff;
+                            const isSingleCellCopied = cellClipboard.length === 1 && cellClipboard[0].length === 1;
+
+                            if (isSingleCellCopied && hasMultiSelection && selectedCells.length > 1) {
+                                const clipCell = cellClipboard[0][0];
+                                selectedCells.forEach(cell => {
+                                    const tr = parseInt(cell.dataset.row);
+                                    const tc = parseInt(cell.dataset.col);
                                     
-                                    if (targetR === 0) {
-                                        if (item.columns[targetC]) item.columns[targetC].label = clipCell.content || '';
+                                    if (tr === 0) {
+                                        if (item.columns[tc]) {
+                                            item.columns[tc].label = window.duplicateFieldBadgesInHtml ? window.duplicateFieldBadgesInHtml(clipCell.content || '', itemId) : (clipCell.content || '');
+                                        }
                                     } else {
-                                        const rIdx = targetR - 1;
-                                        if (item.data[rIdx] && item.data[rIdx][targetC] !== undefined) {
+                                        const rIdx = tr - 1;
+                                        if (item.data[rIdx] && item.data[rIdx][tc] !== undefined) {
                                             if (clipCell.type === 'header') {
-                                                if (typeof item.data[rIdx][targetC] === 'object') item.data[rIdx][targetC].content = clipCell.content;
-                                                else item.data[rIdx][targetC] = clipCell.content;
+                                                const duplicated = window.duplicateFieldBadgesInHtml ? window.duplicateFieldBadgesInHtml(clipCell.content || '', itemId) : clipCell.content;
+                                                if (typeof item.data[rIdx][tc] === 'object') item.data[rIdx][tc].content = duplicated;
+                                                else item.data[rIdx][tc] = duplicated;
                                             } else {
-                                                item.data[rIdx][targetC] = {...clipCell.data};
-                                                delete item.data[rIdx][targetC].db_id;
-                                                delete item.data[rIdx][targetC].content_db_id;
+                                                item.data[rIdx][tc] = {...clipCell.data};
+                                                if (item.data[rIdx][tc].content) {
+                                                    item.data[rIdx][tc].content = window.duplicateFieldBadgesInHtml ? window.duplicateFieldBadgesInHtml(item.data[rIdx][tc].content, itemId) : item.data[rIdx][tc].content;
+                                                }
+                                                delete item.data[rIdx][tc].db_id;
+                                                delete item.data[rIdx][tc].content_db_id;
                                             }
                                         }
                                     }
                                 });
-                            });
+                            } else {
+                                const startR = parseInt(targetCell.dataset.row);
+                                const startC = parseInt(targetCell.dataset.col);
+                                
+                                cellClipboard.forEach((rowData, rOff) => {
+                                    const targetR = startR + rOff;
+                                    rowData.forEach((clipCell, cOff) => {
+                                        const targetC = startC + cOff;
+                                        
+                                        if (targetR === 0) {
+                                            if (item.columns[targetC]) {
+                                                item.columns[targetC].label = window.duplicateFieldBadgesInHtml ? window.duplicateFieldBadgesInHtml(clipCell.content || '', itemId) : (clipCell.content || '');
+                                            }
+                                        } else {
+                                            const rIdx = targetR - 1;
+                                            if (item.data[rIdx] && item.data[rIdx][targetC] !== undefined) {
+                                                if (clipCell.type === 'header') {
+                                                    const duplicated = window.duplicateFieldBadgesInHtml ? window.duplicateFieldBadgesInHtml(clipCell.content || '', itemId) : clipCell.content;
+                                                    if (typeof item.data[rIdx][targetC] === 'object') item.data[rIdx][targetC].content = duplicated;
+                                                    else item.data[rIdx][targetC] = duplicated;
+                                                } else {
+                                                    item.data[rIdx][targetC] = {...clipCell.data};
+                                                    if (item.data[rIdx][targetC].content) {
+                                                        item.data[rIdx][targetC].content = window.duplicateFieldBadgesInHtml ? window.duplicateFieldBadgesInHtml(item.data[rIdx][targetC].content, itemId) : item.data[rIdx][targetC].content;
+                                                    }
+                                                    delete item.data[rIdx][targetC].db_id;
+                                                    delete item.data[rIdx][targetC].content_db_id;
+                                                }
+                                            }
+                                        }
+                                    });
+                                });
+                            }
                             
                             renderBlocks();
                             saveStateDebounced();
@@ -381,7 +430,7 @@
     }
 
     function handleGlobalPaste(e, forcedIndex = null) {
-        if (e.target.closest('[contenteditable="true"]')) return;
+        if (e.target.closest('[contenteditable="true"]') || e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
         const htmlData = (e.clipboardData || window.clipboardData).getData('text/html');
         const plainText = (e.clipboardData || window.clipboardData).getData('text/plain');
         if (!htmlData && !plainText) return;
@@ -462,12 +511,17 @@
             }
         }
 
+        let pastedHtml = html;
+        if (typeof pastedHtml === 'string' && window.duplicateFieldBadgesInHtml) {
+            pastedHtml = window.duplicateFieldBadgesInHtml(pastedHtml, id);
+        }
+
         items.splice(index, 0, { 
             id: id, 
             type: 'static-text', 
             section_id: sectionId,
             label: 'Ghi chú (Pasted)', 
-            content: html, 
+            content: pastedHtml, 
             columns: [],
             borderMode: 'none'
         });
@@ -516,7 +570,11 @@
             rowHeights.push(height);
             const cells = r.querySelectorAll('td, th');
             for (let c = 0; c < colCount; c++) {
-                rowData.push({ content: cells[c] ? sanitizePastedHtml(cells[c].innerHTML) : '', rs: 1, cs: 1, hidden: false });
+                let cellHtml = cells[c] ? sanitizePastedHtml(cells[c].innerHTML) : '';
+                if (typeof cellHtml === 'string' && window.duplicateFieldBadgesInHtml) {
+                    cellHtml = window.duplicateFieldBadgesInHtml(cellHtml, id);
+                }
+                rowData.push({ content: cellHtml, rs: 1, cs: 1, hidden: false });
             }
             data.push(rowData);
         });
@@ -619,12 +677,17 @@
                     dataChanged = true;
                 }
                 
+                let cellContentToPaste = cellObj.content || cellObj;
+                if (typeof cellContentToPaste === 'string' && window.duplicateFieldBadgesInHtml) {
+                    cellContentToPaste = window.duplicateFieldBadgesInHtml(cellContentToPaste, item.id);
+                }
+                
                 // cellObj is now an object: { content, rs, cs, hidden, backgroundColor, textAlign, ... }
                 if (rIndex === 0) {
-                    item.columns[cIndex].label = cellObj.content || cellObj;
+                    item.columns[cIndex].label = cellContentToPaste;
                 } else {
                     item.data[rIndex - 1][cIndex] = {
-                        content: cellObj.content || cellObj,
+                        content: cellContentToPaste,
                         rs: cellObj.rs || 1,
                         cs: cellObj.cs || 1,
                         hidden: cellObj.hidden || false,

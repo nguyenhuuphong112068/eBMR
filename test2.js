@@ -1,0 +1,1 @@
+const formula = 'AVG((item_1),\n(item_2),\n(item_3))'; let processed = formula.replace(/\(([^()]+)\)/g, () => 10); console.log('Processed:', processed); const result = new Function('const AVG = function(...args) { return args.length ? args.reduce((a,b)=>a+b,0)/args.length : 0; }; return ' + processed)(); console.log('Result:', result);

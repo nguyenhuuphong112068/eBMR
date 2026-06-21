@@ -317,11 +317,31 @@
         bomRowIndex = 0;
         $('#bom_table_body_type_0').empty();
         $('#bom_table_body_type_1').empty();
+        function generateNoteUI(noteValue, inputName) {
+            const hasNote = noteValue && noteValue.trim() !== '';
+            const color = hasNote ? '#17a2b8' : '#ccc';
+            return `
+                <div class="position-absolute cell-note-container" style="top: 2px; right: 2px; z-index: 10;">
+                    <button type="button" class="btn btn-xs btn_cell_note" title="Ghi chú" style="padding: 0 4px; font-size: 11px; border: none; background: transparent; color: ${color};">
+                        <i class="fa fa-comment${hasNote ? '' : '-dots'}"></i>
+                    </button>
+                    <div class="cell-note-popover d-none position-absolute bg-white border rounded shadow p-2" style="width: 200px; right: 0; top: 100%; z-index: 1000;">
+                        <textarea class="form-control form-control-sm cell-note-input" name="${inputName}" rows="2" placeholder="Nhập ghi chú...">${noteValue || ''}</textarea>
+                        <div class="mt-1 text-end">
+                            <button type="button" class="btn btn-xs btn-primary btn_close_cell_note">Lưu</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
 
         bomData.forEach((formula, formulaIdx) => {
             const targetTableId = formula.type == 0 ? 'bom_table_body_type_0' : 'bom_table_body_type_1';
 
-            // We no longer build roleOptions for select, we use datalist 'roleOptionsList'
+            let cellNotesForm = formula.cell_notes || {};
+            if (typeof cellNotesForm === 'string') {
+                try { cellNotesForm = JSON.parse(cellNotesForm); } catch(e) { cellNotesForm = {}; }
+            }
 
 
             let materialsCodeHtml = '';
@@ -338,6 +358,11 @@
                 }];
 
             mats.forEach((mat, mIdx) => {
+                let cellNotesMat = mat.cell_notes || {};
+                if (typeof cellNotesMat === 'string') {
+                    try { cellNotesMat = JSON.parse(cellNotesMat); } catch(e) { cellNotesMat = {}; }
+                }
+
                 let specOptionsHtml = '<option value="">-Chọn-</option>';
                 materialSpecs.forEach(spec => {
                     specOptionsHtml +=
@@ -345,25 +370,31 @@
                 });
 
                 materialsCodeHtml += `
-                            <div class="material-group mt-1" data-mat-index="${mIdx}">
-                                <textarea class="form-control auto-resize" name="bom[${bomRowIndex}][materials][${mIdx}][code]" placeholder="Mã NL" rows="1">${mat.code || ''}</textarea>
+                            <div class="material-group mt-1 position-relative" data-mat-index="${mIdx}">
+                                <textarea class="form-control auto-resize pe-4" name="bom[${bomRowIndex}][materials][${mIdx}][code]" placeholder="Mã NL" rows="1">${mat.code || ''}</textarea>
+                                ${generateNoteUI(cellNotesMat.code, `bom[${bomRowIndex}][materials][${mIdx}][cell_notes][code]`)}
                             </div>
                         `;
                 materialsNameHtml += `
-                            <div class="material-group mt-1" data-mat-index="${mIdx}">
-                                <textarea class="form-control auto-resize" name="bom[${bomRowIndex}][materials][${mIdx}][name]" placeholder="Thành phần" rows="2">${mat.name || ''}</textarea>
+                            <div class="material-group mt-1 position-relative" data-mat-index="${mIdx}">
+                                <textarea class="form-control auto-resize pe-4" name="bom[${bomRowIndex}][materials][${mIdx}][name]" placeholder="Thành phần" rows="2">${mat.name || ''}</textarea>
+                                ${generateNoteUI(cellNotesMat.name, `bom[${bomRowIndex}][materials][${mIdx}][cell_notes][name]`)}
                             </div>
                         `;
                 materialsManufHtml += `
-                            <div class="material-group mt-1" data-mat-index="${mIdx}">
-                                <textarea class="form-control auto-resize" name="bom[${bomRowIndex}][materials][${mIdx}][manufacturer]" placeholder="Nhà SX" rows="1">${mat.manufacturer || ''}</textarea>
+                            <div class="material-group mt-1 position-relative" data-mat-index="${mIdx}">
+                                <textarea class="form-control auto-resize pe-4" name="bom[${bomRowIndex}][materials][${mIdx}][manufacturer]" placeholder="Nhà SX" rows="1">${mat.manufacturer || ''}</textarea>
+                                ${generateNoteUI(cellNotesMat.manufacturer, `bom[${bomRowIndex}][materials][${mIdx}][cell_notes][manufacturer]`)}
                             </div>
                         `;
                 materialsSpecHtml += `
                             <div class="material-group mt-1 d-flex align-items-start position-relative" data-mat-index="${mIdx}">
-                                <select class="form-control custom-select" name="bom[${bomRowIndex}][materials][${mIdx}][Spec]">
-                                    ${specOptionsHtml}
-                                </select>
+                                <div class="position-relative flex-grow-1">
+                                    <select class="form-control custom-select pe-4" name="bom[${bomRowIndex}][materials][${mIdx}][Spec]">
+                                        ${specOptionsHtml}
+                                    </select>
+                                    ${generateNoteUI(cellNotesMat.Spec, `bom[${bomRowIndex}][materials][${mIdx}][cell_notes][Spec]`)}
+                                </div>
                                 ${mIdx === 0 
                                     ? `<button type="button" class="btn btn-xs btn-outline-primary ms-1 mt-1 btn_add_material" title="Thêm mã nguyên liệu"><i class="fa fa-plus"></i></button>` 
                                     : `<button type="button" class="btn btn-xs btn-outline-danger ms-1 mt-1 btn_remove_material" title="Xóa mã NL"><i class="fa fa-times"></i></button>`}
@@ -391,8 +422,9 @@
                             <td class="align-middle p-1">
                                 <div class="materials-col-spec">${materialsSpecHtml}</div>
                             </td>
-                            <td class="align-middle">
-                                <div class="d-flex align-items-center mb-1">
+                            <td class="align-middle position-relative">
+                                ${generateNoteUI(cellNotesForm.total_amount_per_unit, `bom[${bomRowIndex}][cell_notes][total_amount_per_unit]`)}
+                                <div class="d-flex align-items-center mb-1 pe-4">
                                     <input type="number" step="any" class="form-control total-amount-unit-input" name="bom[${bomRowIndex}][total_amount_per_unit]" placeholder="Tổng" value="${formula.total_amount_per_unit || ''}">
                                     <input type="text" class="form-control ms-1 text-center px-1" name="bom[${bomRowIndex}][uom]" placeholder="ĐV" style="width: 50px;" value="${formula.uom || ''}">
                                     <button type="button" class="btn btn-xs btn-outline-info ms-1 btn_add_sub_amount" title="Chia phần"><i class="fa fa-plus"></i></button>
@@ -406,9 +438,21 @@
                                 <div class="sub-amounts-container"></div>
                             </td>
                             <td class="align-middle"><input type="text" class="form-control ratio-display text-center text-success fw-bold" placeholder="%" readonly style="background-color: transparent;"></td>
-                            <td class="align-middle">
-                                <div class="d-flex align-items-center mb-1">
-                                    <input type="text" class="form-control total-amount-batch-input" name="bom[${bomRowIndex}][total_amount_per_batch]" placeholder="1 lô" value="${formula.total_amount_per_batch || ''}" readonly style="background-color: transparent;">
+                            <td class="align-middle position-relative">
+                                ${generateNoteUI(cellNotesForm.total_amount_per_batch, `bom[${bomRowIndex}][cell_notes][total_amount_per_batch]`)}
+                                <div class="d-flex align-items-center mb-1 pe-4">
+                                    <input type="text" class="form-control total-amount-batch-input fw-bold" name="bom[${bomRowIndex}][total_amount_per_batch]" placeholder="1 lô" value="${formula.total_amount_per_batch || ''}" readonly style="background-color: transparent;">
+                                </div>
+                                <div class="d-flex align-items-center justify-content-center mt-1">
+                                    <label class="mb-0 text-muted d-flex align-items-center" style="font-size: 0.75rem; cursor: pointer;">
+                                        <input type="checkbox" name="bom[${bomRowIndex}][has_split_batches]" value="1" class="has-split-batches-cb me-1" style="width: 14px; height: 14px; cursor: pointer; margin: 0;" ${formula.number_of_lots > 1 ? 'checked' : ''}>
+                                        Chia mẻ
+                                    </label>
+                                </div>
+                                <div class="split-batch-container d-flex align-items-center mt-1" style="display: ${formula.number_of_lots > 1 ? 'flex' : 'none'} !important;">
+                                    <input type="number" min="1" step="1" class="form-control number-of-lots-input form-control-sm text-center px-1" name="bom[${bomRowIndex}][number_of_lots]" value="${formula.number_of_lots || 1}" title="Số mẻ" placeholder="Mẻ" style="width: 45px;">
+                                    <span class="mx-1 text-muted small">x</span>
+                                    <input type="text" class="form-control amounts-of-lots-input form-control-sm px-1 text-primary" name="bom[${bomRowIndex}][amounts_of_lots]" value="${formula.amounts_of_lots || ''}" title="Lượng / mẻ" placeholder="Lượng/mẻ" readonly style="background-color: transparent;">
                                 </div>
                                 <div class="sub-amounts-batch-container"></div>
                             </td>
@@ -554,10 +598,24 @@
                 batchVal = (unitVal * window.currentBatchQty) / 1000000;
             }
 
+            const numberOfLotsInput = row.find('.number-of-lots-input');
+            const amountsOfLotsInput = row.find('.amounts-of-lots-input');
+            const hasSplitCb = row.find('.has-split-batches-cb').is(':checked');
+
+            let numLots = 1;
+            if (hasSplitCb) {
+                numLots = parseInt(numberOfLotsInput.val());
+                if (isNaN(numLots) || numLots < 1) numLots = 1;
+            } else {
+                numberOfLotsInput.val(1);
+            }
+
             if (batchVal > 0) {
                 batchInput.val(isCalculate ? batchVal.toFixed(3) : `(${batchVal.toFixed(3)})`);
+                amountsOfLotsInput.val((batchVal / numLots).toFixed(3));
             } else {
                 batchInput.val('');
+                amountsOfLotsInput.val('');
             }
 
             // Wrap unit in parens if not calculated
@@ -570,6 +628,7 @@
         } else {
             ratioInput.val('');
             batchInput.val('');
+            row.find('.amounts-of-lots-input').val('');
         }
 
         // Calculate batch values for each sub-amount
@@ -637,6 +696,20 @@
         calculateRowValues($(this).closest('tr.bom-row'));
     });
 
+    $(document).on('input', '.number-of-lots-input', function() {
+        calculateRowValues($(this).closest('tr.bom-row'));
+    });
+
+    $(document).on('change', '.has-split-batches-cb', function() {
+        const row = $(this).closest('tr.bom-row');
+        if ($(this).is(':checked')) {
+            row.find('.split-batch-container').attr('style', 'display: flex !important;');
+        } else {
+            row.find('.split-batch-container').attr('style', 'display: none !important;');
+        }
+        calculateRowValues(row);
+    });
+
     $(document).on('change', '.not-calculator-cb', function() {
         calculateRowValues($(this).closest('tr.bom-row'));
     });
@@ -659,6 +732,7 @@
         ['type_0', 'type_1'].forEach(type => {
             let html = '';
             let rowIndexBase = 1;
+            let cellNoteCounter = 0;
 
             $(`#bom_table_body_${type} tr.bom-row`).each(function() {
                 const row = $(this);
@@ -677,10 +751,32 @@
                             `<sup class="note-superscript ms-1 text-danger fw-bold">(${idxLabel})</sup>`
                         );
                         html +=
-                            `<div><span class="text-danger fw-bold">(${idxLabel})</span> ${noteVal}</div>`;
+                            `<div><span class="text-danger fw-bold">(${idxLabel})</span> ${noteVal.replace(/\n/g, '<br>')}</div>`;
                         subNoteIndex++;
                     }
                 });
+
+                row.find('.cell-note-container').each(function() {
+                    const container = $(this);
+                    const noteInput = container.find('.cell-note-input');
+                    const noteVal = noteInput.val() ? noteInput.val().trim() : '';
+                    const btn = container.find('.btn_cell_note');
+
+                    container.find('.cell-note-superscript').remove();
+
+                    if (noteVal) {
+                        cellNoteCounter++;
+                        const idxLabel = `*${cellNoteCounter}`;
+                        btn.html(`<span class="fw-bold" style="font-size: 11px;">(${idxLabel})</span>`);
+                        btn.css('color', '#17a2b8');
+                        html +=
+                            `<div class="mt-1"><span class="text-info fw-bold">(${idxLabel})</span> ${noteVal.replace(/\n/g, '<br>')}</div>`;
+                    } else {
+                        btn.html('<i class="fa fa-comment-dots"></i>');
+                        btn.css('color', '#ccc');
+                    }
+                });
+
                 rowIndexBase++;
             });
 
@@ -850,7 +946,7 @@
                             matchedRole = r.name;
                         }
                     });
-                    lastBOMRow.find('input[name$="[role]"]').val(matchedRole);
+                    lastBOMRow.find('textarea[name$="[role]"]').val(matchedRole);
                 }
 
                 if (rowData[4]) lastBOMRow.find('textarea[name$="[manufacturer]"]').val(rowData[4].trim());
@@ -872,8 +968,24 @@
                             'input');
                     }
                 }
+
+                if (rowData[8]) {
+                    const batchStr = rowData[8].replace(/,/g, '.');
+                    let match = batchStr.match(/([\d.]+)\s*[xX*]\s*(\d+)/);
+                    if (match) {
+                        let amountsOfLots = parseFloat(match[1]);
+                        let numberOfLots = parseInt(match[2]);
+                        if (!isNaN(amountsOfLots) && !isNaN(numberOfLots)) {
+                            lastBOMRow.find('input[name$="[number_of_lots]"]').val(numberOfLots);
+                            lastBOMRow.find('input[name$="[amounts_of_lots]"]').val(amountsOfLots);
+                            if (numberOfLots > 1) {
+                                lastBOMRow.find('.has-split-batches-cb').prop('checked', true).trigger('change');
+                            }
+                        }
+                    }
+                }
             } else if (action === 'UPDATE_MATERIAL') {
-                const targetRole = lastBOMRow.find('input[name$="[role]"]');
+                const targetRole = lastBOMRow.find('textarea[name$="[role]"]');
                 if (rowData[3] && !targetRole.val()) {
                     const funcText = rowData[3].trim();
                     let matchedRole = funcText;
@@ -951,4 +1063,36 @@
         $('#importBomModal').modal('hide');
         Swal.fire('Thành công', `Đã nhập ${data.length} dòng công thức!`, 'success');
     };
+
+    // --- Cell-level Note Logic ---
+    $(document).on('click', '.btn_cell_note', function(e) {
+        e.stopPropagation();
+        const container = $(this).closest('.cell-note-container');
+        const popover = container.find('.cell-note-popover');
+        
+        // Hide all other popovers
+        $('.cell-note-popover').not(popover).addClass('d-none');
+        
+        // Toggle this one
+        popover.toggleClass('d-none');
+        if (!popover.hasClass('d-none')) {
+            popover.find('textarea').focus();
+        }
+    });
+
+    $(document).on('click', '.btn_close_cell_note', function(e) {
+        e.stopPropagation();
+        const container = $(this).closest('.cell-note-container');
+        const popover = container.find('.cell-note-popover');
+        
+        popover.addClass('d-none');
+        updateBOMNotes();
+    });
+
+    // Close popovers when clicking outside
+    $(document).on('click', function(e) {
+        if (!$(e.target).closest('.cell-note-popover, .btn_cell_note').length) {
+            $('.cell-note-popover').addClass('d-none');
+        }
+    });
 </script>
