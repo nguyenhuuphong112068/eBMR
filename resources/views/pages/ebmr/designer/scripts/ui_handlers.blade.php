@@ -19,7 +19,10 @@
      */
     function printBlankForm() {
         const pageContent = document.getElementById('document-page');
-        if (!pageContent) { window.print(); return; }
+        if (!pageContent) {
+            window.print();
+            return;
+        }
 
         // Lấy tên biểu mẫu
         const titleEl = document.querySelector('.page-a4 h1, .page-a4 h2, .page-a4 .form-title');
@@ -29,7 +32,9 @@
         const styles = Array.from(document.styleSheets).map(ss => {
             try {
                 return Array.from(ss.cssRules).map(r => r.cssText).join('\n');
-            } catch(e) { return ''; }
+            } catch (e) {
+                return '';
+            }
         }).join('\n');
 
         // Clone nội dung trang
@@ -47,33 +52,37 @@
         // Chuyển select thành span gạch chân
         cloned.querySelectorAll('select').forEach(sel => {
             const span = document.createElement('span');
-            span.style.cssText = 'display:block; width:100%; border-bottom:1.5px solid #000; height:55px; min-height:55px; color:transparent;';
-            
+            span.style.cssText =
+                'display:block; width:100%; border-bottom:1.5px solid #000; height:55px; min-height:55px; color:transparent;';
+
             const td = sel.closest('td');
             if (td) {
                 td.style.cssText = 'height:60px; min-height:60px; vertical-align:bottom;';
             }
-            
+
             sel.parentNode.replaceChild(span, sel);
         });
 
         // Chuyển execution-input-test và execution-badge thành gạch chân
-        cloned.querySelectorAll('.execution-input-test, .execution-badge:not(.execution-checkbox-wrapper)').forEach(el => {
-            if (el.tagName === 'INPUT' && el.type === 'checkbox') return; // giữ checkbox
-            el.style.cssText = 'display:block; width:100%; border:none; border-bottom:1.5px solid #000; height:55px; min-height:55px; color:transparent; background:transparent; box-shadow:none; border-radius:0;';
-            // Xóa text bên trong nhưng giữ chiều rộng
-            el.innerHTML = '&nbsp;';
-            
-            // Căn đáy cho thẻ cha (td) để các gạch chân nằm ngang hàng
-            const td = el.closest('td');
-            if (td) {
-                td.style.cssText = 'height:60px; min-height:60px; vertical-align:bottom;';
-            }
-        });
+        cloned.querySelectorAll('.execution-input-test, .execution-badge:not(.execution-checkbox-wrapper)').forEach(
+            el => {
+                if (el.tagName === 'INPUT' && el.type === 'checkbox') return; // giữ checkbox
+                el.style.cssText =
+                    'display:block; width:100%; border:none; border-bottom:1.5px solid #000; height:55px; min-height:55px; color:transparent; background:transparent; box-shadow:none; border-radius:0;';
+                // Xóa text bên trong nhưng giữ chiều rộng
+                el.innerHTML = '&nbsp;';
+
+                // Căn đáy cho thẻ cha (td) để các gạch chân nằm ngang hàng
+                const td = el.closest('td');
+                if (td) {
+                    td.style.cssText = 'height:60px; min-height:60px; vertical-align:bottom;';
+                }
+            });
 
         // Xóa viền vàng badge
         cloned.querySelectorAll('.ebmr-field-badge').forEach(b => {
-            b.style.cssText = 'background:transparent; border:none; box-shadow:none; padding:0; border-radius:0; display:block; width:100%;';
+            b.style.cssText =
+                'background:transparent; border:none; box-shadow:none; padding:0; border-radius:0; display:block; width:100%;';
         });
 
         const printWindow = window.open('', '_blank', 'width=900,height=700');
@@ -171,6 +180,7 @@
         // Cập nhật trạng thái nút bấm trên toolbar (nút Toggle duy nhất)
         const toggleBtn = document.getElementById('btn-mode-toggle');
         const mainContent = document.getElementById('mainContent');
+        const btnExtractDataTree = document.getElementById('btn-extract-data-tree');
 
         if (toggleBtn) {
             if (isExecute) {
@@ -178,11 +188,13 @@
                 toggleBtn.classList.add('btn-success');
                 toggleBtn.innerHTML = '<i class="fas fa-play me-1"></i> <span id="mode-text">Chạy thử</span>';
                 toggleBtn.title = "Chuyển sang Thiết kế (Ctrl + E)";
+                if (btnExtractDataTree) btnExtractDataTree.classList.remove('d-none');
             } else {
                 toggleBtn.classList.remove('btn-success');
                 toggleBtn.classList.add('btn-primary');
                 toggleBtn.innerHTML = '<i class="fas fa-edit me-1"></i> <span id="mode-text">Thiết kế</span>';
                 toggleBtn.title = "Chuyển sang Chạy thử (Ctrl + E)";
+                if (btnExtractDataTree) btnExtractDataTree.classList.add('d-none');
             }
         }
 
@@ -519,12 +531,12 @@
                     event.preventDefault();
                     event.stopPropagation();
                     const targetBtn = event.currentTarget;
-                    
+
                     document.querySelectorAll('#tablePropTabs button.nav-link').forEach(b => {
                         b.classList.remove('active', 'bg-white');
                         b.style.borderTopColor = 'transparent';
                     });
-                    
+
                     targetBtn.classList.add('active', 'bg-white');
                     if (targetBtn.id === 'table-basic-tab') targetBtn.style.borderTopColor = '#0d6efd';
                     if (targetBtn.id === 'table-tool-tab') targetBtn.style.borderTopColor = '#198754';
@@ -653,7 +665,8 @@
             id: id,
             type: type,
             section_id: sectionId,
-            label: (type === 'static-text' ? 'Ghi chú' : (type === 'page-break' ? 'Ngắt trang' : 'Tiêu đề ' + type)),
+            label: (type === 'static-text' ? 'Ghi chú' : (type === 'page-break' ? 'Ngắt trang' : 'Tiêu đề ' +
+                type)),
             content: defaultContent,
             columns: [],
             borderMode: (type === 'static-text' || type === 'page-break') ? 'none' : 'visible',
@@ -1075,7 +1088,7 @@
         const selectionNode = selection.anchorNode;
         const activeCell = selectionNode ? (selectionNode.nodeType === 3 ? selectionNode.parentElement : selectionNode)
             .closest('.mini-table td') : null;
-        
+
         // Cần lấy editable block TRƯỚC khi gọi execCommand vì execCommand có thể thay thế node, làm mất DOM hierarchy
         const currentEditable = activeCell || (selectionNode ? (selectionNode.nodeType === 3 ? selectionNode
             .parentElement : selectionNode).closest('[contenteditable="true"]') : null);
@@ -1087,9 +1100,10 @@
                 return;
             }
             const targetTag = cmd === 'superscript' ? 'SUP' : 'SUB';
-            const parentElement = selectionNode && selectionNode.nodeType === 3 ? selectionNode.parentElement : selectionNode;
+            const parentElement = selectionNode && selectionNode.nodeType === 3 ? selectionNode.parentElement :
+                selectionNode;
             const existingTag = parentElement ? parentElement.closest('sup, sub') : null;
-            
+
             if (existingTag && currentEditable && currentEditable.contains(existingTag)) {
                 if (existingTag.tagName === targetTag) {
                     const fragment = document.createDocumentFragment();
@@ -1242,21 +1256,26 @@
                         }
                         if (domProp) cell.style[domProp] = val;
                     }
-                    
+
                     // --- Dọn dẹp thẻ nội bộ để đảm bảo format toàn ô (td) có hiệu lực ---
-                    if (domProp && ['foreColor', 'bold', 'italic', 'underline', 'strikethrough', 'justifyLeft', 'justifyCenter', 'justifyRight', 'justifyFull'].includes(command)) {
+                    if (domProp && ['foreColor', 'bold', 'italic', 'underline', 'strikethrough', 'justifyLeft',
+                            'justifyCenter', 'justifyRight', 'justifyFull'
+                        ].includes(command)) {
                         let selectors = [];
                         if (command === 'foreColor') selectors = ['font[color]', '[style*="color"]'];
                         else if (command === 'bold') selectors = ['b', 'strong', '[style*="font-weight"]'];
                         else if (command === 'italic') selectors = ['i', 'em', '[style*="font-style"]'];
-                        else if (['underline', 'strikethrough'].includes(command)) selectors = ['u', 'strike', 's', '[style*="text-decoration"]'];
+                        else if (['underline', 'strikethrough'].includes(command)) selectors = ['u', 'strike',
+                            's', '[style*="text-decoration"]'
+                        ];
                         else if (command.startsWith('justify')) selectors = ['[style*="text-align"]', 'center'];
 
                         const innerNodes = cell.querySelectorAll(selectors.join(', '));
                         innerNodes.forEach(node => {
                             if (!node.classList.contains('ebmr-field-badge')) {
                                 const tag = node.tagName.toLowerCase();
-                                if (['b', 'strong', 'i', 'em', 'u', 'strike', 's', 'center'].includes(tag)) {
+                                if (['b', 'strong', 'i', 'em', 'u', 'strike', 's', 'center'].includes(
+                                        tag)) {
                                     // Loại bỏ thẻ nhưng giữ lại nội dung bên trong
                                     const parent = node.parentNode;
                                     while (node.firstChild) parent.insertBefore(node.firstChild, node);
@@ -1271,14 +1290,16 @@
                                     if (command === 'foreColor') node.style.color = '';
                                     else if (command === 'bold') node.style.fontWeight = '';
                                     else if (command === 'italic') node.style.fontStyle = '';
-                                    else if (['underline', 'strikethrough'].includes(command)) node.style.textDecoration = '';
+                                    else if (['underline', 'strikethrough'].includes(command)) node
+                                        .style.textDecoration = '';
                                     else if (command.startsWith('justify')) node.style.textAlign = '';
-                                    
+
                                     if (node.getAttribute('style') === '') {
                                         // Nếu span không còn style nào khác, unwrap luôn cho sạch HTML
                                         const parent = node.parentNode;
                                         if (node.tagName.toLowerCase() === 'span') {
-                                            while (node.firstChild) parent.insertBefore(node.firstChild, node);
+                                            while (node.firstChild) parent.insertBefore(node.firstChild,
+                                                node);
                                             parent.removeChild(node);
                                         } else {
                                             node.removeAttribute('style');
@@ -1550,7 +1571,8 @@
                                 // Nếu span không còn style nào khác, unwrap luôn cho sạch HTML
                                 const parent = node.parentNode;
                                 if (node.tagName.toLowerCase() === 'span') {
-                                    while (node.firstChild) parent.insertBefore(node.firstChild, node);
+                                    while (node.firstChild) parent.insertBefore(node.firstChild,
+                                        node);
                                     parent.removeChild(node);
                                 } else {
                                     node.removeAttribute('style');
@@ -1647,7 +1669,7 @@
             });
             selectedCells.forEach(cell => {
                 cell.style.fontSize = pt + 'pt';
-                
+
                 // Dọn dẹp inner font-size để đảm bảo style td được áp dụng đồng nhất
                 const innerNodes = cell.querySelectorAll('font[size], [style*="font-size"]');
                 innerNodes.forEach(node => {
@@ -1656,8 +1678,7 @@
                             const parent = node.parentNode;
                             while (node.firstChild) parent.insertBefore(node.firstChild, node);
                             parent.removeChild(node);
-                        }
-                        else {
+                        } else {
                             node.style.fontSize = '';
                             if (node.getAttribute('style') === '') {
                                 const parent = node.parentNode;
@@ -1672,7 +1693,7 @@
                         }
                     }
                 });
-                
+
                 // Cập nhật lại HTML đã dọn dẹp vào model
                 const rStr = cell.dataset.row;
                 const cStr = cell.dataset.col;
@@ -1712,7 +1733,8 @@
         // Force data sync for the active cell/block
         const selection = window.getSelection();
         const selectionNode = selection.anchorNode;
-        const editable = selectionNode ? (selectionNode.nodeType === 3 ? selectionNode.parentElement : selectionNode).closest('[contenteditable="true"]') : null;
+        const editable = selectionNode ? (selectionNode.nodeType === 3 ? selectionNode.parentElement : selectionNode)
+            .closest('[contenteditable="true"]') : null;
         if (editable && editable.oninput) {
             editable.oninput();
         }
@@ -2450,7 +2472,7 @@
     window.toggleSelectVarMode = function(fieldId) {
         window.isSelectVarMode = !window.isSelectVarMode;
         const btn = document.getElementById(`btn-select-var-${fieldId}`);
-        
+
         if (window.isSelectVarMode) {
             window.targetFormulaFieldId = fieldId;
             if (btn) {
@@ -2471,8 +2493,10 @@
     };
 
     window.highlightFormulaVars = function(formulaStr, targetFieldId = null) {
-        document.querySelectorAll('.formula-var-highlight').forEach(el => el.classList.remove('formula-var-highlight'));
-        document.querySelectorAll('.formula-target-highlight').forEach(el => el.classList.remove('formula-target-highlight'));
+        document.querySelectorAll('.formula-var-highlight').forEach(el => el.classList.remove(
+            'formula-var-highlight'));
+        document.querySelectorAll('.formula-target-highlight').forEach(el => el.classList.remove(
+            'formula-target-highlight'));
         if (!formulaStr && !targetFieldId) return;
 
         if (targetFieldId) {
@@ -2481,12 +2505,13 @@
         }
 
         if (!formulaStr) return;
-        
+
         let match;
         const regex = /\(([^()]+)\)/g;
         while ((match = regex.exec(formulaStr)) !== null) {
             const idOrName = match[1];
-            const targetField = Object.values(fieldsConfig).find(f => f.name === idOrName || f.label === idOrName || f.id === idOrName);
+            const targetField = Object.values(fieldsConfig).find(f => f.name === idOrName || f.label === idOrName ||
+                f.id === idOrName);
             if (targetField && targetField.id !== targetFieldId) {
                 const badges = document.querySelectorAll(`.ebmr-field-badge[data-field-id="${targetField.id}"]`);
                 badges.forEach(badge => badge.classList.add('formula-var-highlight'));
@@ -2565,7 +2590,11 @@
                 };
             }
             if (!item.data[r][c].na_condition) {
-                item.data[r][c].na_condition = { target_id: '', operator: '=', value: '' };
+                item.data[r][c].na_condition = {
+                    target_id: '',
+                    operator: '=',
+                    value: ''
+                };
             }
             item.data[r][c].na_condition[prop] = val;
             saveStateDebounced();
@@ -2591,19 +2620,19 @@
                 const appendText = `(${varName})`;
                 input.value = input.value ? `${input.value} ${appendText}` : appendText;
                 syncFieldConfig(window.targetFormulaFieldId, 'formula', input.value);
-                
+
                 // Cập nhật giá trị hiển thị preview nếu có
                 const preview = document.getElementById('formula-friendly-preview');
-                if(preview) {
+                if (preview) {
                     preview.innerText = input.value.replace(/\(([^)]+)\)/g, (match, id) => {
                         const target = Object.values(fieldsConfig).find(f => f.name === id || f.label === id);
                         return target ? (target.label || id) : id;
                     });
                 }
-                
+
                 // Trả focus về ô input, thiết lập auto height
                 input.focus();
-                input.style.height = 'auto'; 
+                input.style.height = 'auto';
                 input.style.height = (input.scrollHeight) + 'px';
             }
             return; // Chặn luồng chọn biến thông thường
@@ -2634,8 +2663,8 @@
             if (isSidebarMinimized) toggleSidebar(false);
         }
 
-        
-        
+
+
         let typeHtml = `
             <ul class="nav nav-tabs nav-fill mb-3 border-bottom-0" id="propTabs" role="tablist" style="font-size: 0.8rem;">
                 <li class="nav-item" role="presentation">
@@ -2752,7 +2781,7 @@
                     <label class="small fw-bold mb-2"><i class="fas fa-arrows-alt-h me-1"></i>Kích thước (CSS)</label>
                     <div class="row g-2 mb-2">
                         <div class="col-6">
-                            <label class="small text-muted" style="font-size: 0.75em;">Chiều rộng (px)</label>
+                            <label class="small text-muted" style="font-size: 0.75em;">Rộng(px)</label>
                             <input type="number" class="form-control form-control-sm" placeholder="Mặc định" min="50"
                                    value="${(field.style && field.style.width) ? parseInt(field.style.width) : ''}" 
                                    oninput="const val = this.value ? this.value + 'px' : ''; syncFieldConfig('${fieldId}', 'style.width', val); const badge = document.querySelector('.ebmr-field-badge[data-field-id=\'${fieldId}\']'); if(badge) { if(val) badge.style.setProperty('width', val, 'important'); else badge.style.removeProperty('width'); }">
@@ -2916,7 +2945,7 @@
                     </div>
                 </div>
             `;
-            
+
             advancedHtml += `
                 <div class="card border-0 shadow-none mb-3" style="background: linear-gradient(135deg, #fef2f2, #fee2e2); border: 1px solid #fecaca !important;">
                     <div class="card-body p-3">
@@ -2941,6 +2970,35 @@
                                 <option value="custom"  ${(field.scalePreset) === 'custom'            ? 'selected' : ''}>⚙️ Tùy chỉnh</option>
                             </select>
                         </div>
+                    </div>
+                </div>
+            `;
+        } else if (field.type === 'text') {
+            advancedHtml += `
+                <div class="card border-0 shadow-none mb-3" style="background: linear-gradient(135deg, #f0fdf4, #dcfce7); border: 1px solid #bbf7d0 !important;">
+                    <div class="card-body p-3">
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <i class="fas fa-barcode text-success"></i>
+                            <label class="small fw-bold mb-0 text-success-emphasis">Kích hoạt Quét Barcode</label>
+                        </div>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="barcodeScanEnabled_${fieldId}"
+                                   ${field.barcodeScanEnabled ? 'checked' : ''}
+                                   onchange="syncFieldConfig('${fieldId}', 'barcodeScanEnabled', this.checked); selectField(null, '${fieldId}');">
+                            <label class="form-check-label small fw-bold" for="barcodeScanEnabled_${fieldId}">
+                                Cho phép quét Barcode
+                            </label>
+                        </div>
+                        ${field.barcodeScanEnabled ? `
+                        <div class="mb-2 mt-2">
+                            <label class="small fw-bold mb-1">Mã đối chiếu (Tùy chọn)</label>
+                            <input type="text" class="form-control form-control-sm border-success" placeholder="VD: 22120040279"
+                                   value="${field.barcodeMatchValue || ''}"
+                                   onchange="syncFieldConfig('${fieldId}', 'barcodeMatchValue', this.value);">
+                            
+                        </div>
+                        ` : ''}
+                        
                     </div>
                 </div>
             `;
@@ -3016,13 +3074,13 @@
                 event.preventDefault();
                 event.stopPropagation();
                 const targetBtn = event.currentTarget;
-                
+
                 // 1. Reset tất cả các tab
                 document.querySelectorAll('#propTabs button.nav-link').forEach(b => {
                     b.classList.remove('active', 'bg-white');
                     b.style.borderTopColor = 'transparent';
                 });
-                
+
                 // 2. Active tab được click
                 targetBtn.classList.add('active', 'bg-white');
                 if (targetBtn.id === 'basic-tab') targetBtn.style.borderTopColor = '#0d6efd';
@@ -3037,7 +3095,7 @@
                 const targetPane = document.querySelector(targetPaneId);
                 if (targetPane) {
                     targetPane.classList.add('show', 'active');
-                    
+
                     // Auto-resize tất cả textarea bên trong tab này khi vừa hiện ra
                     setTimeout(() => {
                         targetPane.querySelectorAll('textarea').forEach(ta => {
@@ -3336,7 +3394,7 @@
 
         let html = '';
         let displayBlocks = [...blocks];
-        
+
         // Render header block for GF and BPR automatically
         if (template && (template.type === 'GF' || template.type === 'BPR')) {
             const t = {
@@ -3346,22 +3404,59 @@
                 name: template.category_name || template.name || '',
                 caterogy_id: template.caterogy_id || 0
             };
-            
+
             displayBlocks.unshift({
                 id: 'blk_header_' + Date.now(),
                 type: 'table',
                 label: 'GF Header',
                 rows: 3,
                 cols: 2,
-                columns: [
-                    { label: 'C1', type: 'text', width: '60%' },
-                    { label: 'C2', type: 'text', width: '40%' }
+                columns: [{
+                        label: 'C1',
+                        type: 'text',
+                        width: '60%'
+                    },
+                    {
+                        label: 'C2',
+                        type: 'text',
+                        width: '40%'
+                    }
                 ],
                 data: [
-                    [{ content: `Số SOP đối chiếu: ${t.sop}`, rs: 1, cs: 1, textAlign: 'left', fontStyle: 'italic', fontSize: '1rem', backgroundColor: '#dcdcdc' },
-                     { content: ` Số biểu mẫu: ${t.format}-${t.version}`, rs: 1, cs: 1, textAlign: 'right', fontStyle: 'italic', fontSize: '1rem', backgroundColor: '#dcdcdc' }],
-                    [{ content: t.name, rs: 1, cs: 2, textAlign: 'center', fontSize: '1.2rem', fontWeight: 'bold', textTransform: 'uppercase', backgroundColor: '#dcdcdc' },
-                     { content: '', hidden: true }]
+                    [{
+                            content: `Số SOP đối chiếu: ${t.sop}`,
+                            rs: 1,
+                            cs: 1,
+                            textAlign: 'left',
+                            fontStyle: 'italic',
+                            fontSize: '1rem',
+                            backgroundColor: '#dcdcdc'
+                        },
+                        {
+                            content: ` Số biểu mẫu: ${t.format}-${t.version}`,
+                            rs: 1,
+                            cs: 1,
+                            textAlign: 'right',
+                            fontStyle: 'italic',
+                            fontSize: '1rem',
+                            backgroundColor: '#dcdcdc'
+                        }
+                    ],
+                    [{
+                            content: t.name,
+                            rs: 1,
+                            cs: 2,
+                            textAlign: 'center',
+                            fontSize: '1.2rem',
+                            fontWeight: 'bold',
+                            textTransform: 'uppercase',
+                            backgroundColor: '#dcdcdc'
+                        },
+                        {
+                            content: '',
+                            hidden: true
+                        }
+                    ]
                 ],
                 rowHeights: ['auto', '5px', 'auto'],
                 borderMode: 'none',
@@ -3570,8 +3665,13 @@
         let el = container.nodeType === 3 ? container.parentElement : container;
 
         // Collect inline styles by walking up to editable boundary
-        let bold = false, italic = false, underline = false, strikethrough = false;
-        let fontSize = '', color = '', bgColor = '';
+        let bold = false,
+            italic = false,
+            underline = false,
+            strikethrough = false;
+        let fontSize = '',
+            color = '',
+            bgColor = '';
 
         // queryCommandState reflects the selection state accurately
         bold = document.queryCommandState('bold');
@@ -3585,7 +3685,8 @@
             const cs = window.getComputedStyle(node);
             if (!fontSize && node.style && node.style.fontSize) fontSize = node.style.fontSize;
             if (!color && node.style && node.style.color) color = node.style.color;
-            if (!bgColor && node.style && node.style.backgroundColor && node.style.backgroundColor !== 'rgba(0, 0, 0, 0)') {
+            if (!bgColor && node.style && node.style.backgroundColor && node.style.backgroundColor !==
+                'rgba(0, 0, 0, 0)') {
                 bgColor = node.style.backgroundColor;
             }
             node = node.parentElement;
@@ -3607,7 +3708,10 @@
 
         return {
             type: 'text',
-            bold, italic, underline, strikethrough,
+            bold,
+            italic,
+            underline,
+            strikethrough,
             fontSize,
             color,
             bgColor
@@ -3620,6 +3724,7 @@
      * - Double click (gọi lại trong 400ms): bật liên tục cho đến khi click nút lần nữa hoặc nhấn Esc.
      */
     let _painterClickTimer = null;
+
     function toggleFormatPainter() {
         if (isFormatPainterActive) {
             disableFormatPainter();
@@ -3633,7 +3738,9 @@
             formatPainterLocked = true;
         } else {
             formatPainterLocked = false;
-            _painterClickTimer = setTimeout(() => { _painterClickTimer = null; }, 400);
+            _painterClickTimer = setTimeout(() => {
+                _painterClickTimer = null;
+            }, 400);
         }
 
         const selection = window.getSelection();
@@ -3655,7 +3762,8 @@
             if (item && item.type === 'table') {
                 const rIdx = activeRowIdx - 1;
                 const cIdx = activeColIdx;
-                if (rIdx >= 0 && item.data[rIdx] && item.data[rIdx][cIdx] && typeof item.data[rIdx][cIdx] === 'object') {
+                if (rIdx >= 0 && item.data[rIdx] && item.data[rIdx][cIdx] && typeof item.data[rIdx][cIdx] ===
+                    'object') {
                     const cell = item.data[rIdx][cIdx];
                     storedFormat = {
                         type: 'cell',
@@ -3687,7 +3795,10 @@
                         fontSize: (col.style && col.style.fontSize) || '',
                         textColor: (col.style && col.style.color) || '',
                         textTransform: '',
-                        borderTop: '', borderBottom: '', borderLeft: '', borderRight: '',
+                        borderTop: '',
+                        borderBottom: '',
+                        borderLeft: '',
+                        borderRight: '',
                         writingMode: ''
                     };
                 }
@@ -3710,22 +3821,34 @@
         if (storedFormat) {
             enableFormatPainter();
             // Toast
-            const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 1800 });
-            Toast.fire({ icon: 'info', title: formatPainterLocked ? '🖌️ Sao chép định dạng (đã khoá – nhấn Esc để thoát)' : '🖌️ Đã lấy định dạng – click vào đích để dán' });
+            const Toast = Swal.mixin({
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: false,
+                timer: 1800
+            });
+            Toast.fire({
+                icon: 'info',
+                title: formatPainterLocked ? '🖌️ Sao chép định dạng (đã khoá – nhấn Esc để thoát)' :
+                    '🖌️ Đã lấy định dạng – click vào đích để dán'
+            });
         } else {
             Swal.fire('Thông báo', 'Đặt con trỏ vào văn bản hoặc chọn ô/khối để sao chép định dạng', 'info');
         }
     }
 
     // SVG cursor hình cây chổi sơn (paint-roller) dùng khi Format Painter đang hoạt động
-    const _painterCursorSVG = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 512 512'%3E%3Cpath fill='%231a73e8' d='M352 64h-48V32a32 32 0 0 0-64 0v32H32A32 32 0 0 0 0 96v96a32 32 0 0 0 32 32h288a32 32 0 0 0 32-32v-16h32a16 16 0 0 1 16 16v32a16 16 0 0 1-16 16H272a48 48 0 0 0-48 48v176a48 48 0 0 0 96 0V288h64a80 80 0 0 0 80-80v-32a112 112 0 0 0-112-112z'/%3E%3C/svg%3E") 0 20, crosshair`;
+    const _painterCursorSVG =
+        `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 512 512'%3E%3Cpath fill='%231a73e8' d='M352 64h-48V32a32 32 0 0 0-64 0v32H32A32 32 0 0 0 0 96v96a32 32 0 0 0 32 32h288a32 32 0 0 0 32-32v-16h32a16 16 0 0 1 16 16v32a16 16 0 0 1-16 16H272a48 48 0 0 0-48 48v176a48 48 0 0 0 96 0V288h64a80 80 0 0 0 80-80v-32a112 112 0 0 0-112-112z'/%3E%3C/svg%3E") 0 20, crosshair`;
 
     // Snapshot selection khi mousedown để mouseup có thể lấy lại chính xác
     let _painterSelectionSnapshot = null;
+
     function _handlePainterMouseDown(e) {
         // Đặt lại snapshot khi bắt đầu drag bôi đen mới
         _painterSelectionSnapshot = null;
     }
+
     function _handlePainterSelectionChange() {
         const sel = window.getSelection();
         if (sel && sel.rangeCount > 0 && sel.toString().trim().length > 0) {
@@ -3741,7 +3864,8 @@
             btn.style.backgroundColor = '#e8f0fe';
             btn.style.color = '#1a73e8';
             btn.style.boxShadow = '0 0 0 2px #1a73e8';
-            btn.title = formatPainterLocked ? 'Sao chép định dạng (đã khoá – nhấn Esc để dừng)' : 'Sao chép định dạng (đang hoạt động)';
+            btn.title = formatPainterLocked ? 'Sao chép định dạng (đã khoá – nhấn Esc để dừng)' :
+                'Sao chép định dạng (đang hoạt động)';
         }
         document.body.classList.add('format-painter-active');
         document.addEventListener('mousedown', _handlePainterMouseDown);
@@ -3784,7 +3908,8 @@
         if (selectedText.length === 0) return false;
 
         const selNode = sel.anchorNode;
-        const editable = selNode ? (selNode.nodeType === 3 ? selNode.parentElement : selNode).closest('[contenteditable="true"]') : null;
+        const editable = selNode ? (selNode.nodeType === 3 ? selNode.parentElement : selNode).closest(
+            '[contenteditable="true"]') : null;
         if (!editable) return false;
 
         // 1. Xóa format hiện tại của vùng chọn
@@ -3863,8 +3988,16 @@
                 applied = _applyTextFormat(storedFormat);
                 if (!formatPainterLocked) disableFormatPainter();
                 else {
-                    const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 1200 });
-                    Toast.fire({ icon: 'success', title: 'Đã dán định dạng' });
+                    const Toast = Swal.mixin({
+                        toast: true,
+                        position: 'top-end',
+                        showConfirmButton: false,
+                        timer: 1200
+                    });
+                    Toast.fire({
+                        icon: 'success',
+                        title: 'Đã dán định dạng'
+                    });
                 }
                 return;
             }
@@ -3882,14 +4015,18 @@
                             const tc = item.data[r][c];
                             if (storedFormat.bold !== undefined) tc.fontWeight = storedFormat.bold ? 'bold' : '';
                             if (storedFormat.italic !== undefined) tc.fontStyle = storedFormat.italic ? 'italic' : '';
-                            if (storedFormat.underline !== undefined) tc.textDecoration = storedFormat.underline ? 'underline' : '';
+                            if (storedFormat.underline !== undefined) tc.textDecoration = storedFormat.underline ?
+                                'underline' : '';
                             if (storedFormat.fontSize) tc.fontSize = storedFormat.fontSize;
-                            if (storedFormat.color && storedFormat.color !== 'rgb(0, 0, 0)') tc.textColor = storedFormat.color;
-                            
+                            if (storedFormat.color && storedFormat.color !== 'rgb(0, 0, 0)') tc.textColor = storedFormat
+                                .color;
+
                             // Dọn dẹp nội dung bên trong để format của td không bị các thẻ con ghi đè
                             tc.content = _cleanUpHtmlContent(tc.content, storedFormat);
-                            
-                            renderBlocks(); saveStateDebounced(); applied = true;
+
+                            renderBlocks();
+                            saveStateDebounced();
+                            applied = true;
                         }
                     }
                 }
@@ -3915,7 +4052,7 @@
                 targetCell.borderLeft = storedFormat.borderLeft;
                 targetCell.borderRight = storedFormat.borderRight;
                 if (storedFormat.writingMode) targetCell.writingMode = storedFormat.writingMode;
-                
+
                 // Dọn dẹp thẻ con
                 targetCell.content = _cleanUpHtmlContent(targetCell.content, storedFormat);
             };
@@ -3930,9 +4067,13 @@
                     if (!item || item.type !== 'table') return;
                     const r = parseInt(td.dataset.row) - 1;
                     const c = parseInt(td.dataset.col);
-                    if (r >= 0 && item.data[r] && typeof item.data[r][c] === 'object') applyToCell(item.data[r][c]);
+                    if (r >= 0 && item.data[r] && typeof item.data[r][c] === 'object') applyToCell(item.data[r][
+                        c
+                    ]);
                 });
-                renderBlocks(); saveStateDebounced(); applied = true;
+                renderBlocks();
+                saveStateDebounced();
+                applied = true;
             } else {
                 // Click vào 1 ô cụ thể
                 const td = e.target.closest('td[data-row]');
@@ -3945,10 +4086,17 @@
                             const c = parseInt(td.dataset.col);
                             if (r >= 0 && item.data[r] && item.data[r][c]) {
                                 if (typeof item.data[r][c] !== 'object') {
-                                    item.data[r][c] = { content: item.data[r][c] || '', rs: 1, cs: 1, hidden: false };
+                                    item.data[r][c] = {
+                                        content: item.data[r][c] || '',
+                                        rs: 1,
+                                        cs: 1,
+                                        hidden: false
+                                    };
                                 }
                                 applyToCell(item.data[r][c]);
-                                renderBlocks(); saveStateDebounced(); applied = true;
+                                renderBlocks();
+                                saveStateDebounced();
+                                applied = true;
                             }
                         }
                     }
@@ -3967,7 +4115,9 @@
                     item.textAlign = storedFormat.textAlign;
                     item.fontSize = storedFormat.fontSize;
                     item.borderMode = storedFormat.borderMode;
-                    renderBlocks(); saveStateDebounced(); applied = true;
+                    renderBlocks();
+                    saveStateDebounced();
+                    applied = true;
                 }
             }
         }
@@ -3976,8 +4126,16 @@
             if (!formatPainterLocked) {
                 disableFormatPainter();
             } else {
-                const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 1200 });
-                Toast.fire({ icon: 'success', title: 'Đã dán định dạng – chọn tiếp vùng khác' });
+                const Toast = Swal.mixin({
+                    toast: true,
+                    position: 'top-end',
+                    showConfirmButton: false,
+                    timer: 1200
+                });
+                Toast.fire({
+                    icon: 'success',
+                    title: 'Đã dán định dạng – chọn tiếp vùng khác'
+                });
             }
         } else {
             // Nếu không áp dụng được và không lock → tắt
@@ -4000,7 +4158,8 @@
                 if (!n.classList.contains('ebmr-field-badge')) {
                     n.style.fontSize = '';
                     n.removeAttribute('size');
-                    if (n.tagName.toLowerCase() === 'font' && !n.getAttribute('color') && !n.getAttribute('face')) {
+                    if (n.tagName.toLowerCase() === 'font' && !n.getAttribute('color') && !n.getAttribute(
+                            'face')) {
                         _unwrapNode(n);
                     } else if (n.tagName.toLowerCase() === 'span' && !n.getAttribute('style')) {
                         _unwrapNode(n);
@@ -4013,7 +4172,8 @@
                 if (!n.classList.contains('ebmr-field-badge')) {
                     n.style.color = '';
                     n.removeAttribute('color');
-                    if (n.tagName.toLowerCase() === 'font' && !n.getAttribute('size') && !n.getAttribute('face')) {
+                    if (n.tagName.toLowerCase() === 'font' && !n.getAttribute('size') && !n.getAttribute(
+                            'face')) {
                         _unwrapNode(n);
                     } else if (n.tagName.toLowerCase() === 'span' && !n.getAttribute('style')) {
                         _unwrapNode(n);
@@ -4050,9 +4210,10 @@
         const selection = window.getSelection();
         if (selection.rangeCount > 0 && selection.toString().trim().length > 0) {
             document.execCommand('removeFormat', false, null);
-            
+
             const selectionNode = selection.anchorNode;
-            const editable = selectionNode ? (selectionNode.nodeType === 3 ? selectionNode.parentElement : selectionNode).closest('[contenteditable="true"]') : null;
+            const editable = selectionNode ? (selectionNode.nodeType === 3 ? selectionNode.parentElement :
+                selectionNode).closest('[contenteditable="true"]') : null;
             if (editable && editable.oninput) {
                 editable.oninput();
             }
@@ -4200,18 +4361,34 @@
             // Luôn luôn hiển thị giá trị input là ngày hiện tại (now)
             const d = new Date();
             if (field.date_format === 'hh:mm dd/mm/yyyy') {
-                currentVal = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+                currentVal =
+                    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
             } else {
-                currentVal = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                currentVal =
+                    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
             }
         } else if (field.type === 'text') {
-            inputType = 'textarea';
-            inputAttributes.rows = 4;
-            inputAttributes.placeholder = 'Nhập nội dung văn bản tại đây...';
+            if (field.barcodeScanEnabled) {
+                inputType = 'text';
+                inputAttributes.placeholder = 'Nhập mã Barcode thủ công và nhấn Xác nhận...';
+                currentVal = '';
+            } else {
+                inputType = 'textarea';
+                inputAttributes.rows = 4;
+                inputAttributes.placeholder = 'Nhập nội dung văn bản tại đây...';
+            }
         }
 
         // Build HTML for instruction and hints
         let instructionHtml = '';
+        if (field.type === 'text' && field.barcodeScanEnabled) {
+            instructionHtml += `<div class="mb-3">
+                <button type="button" class="btn btn-success w-100 fw-bold shadow-sm" style="padding: 10px; font-size: 1.1rem; border-radius: 8px;" onclick="startMmsBarcodeScan('${fieldId}')">
+                    <i class="fas fa-camera me-2"></i> Quét Barcode (MMS)
+                </button>
+                <div class="text-center mt-2 small text-muted fw-bold">Hoặc nhập mã Barcode thủ công vào ô bên dưới và nhấn Xác nhận:</div>
+            </div>`;
+        }
         if (field.instruction) {
             instructionHtml += `<div class="alert alert-info text-start small mb-3" style="font-size: 0.85rem; line-height: 1.4; border-left: 4px solid #0dcaf0;">
                                     <i class="fas fa-info-circle me-2"></i><b>Hướng dẫn:</b> ${field.instruction}
@@ -4290,13 +4467,15 @@
             didOpen: () => {
                 if (field.type === 'date') {
                     const input = Swal.getInput();
-                    if (input) input.type = field.date_format === 'hh:mm dd/mm/yyyy' ? 'datetime-local' : 'date';
+                    if (input) input.type = field.date_format === 'hh:mm dd/mm/yyyy' ?
+                        'datetime-local' : 'date';
                 }
             },
             onOpen: () => { // Hỗ trợ phiên bản SweetAlert2 cũ
                 if (field.type === 'date') {
                     const input = Swal.getInput();
-                    if (input) input.type = field.date_format === 'hh:mm dd/mm/yyyy' ? 'datetime-local' : 'date';
+                    if (input) input.type = field.date_format === 'hh:mm dd/mm/yyyy' ?
+                        'datetime-local' : 'date';
                 }
             }
         }).then((result) => {
@@ -4308,6 +4487,13 @@
 
                 console.log("Modal confirmed with value:", finalValue);
                 console.log("fieldId:", fieldId);
+
+                if (field.type === 'text' && field.barcodeScanEnabled && finalValue && finalValue.trim() !==
+                    '') {
+                    // Xử lý khi người dùng nhập Barcode thủ công thay vì quét
+                    fetchMmsDataAndShowModal(finalValue.trim(), fieldId);
+                    return;
+                }
 
                 // Định dạng lại YYYY-MM-DD từ datepicker thành DD/MM/YYYY để hiển thị và lưu thống nhất
                 if (field.type === 'date' && finalValue) {
@@ -4331,9 +4517,11 @@
                 }
 
                 // Lấy giá trị cũ
-                const existing = (window.executionValues[fieldId] && window.executionValues[fieldId]['default'] !== undefined) 
-                                 ? window.executionValues[fieldId]['default'] : '';
-                
+                const existing = (window.executionValues[fieldId] && window.executionValues[fieldId][
+                        'default'
+                    ] !== undefined) ?
+                    window.executionValues[fieldId]['default'] : '';
+
                 if (existing !== '' && existing !== finalValue) {
                     Swal.fire({
                         title: 'Lý do thay đổi',
@@ -4350,7 +4538,8 @@
                         }
                     }).then((reasonResult) => {
                         if (reasonResult.isConfirmed) {
-                            applyVariableValue(fieldId, finalValue, reasonResult.value.trim(), field, loopSuffix);
+                            applyVariableValue(fieldId, finalValue, reasonResult.value.trim(),
+                                field, loopSuffix);
                         }
                     });
                 } else {
@@ -4367,21 +4556,28 @@
             window.executionValues[fieldId] = {};
         }
 
-        const oldVal = window.executionValues[fieldId]['default'] !== undefined ? window.executionValues[fieldId]['default'] : '';
+        const oldVal = window.executionValues[fieldId]['default'] !== undefined ? window.executionValues[fieldId][
+            'default'
+        ] : '';
         window.executionValues[fieldId]['default'] = finalValue;
 
         const now = new Date();
-        const formattedTime = now.toLocaleDateString('vi-VN') + ' ' + now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-        
+        const formattedTime = now.toLocaleDateString('vi-VN') + ' ' + now.toLocaleTimeString('vi-VN', {
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+
         if (!window.executionValues[fieldId]._meta) window.executionValues[fieldId]._meta = {};
         if (!window.executionValues[fieldId]._meta['default']) window.executionValues[fieldId]._meta['default'] = {};
-        
-        window.executionValues[fieldId]._meta['default'].by = '{{ session("user.fullName") ?? (session("user.username") ?? "Người dùng thử") }}';
+
+        window.executionValues[fieldId]._meta['default'].by =
+            '{{ session('user.fullName') ?? (session('user.username') ?? 'Người dùng thử') }}';
         window.executionValues[fieldId]._meta['default'].at = formattedTime;
         if (reason) {
             window.executionValues[fieldId]._meta['default'].reason = reason;
-            window.executionValues[fieldId]._meta['default'].history_count = (window.executionValues[fieldId]._meta['default'].history_count || 0) + 1;
-            
+            window.executionValues[fieldId]._meta['default'].history_count = (window.executionValues[fieldId]._meta[
+                'default'].history_count || 0) + 1;
+
             if (!window.executionValues[fieldId]._meta['default'].history_list) {
                 window.executionValues[fieldId]._meta['default'].history_list = [];
             }
@@ -4664,9 +4860,11 @@
         const now = new Date();
         let timeString = '';
         if (field.date_format === 'hh:mm dd/mm/yyyy') {
-            timeString = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')} ${now.getDate().toString().padStart(2, '0')}/${(now.getMonth()+1).toString().padStart(2, '0')}/${now.getFullYear()}`;
+            timeString =
+                `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')} ${now.getDate().toString().padStart(2, '0')}/${(now.getMonth()+1).toString().padStart(2, '0')}/${now.getFullYear()}`;
         } else {
-            timeString = `${now.getDate().toString().padStart(2, '0')}/${(now.getMonth()+1).toString().padStart(2, '0')}/${now.getFullYear()}`;
+            timeString =
+                `${now.getDate().toString().padStart(2, '0')}/${(now.getMonth()+1).toString().padStart(2, '0')}/${now.getFullYear()}`;
         }
 
         if (!window.executionValues) window.executionValues = {};
@@ -4675,7 +4873,11 @@
         }
         window.executionValues[fieldId]['default'] = timeString;
 
-        const formattedTime = new Date().toLocaleDateString('vi-VN') + ' ' + new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+        const formattedTime = new Date().toLocaleDateString('vi-VN') + ' ' + new Date().toLocaleTimeString(
+            'vi-VN', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
         if (!window.executionValues[fieldId]._meta) window.executionValues[fieldId]._meta = {};
         window.executionValues[fieldId]._meta['default'] = {
             by: '{{ session('user.fullName') ?? (session('user.username') ?? '') }}',
@@ -4712,7 +4914,10 @@
         if (!window.executionValues[blockId]._meta) window.executionValues[blockId]._meta = {};
         window.executionValues[blockId]._meta[`${r}_${c}`] = {
             by: '{{ session('user.fullName') ?? (session('user.username') ?? '') }}',
-            at: now.toLocaleDateString('vi-VN') + ' ' + now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+            at: now.toLocaleDateString('vi-VN') + ' ' + now.toLocaleTimeString('vi-VN', {
+                hour: '2-digit',
+                minute: '2-digit'
+            })
         };
 
         if (typeof renderBlocks === 'function') renderBlocks();
@@ -4857,8 +5062,11 @@
 
         window.executionValues[blockId][`${r}_${c}`] = signatureVal;
 
-        const formattedTime = new Date().toLocaleDateString('vi-VN') + ' ' + new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-        
+        const formattedTime = new Date().toLocaleDateString('vi-VN') + ' ' + new Date().toLocaleTimeString('vi-VN', {
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+
         if (!window.executionValues[blockId]._meta) window.executionValues[blockId]._meta = {};
         window.executionValues[blockId]._meta[`${r}_${c}`] = {
             by: currentUser,
@@ -4934,7 +5142,11 @@
                     window.executionValues[blockId][cellKey] = data.signature_image ? data.signature_image :
                         data.fullName;
 
-                    const formattedTime = new Date().toLocaleDateString('vi-VN') + ' ' + new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+                    const formattedTime = new Date().toLocaleDateString('vi-VN') + ' ' + new Date()
+                        .toLocaleTimeString('vi-VN', {
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        });
                     if (!window.executionValues[blockId]._meta) window.executionValues[blockId]._meta = {};
                     window.executionValues[blockId]._meta[cellKey] = {
                         by: data.fullName,
@@ -5234,12 +5446,17 @@
                         if (!window.executionValues) window.executionValues = {};
                         if (!window.executionValues[blockId]) window.executionValues[blockId] = {};
                         window.executionValues[blockId][cellKey] = result.value;
-                        
+
                         const now = new Date();
-                        const formattedTime = now.toLocaleDateString('vi-VN') + ' ' + now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-                        if (!window.executionValues[blockId]._meta) window.executionValues[blockId]._meta = {};
+                        const formattedTime = now.toLocaleDateString('vi-VN') + ' ' + now
+                            .toLocaleTimeString('vi-VN', {
+                                hour: '2-digit',
+                                minute: '2-digit'
+                            });
+                        if (!window.executionValues[blockId]._meta) window.executionValues[blockId]
+                            ._meta = {};
                         window.executionValues[blockId]._meta[cellKey] = {
-                            by: '{{ session("user.fullName") ?? (session("user.username") ?? "") }}',
+                            by: '{{ session('user.fullName') ?? (session('user.username') ?? '') }}',
                             at: formattedTime
                         };
 
@@ -5253,15 +5470,16 @@
 
     window.handleCheckboxChange = function(fieldId, isChecked, element) {
         if (!window.executionValues) window.executionValues = {};
-        
-        const existing = (window.executionValues[fieldId] && window.executionValues[fieldId]['default'] !== undefined) 
-                         ? window.executionValues[fieldId]['default'] : '';
+
+        const existing = (window.executionValues[fieldId] && window.executionValues[fieldId]['default'] !==
+                undefined) ?
+            window.executionValues[fieldId]['default'] : '';
 
         if (existing !== '' && existing !== isChecked) {
             if (element) {
                 element.checked = !isChecked; // revert visually
             }
-            
+
             Swal.fire({
                 title: 'Lý do thay đổi',
                 text: 'Vui lòng nhập lý do thay đổi dữ liệu:',
@@ -5293,16 +5511,21 @@
         window.executionValues[fieldId]['default'] = isChecked;
 
         const now = new Date();
-        const formattedTime = now.toLocaleDateString('vi-VN') + ' ' + now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-        
+        const formattedTime = now.toLocaleDateString('vi-VN') + ' ' + now.toLocaleTimeString('vi-VN', {
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+
         if (!window.executionValues[fieldId]._meta) window.executionValues[fieldId]._meta = {};
         if (!window.executionValues[fieldId]._meta['default']) window.executionValues[fieldId]._meta['default'] = {};
-        
-        window.executionValues[fieldId]._meta['default'].by = '{{ session("user.fullName") ?? (session("user.username") ?? "") }}';
+
+        window.executionValues[fieldId]._meta['default'].by =
+            '{{ session('user.fullName') ?? (session('user.username') ?? '') }}';
         window.executionValues[fieldId]._meta['default'].at = formattedTime;
         if (reason) {
             window.executionValues[fieldId]._meta['default'].reason = reason;
-            window.executionValues[fieldId]._meta['default'].history_count = (window.executionValues[fieldId]._meta['default'].history_count || 0) + 1;
+            window.executionValues[fieldId]._meta['default'].history_count = (window.executionValues[fieldId]._meta[
+                'default'].history_count || 0) + 1;
         }
 
         if (typeof window.recalculateAllFormulas === 'function') window.recalculateAllFormulas();
@@ -5311,15 +5534,16 @@
 
     window.handleSelectChange = function(fieldId, value, element) {
         if (!window.executionValues) window.executionValues = {};
-        
-        const existing = (window.executionValues[fieldId] && window.executionValues[fieldId]['default'] !== undefined) 
-                         ? window.executionValues[fieldId]['default'] : '';
+
+        const existing = (window.executionValues[fieldId] && window.executionValues[fieldId]['default'] !==
+                undefined) ?
+            window.executionValues[fieldId]['default'] : '';
 
         if (existing !== '' && existing !== value) {
             if (element) {
                 element.value = existing; // revert visually
             }
-            
+
             Swal.fire({
                 title: 'Lý do thay đổi',
                 text: 'Vui lòng nhập lý do thay đổi dữ liệu:',
@@ -5351,16 +5575,21 @@
         window.executionValues[fieldId]['default'] = value;
 
         const now = new Date();
-        const formattedTime = now.toLocaleDateString('vi-VN') + ' ' + now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-        
+        const formattedTime = now.toLocaleDateString('vi-VN') + ' ' + now.toLocaleTimeString('vi-VN', {
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+
         if (!window.executionValues[fieldId]._meta) window.executionValues[fieldId]._meta = {};
         if (!window.executionValues[fieldId]._meta['default']) window.executionValues[fieldId]._meta['default'] = {};
-        
-        window.executionValues[fieldId]._meta['default'].by = '{{ session("user.fullName") ?? (session("user.username") ?? "") }}';
+
+        window.executionValues[fieldId]._meta['default'].by =
+            '{{ session('user.fullName') ?? (session('user.username') ?? '') }}';
         window.executionValues[fieldId]._meta['default'].at = formattedTime;
         if (reason) {
             window.executionValues[fieldId]._meta['default'].reason = reason;
-            window.executionValues[fieldId]._meta['default'].history_count = (window.executionValues[fieldId]._meta['default'].history_count || 0) + 1;
+            window.executionValues[fieldId]._meta['default'].history_count = (window.executionValues[fieldId]._meta[
+                'default'].history_count || 0) + 1;
         }
 
         if (typeof window.recalculateAllFormulas === 'function') window.recalculateAllFormulas();
@@ -5472,7 +5701,7 @@
 
     window.editLoopGroup = function(groupId) {
         if (!groupId) return;
-        
+
         const blocksInGroup = items.filter(i => i.loop_group_id === groupId);
         if (blocksInGroup.length === 0) return;
 
@@ -5480,14 +5709,14 @@
             startId: blocksInGroup[0].id,
             endId: blocksInGroup[blocksInGroup.length - 1].id
         };
-        
+
         selectedId = null;
         renderBlocks();
-        
+
         const existingLoopCount = blocksInGroup[0].loop_count || 3;
         const input = document.getElementById('blockLoopCount');
         if (input) input.value = existingLoopCount;
-        
+
         $('#blockLoopModal').modal('show');
     };
 
@@ -5703,7 +5932,8 @@
                             delete newBlock.data[r][c].db_id;
                             delete newBlock.data[r][c].content_db_id;
                             if (newBlock.data[r][c].content) {
-                                newBlock.data[r][c].content = window.duplicateFieldBadgesInHtml(newBlock.data[r]
+                                newBlock.data[r][c].content = window.duplicateFieldBadgesInHtml(newBlock
+                                    .data[r]
                                     [c].content, newBlockId, targetSectionId);
                             }
                         }
@@ -6226,7 +6456,7 @@
                         // Extract just the inner content, ignoring wrappers and resizers
                         const wrapper = tdEl.querySelector('.cell-wrapper');
                         const actualContent = wrapper ? wrapper.innerHTML : tdEl.innerHTML;
-                        
+
                         if (typeof item.data[r][c] === 'object' && item.data[r][c] !== null) {
                             item.data[r][c].content = actualContent;
                         } else {
@@ -6422,15 +6652,19 @@
 
     window.showRunDataHistory = async function(event, recordId, blockId, cellId) {
         if (event) event.stopPropagation();
-        
+
         if (!recordId || recordId === 'undefined' || recordId === 'null') {
             if (typeof Swal !== 'undefined') {
                 const valObj = window.executionValues[blockId];
-                let historyHtml = '<div class="text-muted small mb-3">Lịch sử chi tiết (chỉ lưu tạm thời trong chế độ Chạy thử):</div>';
-                historyHtml += '<div class="table-responsive"><table class="table table-bordered table-striped table-hover mb-0 text-center" style="font-size: 13px;">';
-                historyHtml += '<thead class="bg-light"><tr><th width="5%">Lần</th><th width="20%">Giá trị cũ</th><th width="20%">Giá trị mới</th><th width="25%">Lý do</th><th width="15%">Người đổi</th><th width="15%">Thời gian</th></tr></thead><tbody>';
-                
-                if (valObj && valObj._meta && valObj._meta[cellId] && valObj._meta[cellId].history_list && valObj._meta[cellId].history_list.length > 0) {
+                let historyHtml =
+                    '<div class="text-muted small mb-3">Lịch sử chi tiết (chỉ lưu tạm thời trong chế độ Chạy thử):</div>';
+                historyHtml +=
+                    '<div class="table-responsive"><table class="table table-bordered table-striped table-hover mb-0 text-center" style="font-size: 13px;">';
+                historyHtml +=
+                    '<thead class="bg-light"><tr><th width="5%">Lần</th><th width="20%">Giá trị cũ</th><th width="20%">Giá trị mới</th><th width="25%">Lý do</th><th width="15%">Người đổi</th><th width="15%">Thời gian</th></tr></thead><tbody>';
+
+                if (valObj && valObj._meta && valObj._meta[cellId] && valObj._meta[cellId].history_list &&
+                    valObj._meta[cellId].history_list.length > 0) {
                     valObj._meta[cellId].history_list.forEach((h, index) => {
                         historyHtml += `<tr>
                             <td>${index + 1}</td>
@@ -6461,21 +6695,23 @@
             }
             return;
         }
-        
+
         try {
             const response = await fetch(`/ebmr/run-data-history/${recordId}/${blockId}/${cellId}`);
             const res = await response.json();
-            
+
             if (res.success) {
                 const tbody = document.getElementById('historyTableBody');
                 if (!tbody) {
-                    if (typeof toastr !== 'undefined') toastr.error('Không tìm thấy bảng hiển thị lịch sử trên giao diện này.');
+                    if (typeof toastr !== 'undefined') toastr.error(
+                        'Không tìm thấy bảng hiển thị lịch sử trên giao diện này.');
                     return;
                 }
                 tbody.innerHTML = '';
-                
+
                 if (res.data.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Không có lịch sử thay đổi</td></tr>';
+                    tbody.innerHTML =
+                        '<tr><td colspan="6" class="text-center text-muted">Không có lịch sử thay đổi</td></tr>';
                 } else {
                     res.data.forEach(item => {
                         tbody.innerHTML += `
@@ -6490,7 +6726,7 @@
                         `;
                     });
                 }
-                
+
                 if (typeof $ !== 'undefined') $('#runDataHistoryModal').modal('show');
             } else {
                 if (typeof toastr !== 'undefined') toastr.error('Không thể lấy lịch sử dữ liệu');
@@ -6505,7 +6741,7 @@
     // TÍNH NĂNG ĐÁNH DẤU N/A (KHÔNG ÁP DỤNG)
     // ==========================================
     let executionSelectedCells = [];
-    
+
     // Gắn sự kiện chọn nhiều ô và context menu trong chế độ thực thi
     document.addEventListener('DOMContentLoaded', () => {
         // Gắn sự kiện click để đóng design context menu khi click ra ngoài
@@ -6550,6 +6786,7 @@
         if (!window.isExecutionMode) {
             e.preventDefault();
             const blockEl = e.target.closest('.block-item');
+            const varEl = e.target.closest('.dynamic-field, .ebmr-field-badge');
             const isOnPageBreak = blockEl && blockEl.classList.contains('type-page-break');
             let insertIdx = null;
             if (blockEl) {
@@ -6558,7 +6795,7 @@
                 insertIdx = idx !== -1 ? idx + 1 : null;
             }
             // Dùng clientX/clientY vì menu dùng position: fixed
-            showDesignContextMenu(e.clientX, e.clientY, isOnPageBreak, blockEl, insertIdx);
+            showDesignContextMenu(e.clientX, e.clientY, isOnPageBreak, blockEl, insertIdx, varEl);
             return;
         }
 
@@ -6610,7 +6847,7 @@
     // ──────────────────────────────────────────────────────────────────
     // CONTEXT MENU CHẾ ĐỘ THIẾT KẾ (Ngắt trang)
     // ──────────────────────────────────────────────────────────────────
-    function showDesignContextMenu(x, y, isOnPageBreak, blockEl, insertIdx) {
+    function showDesignContextMenu(x, y, isOnPageBreak, blockEl, insertIdx, varEl) {
         let menu = document.getElementById('design-context-menu');
         if (!menu) {
             menu = document.createElement('div');
@@ -6622,15 +6859,65 @@
 
         menu.innerHTML = '';
 
-        // Tiêu đề menu
-        const title = document.createElement('div');
-        title.className = 'dropdown-header small text-muted text-uppercase fw-bold px-2 pb-1';
-        title.innerHTML = '<i class="fas fa-cut me-1"></i> Ngắt trang';
-        menu.appendChild(title);
+        // -- BIẾN SỐ --
+        const selectedCells = document.querySelectorAll('.selected-cell');
+        const hasSelectedCells = selectedCells.length > 0;
 
-        const divider1 = document.createElement('div');
-        divider1.className = 'dropdown-divider my-1';
-        menu.appendChild(divider1);
+        if (varEl || window.copiedVariableConfig || hasSelectedCells) {
+            if (varEl) {
+                const btnCopy = document.createElement('button');
+                btnCopy.className = 'dropdown-item rounded mb-1 small fw-bold';
+                btnCopy.innerHTML = '<i class="fas fa-copy me-2 text-primary"></i> Sao chép biến này';
+                btnCopy.onclick = () => {
+                    hideDesignContextMenu();
+                    const fieldId = varEl.getAttribute('data-field-id') || varEl.id;
+                    if(fieldId && typeof window.copyVariable === 'function') {
+                        window.copyVariable(fieldId);
+                    }
+                };
+                menu.appendChild(btnCopy);
+            }
+
+            if (window.copiedVariableConfig && (varEl || hasSelectedCells)) {
+                const btnPaste = document.createElement('button');
+                btnPaste.className = 'dropdown-item rounded mb-1 small fw-bold';
+                btnPaste.innerHTML = '<i class="fas fa-paste me-2 text-success"></i> Dán biến đã copy';
+                btnPaste.onclick = () => {
+                    hideDesignContextMenu();
+                    if (typeof window.pasteVariable === 'function') {
+                        window.pasteVariable();
+                    }
+                };
+                menu.appendChild(btnPaste);
+            }
+
+            if (selectedCells.length > 1) {
+                const btnDeleteBatch = document.createElement('button');
+                btnDeleteBatch.className = 'dropdown-item rounded mb-1 small fw-bold text-danger';
+                btnDeleteBatch.innerHTML = `<i class="fas fa-trash-alt me-2 text-danger"></i> Xóa ${selectedCells.length} biến số đang chọn`;
+                btnDeleteBatch.onclick = () => {
+                    hideDesignContextMenu();
+                    if (typeof batchDeleteFields === 'function') {
+                        batchDeleteFields();
+                    }
+                };
+                menu.appendChild(btnDeleteBatch);
+            } else if (varEl || hasSelectedCells) {
+                const btnDeleteVar = document.createElement('button');
+                btnDeleteVar.className = 'dropdown-item rounded mb-1 small fw-bold text-danger';
+                btnDeleteVar.innerHTML = '<i class="fas fa-eraser me-2"></i> Xóa biến số';
+                btnDeleteVar.onclick = () => {
+                    hideDesignContextMenu();
+                    if (typeof window.deleteVariablesInSelection === 'function') {
+                        let targetFieldId = varEl ? (varEl.getAttribute('data-field-id') || varEl.id) : null;
+                        window.deleteVariablesInSelection(targetFieldId);
+                    }
+                };
+                menu.appendChild(btnDeleteVar);
+            }
+        }
+
+        // -- NGẮT TRANG --
 
         if (!isOnPageBreak) {
             // Chèn ngắt trang sau block đang click
@@ -6764,19 +7051,26 @@
 
             if (!window.executionValues[blockId]) window.executionValues[blockId] = {};
             const key = `${row}_${col}`;
-            
+
             // Xử lý meta history nếu cần (Mô phỏng như thay đổi dữ liệu)
             if (!window.executionValues[blockId]._meta) window.executionValues[blockId]._meta = {};
-            if (!window.executionValues[blockId]._meta[key]) window.executionValues[blockId]._meta[key] = { history_list: [], history_count: 0 };
-            
-            const user = '{{ session("user.fullName") ?? (session("user.username") ?? "Người dùng") }}';
+            if (!window.executionValues[blockId]._meta[key]) window.executionValues[blockId]._meta[key] = {
+                history_list: [],
+                history_count: 0
+            };
+
+            const user = '{{ session('user.fullName') ?? (session('user.username') ?? 'Người dùng') }}';
             const time = new Date().toLocaleString('vi-VN');
 
             if (isNA) {
                 // Đánh dấu N/A
                 window.executionValues[blockId]._na_state = window.executionValues[blockId]._na_state || {};
                 window.executionValues[blockId]._na_state[key] = true;
-                window.executionValues[blockId]._na_state[`${key}_meta`] = { by: user, at: time, reason: reason };
+                window.executionValues[blockId]._na_state[`${key}_meta`] = {
+                    by: user,
+                    at: time,
+                    reason: reason
+                };
             } else {
                 // Hủy N/A
                 window.executionValues[blockId][key] = '';
@@ -6787,4 +7081,403 @@
         });
     }
 
+    // ====== MMS BARCODE SCANNER ======
+    window.startMmsBarcodeScan = function(fieldId) {
+        Swal.close();
+        if (typeof Html5QrcodeScanner === 'undefined') {
+            const script = document.createElement('script');
+            script.src = "{{ asset('libs/html5-qrcode.min.js') }}";
+            script.onload = () => initMmsBarcodeScan(fieldId);
+            document.head.appendChild(script);
+        } else {
+            initMmsBarcodeScan(fieldId);
+        }
+    }
+
+    window.initMmsBarcodeScan = function(fieldId) {
+        Swal.fire({
+            title: 'Quét Barcode',
+            html: '<div id="mms-reader" style="width:100%; min-height: 250px;"></div>',
+            showCancelButton: true,
+            cancelButtonText: 'Hủy',
+            showConfirmButton: false,
+            didOpen: () => {
+                const html5QrcodeScanner = new Html5QrcodeScanner("mms-reader", {
+                    fps: 10,
+                    qrbox: {
+                        width: 250,
+                        height: 100
+                    }
+                }, false);
+                html5QrcodeScanner.render((decodedText) => {
+                    html5QrcodeScanner.clear();
+                    fetchMmsDataAndShowModal(decodedText, fieldId);
+                }, (error) => {});
+                window.currentMmsScanner = html5QrcodeScanner;
+            },
+            willClose: () => {
+                if (window.currentMmsScanner) {
+                    window.currentMmsScanner.clear().catch(e => {});
+                    window.currentMmsScanner = null;
+                }
+            }
+        }).then((result) => {
+            if (result.dismiss === Swal.DismissReason.cancel) {
+                window.openVariableInputModal(fieldId);
+            }
+        });
+    }
+
+    window.fetchMmsDataAndShowModal = async function(barcode, fieldId) {
+        Swal.fire({
+            title: 'Đang tra cứu MMS...',
+            allowOutsideClick: false,
+            didOpen: () => Swal.showLoading()
+        });
+        try {
+            const res = await fetch(`/ebmr/mms/stock/${barcode}`);
+            const json = await res.json();
+            if (!json.success) {
+                Swal.fire('Thông báo', json.message || 'Không tìm thấy Barcode', 'info').then(() => window
+                    .openVariableInputModal(fieldId));
+                return;
+            }
+            const data = json.data;
+
+            let originalId = fieldId;
+            const loopMatch = fieldId.match(/(.+)(_loop_\d+)$/);
+            if (loopMatch) originalId = loopMatch[1];
+            const fieldConf = fieldsConfig[originalId] || {};
+            const matchValue = fieldConf.barcodeMatchValue ? fieldConf.barcodeMatchValue.trim() : '';
+
+            let isMatched = true;
+            let warningHtml =
+                '<div class="alert alert-success fw-bold text-center mb-3 shadow-sm" style="background-color: #ecfdf5; color: #065f46; border-color: #a7f3d0;">APPROVED</div>';
+
+            if (matchValue) {
+                const values = Object.values(data).map(v => String(v).toLowerCase());
+                const target = matchValue.toLowerCase();
+                isMatched = values.some(v => v.includes(target));
+
+                if (!isMatched) {
+                    warningHtml = `<div class="alert alert-danger fw-bold text-center mb-3 shadow-sm" style="background-color: #fef2f2; color: #991b1b; border-color: #fecaca;">
+                        <i class="fas fa-exclamation-triangle me-1"></i> KHÔNG KHỚP MÃ ĐỐI CHIẾU (${matchValue})
+                    </div>`;
+                }
+            }
+
+            const chkState = isMatched ? '' : 'disabled';
+
+            const html = `
+                <div class="text-start" style="font-size: 0.95rem;">
+                    <style>
+                        .mms-chk { width: 1.4rem; height: 1.4rem; cursor: pointer; border: 2px solid #a5b4fc; transition: all 0.2s; }
+                        .mms-chk:checked { background-color: #4f46e5; border-color: #4f46e5; box-shadow: 0 0 0 0.25rem rgba(79, 70, 229, 0.25); }
+                        .mms-chk:disabled { background-color: #e2e8f0; border-color: #cbd5e1; cursor: not-allowed; opacity: 0.5; }
+                        .mms-table td { vertical-align: middle; padding: 0.6rem 0.5rem; border-color: #e2e8f0; }
+                        .mms-table th { border-color: #e2e8f0; background-color: #f8fafc; }
+                        .mms-table tr:hover td { background-color: #f1f5f9; }
+                    </style>
+                    ${warningHtml}
+                    <table class="table table-sm table-bordered mms-table ${isMatched ? '' : 'opacity-75'}">
+                        <thead>
+                            <tr>
+                                <th class="text-center text-muted" style="width: 35%;">Thông tin</th>
+                                <th class="text-center text-muted">Giá trị</th>
+                                <th class="text-center text-muted" style="width: 60px;">Chọn</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td class="fw-bold text-end text-secondary">GRN No / Barcode:</td><td class="text-start fw-medium text-dark">${data.GRN_No} ${data.Barcode_No}</td><td class="text-center"><input type="checkbox" class="mms-chk form-check-input m-0" ${chkState} value="${data.GRN_No} ${data.Barcode_No}"></td></tr>
+                            <tr><td class="fw-bold text-end text-secondary">LOT:</td><td class="text-start fw-medium text-dark">${data.LOT}</td><td class="text-center"><input type="checkbox" class="mms-chk form-check-input m-0" ${chkState} value="${data.LOT}"></td></tr>
+                            <tr><td class="fw-bold text-end text-secondary">Material Code:</td><td class="text-start fw-medium text-dark">${data.Material_Code}</td><td class="text-center"><input type="checkbox" class="mms-chk form-check-input m-0" ${chkState} value="${data.Material_Code}"></td></tr>
+                            <tr><td class="fw-bold text-end text-secondary">Số PKN (ARNO):</td><td class="text-start fw-medium text-dark">${data.ARNO}</td><td class="text-center"><input type="checkbox" class="mms-chk form-check-input m-0" ${chkState} value="${data.ARNO}"></td></tr>
+                            <tr><td class="fw-bold text-end text-secondary">Material Name:</td><td class="text-start fw-medium text-dark">${data.Material_Name}</td><td class="text-center"><input type="checkbox" class="mms-chk form-check-input m-0" ${chkState} value="${data.Material_Name}"></td></tr>
+                            <tr><td class="fw-bold text-end text-secondary">Expiry Date:</td><td class="text-start fw-medium text-dark">${data.Expiry_Date}</td><td class="text-center"><input type="checkbox" class="mms-chk form-check-input m-0" ${chkState} value="${data.Expiry_Date}"></td></tr>
+                            <tr><td class="fw-bold text-end text-secondary">Retest Date:</td><td class="text-start fw-medium text-dark">${data.Retest_Date}</td><td class="text-center"><input type="checkbox" class="mms-chk form-check-input m-0" ${chkState} value="${data.Retest_Date}"></td></tr>
+                            <tr><td class="fw-bold text-end text-secondary">Mfg. Name:</td><td class="text-start fw-medium text-dark">${data.Mfg_Name}</td><td class="text-center"><input type="checkbox" class="mms-chk form-check-input m-0" ${chkState} value="${data.Mfg_Name}"></td></tr>
+                            <tr><td class="fw-bold text-end text-secondary">MFG Date:</td><td class="text-start fw-medium text-dark">${data.MFG_Date}</td><td class="text-center"><input type="checkbox" class="mms-chk form-check-input m-0" ${chkState} value="${data.MFG_Date}"></td></tr>
+                            <tr><td class="fw-bold text-end text-secondary">Supplier Name:</td><td class="text-start fw-medium text-dark">${data.Supplier_Name}</td><td class="text-center"><input type="checkbox" class="mms-chk form-check-input m-0" ${chkState} value="${data.Supplier_Name}"></td></tr>
+                            <tr><td class="fw-bold text-end text-secondary">MFG Batch:</td><td class="text-start fw-medium text-dark">${data.MFG_Batch}</td><td class="text-center"><input type="checkbox" class="mms-chk form-check-input m-0" ${chkState} value="${data.MFG_Batch}"></td></tr>
+                            <tr><td class="fw-bold text-end text-secondary">Qty:</td><td class="text-start fw-medium text-dark">${parseFloat(data.Qty)}</td><td class="text-center"><input type="checkbox" class="mms-chk form-check-input m-0" ${chkState} value="${parseFloat(data.Qty)}"></td></tr>
+                            <tr><td class="fw-bold text-end text-secondary">Sample Type:</td><td class="text-start fw-medium text-dark">${data.Sample_Type}</td><td class="text-center"><input type="checkbox" class="mms-chk form-check-input m-0" ${chkState} value="${data.Sample_Type}"></td></tr>
+                            <tr><td class="fw-bold text-end text-secondary">Sample By / On:</td><td class="text-start fw-medium text-dark">${data.SampleBy} / ${data.sample_On}</td><td class="text-center"><input type="checkbox" class="mms-chk form-check-input m-0" ${chkState} value="${data.SampleBy} / ${data.sample_On}"></td></tr>
+                            <tr><td class="fw-bold text-end text-secondary">COA No:</td><td class="text-start fw-medium text-dark">${data.COA_No}</td><td class="text-center"><input type="checkbox" class="mms-chk form-check-input m-0" ${chkState} value="${data.COA_No}"></td></tr>
+                            <tr><td class="fw-bold text-end text-secondary">COA Date:</td><td class="text-start fw-medium text-dark">${data.COA_Date}</td><td class="text-center"><input type="checkbox" class="mms-chk form-check-input m-0" ${chkState} value="${data.COA_Date}"></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            Swal.fire({
+                title: 'Nhãn - ' + data.Material_Name,
+                html: html,
+                width: '650px',
+                showCancelButton: true,
+                confirmButtonText: 'Áp dụng',
+                cancelButtonText: 'Hủy',
+                preConfirm: () => {
+                    return Array.from(Swal.getPopup().querySelectorAll('.mms-chk:checked')).map(
+                        cb => cb.value);
+                },
+                didOpen: () => {
+                    const popup = Swal.getPopup();
+                    const title = Swal.getTitle();
+                    title.style.cursor = 'move';
+
+                    let isDragging = false;
+                    let startX, startY, startLeft, startTop;
+
+                    const onMouseDown = (e) => {
+                        isDragging = true;
+                        startX = e.clientX;
+                        startY = e.clientY;
+                        const rect = popup.getBoundingClientRect();
+                        startLeft = rect.left;
+                        startTop = rect.top;
+                        popup.style.position = 'absolute';
+                        popup.style.left = startLeft + 'px';
+                        popup.style.top = startTop + 'px';
+                        popup.style.transform = 'none';
+                        popup.style.margin = '0';
+                        document.body.style.userSelect = 'none';
+                    };
+
+                    const onMouseMove = (e) => {
+                        if (!isDragging) return;
+                        const dx = e.clientX - startX;
+                        const dy = e.clientY - startY;
+                        popup.style.left = (startLeft + dx) + 'px';
+                        popup.style.top = (startTop + dy) + 'px';
+                    };
+
+                    const onMouseUp = () => {
+                        isDragging = false;
+                        document.body.style.userSelect = '';
+                    };
+
+                    title.addEventListener('mousedown', onMouseDown);
+                    document.addEventListener('mousemove', onMouseMove);
+                    document.addEventListener('mouseup', onMouseUp);
+
+                    // Xóa sự kiện khi đóng modal
+                    window.currentMmsDragCleanup = () => {
+                        document.removeEventListener('mousemove', onMouseMove);
+                        document.removeEventListener('mouseup', onMouseUp);
+                    };
+                },
+                willClose: () => {
+                    if (window.currentMmsDragCleanup) {
+                        window.currentMmsDragCleanup();
+                        window.currentMmsDragCleanup = null;
+                    }
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    const checked = result.value || [];
+                    const finalStr = checked.join('\n');
+
+                    let originalId = fieldId;
+                    let loopSuffix = '';
+                    const loopMatch = fieldId.match(/(.+)(_loop_\d+)$/);
+                    if (loopMatch) {
+                        originalId = loopMatch[1];
+                        loopSuffix = loopMatch[2];
+                    }
+                    const fieldConf = fieldsConfig[originalId];
+
+                    applyVariableValue(fieldId, finalStr, '', fieldConf, loopSuffix);
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Thành công',
+                        text: 'Đã điền thông tin vào tài liệu',
+                        timer: 1500,
+                        showConfirmButton: false
+                    });
+                } else {
+                    window.openVariableInputModal(fieldId);
+                }
+            });
+        } catch (e) {
+            Swal.fire('Lỗi', 'Không thể kết nối API MMS', 'error');
+        }
+    }
+
+    /**
+     * Bóc tách Cây Dữ Liệu Ngữ Cảnh (Semantic Data Tree)
+     */
+    function extractDataTree() {
+        if (typeof items === 'undefined' || !items) {
+            Swal.fire('Lỗi', 'Không tìm thấy dữ liệu items!', 'error');
+            return;
+        }
+
+        let tree = {
+            "Báo cáo BMR": {}
+        };
+        
+        let root = tree["Báo cáo BMR"];
+
+        // Hàm helper tìm tên Section (Step)
+        function getSectionName(sectionId) {
+            if(!sectionId) return "Chưa phân đoạn";
+            let sec = items.find(i => (i.id === sectionId || i.section_id === sectionId) && i.type === 'section');
+            if(sec) return sec.label || "Chưa phân đoạn";
+            return "Phân đoạn " + sectionId;
+        }
+
+        // Lặp qua tất cả ô nhập liệu trên màn hình để lấy giá trị
+        let blocks = document.querySelectorAll('.block-item');
+        blocks.forEach(blockWrapper => {
+            let blockId = blockWrapper.getAttribute('data-id');
+            let blockKey = blockWrapper.getAttribute('data-block-key') || blockId;
+            if(!blockId) return;
+
+            let item = items.find(i => i.id === blockId);
+            if(!item) return;
+            
+            // Bỏ qua các khối không chứa dữ liệu nhập
+            if (item.type === 'text' || item.type === 'image' || item.type === 'divider' || item.type === 'page-break' || item.type === 'section') return;
+
+            let stepName = getSectionName(item.section_id);
+            let blockName = item.label || 'Không tên';
+
+            if(!root[stepName]) root[stepName] = {};
+            if(!root[stepName][blockName]) root[stepName][blockName] = {};
+
+            if (item.type === 'table') {
+                // Bảng: Lặp qua từng ô
+                let cells = blockWrapper.querySelectorAll('td[data-row]');
+                cells.forEach(td => {
+                    let r = parseInt(td.getAttribute('data-row')) - 1; // data-row is 1-indexed
+                    let c = parseInt(td.getAttribute('data-col'));
+                    if(isNaN(r) || isNaN(c)) return;
+
+                    let colName = "Cột " + (c + 1);
+                    if(item.columns && item.columns.length > c) {
+                        colName = item.columns[c].label || item.columns[c];
+                    } else {
+                        let ths = td.closest('table').querySelectorAll('th');
+                        if(ths.length > c) colName = ths[c].innerText.trim();
+                    }
+                    let tr = td.closest('tr');
+                    let rowName = "Dòng " + (tr ? tr.rowIndex : (r + 1));
+
+                    // Lấy giá trị
+                    let val = "";
+                    
+                    let badge = td.querySelector('[data-field-id]');
+                    if (badge) {
+                        // Nếu ô này chứa một biến động (checkbox, combobox, date...)
+                        let fieldId = badge.getAttribute('data-field-id') + loopSuffix;
+                        if (window.executionValues && window.executionValues[fieldId] && window.executionValues[fieldId]['default'] !== undefined) {
+                            val = window.executionValues[fieldId]['default'];
+                        } else {
+                            let inputEl = badge.querySelector('input, select, textarea');
+                            if(inputEl) {
+                                if(inputEl.type === 'checkbox') val = inputEl.checked ? "Yes" : "No";
+                                else val = inputEl.value;
+                            } else {
+                                val = badge.innerText.replace(/[\n\r]+/g, ' ').trim();
+                                if (badge.querySelector('span[style*="italic"]')) val = "";
+                            }
+                        }
+                    } else {
+                        // Nếu là ô nhập liệu thường hoặc chữ ký bảng
+                        if (window.executionValues && window.executionValues[blockKey] && window.executionValues[blockKey][`${r}_${c}`] !== undefined) {
+                            val = window.executionValues[blockKey][`${r}_${c}`];
+                        } else {
+                            val = td.innerText.replace(/[\n\r]+/g, ' ').trim();
+                            // Bỏ qua chữ placeholder như [Nhập dữ liệu], [Ký tên]...
+                            if (val.includes('[') && val.includes(']')) val = "";
+                        }
+                    }
+                    if (typeof val === 'boolean') val = val ? "Yes" : "No";
+
+                    if(!root[stepName][blockName][colName]) root[stepName][blockName][colName] = {};
+                    root[stepName][blockName][colName][rowName] = { 
+                        value: val || "(trống)" 
+                    };
+                });
+            } else {
+                // Biến số đơn
+                let val = "";
+                if (window.executionValues && window.executionValues[blockKey] && window.executionValues[blockKey]['default'] !== undefined) {
+                    val = window.executionValues[blockKey]['default'];
+                } else {
+                    let badge = blockWrapper.querySelector('.execution-input-test, .execution-checkbox-wrapper, input, select, textarea');
+                    if(badge) {
+                        if(badge.tagName === 'INPUT' && badge.type === 'checkbox') val = badge.checked ? "Yes" : "No";
+                        else if(badge.tagName === 'INPUT' || badge.tagName === 'SELECT' || badge.tagName === 'TEXTAREA') val = badge.value;
+                        else {
+                            val = badge.innerText.trim();
+                            if (badge.querySelector('span[style*="italic"]')) val = ""; // Bỏ qua placeholder
+                        }
+                    }
+                }
+                if (typeof val === 'boolean') val = val ? "Yes" : "No";
+                
+                root[stepName][blockName]["Giá trị"] = { 
+                    value: val || "(trống)" 
+                };
+            }
+        });
+
+        let jsonStr = JSON.stringify(tree, null, 4);
+
+        let newWin = window.open('', '_blank');
+        newWin.document.write(`
+            <!DOCTYPE html>
+            <html lang="vi">
+            <head>
+                <meta charset="UTF-8">
+                <title>Cây Dữ Liệu Ngữ Cảnh</title>
+                <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+                <style>
+                    body { background: #f8f9fa; padding: 20px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+                    .card { border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+                    pre { background: #2d2d2d; color: #ccc; padding: 20px; border-radius: 8px; font-size: 14px; }
+                    .string { color: #98c379; }
+                    .number { color: #d19a66; }
+                    .boolean { color: #56b6c2; }
+                    .null { color: #e06c75; }
+                    .key { color: #e5c07b; font-weight: bold; }
+                </style>
+            </head>
+            <body>
+                <div class="container mt-4">
+                    <h3 class="mb-3">🌳 Cây Dữ Liệu Ngữ Cảnh (Semantic Data Tree)</h3>
+                    <p class="text-muted">Hệ thống đã tự động bóc tách cấu trúc thiết kế của bạn và nội suy ra Đường dẫn Ngữ cảnh cho từng biến số. Bạn có thể dùng đường dẫn này để tự động xuất các báo cáo (PVR, PQR) mà không cần gắn Tag thủ công.</p>
+                    <div class="card">
+                        <div class="card-body p-0">
+                            <pre id="json-renderer"></pre>
+                        </div>
+                    </div>
+                </div>
+                <script>
+                    function syntaxHighlight(json) {
+                        json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                        return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\\s*:)?|\\b(true|false|null)\\b|-?\\d+(?:\\.\\d*)?(?:[eE][+\\-]?\\d+)?)/g, function (match) {
+                            var cls = 'number';
+                            if (/^"/.test(match)) {
+                                if (/:$/.test(match)) {
+                                    cls = 'key';
+                                } else {
+                                    cls = 'string';
+                                }
+                            } else if (/true|false/.test(match)) {
+                                cls = 'boolean';
+                            } else if (/null/.test(match)) {
+                                cls = 'null';
+                            }
+                            return '<span class="' + cls + '">' + match + '</span>';
+                        });
+                    }
+                    let rawJson = ${JSON.stringify(jsonStr).replace(/<\//g, '<\\/')};
+                    document.getElementById('json-renderer').innerHTML = syntaxHighlight(rawJson);
+                <\/script>
+            </body>
+            </html>
+        `);
+        newWin.document.close();
+    }
 </script>

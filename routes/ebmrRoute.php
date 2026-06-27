@@ -67,4 +67,7 @@ Route::group(['prefix' => 'ebmr', 'as' => 'pages.ebmr.'], function () {
     Route::get('/templates/{id}/properties', [EbmrTemplateController::class, 'getProperties'])->name('getProperties');
     Route::post('/templates/{id}/properties', [EbmrTemplateController::class, 'saveProperty'])->name('saveProperty');
     Route::delete('/templates/{id}/properties/{propId}', [EbmrTemplateController::class, 'deleteProperty'])->name('deleteProperty');
+
+    // 7. MMS Integration
+    Route::get('/mms/stock/{barcode}', [\App\Http\Controllers\MmsController::class, 'getStockByBarcode'])->name('mmsStockByBarcode');
 });

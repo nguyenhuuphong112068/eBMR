@@ -1,18 +1,55 @@
 <script>
     function initTableAdvancedFeatures() {
+        let marqueeDiv = null;
+        let marqueeStartX = 0;
+        let marqueeStartY = 0;
+        let isMarqueeActive = false;
+
         // 1. Selection Logic
         document.addEventListener('mousedown', (e) => {
             if (window.isExecutionMode) return; // Chặn chọn khối ở chế độ ghi chép
             if (window.isSelectVarMode) return; // Chặn chọn khối/ô khi đang bắt biến
+
+            // -- MARQUEE SELECTOR LOGIC (Shift + Left Click) --
+            if (e.shiftKey && e.button === 0 && e.target.closest('#editor-content')) {
+                e.preventDefault();
+                window.getSelection().removeAllRanges();
+                
+                isMarqueeActive = true;
+                marqueeStartX = e.clientX;
+                marqueeStartY = e.clientY;
+                
+                marqueeDiv = document.createElement('div');
+                marqueeDiv.className = 'marquee-selector';
+                marqueeDiv.style.left = marqueeStartX + 'px';
+                marqueeDiv.style.top = marqueeStartY + 'px';
+                marqueeDiv.style.width = '0px';
+                marqueeDiv.style.height = '0px';
+                document.body.appendChild(marqueeDiv);
+                
+                clearSelection();
+                return; // Dừng lại, không chạy logic chọn ô cũ
+            }
 
             const cell = e.target.closest('td, th');
             if (cell && cell.closest('.mini-table')) {
                 const blockItem = cell.closest('.block-item');
                 const bId = blockItem ? blockItem.getAttribute('data-id') : null;
                 
-                // Nếu đang giữ Shift và click vào block khác, đây là chọn dải block, không phải chọn ô
-                if (e.shiftKey && bId && bId !== selectedId) {
+                // Nếu click chuột phải
+                if (e.button === 2) {
+                    // Nếu ô click phải chưa được chọn, thì mới xoá chọn cũ và chọn ô này. Nếu đã chọn rồi thì giữ nguyên.
+                    if (!cell.classList.contains('selected-cell')) {
+                        clearSelection();
+                        cell.classList.add('selected-cell');
+                        if (bId) selectItem(bId, false);
+                    }
                     return;
+                }
+
+                // Nếu click vào block khác, chuyển active block sang block mới
+                if (bId && bId !== selectedId) {
+                    selectItem(bId, false);
                 }
 
                 // Kiểm tra xem click có ở sát lề ô không (dành cho chọn ô)
@@ -32,7 +69,7 @@
                     return; // Dừng lại ở đây, KHÔNG bật isSelecting để tránh đụng độ
                 }
 
-                // Bắt đầu chế độ chọn Ô (Cell Selection)
+                // Bắt đầu chế độ chọn Ô (Cell Selection cũ - rê mép lề)
                 // Ngăn chặn native text selection flash khi kéo thả nhiều ô
                 if (isNearEdge) {
                     e.preventDefault(); 
@@ -43,59 +80,115 @@
                 activeRowIdx = parseInt(cell.dataset.row);
                 activeColIdx = parseInt(cell.dataset.col);
                 
-                // Chỉ reset vùng chọn nếu không phải đang shift-click vào ô đã chọn
-                if (!e.shiftKey || !cell.classList.contains('selected-cell')) {
-                    clearSelection();
-                    cell.classList.add('selected-cell');
-                }
+                clearSelection();
+                cell.classList.add('selected-cell');
                 
                 if (bId) selectItem(bId, false);
-            } else if (!e.target.closest('#property-panel') && !e.target.closest('.editor-toolbar')) {
+            } else if (!e.target.closest('#property-panel') && !e.target.closest('.editor-toolbar') && !e.target.closest('#design-context-menu') && !e.target.closest('#na-context-menu')) {
                 clearSelection();
             }
         });
 
+        document.addEventListener('mousemove', (e) => {
+            if (isMarqueeActive && marqueeDiv) {
+                const currentX = e.clientX;
+                const currentY = e.clientY;
+                
+                const x = Math.min(marqueeStartX, currentX);
+                const y = Math.min(marqueeStartY, currentY);
+                const w = Math.abs(currentX - marqueeStartX);
+                const h = Math.abs(currentY - marqueeStartY);
+                
+                marqueeDiv.style.left = x + 'px';
+                marqueeDiv.style.top = y + 'px';
+                marqueeDiv.style.width = w + 'px';
+                marqueeDiv.style.height = h + 'px';
+                
+                // Dùng toạ độ toán học trực tiếp thay vì getBoundingClientRect để tránh độ trễ DOM render
+                const rect = {
+                    left: x,
+                    right: x + w,
+                    top: y,
+                    bottom: y + h
+                };
+                
+                const cells = document.querySelectorAll('#editor-content td, #editor-content th');
+                cells.forEach(cell => {
+                    const cellRect = cell.getBoundingClientRect();
+                    const intersect = !(rect.right < cellRect.left || 
+                                      rect.left > cellRect.right || 
+                                      rect.bottom < cellRect.top || 
+                                      rect.top > cellRect.bottom);
+                    if (intersect) {
+                        cell.classList.add('selected-cell');
+                    } else {
+                        cell.classList.remove('selected-cell');
+                    }
+                });
+                return;
+            }
+        });
+
         document.addEventListener('mouseover', (e) => {
-            if (window.isExecutionMode || !isSelecting) return;
+            if (window.isExecutionMode || !isSelecting || isMarqueeActive) return;
             const cell = e.target.closest('td, th');
             if (cell && cell.closest('.mini-table') === startCell.closest('.mini-table')) {
                 highlightRange(startCell, cell);
             }
         });
 
+        let justFinishedMarquee = false;
+
+        // Chặn sự kiện click ngay sau khi kết thúc quét khối
+        document.addEventListener('click', (e) => {
+            if (justFinishedMarquee) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        }, true); // Dùng capture phase để chặn sớm nhất
+
         document.addEventListener('mouseup', (e) => {
             isSelecting = false;
             
-            // --- Batch Field Selection Logic (Shift + Drag) ---
-            if (e.shiftKey) {
-                const selectedCells = document.querySelectorAll('.selected-cell');
-                if (selectedCells.length > 1) {
-                    let fieldIdsInSelection = [];
-                    selectedCells.forEach(td => {
-                        const badge = td.querySelector('.ebmr-field-badge');
-                        if (badge) {
-                            const fid = badge.getAttribute('data-field-id');
-                            if (fid) fieldIdsInSelection.push(fid);
-                        }
-                    });
-
-                    if (fieldIdsInSelection.length > 0) {
-                        // Use a tiny timeout to ensure it runs AFTER any other mousedown/mouseup logic that might update the panel
-                        setTimeout(() => {
-                            if (typeof selectMultipleFields === 'function') {
-                                selectMultipleFields(fieldIdsInSelection);
-                            }
-                        }, 50);
-                    }
-                } else if (selectedCells.length === 1) {
-                    const badge = selectedCells[0].querySelector('.ebmr-field-badge');
+            if (isMarqueeActive) {
+                isMarqueeActive = false;
+                justFinishedMarquee = true;
+                setTimeout(() => justFinishedMarquee = false, 150); // Chặn click trong 150ms
+                
+                if (marqueeDiv) {
+                    marqueeDiv.remove();
+                    marqueeDiv = null;
+                }
+            }
+            
+            // --- Cập nhật Properties Panel sau khi nhả chuột ---
+            const selectedCells = document.querySelectorAll('.selected-cell');
+            if (selectedCells.length > 1) {
+                let fieldIdsInSelection = [];
+                selectedCells.forEach(td => {
+                    const badge = td.querySelector('.ebmr-field-badge');
                     if (badge) {
                         const fid = badge.getAttribute('data-field-id');
-                        if (fid) {
-                            setTimeout(() => {
-                                selectField(null, fid);
-                            }, 50);
+                        if (fid) fieldIdsInSelection.push(fid);
+                    }
+                });
+
+                if (fieldIdsInSelection.length > 0) {
+                    // Dùng timeout để đảm bảo logic chạy sau các sự kiện click mặc định khác
+                    setTimeout(() => {
+                        if (typeof selectMultipleFields === 'function') {
+                            selectMultipleFields(fieldIdsInSelection);
                         }
+                    }, 50);
+                }
+            } else if (selectedCells.length === 1) {
+                const badge = selectedCells[0].querySelector('.ebmr-field-badge');
+                if (badge) {
+                    const fid = badge.getAttribute('data-field-id');
+                    if (fid) {
+                        setTimeout(() => {
+                            selectField(null, fid);
+                        }, 50);
                     }
                 }
             }
@@ -653,6 +746,50 @@
             if (plainText) grid = plainText.trim().split(/\r\n|\n/).map(row => row.split('\t'));
         }
         if (grid.length === 0) return;
+
+        // MULTI-CELL PASTE FOR SINGLE VALUE
+        if (grid.length === 1 && grid[0].length === 1) {
+            const selectedCells = document.querySelectorAll('.selected-cell');
+            if (selectedCells.length > 1) {
+                e.preventDefault();
+                saveState();
+                selectedCells.forEach(td => {
+                    const blockItem = td.closest('.block-item');
+                    if (!blockItem) return;
+                    const item = items.find(i => i.id === blockItem.getAttribute('data-id'));
+                    if (!item || item.type !== 'table') return;
+
+                    const rStr = td.dataset.row;
+                    const cStr = td.dataset.col;
+                    if (rStr === undefined || cStr === undefined) return;
+                    
+                    const r = parseInt(rStr);
+                    const c = parseInt(cStr);
+                    
+                    let cellObj = grid[0][0];
+                    let cellContentToPaste = cellObj.content || cellObj;
+                    if (typeof cellContentToPaste === 'string' && window.duplicateFieldBadgesInHtml) {
+                        cellContentToPaste = window.duplicateFieldBadgesInHtml(cellContentToPaste, item.id);
+                    }
+                    
+                    if (r === 0) {
+                        item.columns[c].label = cellContentToPaste;
+                    } else {
+                        if (!item.data[r - 1][c]) {
+                            item.data[r - 1][c] = { content: '', rs: 1, cs: 1, hidden: false };
+                        }
+                        item.data[r - 1][c].content = cellContentToPaste;
+                        if (cellObj.backgroundColor) item.data[r - 1][c].backgroundColor = cellObj.backgroundColor;
+                        if (cellObj.textAlign) item.data[r - 1][c].textAlign = cellObj.textAlign;
+                        if (cellObj.fontWeight) item.data[r - 1][c].fontWeight = cellObj.fontWeight;
+                        if (cellObj.fontStyle) item.data[r - 1][c].fontStyle = cellObj.fontStyle;
+                    }
+                    item.dirty = true;
+                });
+                renderBlocks();
+                return;
+            }
+        }
 
         e.preventDefault();
         const startR = parseInt(target.dataset.row); 

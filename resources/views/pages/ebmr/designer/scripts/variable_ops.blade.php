@@ -753,11 +753,9 @@
                 }
                 window.__ebmrExistingFieldNamesCache.add(newName);
                 
-                configObj[newId] = {
-                    ...oldConfig,
-                    id: newId,
-                    name: newName
-                };
+                configObj[newId] = JSON.parse(JSON.stringify(oldConfig));
+                configObj[newId].id = newId;
+                configObj[newId].name = newName;
 
                 if (newBlockId) configObj[newId].block_id = newBlockId;
                 if (newSectionId) configObj[newId].section_id = newSectionId;
@@ -862,7 +860,7 @@
                     section_id: item.section_id || null
                 };
 
-                const cellBadgeHtml = `<span contenteditable="false" class="ebmr-field-badge" data-field-id="${cellId}" onclick="selectField(event, '${cellId}')"></span>\u200B`;
+                const cellBadgeHtml = `<span contenteditable="false" class="ebmr-field-badge" data-field-id="${cellId}" onclick="selectField(event, '${cellId}')"></span>`;
 
                 if (!item.data[r][c] || typeof item.data[r][c] !== 'object') {
                     item.data[r][c] = {
@@ -1124,5 +1122,92 @@
         
         document.addEventListener('mousemove', onMouseMove);
         document.addEventListener('mouseup', onMouseUp);
+    };
+
+    window.deleteVariablesInSelection = function(targetFieldId) {
+        const selectedCells = document.querySelectorAll('.selected-cell');
+        
+        let deletedCount = 0;
+        let useBatch = false;
+
+        if (selectedCells.length > 1) {
+            useBatch = true;
+        } else if (selectedCells.length === 1) {
+            let hasCursorInCell = false;
+            const selForCheck = savedTextSelection ? [savedTextSelection] : (window.getSelection().rangeCount > 0 ? [window.getSelection().getRangeAt(0)] : []);
+            if (selForCheck.length > 0) {
+                let node = selForCheck[0].commonAncestorContainer;
+                if (node.nodeType === 3) node = node.parentNode;
+                if (node.closest && node.closest('td, th') === selectedCells[0]) {
+                    hasCursorInCell = true;
+                }
+            }
+            if (!hasCursorInCell) {
+                useBatch = true;
+            }
+        }
+
+        if (useBatch) {
+            saveState();
+            selectedCells.forEach(td => {
+                const block = td.closest('.block-item');
+                if (!block) return;
+                const blockId = block.getAttribute('data-id');
+                const item = items.find(i => i.id === blockId);
+                if (!item || item.type !== 'table') return;
+
+                const rStr = td.dataset.row;
+                const cStr = td.dataset.col;
+                if (rStr === undefined || cStr === undefined) return;
+
+                const r = parseInt(rStr) - 1; // 1-indexed for non-header
+                const c = parseInt(cStr);
+
+                if (item.data[r] && item.data[r][c] && item.data[r][c].content) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = item.data[r][c].content;
+                    const badges = tempDiv.querySelectorAll('.ebmr-field-badge');
+                    
+                    if (badges.length > 0) {
+                        badges.forEach(badge => {
+                            const fId = badge.getAttribute('data-field-id');
+                            if (fId && fieldsConfig[fId]) {
+                                delete fieldsConfig[fId];
+                                deletedCount++;
+                            }
+                            badge.remove();
+                        });
+                        item.data[r][c].content = tempDiv.innerHTML;
+                        item.dirty = true;
+                    }
+                }
+            });
+            if (deletedCount > 0) {
+                renderBlocks();
+                toastr.success(`Đã xóa ${deletedCount} biến số trong các ô được chọn.`);
+            } else {
+                toastr.info('Không có biến số nào trong các ô được chọn.');
+            }
+            return;
+        }
+
+        // Xoá 1 biến cụ thể (nếu click trực tiếp)
+        if (targetFieldId && fieldsConfig[targetFieldId]) {
+            delete fieldsConfig[targetFieldId];
+            
+            // Xóa element trên DOM
+            const el = document.querySelector(`.ebmr-field-badge[data-field-id="${targetFieldId}"]`);
+            if (el) {
+                el.remove();
+                saveStateDebounced();
+                toastr.success('Đã xóa biến số');
+            }
+            if (selectedFieldId === targetFieldId) {
+                closePropertiesSidebar();
+                selectedFieldId = null;
+            }
+        } else if (targetFieldId === null) {
+            toastr.info('Vui lòng chọn biến số cần xóa.');
+        }
     };
 </script>

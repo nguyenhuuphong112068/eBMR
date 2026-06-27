@@ -258,6 +258,13 @@
                 <i class="fas fa-ban me-1"></i> N/A Vùng Chọn (Z)
             </button>
 
+            {{-- Extract Data Tree Button (ẩn mặc định, hiện khi execution mode) --}}
+            {{-- <button class="btn btn-sm btn-outline-info px-3 d-none fw-bold" id="btn-extract-data-tree"
+                onclick="extractDataTree()" style="border-radius: 20px;"
+                title="Trích xuất Cây Dữ Liệu Ngữ Cảnh">
+                <i class="fas fa-sitemap me-1"></i> Xem Cây Dữ Liệu
+            </button> --}}
+
             {{-- Designer / Execution mode toggle --}}
             <button type="button" id="btn-mode-toggle"
                 class="btn btn-sm px-3 {{ empty($isExecutionMode) ? 'btn-primary' : 'btn-success' }}"

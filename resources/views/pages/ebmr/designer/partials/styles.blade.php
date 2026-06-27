@@ -590,6 +590,17 @@
         box-shadow: inset 0 0 0 1px rgba(26, 115, 232, 0.5);
     }
 
+    /* Đánh dấu rõ biến số đang được chọn bằng khung xanh dương */
+    .selected-cell .ebmr-field-badge {
+        outline: 2px solid #3b82f6 !important;
+        outline-offset: 1px !important;
+        box-shadow: 0 0 10px rgba(59, 130, 246, 0.8) !important;
+        transform: scale(1.02);
+        z-index: 10;
+        position: relative;
+        transition: all 0.2s;
+    }
+
     .mini-table td[contenteditable="true"]:focus,
     .mini-table th[contenteditable="true"]:focus {
         outline: 2px solid #1a73e8;
@@ -2764,5 +2775,16 @@
     .insert-divider.drag-over-active::before {
         color: #0284c7;
         font-weight: bold;
+    }
+
+    /* React-style Marquee Selector */
+    .marquee-selector {
+        position: fixed;
+        border: 1px solid #3b82f6;
+        background-color: rgba(59, 130, 246, 0.15);
+        z-index: 999999;
+        pointer-events: none;
+        border-radius: 2px;
+        box-shadow: 0 0 0 1px rgba(255,255,255,0.3) inset;
     }
 </style>
