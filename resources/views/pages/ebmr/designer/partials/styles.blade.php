@@ -1385,6 +1385,13 @@
         position: relative !important;
     }
 
+    /* Ở chế độ thực thi, cho phép nội dung văn bản dài tự động xuống dòng */
+    .ebmr-field-badge.ebmr-field-value {
+        white-space: normal !important;
+        word-break: break-word;
+        height: auto;
+    }
+
     /* Drag handles for variables */
     .ebmr-field-badge .badge-drag-handle {
         position: absolute;
@@ -2679,8 +2686,30 @@
     body.select-var-mode-active .ebmr-field-badge:hover {
         outline: 3px solid #28a745 !important;
         transform: scale(1.1);
-        z-index: 1001;
+        z-index: 1002;
         box-shadow: 0 0 12px rgba(40, 167, 69, 0.8) !important;
+    }
+
+    /* Biến số mục tiêu đang được cài đặt công thức */
+    body.select-var-mode-active .ebmr-field-badge.select-var-target {
+        outline: 3px solid #dc3545 !important;
+        outline-offset: 3px;
+        box-shadow: 0 0 15px rgba(220, 53, 69, 0.8) !important;
+        background-color: #f8d7da !important;
+        color: #721c24 !important;
+        z-index: 1001 !important;
+        animation: target-pulse-select 1.5s infinite alternate;
+    }
+    
+    @keyframes target-pulse-select {
+        0% {
+            box-shadow: 0 0 8px rgba(220, 53, 69, 0.5) !important;
+            transform: scale(1);
+        }
+        100% {
+            box-shadow: 0 0 18px rgba(220, 53, 69, 0.9) !important;
+            transform: scale(1.03);
+        }
     }
 
     /* CSS cho Checkbox tự động (disabled nhưng giữ nguyên màu như checkbox thường) */
@@ -2692,6 +2721,14 @@
     .execution-checkbox-wrapper input[type="checkbox"]:checked:disabled {
         background-color: #0d6efd !important;
         border-color: #0d6efd !important;
+    }
+
+    /* Contenteditable placeholder support */
+    div[contenteditable="true"]:empty:before {
+        content: attr(placeholder);
+        color: #adb5bd;
+        cursor: text;
+        font-style: italic;
     }
 
     /* Components Sidebar */
@@ -2777,7 +2814,6 @@
         font-weight: bold;
     }
 
-    /* React-style Marquee Selector */
     .marquee-selector {
         position: fixed;
         border: 1px solid #3b82f6;
@@ -2786,5 +2822,14 @@
         pointer-events: none;
         border-radius: 2px;
         box-shadow: 0 0 0 1px rgba(255,255,255,0.3) inset;
+    }
+
+    body.border-pen-active #editor-content table,
+    body.border-pen-active #editor-content td,
+    body.border-pen-active #editor-content th,
+    body.border-pen-active .mini-table,
+    body.border-pen-active .mini-table td,
+    body.border-pen-active .mini-table th {
+        cursor: crosshair !important;
     }
 </style>

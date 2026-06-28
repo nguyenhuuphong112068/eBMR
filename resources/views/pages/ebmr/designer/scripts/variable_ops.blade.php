@@ -757,6 +757,14 @@
                 configObj[newId].id = newId;
                 configObj[newId].name = newName;
 
+                // Track pasted field names and formulas for translation
+                if (window.__ebmrPastedNameMapping && oldConfig.name) {
+                    window.__ebmrPastedNameMapping[oldConfig.name] = newName;
+                }
+                if (window.__ebmrPastedFormulaFields && (oldConfig.type === 'formula' || oldConfig.type === 'checkbox')) {
+                    window.__ebmrPastedFormulaFields.push(newId);
+                }
+
                 if (newBlockId) configObj[newId].block_id = newBlockId;
                 if (newSectionId) configObj[newId].section_id = newSectionId;
                 
@@ -766,6 +774,38 @@
         });
         
         return tempDiv.innerHTML;
+    };
+
+    window.translateFormulaReferencesOfPastedFields = function() {
+        if (!window.__ebmrPastedFormulaFields || window.__ebmrPastedFormulaFields.length === 0) return;
+        if (!window.__ebmrPastedNameMapping || Object.keys(window.__ebmrPastedNameMapping).length === 0) return;
+        
+        let configObj = null;
+        if (typeof fieldsConfig !== 'undefined') {
+            configObj = fieldsConfig;
+        } else if (window.fieldsConfig) {
+            configObj = window.fieldsConfig;
+        }
+        if (!configObj) return;
+
+        window.__ebmrPastedFormulaFields.forEach(newId => {
+            const config = configObj[newId];
+            if (config && config.formula) {
+                let updatedFormula = config.formula;
+                updatedFormula = updatedFormula.replace(/\(([^()]+)\)/g, (match, varName) => {
+                    const trimmed = varName.trim();
+                    if (window.__ebmrPastedNameMapping[trimmed]) {
+                        return `(${window.__ebmrPastedNameMapping[trimmed]})`;
+                    }
+                    return match;
+                });
+                config.formula = updatedFormula;
+            }
+        });
+
+        // Reset tracking objects
+        window.__ebmrPastedFormulaFields = [];
+        window.__ebmrPastedNameMapping = {};
     };
 
     window.copyVariable = function(fieldId) {

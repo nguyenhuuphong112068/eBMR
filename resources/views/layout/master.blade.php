@@ -845,7 +845,7 @@
 
 </head>
 
-<body class="hold-transition sidebar-mini layout-navbar-fixed layout-fixed">
+<body class="hold-transition sidebar-mini layout-navbar-fixed layout-fixed {{ request()->is('ebmr/designer*') ? 'sidebar-collapse' : '' }}">
 
     <!-- General wrapper -->
     <div class="wrapper ebmr-content-wrapper">

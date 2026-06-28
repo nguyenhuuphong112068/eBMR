@@ -34,6 +34,12 @@
             </div>
             
             <div class="mb-3">
+                <label class="small fw-bold text-muted text-uppercase mb-2">Tên thẻ chung (Nhãn hiển thị)</label>
+                <input type="text" class="form-control form-control-sm" value="${firstField.label || ''}" placeholder="Nhập tên thẻ chung..." oninput="batchSyncFieldConfig('label', this.value)">
+                <div class="form-text small" style="font-size: 0.7rem;">Thay đổi nhãn hiển thị cho tất cả các biến đã chọn.</div>
+            </div>
+
+            <div class="mb-3">
                 <label class="small fw-bold text-muted text-uppercase mb-2">Kiểu dữ liệu chung</label>
                 <select class="form-select form-select-sm" onchange="batchSyncFieldConfig('type', this.value)">
                     <option value="" disabled selected>-- Chọn kiểu để áp dụng cho tất cả --</option>

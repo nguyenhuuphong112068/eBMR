@@ -5,6 +5,7 @@
         let marqueeStartY = 0;
         let isMarqueeActive = false;
 
+
         // 1. Selection Logic
         document.addEventListener('mousedown', (e) => {
             if (window.isExecutionMode) return; // Chặn chọn khối ở chế độ ghi chép
@@ -90,6 +91,7 @@
         });
 
         document.addEventListener('mousemove', (e) => {
+
             if (isMarqueeActive && marqueeDiv) {
                 const currentX = e.clientX;
                 const currentY = e.clientY;
@@ -149,7 +151,7 @@
 
         document.addEventListener('mouseup', (e) => {
             isSelecting = false;
-            
+
             if (isMarqueeActive) {
                 isMarqueeActive = false;
                 justFinishedMarquee = true;
@@ -162,6 +164,8 @@
             }
             
             // --- Cập nhật Properties Panel sau khi nhả chuột ---
+            if (e.target.closest('#property-panel')) return;
+            if (window.isSelectVarMode) return;
             const selectedCells = document.querySelectorAll('.selected-cell');
             if (selectedCells.length > 1) {
                 let fieldIdsInSelection = [];
@@ -181,8 +185,9 @@
                         }
                     }, 50);
                 }
-            } else if (selectedCells.length === 1) {
-                const badge = selectedCells[0].querySelector('.ebmr-field-badge');
+            } else {
+                // Lựa chọn thông minh: Chỉ chọn cấu hình biến nếu chuột click trực tiếp vào biến số
+                const badge = e.target.closest('.ebmr-field-badge');
                 if (badge) {
                     const fid = badge.getAttribute('data-field-id');
                     if (fid) {
@@ -256,7 +261,8 @@
 
                     // If NOT writing in a text box/input, or if we have a table selection, handle cell-level operations
                     if (!isWriting || (hasMultiSelection && !isInput)) {
-                        const targetCell = hasMultiSelection ? selectedCells[0] : e.target.closest('td, th');
+                        const focusedCell = e.target.closest('td, th');
+                        const targetCell = focusedCell ? focusedCell : (hasMultiSelection ? selectedCells[0] : null);
                         if (!targetCell) {
                             if (key === 'c') {
                                 e.preventDefault();
@@ -332,6 +338,10 @@
                             if (!cellClipboard) return;
                             e.preventDefault();
                             saveState();
+
+                            // Initialize name mapping for formula translation
+                            window.__ebmrPastedNameMapping = {};
+                            window.__ebmrPastedFormulaFields = [];
                             
                             const isSingleCellCopied = cellClipboard.length === 1 && cellClipboard[0].length === 1;
 
@@ -395,6 +405,12 @@
                                         }
                                     });
                                 });
+                            }
+
+                            item.dirty = true;
+
+                            if (typeof window.translateFormulaReferencesOfPastedFields === 'function') {
+                                window.translateFormulaReferencesOfPastedFields();
                             }
                             
                             renderBlocks();
@@ -636,18 +652,64 @@
             }
         }
         const rowCount = rows.length;
+
+        // Use virtual grid parsing to preserve rowspan and colspan
+        const virtualGrid = [];
         let colCount = 0;
-        rows.forEach(r => {
-            const cells = r.querySelectorAll('td, th');
-            if (cells.length > colCount) colCount = cells.length;
+        
+        rows.forEach((tr, rIdx) => {
+            if (!virtualGrid[rIdx]) virtualGrid[rIdx] = [];
+            let cIdx = 0;
+            
+            tr.querySelectorAll('td, th').forEach(cell => {
+                while (virtualGrid[rIdx][cIdx]) cIdx++;
+                
+                const rs = parseInt(cell.getAttribute('rowspan')) || 1;
+                const cs = parseInt(cell.getAttribute('colspan')) || 1;
+                let cellHtml = sanitizePastedHtml(cell.innerHTML);
+                
+                const style = cell.style || {};
+                const bgColor = cell.getAttribute('bgcolor') || style.backgroundColor || '';
+                const textAlign = cell.getAttribute('align') || style.textAlign || '';
+                const fontWeight = style.fontWeight || '';
+                const fontStyle = style.fontStyle || '';
+
+                virtualGrid[rIdx][cIdx] = { 
+                    content: cellHtml, rs, cs, hidden: false,
+                    backgroundColor: bgColor,
+                    textAlign: textAlign,
+                    fontWeight: fontWeight,
+                    fontStyle: fontStyle
+                };
+                
+                for (let dr = 0; dr < rs; dr++) {
+                    for (let dc = 0; dc < cs; dc++) {
+                        if (dr === 0 && dc === 0) continue;
+                        const trIndex = rIdx + dr;
+                        const tcIndex = cIdx + dc;
+                        if (!virtualGrid[trIndex]) virtualGrid[trIndex] = [];
+                        virtualGrid[trIndex][tcIndex] = { content: '', rs: 1, cs: 1, hidden: true };
+                    }
+                }
+                cIdx += cs;
+                if (cIdx > colCount) colCount = cIdx;
+            });
         });
+
+        // Ensure all rows have equal columns length
+        for (let r = 0; r < rowCount; r++) {
+            if (!virtualGrid[r]) virtualGrid[r] = [];
+            while (virtualGrid[r].length < colCount) {
+                virtualGrid[r].push({ content: '', rs: 1, cs: 1, hidden: false });
+            }
+        }
 
         const id = 'blk_' + Date.now() + Math.random().toString(36).substr(2, 5);
         let columns = [];
         let rowHeights = [];
         for (let i = 0; i < colCount; i++) {
             let width = 'auto';
-            const firstCell = rows[0].querySelectorAll('td, th')[i];
+            const firstCell = rows[0] ? rows[0].querySelectorAll('td, th')[i] : null;
             if (firstCell) {
                 width = firstCell.style.width || firstCell.getAttribute('width') || 'auto';
                 if (width !== 'auto' && !width.includes('px') && !width.includes('%')) width += 'px';
@@ -655,32 +717,55 @@
             columns.push({ label: 'Cột ' + (i + 1), type: 'text', width: width });
         }
 
+        // Apply duplicate fields and clean up
         let data = [];
-        rows.forEach((r, rIdx) => {
-            let rowData = [];
-            let height = r.style.height || r.getAttribute('height') || 'auto';
+        virtualGrid.forEach((rowData, rIdx) => {
+            let height = rows[rIdx] ? (rows[rIdx].style.height || rows[rIdx].getAttribute('height') || 'auto') : 'auto';
             if (height !== 'auto' && !height.includes('px')) height += 'px';
             rowHeights.push(height);
-            const cells = r.querySelectorAll('td, th');
-            for (let c = 0; c < colCount; c++) {
-                let cellHtml = cells[c] ? sanitizePastedHtml(cells[c].innerHTML) : '';
+
+            const processedRow = rowData.map(cell => {
+                let cellHtml = cell.content || '';
                 if (typeof cellHtml === 'string' && window.duplicateFieldBadgesInHtml) {
                     cellHtml = window.duplicateFieldBadgesInHtml(cellHtml, id);
                 }
-                rowData.push({ content: cellHtml, rs: 1, cs: 1, hidden: false });
-            }
-            data.push(rowData);
+                return {
+                    content: cellHtml,
+                    rs: cell.rs || 1,
+                    cs: cell.cs || 1,
+                    hidden: cell.hidden || false,
+                    backgroundColor: cell.backgroundColor || '',
+                    textAlign: cell.textAlign || '',
+                    fontWeight: cell.fontWeight || '',
+                    fontStyle: cell.fontStyle || ''
+                };
+            });
+            data.push(processedRow);
         });
 
-        items.splice(index, 0, {
-            id: id, type: 'table', section_id: sectionId, label: 'Bảng (Pasted)', rows: rowCount, cols: colCount,
-            columns: columns, data: data, rowHeights: rowHeights, borderMode: 'visible', hideHeader: true
+        items.splice(index, 0, { 
+            id: id, 
+            type: 'table', 
+            section_id: sectionId,
+            label: 'Bảng (Pasted)', 
+            rows: rowCount, 
+            cols: colCount,
+            columns: columns, 
+            data: data, 
+            rowHeights: rowHeights, 
+            borderMode: 'visible', 
+            hideHeader: true
         });
     }
 
     function handleTablePaste(e) {
         const target = e.target.closest('td, th');
         if (!target) return;
+
+        // Initialize name mapping for formula translation
+        window.__ebmrPastedNameMapping = {};
+        window.__ebmrPastedFormulaFields = [];
+
         const tableEl = target.closest('.mini-table');
         const blockItem = target.closest('.block-item');
         const item = items.find(i => blockItem && blockItem.contains(tableEl));
@@ -839,6 +924,10 @@
         });
 
         if (dataChanged) {
+            item.dirty = true;
+            if (typeof window.translateFormulaReferencesOfPastedFields === 'function') {
+                window.translateFormulaReferencesOfPastedFields();
+            }
             renderBlocks();
             setTimeout(() => {
                 const newCell = document.querySelector(`[data-row="${startR}"][data-col="${startC}"]`);

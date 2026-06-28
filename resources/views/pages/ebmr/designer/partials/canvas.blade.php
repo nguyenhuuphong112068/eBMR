@@ -2,8 +2,8 @@
     <div class="row justify-content-center">
         @if (!($isExecutionMode ?? false))
             <!-- Outline Sidebar -->
-            <div id="outline-col" class="col-lg-2 transition-all">
-                <div class="p-3 bg-white rounded shadow-sm outline-sidebar h-100">
+            <div id="outline-col" class="col-lg-1 transition-all p-0">
+                <div class="p-3 bg-white rounded shadow-sm outline-sidebar h-100 d-none">
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <h6 class="mb-0 text-muted fw-bold" style="font-size: 0.85rem;">
                             <i class="fas fa-list-ul me-2"></i>MỤC LỤC & THẺ
@@ -20,7 +20,7 @@
                 </div>
                 <!-- Minimized ToC -->
                 <div id="outline-minimized"
-                    class="d-none bg-white rounded-end shadow-sm py-3 text-center cursor-pointer transition-all"
+                    class="bg-white rounded-end shadow-sm py-3 text-center cursor-pointer transition-all"
                     onclick="toggleOutline(false)"
                     style="width: 34px; position: sticky; top: 200px; min-height: 200px; display: flex; flex-direction: column; align-items: center; border: 1px solid #ddd; border-left: none; z-index: 1040;">
                     <i class="fas fa-list-ul text-muted mb-3 mt-1"></i>
@@ -33,7 +33,7 @@
         @endif
 
         <!-- Document Canvas -->
-        <div id="canvas-col" class="{{ $isExecutionMode ?? false ? 'col-lg-12' : 'col-lg-9' }} transition-all">
+        <div id="canvas-col" class="{{ $isExecutionMode ?? false ? 'col-lg-12' : 'col-lg-10' }} transition-all">
 
 
             @if (!$isReadOnly)

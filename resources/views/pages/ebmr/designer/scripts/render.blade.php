@@ -391,7 +391,7 @@
                     data-row="0"
                     data-col="${cIdx}"
                     class="table-header-cell"
-                    style="position: relative; width: ${c.width || 'auto'}; background-color: ${bg}; text-align: ${align}; font-weight: ${fw}; font-style: ${fs}; text-decoration: ${td}; font-size: ${fsz}; color: ${tc}; border-top: ${s.borderTop || ''}; border-bottom: ${s.borderBottom || ''}; border-left: ${s.borderLeft || ''}; border-right: ${s.borderRight || ''}; writing-mode: ${wm};">
+                    style="position: relative; width: ${c.width || 'auto'}; background-color: ${bg}; text-align: ${align}; font-weight: ${fw}; font-style: ${fs}; text-decoration: ${td}; font-size: ${fsz}; color: ${tc}; border-top: ${s.borderTop ? s.borderTop + ' !important' : ''}; border-bottom: ${s.borderBottom ? s.borderBottom + ' !important' : ''}; border-left: ${s.borderLeft ? s.borderLeft + ' !important' : ''}; border-right: ${s.borderRight ? s.borderRight + ' !important' : ''}; writing-mode: ${wm};">
                         <div class="header-content" style="transform: ${tf}; transform-origin: center center; display: inline-block; width: 100%;">${c.label}</div>
                         ${!window.isExecutionMode ? `
                         <div class="col-actions">
@@ -513,7 +513,7 @@
                     colspan="${cell.cs || 1}"
                     ${onclickAttr}
                     class="${cellClass} ${item.locked ? 'locked-cell' : ''}"
-                    style="position: relative; width: ${cellWidth}; height: ${rowH}; background-color: ${cellBg}; text-align: ${cell.textAlign || ''}; font-weight: ${cell.fontWeight || ''}; font-style: ${cell.fontStyle || ''}; text-decoration: ${cell.textDecoration || ''}; font-size: ${cell.fontSize || ''}; color: ${cell.textColor || ''}; text-transform: ${cell.textTransform || ''}; border-top: ${cell.borderTop || ''}; border-bottom: ${cell.borderBottom || ''}; border-left: ${cell.borderLeft || ''}; border-right: ${cell.borderRight || ''}; writing-mode: ${cell.writingMode || ''};"
+                    style="position: relative; width: ${cellWidth}; height: ${rowH}; background-color: ${cellBg}; text-align: ${cell.textAlign || ''}; font-weight: ${cell.fontWeight || ''}; font-style: ${cell.fontStyle || ''}; text-decoration: ${cell.textDecoration || ''}; font-size: ${cell.fontSize || ''}; color: ${cell.textColor || ''}; text-transform: ${cell.textTransform || ''}; border-top: ${cell.borderTop ? cell.borderTop + ' !important' : ''}; border-bottom: ${cell.borderBottom ? cell.borderBottom + ' !important' : ''}; border-left: ${cell.borderLeft ? cell.borderLeft + ' !important' : ''}; border-right: ${cell.borderRight ? cell.borderRight + ' !important' : ''}; writing-mode: ${cell.writingMode || ''};"
                     oninput="updateTableInline('${blockKey}', 'cell', ${r}, ${c}, this.innerHTML)"
                     ${!window.isExecutionMode ? `
                         ondragover="event.preventDefault(); this.classList.add('criteria-drag-over');"
@@ -760,6 +760,18 @@
         const container = document.getElementById('editor-content');
         const hint = document.getElementById('drop-hint');
         if (!container) return;
+
+        // Save selection state to restore after rendering
+        const savedSelected = [];
+        document.querySelectorAll('.selected-cell').forEach(cell => {
+            const blockItem = cell.closest('.block-item');
+            const bId = blockItem ? blockItem.getAttribute('data-id') : null;
+            const r = cell.dataset.row;
+            const c = cell.dataset.col;
+            if (bId && r !== undefined && c !== undefined) {
+                savedSelected.push({ bId, r, c });
+            }
+        });
 
         if (window.isExecutionMode) {
             selectedId = null;
@@ -1065,6 +1077,12 @@
     if (typeof window.syncPreviewContent === 'function') {
         window.syncPreviewContent();
     }
+
+    // Restore selection state
+    savedSelected.forEach(sel => {
+        const cell = document.querySelector(`.block-item[data-id="${sel.bId}"] [data-row="${sel.r}"][data-col="${sel.c}"]`);
+        if (cell) cell.classList.add('selected-cell');
+    });
     }
 
     window.dynamicOptionsCache = {};
@@ -1310,10 +1328,31 @@
                     } else {
                         badge.style.removeProperty('width');
                     }
+                    if (field.style.height) {
+                        badge.style.setProperty('height', field.style.height, 'important');
+                    } else {
+                        badge.style.removeProperty('height');
+                    }
                     if (field.style.marginLeft) {
                         badge.style.setProperty('margin-left', field.style.marginLeft, 'important');
                     } else {
                         badge.style.removeProperty('margin-left');
+                    }
+                    if (field.style.badgeAlign) {
+                        badge.style.setProperty('display', 'table', 'important');
+                        if (field.style.badgeAlign === 'center') {
+                            badge.style.setProperty('margin-left', 'auto', 'important');
+                            badge.style.setProperty('margin-right', 'auto', 'important');
+                        } else if (field.style.badgeAlign === 'right') {
+                            badge.style.setProperty('margin-left', 'auto', 'important');
+                            badge.style.setProperty('margin-right', '0', 'important');
+                        } else {
+                            badge.style.setProperty('margin-left', '0', 'important');
+                            badge.style.setProperty('margin-right', 'auto', 'important');
+                        }
+                    } else {
+                        badge.style.removeProperty('display');
+                        badge.style.removeProperty('margin-right');
                     }
                 } else {
                     badge.style.removeProperty('width');
@@ -1517,6 +1556,26 @@
                         wrapper.style.alignItems = 'center';
                         wrapper.style.verticalAlign = 'middle';
                         wrapper.style.margin = '0 2px';
+                        
+                        // Apply alignment config to the wrapper as well
+                        if (field.style) {
+                            if (field.style.badgeAlign) {
+                                wrapper.style.setProperty('display', 'flex', 'important');
+                                wrapper.style.setProperty('width', 'max-content', 'important');
+                                if (field.style.badgeAlign === 'center') {
+                                    wrapper.style.setProperty('margin-left', 'auto', 'important');
+                                    wrapper.style.setProperty('margin-right', 'auto', 'important');
+                                } else if (field.style.badgeAlign === 'right') {
+                                    wrapper.style.setProperty('margin-left', 'auto', 'important');
+                                    wrapper.style.setProperty('margin-right', '0', 'important');
+                                } else {
+                                    wrapper.style.setProperty('margin-left', '0', 'important');
+                                    wrapper.style.setProperty('margin-right', 'auto', 'important');
+                                }
+                            } else if (field.style.marginLeft) {
+                                wrapper.style.setProperty('margin-left', field.style.marginLeft, 'important');
+                            }
+                        }
                         
                         // Move badge into wrapper
                         badge.parentNode.insertBefore(wrapper, badge);

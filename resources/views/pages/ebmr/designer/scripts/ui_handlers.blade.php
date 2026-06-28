@@ -346,7 +346,7 @@
                             <input type="color" class="form-control form-control-color p-1" style="height: 30px; width: 40px;" id="customBgColor" value="${item.backgroundColor || '#ffffff'}" onchange="updateBlockBackground('${item.id}', this.value)">
                             <label class="small text-muted mb-0" for="customBgColor">Màu tuỳ chỉnh...</label>
                         </div>
-                        <button class="btn btn-light btn-sm w-100 mt-2 text-danger text-start" onclick="updateBlockBackground('${item.id}', '')"><i class="fas fa-eraser me-2"></i>Xoá màu nền</button>
+                        <button class="btn btn-light btn-sm w-100 mt-2" onclick="updateBlockBackground('${item.id}', '')"><i class="fas fa-eraser me-2"></i>Xoá màu nền</button>
                     </div>
                 </div>
             </div>
@@ -385,6 +385,21 @@
                                 onclick="setTableBorderMode('dashed')" title="Viền nét đứt (Chỉ Editor)">
                             <i class="fas fa-grip-lines"></i>
                         </button>
+                    </div>
+                    
+                    <div class="mt-3 p-2 border rounded bg-white shadow-sm">
+                        <label class="small fw-bold mb-2"><i class="fas fa-border-style"></i> Kẻ viền ô đã chọn:</label>
+                        <div class="d-flex flex-wrap gap-1 mb-2">
+                            <button class="btn btn-sm btn-light border" onclick="applyBorderToSelectedCells('all')" title="Tất cả viền"><i class="fas fa-border-all"></i></button>
+                            <button class="btn btn-sm btn-light border" onclick="applyBorderToSelectedCells('none')" title="Xóa viền (Ẩn viền)"><i class="fas fa-border-none"></i></button>
+                            <button class="btn btn-sm btn-light border" onclick="applyBorderToSelectedCells('top')" title="Viền trên"><i class="fas fa-border-top"></i> Top</button>
+                            <button class="btn btn-sm btn-light border" onclick="applyBorderToSelectedCells('bottom')" title="Viền dưới"><i class="fas fa-border-bottom"></i> Bottom</button>
+                            <button class="btn btn-sm btn-light border" onclick="applyBorderToSelectedCells('left')" title="Viền trái"><i class="fas fa-border-left"></i> Left</button>
+                            <button class="btn btn-sm btn-light border" onclick="applyBorderToSelectedCells('right')" title="Viền phải"><i class="fas fa-border-right"></i> Right</button>
+                        </div>
+                        <div class="text-muted mt-1" style="font-size: 0.7rem; line-height: 1.2;">
+                            <i>* Bôi đen các ô trong bảng rồi chọn kiểu viền muốn kẻ.</i>
+                        </div>
                     </div>
                 </div>
                 <div class="mb-3">
@@ -438,6 +453,9 @@
                             <button class="btn btn-outline-danger" onclick="modifyTable('deleteRow')" title="Xóa hàng đang chọn"><i class="fas fa-trash-alt"></i> Xóa hàng</button>
                             <button class="btn btn-outline-danger" onclick="modifyTable('deleteCol')" title="Xóa cột đang chọn"><i class="fas fa-trash-alt"></i> Xóa cột</button>
                         </div>
+                        <button class="btn btn-outline-primary btn-sm w-100 mt-2" onclick="tableDuplicateRowStructure()" title="Nhân bản cấu trúc dòng đang chọn (kèm gộp ô & tịnh tiến công thức)">
+                            <i class="fas fa-clone me-1"></i> Nhân bản cấu trúc dòng
+                        </button>
                         <button class="btn btn-info btn-sm w-100 mt-2" onclick="openChartCreator('${item.id}')">
                             <i class="fas fa-chart-line me-1"></i> Tạo biểu đồ từ bảng này
                         </button>
@@ -743,18 +761,294 @@
         saveStateDebounced();
 
         const numCols = item.columns.length;
-        const newRow = Array(numCols).fill('');
+        let rowsToInsert = [];
+        let insertAt = index;
 
-        if (index === -1) {
-            item.data.push(newRow);
-        } else {
-            item.data.splice(index, 0, newRow);
+        const newRow = [];
+        let actualInsertAt = insertAt;
+        if (actualInsertAt === -1) {
+            actualInsertAt = item.data.length;
         }
 
+        if (actualInsertAt > 0 && actualInsertAt < item.data.length) {
+            for (let c = 0; c < numCols; c++) {
+                let spanned = false;
+                for (let r = 0; r < actualInsertAt; r++) {
+                    const cell = item.data[r] ? item.data[r][c] : null;
+                    if (cell && !cell.hidden && cell.rs > 1 && (r + cell.rs) > actualInsertAt) {
+                        cell.rs += 1;
+                        spanned = true;
+                        break;
+                    }
+                }
+                if (spanned) {
+                    newRow.push({
+                        content: '',
+                        rs: 1,
+                        cs: 1,
+                        hidden: true
+                    });
+                } else {
+                    newRow.push({
+                        content: '',
+                        rs: 1,
+                        cs: 1,
+                        hidden: false
+                    });
+                }
+            }
+        } else {
+            for (let i = 0; i < numCols; i++) {
+                newRow.push({
+                    content: '',
+                    rs: 1,
+                    cs: 1,
+                    hidden: false
+                });
+            }
+        }
+        rowsToInsert.push(newRow);
+
+        if (insertAt === -1) {
+            insertAt = item.data.length;
+        }
+
+        item.data.splice(insertAt, 0, ...rowsToInsert);
         item.rows = item.data.length;
+
+        if (!item.rowHeights) {
+            item.rowHeights = new Array(item.rows).fill('auto');
+        } else {
+            const heightsToInsert = Array(rowsToInsert.length).fill('auto');
+            item.rowHeights.splice(insertAt, 0, ...heightsToInsert);
+        }
+
         item.dirty = true;
         renderBlocks();
     }
+
+    window.tableDuplicateRowStructure = function() {
+        // Find selected cells first
+        const selectedCells = Array.from(document.querySelectorAll('.selected-cell'));
+        if (selectedCells.length === 0) {
+            toastr.warning('Vui lòng chọn ít nhất một ô trong các hàng cần nhân bản cấu trúc.');
+            return;
+        }
+
+        // Detect the active table item directly from the selected cells
+        const firstCell = selectedCells[0];
+        const blockEl = firstCell.closest('.block-item');
+        const blockId = blockEl ? blockEl.getAttribute('data-id') : null;
+
+        const item = items.find(i => i.id === blockId);
+        if (!item || item.type !== 'table') {
+            toastr.error('Không tìm thấy bảng tương ứng với các ô được chọn.');
+            return;
+        }
+
+        // Filter cells only belonging to this table
+        const filteredCells = selectedCells.filter(cell => cell.closest('.block-item').getAttribute('data-id') ===
+            item.id);
+        if (filteredCells.length === 0) {
+            toastr.warning('Vui lòng chọn ít nhất một ô trong các hàng cần nhân bản cấu trúc.');
+            return;
+        }
+
+        saveStateDebounced();
+
+        const numCols = item.columns.length;
+        const selectedRows = new Set();
+        const selectedCoords = new Set();
+        filteredCells.forEach(cell => {
+            const r = parseInt(cell.dataset.row);
+            const c = parseInt(cell.dataset.col);
+            if (r > 0) {
+                selectedRows.add(r - 1);
+                selectedCoords.add(`${r - 1}_${c}`);
+            }
+        });
+
+        // Expand selectedRows to cover entire rowspan groups transitively
+        const expandedRows = new Set(selectedRows);
+        let changed = true;
+        while (changed) {
+            changed = false;
+            const currentRows = Array.from(expandedRows);
+            for (let i = 0; i < currentRows.length; i++) {
+                const r = currentRows[i];
+                for (let c = 0; c < numCols; c++) {
+                    const cell = item.data[r] ? item.data[r][c] : null;
+                    if (!cell) continue;
+
+                    if (cell.rs > 1) {
+                        for (let dr = 1; dr < cell.rs; dr++) {
+                            const targetR = r + dr;
+                            if (targetR < item.data.length && !expandedRows.has(targetR)) {
+                                expandedRows.add(targetR);
+                                changed = true;
+                            }
+                        }
+                    }
+
+                    if (cell.hidden) {
+                        let ownerR = r;
+                        while (ownerR > 0) {
+                            ownerR--;
+                            const ownerCell = item.data[ownerR] ? item.data[ownerR][c] : null;
+                            if (ownerCell && !ownerCell.hidden) {
+                                for (let dr = 0; dr < ownerCell.rs; dr++) {
+                                    const targetR = ownerR + dr;
+                                    if (targetR < item.data.length && !expandedRows.has(targetR)) {
+                                        expandedRows.add(targetR);
+                                        changed = true;
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        const sortedRows = Array.from(expandedRows).sort((a, b) => a - b);
+        const insertAt = sortedRows[sortedRows.length - 1] + 1;
+        const blockHeight = sortedRows.length;
+
+        // Determine which columns to EXPAND (rowspan increase) vs DUPLICATE
+        const columnsToExpand = new Set();
+        const ownerRowToExpandMap = new Map();
+
+        for (let c = 0; c < numCols; c++) {
+            const firstRow = sortedRows[0];
+            const cell = item.data[firstRow] ? item.data[firstRow][c] : null;
+            if (!cell) continue;
+
+            if (cell.hidden) {
+                // Find owner of this hidden cell
+                let ownerR = firstRow;
+                while (ownerR > 0) {
+                    ownerR--;
+                    const ownerCell = item.data[ownerR] ? item.data[ownerR][c] : null;
+                    if (ownerCell && !ownerCell.hidden) {
+                        if (ownerR < firstRow) {
+                            // Owner is outside the block -> MUST expand
+                            columnsToExpand.add(c);
+                            ownerRowToExpandMap.set(c, ownerR);
+                        }
+                        break;
+                    }
+                }
+            } else {
+                // Determine if this cell spans the entire block by checking if all subsequent rows in the block have this column hidden.
+                // This is robust against corrupted `rs` values in the database.
+                let spansEntireBlock = true;
+                for (let i = 1; i < blockHeight; i++) {
+                    const rIdx = sortedRows[i];
+                    const targetCell = item.data[rIdx] ? item.data[rIdx][c] : null;
+                    if (!targetCell || !targetCell.hidden) {
+                        spansEntireBlock = false;
+                        break;
+                    }
+                }
+
+                if (spansEntireBlock) {
+                    // Cell perfectly spans the entire block (or more).
+                    // If user DID NOT select ANY cell in this column within the block, we EXPAND it.
+                    let isSelected = false;
+                    for (let r of sortedRows) {
+                        if (selectedCoords.has(`${r}_${c}`)) {
+                            isSelected = true;
+                            break;
+                        }
+                    }
+                    if (!isSelected) {
+                        columnsToExpand.add(c);
+                        ownerRowToExpandMap.set(c, firstRow);
+                    }
+                }
+            }
+        }
+
+        // Set up name/formula tracking for duplication
+        window.__ebmrPastedNameMapping = {};
+        window.__ebmrPastedFormulaFields = [];
+
+        const rowsToInsert = sortedRows.map(srcIdx => {
+            const srcRow = item.data[srcIdx];
+            if (!srcRow) {
+                const blankRow = [];
+                for (let i = 0; i < numCols; i++) {
+                    blankRow.push({
+                        content: '',
+                        rs: 1,
+                        cs: 1,
+                        hidden: false
+                    });
+                }
+                return blankRow;
+            }
+            return srcRow.map((cell, c) => {
+                const cellObj = typeof cell === 'object' && cell !== null ? cell : {
+                    content: cell || '',
+                    rs: 1,
+                    cs: 1,
+                    hidden: false
+                };
+                const cellCopy = {
+                    rs: cellObj.rs || 1,
+                    cs: cellObj.cs || 1,
+                    hidden: cellObj.hidden || false,
+                    backgroundColor: cellObj.backgroundColor || '',
+                    textAlign: cellObj.textAlign || '',
+                    fontWeight: cellObj.fontWeight || '',
+                    fontStyle: cellObj.fontStyle || ''
+                };
+
+                if (columnsToExpand.has(c)) {
+                    // For expanded columns, copied cells are always hidden
+                    cellCopy.hidden = true;
+                    cellCopy.rs = 1;
+                    cellCopy.content = '';
+                } else {
+                    if (cellObj.content) {
+                        cellCopy.content = window.duplicateFieldBadgesInHtml ? window
+                            .duplicateFieldBadgesInHtml(cellObj.content, item.id) : cellObj.content;
+                    } else {
+                        cellCopy.content = '';
+                    }
+                }
+                return cellCopy;
+            });
+        });
+
+        if (typeof window.translateFormulaReferencesOfPastedFields === 'function') {
+            window.translateFormulaReferencesOfPastedFields();
+        }
+
+        item.data.splice(insertAt, 0, ...rowsToInsert);
+        item.rows = item.data.length;
+
+        // Apply rowspan expansion to original owner cells
+        columnsToExpand.forEach(c => {
+            const ownerR = ownerRowToExpandMap.get(c);
+            if (item.data[ownerR] && item.data[ownerR][c]) {
+                const currentRs = parseInt(item.data[ownerR][c].rs) || 1;
+                item.data[ownerR][c].rs = currentRs + blockHeight;
+            }
+        });
+
+        if (!item.rowHeights) {
+            item.rowHeights = new Array(item.rows).fill('auto');
+        } else {
+            const heightsToInsert = Array(rowsToInsert.length).fill('auto');
+            item.rowHeights.splice(insertAt, 0, ...heightsToInsert);
+        }
+
+        item.dirty = true;
+        renderBlocks();
+        toastr.success(`Đã nhân bản cấu trúc khối gồm ${rowsToInsert.length} hàng thành công.`);
+    };
 
     function tableRemoveRow(index) {
         const item = items.find(i => i.id === selectedId);
@@ -803,6 +1097,61 @@
      * THIẾT LẬP VIỀN BẢNG (Giống Google Doc)
      * @param {string} mode - 'all', 'none', 'outer', 'rows', 'cols'
      */
+    window.applyBorderToSelectedCells = function(edge) {
+        const item = items.find(i => i.id === selectedId);
+        if (!item || item.type !== 'table') return;
+
+        const selectedCells = document.querySelectorAll('.selected-cell');
+        if (selectedCells.length === 0) return;
+
+        saveStateDebounced();
+
+        const weight = item.borderWeight || '1px';
+        const color = '#dee2e6';
+        const borderStyle = `${weight} solid ${color}`;
+        
+        selectedCells.forEach(cell => {
+            const r = parseInt(cell.dataset.row);
+            const c = parseInt(cell.dataset.col);
+
+            let target;
+            if (r === 0) {
+                if (!item.columns[c].style) item.columns[c].style = {};
+                target = item.columns[c].style;
+            } else {
+                const rIdx = r - 1;
+                if (!item.data[rIdx][c] || typeof item.data[rIdx][c] !== 'object') {
+                    item.data[rIdx][c] = {
+                        content: item.data[rIdx][c] || '',
+                        rs: 1,
+                        cs: 1,
+                        hidden: false
+                    };
+                }
+                target = item.data[rIdx][c];
+            }
+
+            const applyStyle = edge === 'none' ? 'hidden' : borderStyle;
+
+            if (edge === 'all') {
+                target.borderTop = target.borderBottom = target.borderLeft = target.borderRight = borderStyle;
+            } else if (edge === 'none') {
+                target.borderTop = target.borderBottom = target.borderLeft = target.borderRight = 'hidden';
+            } else if (edge === 'top') {
+                target.borderTop = applyStyle;
+            } else if (edge === 'bottom') {
+                target.borderBottom = applyStyle;
+            } else if (edge === 'left') {
+                target.borderLeft = applyStyle;
+            } else if (edge === 'right') {
+                target.borderRight = applyStyle;
+            }
+        });
+
+        item.dirty = true;
+        renderBlocks();
+    };
+
     function setTableBorderMode(mode) {
         const item = items.find(i => i.id === selectedId);
         if (!item || item.type !== 'table') return;
@@ -915,6 +1264,9 @@
         item.dirty = true;
         renderBlocks();
     }
+
+
+
 
     /**
      * Xóa một khối khỏi tài liệu dựa trên ID.
@@ -2334,7 +2686,7 @@
         marginR.style.width = rightPx + 'px';
     }
 
-    let isOutlineMinimized = false;
+    let isOutlineMinimized = true;
     let isSidebarMinimized = true;
 
     /**
@@ -2469,6 +2821,183 @@
     window.isSelectVarMode = false;
     window.targetFormulaFieldId = null;
 
+    const formulaColors = [{
+            border: '#4f46e5',
+            bg: '#e0e7ff',
+            text: '#312e81',
+            shadow: 'rgba(79, 70, 229, 0.4)'
+        }, // Indigo
+        {
+            border: '#10b981',
+            bg: '#d1fae5',
+            text: '#064e3b',
+            shadow: 'rgba(16, 185, 129, 0.4)'
+        }, // Emerald
+        {
+            border: '#f59e0b',
+            bg: '#fef3c7',
+            text: '#78350f',
+            shadow: 'rgba(245, 158, 11, 0.4)'
+        }, // Amber
+        {
+            border: '#ec4899',
+            bg: '#fce7f3',
+            text: '#701a75',
+            shadow: 'rgba(236, 72, 153, 0.4)'
+        }, // Pink/Rose
+        {
+            border: '#8b5cf6',
+            bg: '#ede9fe',
+            text: '#4c1d95',
+            shadow: 'rgba(139, 92, 246, 0.4)'
+        }, // Violet
+        {
+            border: '#06b6d4',
+            bg: '#ecfeff',
+            text: '#083344',
+            shadow: 'rgba(6, 182, 212, 0.4)'
+        }, // Cyan
+    ];
+
+    function getShortAlias(name, explicitLabel = null) {
+        if (!name) return '';
+        if (explicitLabel) return explicitLabel;
+        if ((name.startsWith('item_') || name.startsWith('blk_')) && name.length > 15) {
+            const match = name.match(/_r(\d+)_c(\d+)$/);
+            if (match) {
+                return `[Bảng] Dòng ${match[1]}, Cột ${match[2]}`;
+            }
+            return `[Khối] ...${name.substring(name.length - 5)}`;
+        }
+        return name;
+    }
+
+    window.serializeFormulaElement = function(el) {
+        if (!el) return '';
+        let formula = '';
+        el.childNodes.forEach(node => {
+            if (node.nodeType === 3) { // Node.TEXT_NODE
+                formula += node.textContent;
+            } else if (node.nodeType === 1) { // Node.ELEMENT_NODE
+                if (node.hasAttribute('data-var-name')) {
+                    formula += `(${node.getAttribute('data-var-name')})`;
+                } else {
+                    formula += node.textContent;
+                }
+            }
+        });
+        return formula;
+    };
+
+    window.deserializeFormulaToHtml = function(formulaStr, targetFieldId = null) {
+        if (!formulaStr) return '';
+
+        let match;
+        const regex = /\(([^()]+)\)/g;
+        const refVarNames = [];
+        while ((match = regex.exec(formulaStr)) !== null) {
+            refVarNames.push(match[1].trim());
+        }
+        const uniqueVars = [...new Set(refVarNames)];
+        const assignedColors = {};
+        uniqueVars.forEach((varName, index) => {
+            const targetField = Object.values(fieldsConfig).find(f => f.name === varName || f.label ===
+                varName || f.id === varName);
+            if (targetField) {
+                assignedColors[targetField.id] = formulaColors[index % formulaColors.length];
+            }
+        });
+
+        let html = formulaStr;
+        html = html.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        html = html.replace(/\(([^()]+)\)/g, (match, varName) => {
+            const trimmed = varName.trim();
+            const targetField = Object.values(fieldsConfig).find(f => f.name === trimmed || f.label ===
+                trimmed || f.id === trimmed);
+            if (targetField) {
+                const isTarget = targetField.id === targetFieldId;
+                const alias = getShortAlias(trimmed, targetField.label);
+                if (isTarget) {
+                    return `<span class="badge mx-1 px-2 py-1 rounded border shadow-sm" contenteditable="false" data-var-name="${trimmed}" style="border-color: #dc3545 !important; background-color: #f8d7da !important; color: #721c24 !important; font-size: 0.8rem; font-weight: bold; font-family: sans-serif; display: inline-flex; align-items: center; gap: 4px; vertical-align: middle;">${alias} (Đang cài)</span>`;
+                }
+                const color = assignedColors[targetField.id];
+                if (color) {
+                    return `<span class="badge mx-1 px-2 py-1 rounded border shadow-sm" contenteditable="false" data-var-name="${trimmed}" style="border-color: ${color.border} !important; background-color: ${color.bg} !important; color: ${color.text} !important; font-size: 0.8rem; font-weight: bold; font-family: sans-serif; display: inline-flex; align-items: center; gap: 4px; vertical-align: middle;" title="${trimmed}">${alias}<span class="ms-1 text-danger-emphasis" style="cursor: pointer; font-weight: bold;" onclick="event.stopPropagation(); this.parentElement.remove(); document.getElementById('formula-input-${targetFieldId}').dispatchEvent(new Event('input'));">&times;</span></span>`;
+                }
+            }
+            return `<span class="badge mx-1 px-2 py-1 rounded border bg-light text-muted border-secondary shadow-sm" contenteditable="false" data-var-name="${trimmed}" style="font-size: 0.8rem; font-family: sans-serif; display: inline-flex; align-items: center; gap: 4px; vertical-align: middle;">${getShortAlias(trimmed)}<span class="ms-1 text-danger-emphasis" style="cursor: pointer; font-weight: bold;" onclick="event.stopPropagation(); this.parentElement.remove(); document.getElementById('formula-input-${targetFieldId}').dispatchEvent(new Event('input'));">&times;</span></span>`;
+        });
+        return html;
+    };
+
+    window.insertFormulaToken = function(fieldId, token, isBadge = false) {
+        const input = document.getElementById(`formula-input-${fieldId}`);
+        if (!input) return;
+
+        input.focus();
+
+        if (isBadge) {
+            const targetField = Object.values(fieldsConfig).find(f => f.name === token || f.label === token || f
+                .id === token);
+            if (targetField) {
+                const badge = document.createElement('span');
+                badge.className = 'badge mx-1 px-2 py-1 rounded border shadow-sm';
+                badge.contentEditable = 'false';
+                badge.setAttribute('data-var-name', token);
+
+                const currentFormula = serializeFormulaElement(input);
+                const refVarNames = [];
+                let match;
+                const regex = /\(([^()]+)\)/g;
+                while ((match = regex.exec(currentFormula)) !== null) {
+                    refVarNames.push(match[1].trim());
+                }
+                const uniqueVars = [...new Set(refVarNames)];
+                let colorIndex = uniqueVars.indexOf(targetField.id);
+                if (colorIndex === -1) colorIndex = uniqueVars.length;
+                const color = formulaColors[colorIndex % formulaColors.length];
+
+                badge.style.setProperty('border-color', color.border, 'important');
+                badge.style.setProperty('background-color', color.bg, 'important');
+                badge.style.setProperty('color', color.text, 'important');
+                badge.style.fontSize = '0.8rem';
+                badge.style.fontWeight = 'bold';
+                badge.style.fontFamily = 'sans-serif';
+                badge.style.display = 'inline-flex';
+                badge.style.alignItems = 'center';
+                badge.style.gap = '4px';
+                badge.style.verticalAlign = 'middle';
+                badge.title = token;
+
+                const alias = getShortAlias(token, targetField.label);
+                if (targetField.id === fieldId) {
+                    badge.innerHTML = `${alias} (Đang cài)`;
+                } else {
+                    badge.innerHTML =
+                        `${alias}<span class="ms-1 text-danger-emphasis" style="cursor: pointer; font-weight: bold;" onclick="event.stopPropagation(); this.parentElement.remove(); document.getElementById('formula-input-${fieldId}').dispatchEvent(new Event('input'));">&times;</span>`;
+                }
+
+                input.appendChild(badge);
+                input.appendChild(document.createTextNode(' '));
+            } else {
+                input.appendChild(document.createTextNode(token));
+            }
+        } else {
+            input.appendChild(document.createTextNode(token));
+        }
+
+        input.dispatchEvent(new Event('input'));
+
+        if (typeof window.getSelection != "undefined" && typeof document.createRange != "undefined") {
+            const range = document.createRange();
+            range.selectNodeContents(input);
+            range.collapse(false);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+        }
+    };
+
     window.toggleSelectVarMode = function(fieldId) {
         window.isSelectVarMode = !window.isSelectVarMode;
         const btn = document.getElementById(`btn-select-var-${fieldId}`);
@@ -2481,7 +3010,32 @@
                 btn.classList.add('btn-warning', 'text-dark');
             }
             document.body.classList.add('select-var-mode-active');
+            // Thêm class highlight riêng cho biến số đang được cấu hình
+            document.querySelectorAll(`.ebmr-field-badge[data-field-id="${fieldId}"]`).forEach(el => {
+                el.classList.add('select-var-target');
+            });
+
+            // Trích xuất công thức hiện tại để highlight các biến đã có sẵn
+            const input = document.getElementById(`formula-input-${fieldId}`);
+            if (input) {
+                const fs = serializeFormulaElement(input);
+                if (fs) highlightFormulaVars(fs, fieldId);
+            }
         } else {
+            // Xóa class highlight của biến mục tiêu
+            document.querySelectorAll('.select-var-target').forEach(el => {
+                el.classList.remove('select-var-target');
+            });
+
+            // Xóa toàn bộ inline styles của các biến được bắt để phục hồi màu gốc
+            document.querySelectorAll('.ebmr-field-badge').forEach(badge => {
+                badge.style.removeProperty('outline');
+                badge.style.removeProperty('outline-offset');
+                badge.style.removeProperty('background-color');
+                badge.style.removeProperty('box-shadow');
+                badge.style.removeProperty('color');
+            });
+
             window.targetFormulaFieldId = null;
             if (btn) {
                 btn.innerHTML = '<i class="fas fa-hand-pointer me-1"></i> Bắt biến từ màn hình';
@@ -2489,18 +3043,45 @@
                 btn.classList.add('btn-outline-warning');
             }
             document.body.classList.remove('select-var-mode-active');
+
         }
     };
 
     window.highlightFormulaVars = function(formulaStr, targetFieldId = null) {
+        // Nếu đang ở chế độ bắt biến mà mất focus tạm thời (onblur), không xóa highlight
+        if (!formulaStr && !targetFieldId) {
+            if (window.isSelectVarMode) return;
+
+            document.querySelectorAll('.ebmr-field-badge').forEach(badge => {
+                badge.style.removeProperty('outline');
+                badge.style.removeProperty('outline-offset');
+                badge.style.removeProperty('background-color');
+                badge.style.removeProperty('box-shadow');
+                badge.style.removeProperty('color');
+            });
+            document.querySelectorAll('.formula-var-highlight').forEach(el => el.classList.remove(
+                'formula-var-highlight'));
+            document.querySelectorAll('.formula-target-highlight').forEach(el => el.classList.remove(
+                'formula-target-highlight'));
+            return;
+        }
+
+        // Reset highlight cũ trên các biến
+        document.querySelectorAll('.ebmr-field-badge').forEach(badge => {
+            badge.style.removeProperty('outline');
+            badge.style.removeProperty('outline-offset');
+            badge.style.removeProperty('background-color');
+            badge.style.removeProperty('box-shadow');
+            badge.style.removeProperty('color');
+        });
         document.querySelectorAll('.formula-var-highlight').forEach(el => el.classList.remove(
             'formula-var-highlight'));
         document.querySelectorAll('.formula-target-highlight').forEach(el => el.classList.remove(
             'formula-target-highlight'));
-        if (!formulaStr && !targetFieldId) return;
 
-        if (targetFieldId) {
-            const targetBadges = document.querySelectorAll(`.ebmr-field-badge[data-field-id="${targetFieldId}"]`);
+        const activeTargetId = targetFieldId || (window.isSelectVarMode ? window.targetFormulaFieldId : null);
+        if (activeTargetId) {
+            const targetBadges = document.querySelectorAll(`.ebmr-field-badge[data-field-id="${activeTargetId}"]`);
             targetBadges.forEach(badge => badge.classList.add('formula-target-highlight'));
         }
 
@@ -2508,15 +3089,40 @@
 
         let match;
         const regex = /\(([^()]+)\)/g;
+        const refVarNames = [];
         while ((match = regex.exec(formulaStr)) !== null) {
-            const idOrName = match[1];
-            const targetField = Object.values(fieldsConfig).find(f => f.name === idOrName || f.label === idOrName ||
-                f.id === idOrName);
-            if (targetField && targetField.id !== targetFieldId) {
-                const badges = document.querySelectorAll(`.ebmr-field-badge[data-field-id="${targetField.id}"]`);
-                badges.forEach(badge => badge.classList.add('formula-var-highlight'));
-            }
+            refVarNames.push(match[1].trim());
         }
+
+        const uniqueVars = [...new Set(refVarNames)];
+        const uniqueFieldIds = [];
+        uniqueVars.forEach(varName => {
+            const targetField = Object.values(fieldsConfig).find(f => f.name === varName || f.label ===
+                varName || f.id === varName);
+            if (targetField && targetField.id !== activeTargetId) {
+                uniqueFieldIds.push({
+                    varName: varName,
+                    fieldId: targetField.id,
+                    field: targetField
+                });
+            }
+        });
+
+        const assignedColors = {};
+        uniqueFieldIds.forEach((item, index) => {
+            const color = formulaColors[index % formulaColors.length];
+            assignedColors[item.fieldId] = color;
+
+            // Highlight biến này trên màn hình bằng màu sắc tương ứng
+            document.querySelectorAll(`.ebmr-field-badge[data-field-id="${item.fieldId}"]`).forEach(
+                badge => {
+                    badge.style.setProperty('outline', `3px solid ${color.border}`, 'important');
+                    badge.style.setProperty('outline-offset', `-3px`, 'important');
+                    badge.style.setProperty('background-color', color.bg, 'important');
+                    badge.style.setProperty('box-shadow', `0 0 10px ${color.shadow}`, 'important');
+                    badge.style.setProperty('color', color.text, 'important');
+                });
+        });
     };
 
     /**
@@ -2618,22 +3224,13 @@
             if (input) {
                 const varName = targetField.name || targetField.label || fieldId;
                 const appendText = `(${varName})`;
-                input.value = input.value ? `${input.value} ${appendText}` : appendText;
-                syncFieldConfig(window.targetFormulaFieldId, 'formula', input.value);
+                insertFormulaToken(window.targetFormulaFieldId, varName, true);
 
-                // Cập nhật giá trị hiển thị preview nếu có
-                const preview = document.getElementById('formula-friendly-preview');
-                if (preview) {
-                    preview.innerText = input.value.replace(/\(([^)]+)\)/g, (match, id) => {
-                        const target = Object.values(fieldsConfig).find(f => f.name === id || f.label === id);
-                        return target ? (target.label || id) : id;
-                    });
-                }
+                // Cập nhật giá trị hiển thị preview và highlights
+                highlightFormulaVars(serializeFormulaElement(input), window.targetFormulaFieldId);
 
                 // Trả focus về ô input, thiết lập auto height
                 input.focus();
-                input.style.height = 'auto';
-                input.style.height = (input.scrollHeight) + 'px';
             }
             return; // Chặn luồng chọn biến thông thường
         }
@@ -2702,7 +3299,7 @@
                     <hr class="text-muted opacity-25 my-3">
                     <div class="mb-3">
                         <label class="small fw-bold text-muted text-uppercase mb-2">Tên thẻ (Nhãn hiển thị)</label>
-                        <input type="text" class="form-control form-control-sm" value="${field.label || ''}" oninput="syncFieldConfig('${fieldId}', 'label', this.value)">
+                        <input type="text" id="prop-label-input-${fieldId}" class="form-control form-control-sm" value="${field.label || ''}" oninput="syncFieldConfig('${fieldId}', 'label', this.value)">
                         <div class="form-text small" style="font-size: 0.7rem;">Hiển thị cho người dùng. VD: Số lượng.</div>
                     </div>
                     <hr class="text-muted opacity-25 my-3">
@@ -2778,20 +3375,46 @@
             <hr class="text-muted opacity-25 my-3">
             <div class="card bg-light border-0 shadow-none mb-3">
                 <div class="card-body p-3">
-                    <label class="small fw-bold mb-2"><i class="fas fa-arrows-alt-h me-1"></i>Kích thước (CSS)</label>
+                    <label class="small fw-bold mb-2">Kích thước biến <i class="fas fa-arrows-alt-h me-1"></i></label>
                     <div class="row g-2 mb-2">
                         <div class="col-6">
                             <label class="small text-muted" style="font-size: 0.75em;">Rộng(px)</label>
-                            <input type="number" class="form-control form-control-sm" placeholder="Mặc định" min="50"
-                                   value="${(field.style && field.style.width) ? parseInt(field.style.width) : ''}" 
-                                   oninput="const val = this.value ? this.value + 'px' : ''; syncFieldConfig('${fieldId}', 'style.width', val); const badge = document.querySelector('.ebmr-field-badge[data-field-id=\'${fieldId}\']'); if(badge) { if(val) badge.style.setProperty('width', val, 'important'); else badge.style.removeProperty('width'); }">
+                            <input type="number" class="form-control form-control-sm w-input-custom" placeholder="Mặc định" min="50"
+                                   value="${(field.style && field.style.width && !field.style.width.includes('%')) ? parseInt(field.style.width) : ''}" 
+                                   oninput="const val = this.value ? this.value + 'px' : ''; syncFieldConfig('${fieldId}', 'style.width', val); const badge = document.querySelector('.ebmr-field-badge[data-field-id=\\'${fieldId}\\']'); if(badge) { if(val) badge.style.setProperty('width', val, 'important'); else badge.style.removeProperty('width'); document.getElementById('btn-max-width-${fieldId}').classList.remove('active', 'btn-primary'); document.getElementById('btn-max-width-${fieldId}').classList.add('btn-outline-secondary'); }">
                         </div>
                         <div class="col-6">
                             <label class="small text-muted" style="font-size: 0.75em;">Lề trái (px)</label>
                             <input type="number" class="form-control form-control-sm" placeholder="Mặc định" min="0"
                                    value="${(field.style && field.style.marginLeft) ? parseInt(field.style.marginLeft) : ''}" 
-                                   oninput="const val = this.value ? this.value + 'px' : ''; syncFieldConfig('${fieldId}', 'style.marginLeft', val); const badge = document.querySelector('.ebmr-field-badge[data-field-id=\'${fieldId}\']'); if(badge) { if(val) badge.style.setProperty('margin-left', val, 'important'); else badge.style.removeProperty('margin-left'); }">
+                                   oninput="const val = this.value ? this.value + 'px' : ''; syncFieldConfig('${fieldId}', 'style.marginLeft', val); const badge = document.querySelector('.ebmr-field-badge[data-field-id=\\'${fieldId}\\']'); if(badge) { if(val) badge.style.setProperty('margin-left', val, 'important'); else badge.style.removeProperty('margin-left'); }">
                         </div>
+                    </div>
+                    
+                    <div class="d-flex gap-2 mb-2">
+                        <button type="button" id="btn-max-width-${fieldId}" class="btn btn-sm ${(field.style && field.style.width === '100%') ? 'btn-primary active' : 'btn-outline-secondary'} flex-fill"
+                                onclick="const isActive = this.classList.contains('active'); const val = isActive ? '' : '100%'; syncFieldConfig('${fieldId}', 'style.width', val); const badge = document.querySelector('.ebmr-field-badge[data-field-id=\\'${fieldId}\\']'); if(badge) { if(val) badge.style.setProperty('width', val, 'important'); else badge.style.removeProperty('width'); } if(isActive) { this.classList.remove('active', 'btn-primary'); this.classList.add('btn-outline-secondary'); } else { this.classList.add('active', 'btn-primary'); this.classList.remove('btn-outline-secondary'); this.closest('.card-body').querySelector('.w-input-custom').value = ''; }" title="Chiều rộng tối đa (100%)">
+                            <i class="fas fa-arrows-alt-h"></i> Max Rộng
+                        </button>
+                        <button type="button" id="btn-max-height-${fieldId}" class="btn btn-sm ${(field.style && field.style.height === '100%') ? 'btn-primary active' : 'btn-outline-secondary'} flex-fill"
+                                onclick="const isActive = this.classList.contains('active'); const val = isActive ? '' : '100%'; syncFieldConfig('${fieldId}', 'style.height', val); const badge = document.querySelector('.ebmr-field-badge[data-field-id=\\'${fieldId}\\']'); if(badge) { if(val) badge.style.setProperty('height', val, 'important'); else badge.style.removeProperty('height'); } if(isActive) { this.classList.remove('active', 'btn-primary'); this.classList.add('btn-outline-secondary'); } else { this.classList.add('active', 'btn-primary'); this.classList.remove('btn-outline-secondary'); }" title="Chiều cao tối đa (100%)">
+                            <i class="fas fa-arrows-alt-v"></i> Max Cao
+                        </button>
+                    </div>
+
+                    <div class="btn-group w-100 mb-2" role="group">
+                        <button type="button" class="btn btn-sm ${(field.style && field.style.badgeAlign === 'left') ? 'btn-primary active' : 'btn-outline-secondary'}"
+                                onclick="syncFieldConfig('${fieldId}', 'style.badgeAlign', 'left'); const badge = document.querySelector('.ebmr-field-badge[data-field-id=\\'${fieldId}\\']'); if(badge) { badge.style.setProperty('display', 'table', 'important'); badge.style.setProperty('margin-left', '0', 'important'); badge.style.setProperty('margin-right', 'auto', 'important'); } this.parentElement.querySelectorAll('.btn').forEach(b => { b.classList.remove('btn-primary', 'active'); b.classList.add('btn-outline-secondary'); }); this.classList.add('btn-primary', 'active'); this.classList.remove('btn-outline-secondary');" title="Canh trái so với thẻ cha">
+                            <i class="fas fa-align-left"></i> Trái
+                        </button>
+                        <button type="button" class="btn btn-sm ${(field.style && field.style.badgeAlign === 'center') ? 'btn-primary active' : 'btn-outline-secondary'}"
+                                onclick="syncFieldConfig('${fieldId}', 'style.badgeAlign', 'center'); const badge = document.querySelector('.ebmr-field-badge[data-field-id=\\'${fieldId}\\']'); if(badge) { badge.style.setProperty('display', 'table', 'important'); badge.style.setProperty('margin-left', 'auto', 'important'); badge.style.setProperty('margin-right', 'auto', 'important'); } this.parentElement.querySelectorAll('.btn').forEach(b => { b.classList.remove('btn-primary', 'active'); b.classList.add('btn-outline-secondary'); }); this.classList.add('btn-primary', 'active'); this.classList.remove('btn-outline-secondary');" title="Canh giữa so với thẻ cha">
+                            <i class="fas fa-align-center"></i> Giữa
+                        </button>
+                        <button type="button" class="btn btn-sm ${(field.style && field.style.badgeAlign === 'right') ? 'btn-primary active' : 'btn-outline-secondary'}"
+                                onclick="syncFieldConfig('${fieldId}', 'style.badgeAlign', 'right'); const badge = document.querySelector('.ebmr-field-badge[data-field-id=\\'${fieldId}\\']'); if(badge) { badge.style.setProperty('display', 'table', 'important'); badge.style.setProperty('margin-left', 'auto', 'important'); badge.style.setProperty('margin-right', '0', 'important'); } this.parentElement.querySelectorAll('.btn').forEach(b => { b.classList.remove('btn-primary', 'active'); b.classList.add('btn-outline-secondary'); }); this.classList.add('btn-primary', 'active'); this.classList.remove('btn-outline-secondary');" title="Canh phải so với thẻ cha">
+                            <i class="fas fa-align-right"></i> Phải
+                        </button>
                     </div>
                 </div>
             </div>
@@ -2814,29 +3437,23 @@
                 <div class="mb-3">
                     <label class="small fw-bold text-success mb-2"><i class="fas fa-calculator me-1"></i>Công thức tính toán</label>
                     <div class="input-group input-group-sm mb-2">
-                        <select class="form-select border-success" style="max-width: 60%;" id="formula-var-helper" onchange="if(this.value) { const input = document.getElementById('formula-input-${fieldId}'); input.value += '(' + this.value + ')'; syncFieldConfig('${fieldId}', 'formula', input.value); this.value=''; }">
+                        <select class="form-select border-success" style="max-width: 60%;" id="formula-var-helper" onchange="if(this.value) { insertFormulaToken('${fieldId}', this.value, true); this.value=''; }">
                             ${numberFieldsOptions}
                         </select>
                         <button class="btn btn-outline-warning" type="button" onclick="toggleSelectVarMode('${fieldId}')" id="btn-select-var-${fieldId}" title="Nhấn để chọn biến từ màn hình"><i class="fas fa-hand-pointer"></i></button>
-                        <button class="btn btn-outline-success" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += ' + '; syncFieldConfig('${fieldId}', 'formula', input.value);">+</button>
-                        <button class="btn btn-outline-success" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += ' - '; syncFieldConfig('${fieldId}', 'formula', input.value);">-</button>
-                        <button class="btn btn-outline-success" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += ' * '; syncFieldConfig('${fieldId}', 'formula', input.value);">×</button>
-                        <button class="btn btn-outline-success" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += ' / '; syncFieldConfig('${fieldId}', 'formula', input.value);">÷</button>
+                        <button class="btn btn-outline-success" type="button" onclick="insertFormulaToken('${fieldId}', ' + ')">+</button>
+                        <button class="btn btn-outline-success" type="button" onclick="insertFormulaToken('${fieldId}', ' - ')">-</button>
+                        <button class="btn btn-outline-success" type="button" onclick="insertFormulaToken('${fieldId}', ' * ')">×</button>
+                        <button class="btn btn-outline-success" type="button" onclick="insertFormulaToken('${fieldId}', ' / ')">÷</button>
                     </div>
                     <div class="input-group input-group-sm mb-2">
-                        <button class="btn btn-outline-success" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += 'AVG('; syncFieldConfig('${fieldId}', 'formula', input.value); input.focus();" title="Trung bình cộng">AVG()</button>
-                        <button class="btn btn-outline-success" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += 'MAX('; syncFieldConfig('${fieldId}', 'formula', input.value); input.focus();" title="Giá trị lớn nhất">MAX()</button>
-                        <button class="btn btn-outline-success" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += 'MIN('; syncFieldConfig('${fieldId}', 'formula', input.value); input.focus();" title="Giá trị nhỏ nhất">MIN()</button>
-                        <button class="btn btn-outline-secondary" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += ', '; syncFieldConfig('${fieldId}', 'formula', input.value); input.focus();" title="Dấu phẩy ngăn cách">,</button>
-                        <button class="btn btn-outline-secondary" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += ')'; syncFieldConfig('${fieldId}', 'formula', input.value); input.focus();" title="Đóng ngoặc">)</button>
+                        <button class="btn btn-outline-success" type="button" onclick="insertFormulaToken('${fieldId}', 'AVG(')" title="Trung bình cộng">AVG()</button>
+                        <button class="btn btn-outline-success" type="button" onclick="insertFormulaToken('${fieldId}', 'MAX(')" title="Giá trị lớn nhất">MAX()</button>
+                        <button class="btn btn-outline-success" type="button" onclick="insertFormulaToken('${fieldId}', 'MIN(')" title="Giá trị nhỏ nhất">MIN()</button>
+                        <button class="btn btn-outline-secondary" type="button" onclick="insertFormulaToken('${fieldId}', ', ')" title="Dấu phẩy ngăn cách">,</button>
+                        <button class="btn btn-outline-secondary" type="button" onclick="insertFormulaToken('${fieldId}', ')')" title="Đóng ngoặc">)</button>
                     </div>
-                    <textarea id="formula-input-${fieldId}" class="form-control form-control-sm border-success font-monospace" 
-                              style="overflow:hidden; resize:none; min-height: 60px;"
-                              placeholder="VD: (var_1) - (var_2)" 
-                              onfocus="highlightFormulaVars(this.value, '${fieldId}')"
-                              onblur="highlightFormulaVars('')"
-                              oninput="syncFieldConfig('${fieldId}', 'formula', this.value); this.style.height = 'auto'; this.style.height = (this.scrollHeight) + 'px'; 
-                                       highlightFormulaVars(this.value, '${fieldId}');">${field.formula || ''}</textarea>
+                    <div id="formula-input-${fieldId}" class="form-control form-control-sm border-success font-monospace" style="min-height: 80px; height: auto; max-height: none; background-color: #fff; cursor: text; white-space: pre-wrap; overflow-wrap: break-word; word-break: break-word;" contenteditable="true" placeholder="Nhấp chuột vào đây để gõ công thức hoặc chọn các nút hỗ trợ..." onfocus="highlightFormulaVars(serializeFormulaElement(this), '${fieldId}')" onblur="highlightFormulaVars('')" oninput="const fs = serializeFormulaElement(this); syncFieldConfig('${fieldId}', 'formula', fs); highlightFormulaVars(fs, '${fieldId}');">${deserializeFormulaToHtml(field.formula || '', fieldId)}</div>
 
                     <div class="mt-3 p-2 bg-light rounded">
                         <label class="small fw-bold text-muted mb-1" style="font-size: 0.75em;">Làm tròn số thập phân</label>
@@ -2879,10 +3496,10 @@
                                ${field.is_checker ? 'checked' : ''} 
                                onchange="syncFieldConfig('${fieldId}', 'is_checker', this.checked)">
                         <label class="form-check-label small fw-bold text-muted ms-1" for="checkIsChecker">
-                            Chữ ký Người kiểm tra
+                            Chữ ký người không đăng nhập
                         </label>
                     </div>
-                    <div class="form-text small mt-2 text-start" style="font-size: 0.65rem;">Người dùng cấp cao sẽ phải nhập Mật khẩu cấp 2 của họ để ký điện tử.</div>
+                    <div class="form-text small mt-2 text-start" style="font-size: 0.65rem;">Người dùng phải nhập lại user và mật khẩu để ký tên.</div>
                 </div>
             `;
         } else if (field.type === 'checkbox') {
@@ -2891,7 +3508,7 @@
                 <div class="mb-3 p-2 bg-light rounded border border-success border-opacity-25">
                     <label class="small fw-bold text-success mb-2"><i class="fas fa-calculator me-1"></i>Công thức tự động Tick</label>
                     <div class="input-group input-group-sm mb-2">
-                        <select class="form-select border-success" style="max-width: 60%;" id="formula-var-helper-checkbox" onchange="if(this.value) { const input = document.getElementById('formula-input-${fieldId}'); input.value += '(' + this.value + ')'; syncFieldConfig('${fieldId}', 'formula', input.value); this.value=''; }">
+                        <select class="form-select border-success" style="max-width: 60%;" id="formula-var-helper-checkbox" onchange="if(this.value) { insertFormulaToken('${fieldId}', this.value, true); this.value=''; }">
                             ${numberFieldsOptions}
                         </select>
                         <button class="btn btn-warning fw-bold" type="button" onclick="toggleSelectVarMode('${fieldId}')" id="btn-select-var-${fieldId}" title="Bắt biến từ màn hình">
@@ -2899,19 +3516,13 @@
                         </button>
                     </div>
                     <div class="input-group input-group-sm mb-2">
-                        <button class="btn btn-outline-success" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += ' + '; syncFieldConfig('${fieldId}', 'formula', input.value);">+</button>
-                        <button class="btn btn-outline-success" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += ' - '; syncFieldConfig('${fieldId}', 'formula', input.value);">-</button>
-                        <button class="btn btn-outline-success" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += ' * '; syncFieldConfig('${fieldId}', 'formula', input.value);">×</button>
-                        <button class="btn btn-outline-success" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += ' / '; syncFieldConfig('${fieldId}', 'formula', input.value);">÷</button>
-                        <button class="btn btn-outline-success" type="button" onclick="const input = document.getElementById('formula-input-${fieldId}'); input.value += ' == '; syncFieldConfig('${fieldId}', 'formula', input.value);">==</button>
+                        <button class="btn btn-outline-success" type="button" onclick="insertFormulaToken('${fieldId}', ' + ')">+</button>
+                        <button class="btn btn-outline-success" type="button" onclick="insertFormulaToken('${fieldId}', ' - ')">-</button>
+                        <button class="btn btn-outline-success" type="button" onclick="insertFormulaToken('${fieldId}', ' * ')">×</button>
+                        <button class="btn btn-outline-success" type="button" onclick="insertFormulaToken('${fieldId}', ' / ')">÷</button>
+                        <button class="btn btn-outline-success" type="button" onclick="insertFormulaToken('${fieldId}', ' == ')">==</button>
                     </div>
-                    <textarea id="formula-input-${fieldId}" class="form-control form-control-sm border-success font-monospace" 
-                              style="overflow:hidden; resize:none; min-height: 60px;"
-                              placeholder="VD: (var1) == (var2)" 
-                              onfocus="highlightFormulaVars(this.value, '${fieldId}')"
-                              onblur="highlightFormulaVars('')"
-                              oninput="syncFieldConfig('${fieldId}', 'formula', this.value); this.style.height = 'auto'; this.style.height = (this.scrollHeight) + 'px';
-                                       highlightFormulaVars(this.value, '${fieldId}');">${field.formula || ''}</textarea>
+                    <div id="formula-input-${fieldId}" class="form-control form-control-sm border-success font-monospace" style="min-height: 80px; height: auto; max-height: none; background-color: #fff; cursor: text; white-space: pre-wrap; overflow-wrap: break-word; word-break: break-word;" contenteditable="true" placeholder="Nhấp chuột vào đây để gõ công thức hoặc chọn các nút hỗ trợ..." onfocus="highlightFormulaVars(serializeFormulaElement(this), '${fieldId}')" onblur="highlightFormulaVars('')" oninput="const fs = serializeFormulaElement(this); syncFieldConfig('${fieldId}', 'formula', fs); highlightFormulaVars(fs, '${fieldId}');">${deserializeFormulaToHtml(field.formula || '', fieldId)}</div>
                     
                     <div class="form-text small" style="font-size: 0.65rem;">Nếu công thức &gt; 0 hoặc TRUE, ô này sẽ tự động được Tick.</div>
                 </div>
@@ -3109,14 +3720,9 @@
             });
         });
 
-        // Auto-adjust height for formula textarea
-        setTimeout(() => {
-            const formulaInput = document.getElementById(`formula-input-${fieldId}`);
-            if (formulaInput) {
-                formulaInput.style.height = 'auto';
-                formulaInput.style.height = (formulaInput.scrollHeight) + 'px';
-            }
-        }, 50);
+        // Xóa lựa chọn native của trình duyệt để tránh việc người dùng bấm phím Backspace/Paste làm xóa biến trên màn hình
+        window.getSelection().removeAllRanges();
+
     }
 
     /**
@@ -3150,12 +3756,15 @@
 
         target[lastKey] = value;
 
-        // If label changes, update the DOM badge immediately
+        // If label changes, render blocks to update the DOM badge properly
         if (path === 'label') {
-            const el = document.querySelector(`.ebmr-field-badge[data-field-id="${fieldId}"]`);
-            if (el) el.innerHTML = `<i class="fas fa-edit me-1"></i> ${value || '[Trống]'}`;
+            if (window._syncLabelTimeout) clearTimeout(window._syncLabelTimeout);
+            window._syncLabelTimeout = setTimeout(() => {
+                renderBlocks();
+            }, 100);
         } else if (path === 'type') {
             selectField(null, fieldId); // Re-render panel
+            renderBlocks();
         }
 
         saveStateDebounced();
@@ -5911,6 +6520,9 @@
         if (!targetSectionId && items.length > 0) {
             targetSectionId = items[0].section_id || (items[0].type === 'section' ? items[0].id : null);
         }
+        // Initialize name mapping for formula translation
+        window.__ebmrPastedNameMapping = {};
+        window.__ebmrPastedFormulaFields = [];
 
         const clonedBlocks = window.blockClipboard.blocks.map(block => {
             const newBlock = JSON.parse(JSON.stringify(block));
@@ -5954,6 +6566,10 @@
                 endId: clonedBlocks[clonedBlocks.length - 1].id
             };
             selectedId = null;
+        }
+
+        if (typeof window.translateFormulaReferencesOfPastedFields === 'function') {
+            window.translateFormulaReferencesOfPastedFields();
         }
 
         renderBlocks();
@@ -6871,7 +7487,7 @@
                 btnCopy.onclick = () => {
                     hideDesignContextMenu();
                     const fieldId = varEl.getAttribute('data-field-id') || varEl.id;
-                    if(fieldId && typeof window.copyVariable === 'function') {
+                    if (fieldId && typeof window.copyVariable === 'function') {
                         window.copyVariable(fieldId);
                     }
                 };
@@ -6891,10 +7507,24 @@
                 menu.appendChild(btnPaste);
             }
 
+            if (hasSelectedCells) {
+                const btnDupStructure = document.createElement('button');
+                btnDupStructure.className = 'dropdown-item rounded mb-1 small fw-bold text-primary';
+                btnDupStructure.innerHTML = '<i class="fas fa-clone me-2 text-primary"></i> Nhân bản cấu trúc dòng';
+                btnDupStructure.onclick = () => {
+                    hideDesignContextMenu();
+                    if (typeof window.tableDuplicateRowStructure === 'function') {
+                        window.tableDuplicateRowStructure();
+                    }
+                };
+                menu.appendChild(btnDupStructure);
+            }
+
             if (selectedCells.length > 1) {
                 const btnDeleteBatch = document.createElement('button');
                 btnDeleteBatch.className = 'dropdown-item rounded mb-1 small fw-bold text-danger';
-                btnDeleteBatch.innerHTML = `<i class="fas fa-trash-alt me-2 text-danger"></i> Xóa ${selectedCells.length} biến số đang chọn`;
+                btnDeleteBatch.innerHTML =
+                    `<i class="fas fa-trash-alt me-2 text-danger"></i> Xóa ${selectedCells.length} biến số đang chọn`;
                 btnDeleteBatch.onclick = () => {
                     hideDesignContextMenu();
                     if (typeof batchDeleteFields === 'function') {
@@ -7314,14 +7944,14 @@
         let tree = {
             "Báo cáo BMR": {}
         };
-        
+
         let root = tree["Báo cáo BMR"];
 
         // Hàm helper tìm tên Section (Step)
         function getSectionName(sectionId) {
-            if(!sectionId) return "Chưa phân đoạn";
+            if (!sectionId) return "Chưa phân đoạn";
             let sec = items.find(i => (i.id === sectionId || i.section_id === sectionId) && i.type === 'section');
-            if(sec) return sec.label || "Chưa phân đoạn";
+            if (sec) return sec.label || "Chưa phân đoạn";
             return "Phân đoạn " + sectionId;
         }
 
@@ -7330,19 +7960,20 @@
         blocks.forEach(blockWrapper => {
             let blockId = blockWrapper.getAttribute('data-id');
             let blockKey = blockWrapper.getAttribute('data-block-key') || blockId;
-            if(!blockId) return;
+            if (!blockId) return;
 
             let item = items.find(i => i.id === blockId);
-            if(!item) return;
-            
+            if (!item) return;
+
             // Bỏ qua các khối không chứa dữ liệu nhập
-            if (item.type === 'text' || item.type === 'image' || item.type === 'divider' || item.type === 'page-break' || item.type === 'section') return;
+            if (item.type === 'text' || item.type === 'image' || item.type === 'divider' || item.type ===
+                'page-break' || item.type === 'section') return;
 
             let stepName = getSectionName(item.section_id);
             let blockName = item.label || 'Không tên';
 
-            if(!root[stepName]) root[stepName] = {};
-            if(!root[stepName][blockName]) root[stepName][blockName] = {};
+            if (!root[stepName]) root[stepName] = {};
+            if (!root[stepName][blockName]) root[stepName][blockName] = {};
 
             if (item.type === 'table') {
                 // Bảng: Lặp qua từng ô
@@ -7350,31 +7981,32 @@
                 cells.forEach(td => {
                     let r = parseInt(td.getAttribute('data-row')) - 1; // data-row is 1-indexed
                     let c = parseInt(td.getAttribute('data-col'));
-                    if(isNaN(r) || isNaN(c)) return;
+                    if (isNaN(r) || isNaN(c)) return;
 
                     let colName = "Cột " + (c + 1);
-                    if(item.columns && item.columns.length > c) {
+                    if (item.columns && item.columns.length > c) {
                         colName = item.columns[c].label || item.columns[c];
                     } else {
                         let ths = td.closest('table').querySelectorAll('th');
-                        if(ths.length > c) colName = ths[c].innerText.trim();
+                        if (ths.length > c) colName = ths[c].innerText.trim();
                     }
                     let tr = td.closest('tr');
                     let rowName = "Dòng " + (tr ? tr.rowIndex : (r + 1));
 
                     // Lấy giá trị
                     let val = "";
-                    
+
                     let badge = td.querySelector('[data-field-id]');
                     if (badge) {
                         // Nếu ô này chứa một biến động (checkbox, combobox, date...)
                         let fieldId = badge.getAttribute('data-field-id') + loopSuffix;
-                        if (window.executionValues && window.executionValues[fieldId] && window.executionValues[fieldId]['default'] !== undefined) {
+                        if (window.executionValues && window.executionValues[fieldId] && window
+                            .executionValues[fieldId]['default'] !== undefined) {
                             val = window.executionValues[fieldId]['default'];
                         } else {
                             let inputEl = badge.querySelector('input, select, textarea');
-                            if(inputEl) {
-                                if(inputEl.type === 'checkbox') val = inputEl.checked ? "Yes" : "No";
+                            if (inputEl) {
+                                if (inputEl.type === 'checkbox') val = inputEl.checked ? "Yes" : "No";
                                 else val = inputEl.value;
                             } else {
                                 val = badge.innerText.replace(/[\n\r]+/g, ' ').trim();
@@ -7383,7 +8015,8 @@
                         }
                     } else {
                         // Nếu là ô nhập liệu thường hoặc chữ ký bảng
-                        if (window.executionValues && window.executionValues[blockKey] && window.executionValues[blockKey][`${r}_${c}`] !== undefined) {
+                        if (window.executionValues && window.executionValues[blockKey] && window
+                            .executionValues[blockKey][`${r}_${c}`] !== undefined) {
                             val = window.executionValues[blockKey][`${r}_${c}`];
                         } else {
                             val = td.innerText.replace(/[\n\r]+/g, ' ').trim();
@@ -7393,21 +8026,25 @@
                     }
                     if (typeof val === 'boolean') val = val ? "Yes" : "No";
 
-                    if(!root[stepName][blockName][colName]) root[stepName][blockName][colName] = {};
-                    root[stepName][blockName][colName][rowName] = { 
-                        value: val || "(trống)" 
+                    if (!root[stepName][blockName][colName]) root[stepName][blockName][colName] = {};
+                    root[stepName][blockName][colName][rowName] = {
+                        value: val || "(trống)"
                     };
                 });
             } else {
                 // Biến số đơn
                 let val = "";
-                if (window.executionValues && window.executionValues[blockKey] && window.executionValues[blockKey]['default'] !== undefined) {
+                if (window.executionValues && window.executionValues[blockKey] && window.executionValues[
+                        blockKey]['default'] !== undefined) {
                     val = window.executionValues[blockKey]['default'];
                 } else {
-                    let badge = blockWrapper.querySelector('.execution-input-test, .execution-checkbox-wrapper, input, select, textarea');
-                    if(badge) {
-                        if(badge.tagName === 'INPUT' && badge.type === 'checkbox') val = badge.checked ? "Yes" : "No";
-                        else if(badge.tagName === 'INPUT' || badge.tagName === 'SELECT' || badge.tagName === 'TEXTAREA') val = badge.value;
+                    let badge = blockWrapper.querySelector(
+                        '.execution-input-test, .execution-checkbox-wrapper, input, select, textarea');
+                    if (badge) {
+                        if (badge.tagName === 'INPUT' && badge.type === 'checkbox') val = badge.checked ?
+                            "Yes" : "No";
+                        else if (badge.tagName === 'INPUT' || badge.tagName === 'SELECT' || badge.tagName ===
+                            'TEXTAREA') val = badge.value;
                         else {
                             val = badge.innerText.trim();
                             if (badge.querySelector('span[style*="italic"]')) val = ""; // Bỏ qua placeholder
@@ -7415,9 +8052,9 @@
                     }
                 }
                 if (typeof val === 'boolean') val = val ? "Yes" : "No";
-                
-                root[stepName][blockName]["Giá trị"] = { 
-                    value: val || "(trống)" 
+
+                root[stepName][blockName]["Giá trị"] = {
+                    value: val || "(trống)"
                 };
             }
         });

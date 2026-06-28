@@ -265,16 +265,10 @@
         const cIdx = activeColIdx;
 
         if (action === 'addRow') {
-            item.rows++;
-            let newRow = [];
-            for (let i = 0; i < item.cols; i++) {
-                newRow.push({ content: '', rs: 1, cs: 1, hidden: false });
-            }
             let insertAt = (param === 'up') ? Math.max(0, rIdx - 1) : rIdx;
             if (rIdx === 0 && param === 'up') insertAt = 0; 
-
-            item.data.splice(insertAt, 0, newRow);
-            item.rowHeights.splice(insertAt, 0, 'auto');
+            tableAddRow(insertAt);
+            return;
         } else if (action === 'deleteRow') {
             const selectedCells = Array.from(document.querySelectorAll('.selected-cell:not([data-row="0"])'))
                 .filter(cell => cell.closest('.block-item').getAttribute('data-id') === selectedId);
