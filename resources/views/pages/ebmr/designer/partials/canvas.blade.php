@@ -84,13 +84,13 @@
         <div class="test-mode-badge">
             <i class="fas fa-flask me-2"></i> Đang ở chế độ Chạy thử (Preview)
         </div>
-        
+
         <!-- Nút In nổi góc trên bên phải -->
-        @if(isset($template) && $template->status === 'active')
-        <button class="btn shadow-lg print-blank-btn" onclick="printBlankForm()" title="In Biểu mẫu trắng" 
-            style="position: fixed; top: 90px; right: 30px; z-index: 1050; border-radius: 50px; padding: 10px 20px; background-color: #28a745; color: white; font-weight: bold; cursor: pointer; pointer-events: auto;">
-            <i class="fas fa-print me-2"></i> In Biểu mẫu trắng
-        </button>
+        @if (isset($template) && $template->status === 'active')
+            <button class="btn shadow-lg print-blank-btn" onclick="printBlankForm()" title="In Biểu mẫu trắng"
+                style="position: fixed; top: 90px; right: 30px; z-index: 1050; border-radius: 50px; padding: 10px 20px; background-color: #28a745; color: white; font-weight: bold; cursor: pointer; pointer-events: auto;">
+                <i class="fas fa-print me-2"></i> In Biểu mẫu trắng
+            </button>
         @endif
     </div>
 
@@ -153,8 +153,9 @@
                                     style="font-size: 4.5rem; font-weight: 800; font-family: 'Outfit', 'Inter', monospace; line-height: 1; letter-spacing: -0.02em;">
                                     —.— g
                                 </span>
-                                <div class="small text-muted mt-2" style="font-size: 0.8rem;">
-                                    Đứng yên = Ổn định ✓ &nbsp;|&nbsp; Nhấp nháy = Đang rung động
+                                <div id="scale-live-status-text" class="small text-muted mt-2 fw-bold"
+                                    style="font-size: 0.85rem; height: 1.25rem;">
+                                    <i class="fas fa-info-circle me-1"></i> Đang chờ dữ liệu...
                                 </div>
                             </div>
                         </div>
@@ -350,7 +351,7 @@
                     <div class="d-flex justify-content-between align-items-center w-100">
                         <div class="small text-muted">
                             <i class="fas fa-lightbulb text-warning me-1"></i>
-                            Hệ thống sẽ tự động điền giá trị <strong>ổn định</strong> vào biến số.
+                            Bạn cần bấm nút <strong>"Đọc giá trị"</strong> để lấy số liệu vào biến số.
                         </div>
                         <div class="d-flex gap-2">
                             <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal"
@@ -368,3 +369,52 @@
             </div>
         </div>
     </div>
+
+    <!-- Script giúp Modal có thể di chuyển được -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            setTimeout(function() {
+                const modal = document.getElementById('scaleConnectionModal');
+                const modalContent = modal ? modal.querySelector('.modal-content') : null;
+                const modalHeader = modal ? modal.querySelector('.modal-header') : null;
+                
+                if (modalContent && modalHeader) {
+                    let isDragging = false;
+                    let initialX, initialY;
+                    
+                    if (typeof modalContent.dataset.dragX === 'undefined') {
+                        modalContent.dataset.dragX = 0;
+                        modalContent.dataset.dragY = 0;
+                    }
+
+                    modalHeader.style.cursor = 'move';
+
+                    modalHeader.addEventListener('mousedown', function(e) {
+                        // Bỏ qua nếu click vào nút X (close button)
+                        if (e.target.closest('.btn-close') || e.target.closest('button')) return;
+                        
+                        initialX = e.clientX - parseFloat(modalContent.dataset.dragX);
+                        initialY = e.clientY - parseFloat(modalContent.dataset.dragY);
+                        isDragging = true;
+                    });
+
+                    document.addEventListener('mousemove', function(e) {
+                        if (isDragging) {
+                            e.preventDefault();
+                            const currentX = e.clientX - initialX;
+                            const currentY = e.clientY - initialY;
+                            
+                            modalContent.dataset.dragX = currentX;
+                            modalContent.dataset.dragY = currentY;
+                            
+                            modalContent.style.transform = `translate(${currentX}px, ${currentY}px)`;
+                        }
+                    });
+
+                    document.addEventListener('mouseup', function() {
+                        isDragging = false;
+                    });
+                }
+            }, 500);
+        });
+    </script>

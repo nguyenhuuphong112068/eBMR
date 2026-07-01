@@ -305,9 +305,17 @@ window.ScaleManager = (function () {
                             });
                             // Cập nhật hiển thị giá trị mới nhất trong modal
                             const liveVal = document.getElementById('scale-live-value');
+                            const liveStatus = document.getElementById('scale-live-status-text');
                             if (liveVal) {
                                 liveVal.textContent = `${result.value} ${result.unit}`;
                                 liveVal.className = `scale-live-value ${result.stable ? 'stable' : 'unstable'}`;
+                            }
+                            if (liveStatus) {
+                                if (result.stable) {
+                                    liveStatus.innerHTML = '<i class="fas fa-check-circle me-1 text-success"></i> <span class="text-success">Trạng thái: Ổn định</span>';
+                                } else {
+                                    liveStatus.innerHTML = '<i class="fas fa-exclamation-triangle me-1 text-warning"></i> <span class="text-warning">Trạng thái: Đang rung lắc</span>';
+                                }
                             }
 
                             // Cập nhật floating status pill
@@ -485,9 +493,17 @@ window.ScaleManager = (function () {
                                 });
 
                                 const liveVal = document.getElementById('scale-live-value');
+                                const liveStatus = document.getElementById('scale-live-status-text');
                                 if (liveVal) {
                                     liveVal.textContent = `${result.value} ${result.unit}`;
                                     liveVal.className = `scale-live-value ${result.stable ? 'stable' : 'unstable'}`;
+                                }
+                                if (liveStatus) {
+                                    if (result.stable) {
+                                        liveStatus.innerHTML = '<i class="fas fa-check-circle me-1 text-success"></i> <span class="text-success">Trạng thái: Ổn định</span>';
+                                    } else {
+                                        liveStatus.innerHTML = '<i class="fas fa-exclamation-triangle me-1 text-warning"></i> <span class="text-warning">Trạng thái: Đang rung lắc</span>';
+                                    }
                                 }
                                 _updateFloatingPill(true, result);
                             }
@@ -706,6 +722,40 @@ window.writeScaleValueToField = function(fieldId, value, unit) {
     }
     window.executionValues[fieldId]['default'] = String(finalValue);
 
+    // Lưu metadata định dạng giấy in cân
+    if (!window.executionValues[fieldId]['_meta']) {
+        window.executionValues[fieldId]['_meta'] = {};
+    }
+    const deviceSelect = document.getElementById('scale-device-select');
+    let deviceName = 'Cân điện tử';
+    let deviceCode = '---';
+    
+    if (deviceSelect && deviceSelect.options.length > 0) {
+        const optText = deviceSelect.options[deviceSelect.selectedIndex > -1 ? deviceSelect.selectedIndex : 0].text;
+        if (optText.includes('-- Tự nhập')) {
+            deviceName = 'Cân tùy chỉnh';
+            deviceCode = 'Custom';
+        } else {
+            const match = optText.match(/^(.*?)\s*\((.*?)\)$/);
+            if (match) {
+                deviceName = match[1].trim();
+                deviceCode = match[2].trim();
+            } else {
+                deviceName = optText.trim();
+                deviceCode = '---';
+            }
+        }
+    }
+    
+    const scaleUserName = '{{ session("user") ? (session("user")["fullName"] ?? session("user")["username"]) : "Hệ thống" }}';
+    
+    window.executionValues[fieldId]['_meta']['default'] = window.executionValues[fieldId]['_meta']['default'] || {};
+    window.executionValues[fieldId]['_meta']['default'].device = deviceName;
+    window.executionValues[fieldId]['_meta']['default'].deviceCode = deviceCode;
+    window.executionValues[fieldId]['_meta']['default'].unit = unit || '';
+    window.executionValues[fieldId]['_meta']['default'].at = new Date().toLocaleString('vi-VN');
+    window.executionValues[fieldId]['_meta']['default'].by = scaleUserName;
+
     // Kích hoạt tính lại công thức & vẽ lại giao diện
     if (typeof window.recalculateAllFormulas === 'function') {
         window.recalculateAllFormulas();
@@ -823,48 +873,54 @@ window.openScaleConnectionModal = function(fieldId) {
 
     // Hiển thị ngay giá trị cuối cùng từ cân nếu có
     const liveVal = document.getElementById('scale-live-value');
+    const liveStatus = document.getElementById('scale-live-status-text');
+    const btnRead = document.getElementById('scale-read-now-btn');
     if (liveVal) {
         const lastResult = window.ScaleManager.getLastResult();
         if (lastResult) {
             liveVal.textContent = `${lastResult.value} ${lastResult.unit}`;
             liveVal.className = `scale-live-value ${lastResult.stable ? 'stable' : 'unstable'}`;
+            if (btnRead) btnRead.disabled = !lastResult.stable;
+            if (liveStatus) {
+                if (lastResult.stable) {
+                    liveStatus.innerHTML = '<i class="fas fa-check-circle me-1 text-success"></i> <span class="text-success">Trạng thái: Ổn định - Nhấn "Đọc giá trị" để lưu</span>';
+                } else {
+                    liveStatus.innerHTML = '<i class="fas fa-exclamation-triangle me-1 text-warning"></i> <span class="text-warning">Trạng thái: Đang rung lắc</span>';
+                }
+            }
         } else {
             liveVal.textContent = '—.— g';
             liveVal.className = 'scale-live-value stable';
+            if (btnRead) btnRead.disabled = true;
+            if (liveStatus) {
+                liveStatus.innerHTML = '<i class="fas fa-info-circle me-1"></i> Đang chờ dữ liệu...';
+            }
         }
     }
-
     // Hủy đăng ký listener cũ nếu có để tránh trùng lặp
     if (window._scaleModalUnsubscribe) {
         window._scaleModalUnsubscribe();
         window._scaleModalUnsubscribe = null;
     }
-
-    // Đăng ký lắng nghe dữ liệu để tự động điền khi cân báo ổn định
+    
+    // Đăng ký lắng nghe dữ liệu để cập nhật UI (không tự động điền)
     if (fieldId) {
         window._scaleModalUnsubscribe = window.ScaleManager.onData(function(result) {
-            if (result.stable) {
-                window.writeScaleValueToField(fieldId, result.value, result.unit);
-                
-                // Đóng modal
-                const modalEl = document.getElementById('scaleConnectionModal');
-                if (modalEl) {
-                    if (typeof bootstrap !== 'undefined' && typeof bootstrap.Modal !== 'undefined' && typeof bootstrap.Modal.getInstance === 'function') {
-                        const inst = bootstrap.Modal.getInstance(modalEl) || (bootstrap.Modal.getOrCreateInstance ? bootstrap.Modal.getOrCreateInstance(modalEl) : null);
-                        if (inst) inst.hide();
-                        else if (typeof $ !== 'undefined') {
-                            $(modalEl).modal('hide');
-                        }
-                    } else if (typeof $ !== 'undefined') {
-                        $(modalEl).modal('hide');
+            if (btnRead) btnRead.disabled = !result.stable;
+            // Chỉ cập nhật hiển thị, không tự động điền
+            if (liveVal) {
+                liveVal.textContent = `${result.value} ${result.unit}`;
+                liveVal.className = `scale-live-value ${result.stable ? 'stable' : 'unstable'}`;
+                if (liveStatus) {
+                    if (result.stable) {
+                        liveStatus.innerHTML = '<i class="fas fa-check-circle me-1 text-success"></i> <span class="text-success">Trạng thái: Ổn định - Nhấn "Đọc giá trị" để lưu</span>';
+                    } else {
+                        liveStatus.innerHTML = '<i class="fas fa-exclamation-triangle me-1 text-warning"></i> <span class="text-warning">Trạng thái: Đang rung lắc</span>';
                     }
-                }
-                
-                if (typeof toastr !== 'undefined') {
-                     toastr.success(`✅ Đã đọc: ${result.value} ${result.unit} (Ổn định)`, 'Cân điện tử', { timeOut: 3000 });
                 }
             }
         });
+    }
 
         // Lắng nghe sự kiện ẩn modal để hủy đăng ký listener
         const modalEl = document.getElementById('scaleConnectionModal');
@@ -882,10 +938,9 @@ window.openScaleConnectionModal = function(fieldId) {
                 modalEl.addEventListener('hidden.bs.modal', cleanup);
             }
         }
-    }
+
 
     // Hiện modal nếu chưa hiển thị
-    const modalEl = document.getElementById('scaleConnectionModal');
     let isModalVisible = false;
     if (modalEl) {
         isModalVisible = modalEl.classList.contains('show');
@@ -1001,22 +1056,16 @@ window.readScaleFromModal = function() {
         if (result && result.value !== undefined) {
             window.writeScaleValueToField(window._scaleTargetFieldId, result.value, result.unit);
             
-            // Thông báo thành công
-            if (typeof toastr !== 'undefined') {
-                toastr.success(`✅ Đã đọc: ${result.value} ${result.unit} (Lấy ngay từ modal)`, 'Cân điện tử', { timeOut: 3000 });
-            }
+            // Đã loại bỏ toastr báo thành công khi đọc ngay
             
             // Đóng modal
             const modalEl = document.getElementById('scaleConnectionModal');
             if (modalEl) {
-                if (typeof bootstrap !== 'undefined' && typeof bootstrap.Modal !== 'undefined' && typeof bootstrap.Modal.getInstance === 'function') {
-                    const inst = bootstrap.Modal.getInstance(modalEl);
-                    if (inst) inst.hide();
-                    else {
-                        if (typeof $ !== 'undefined') $('#scaleConnectionModal').modal('hide');
-                    }
-                } else if (typeof $ !== 'undefined') {
+                if (typeof $ !== 'undefined') {
                     $('#scaleConnectionModal').modal('hide');
+                } else if (typeof bootstrap !== 'undefined' && typeof bootstrap.Modal !== 'undefined' && typeof bootstrap.Modal.getInstance === 'function') {
+                    const inst = bootstrap.Modal.getInstance(modalEl) || (bootstrap.Modal.getOrCreateInstance ? bootstrap.Modal.getOrCreateInstance(modalEl) : null);
+                    if (inst) inst.hide();
                 }
             }
         } else {

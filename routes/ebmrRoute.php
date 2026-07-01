@@ -60,6 +60,7 @@ Route::group(['prefix' => 'ebmr', 'as' => 'pages.ebmr.'], function () {
     Route::post('/verify-checker', [EbmrExecutionController::class, 'verifyChecker'])->name('verifyChecker');
     Route::post('/log-error', [EbmrDesignerController::class, 'logError'])->name('logError');
     Route::post('/dynamic-options', [EbmrDesignerController::class, 'getDynamicOptions'])->name('dynamicOptions');
+    Route::get('/designer-api/equipment', [EbmrDesignerController::class, 'getEquipmentList'])->name('designerEquipmentList');
     Route::get('/document/view-by-code/{code}', [EbmrExecutionController::class, 'viewDocumentByCode'])->name('viewDocumentByCode');
     Route::get('/document/check-exists/{code}', [EbmrExecutionController::class, 'checkDocumentExists'])->name('checkDocumentExists');
 

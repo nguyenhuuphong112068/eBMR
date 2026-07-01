@@ -161,6 +161,14 @@
         min-width: 100%;
         border-collapse: collapse;
         table-layout: fixed;
+        counter-reset: ebmr-stt-counter;
+    }
+
+    .ebmr-css-stt {
+        counter-increment: ebmr-stt-counter;
+    }
+    .ebmr-css-stt::before {
+        content: counter(ebmr-stt-counter);
     }
 
     .mini-table th {
@@ -1465,8 +1473,22 @@
         margin: 2px;
     }
 
-    /* Khi Công thức tự động nằm trong ô Bảng */
-    td .formula-result {
+    .formula-out-of-bounds {
+        border-color: #dc3545 !important;
+        background-color: #fef2f2 !important;
+        color: #dc3545 !important;
+        box-shadow: 0 0 0 0.1rem rgba(220, 53, 69, 0.25) !important;
+        animation: pulse-danger 2s infinite;
+    }
+
+    @keyframes pulse-danger {
+        0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.4); }
+        70% { box-shadow: 0 0 0 6px rgba(220, 53, 69, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
+    }
+
+    /* Khi Công thức tự động là phần tử duy nhất trong ô Bảng */
+    td.solo-badge-cell .formula-result {
         display: flex !important;
         width: 100% !important;
         min-height: 38px;
@@ -1925,7 +1947,7 @@
         top: 57px;
         /* Below AdminLTE header height */
         right: 0;
-        width: 300px;
+        width: 250px;
         height: calc(100vh - 57px);
         z-index: 1045;
         transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -1947,7 +1969,7 @@
         top: 57px;
         /* Below AdminLTE header height */
         right: 0;
-        width: 330px;
+        width: 250px;
         height: calc(100vh - 57px);
         z-index: 1045;
         transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -2736,7 +2758,7 @@
         position: fixed;
         top: 60px;
         left: 0;
-        width: 280px;
+        width: 250px;
         height: calc(100vh - 60px);
         z-index: 1040;
         transform: translateX(-100%);
@@ -2762,7 +2784,9 @@
     
     /* Make all insert-dividers prominent drop zones while dragging without changing layout height */
     body.component-dragging .insert-divider {
-        background-color: rgba(2, 132, 199, 0.05) !important;
+        opacity: 1 !important;
+        height: 12px !important;
+        background-color: rgba(2, 132, 199, 0.1) !important;
         border-radius: 4px;
         transition: all 0.2s;
     }
@@ -2771,7 +2795,7 @@
         content: "Thả vào đây";
         display: block;
         text-align: center;
-        color: rgba(2, 132, 199, 0.8);
+        color: rgba(2, 132, 199, 1);
         font-weight: 600;
         font-size: 10px;
         line-height: 12px;
@@ -2807,6 +2831,13 @@
         background-color: rgba(2, 132, 199, 0.2) !important;
         border: 2px dashed #0284c7 !important;
         transform: scale(1.02);
+    }
+    
+    /* Drag over existing equipment table */
+    .table-responsive-wrapper.table-drag-over {
+        border: 2px dashed #0284c7 !important;
+        background-color: rgba(2, 132, 199, 0.05) !important;
+        border-radius: 4px;
     }
     
     .insert-divider.drag-over-active::before {

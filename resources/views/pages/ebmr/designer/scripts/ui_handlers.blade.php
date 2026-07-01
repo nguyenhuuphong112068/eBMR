@@ -1,4 +1,35 @@
 <script>
+    /**
+     * Resolves the correct target section ID (e.g., "6_1") based on the insertion point.
+     * Never returns frontend IDs (blk_sec_*).
+     */
+    window.resolveTargetSectionId = function(insertIndex, fallbackSectionId) {
+        // 1. Try to find the section block upwards from insertIndex
+        for (let i = insertIndex - 1; i >= 0; i--) {
+            if (window.items && window.items[i] && window.items[i].type === 'section') {
+                return window.items[i].section_id || window.items[i].id; // Fallback to id only if section_id is really missing (shouldn't happen)
+            }
+        }
+        
+        // 2. If not found upwards, use activeSectionId by finding the block
+        if (window.activeSectionId && window.items) {
+            const sec = window.items.find(item => item.id === window.activeSectionId && item.type === 'section');
+            if (sec && sec.section_id) {
+                return sec.section_id;
+            }
+        }
+        
+        // 3. Fallback to the very first section block in the document
+        if (window.items) {
+            const firstSec = window.items.find(item => item.type === 'section');
+            if (firstSec && firstSec.section_id) {
+                return firstSec.section_id;
+            }
+        }
+        
+        // 4. Ultimate fallback (should never happen if sections exist)
+        return fallbackSectionId || 'section_0';
+    };
     // Auto-detect Review Mode from URL
     document.addEventListener('DOMContentLoaded', () => {
         const urlParams = new URLSearchParams(window.location.search);
@@ -672,6 +703,10 @@
         // Priority 2: Use currently active section
         if (!sectionId) {
             sectionId = window.activeSectionId;
+            if (sectionId) {
+                const sec = items.find(i => i.id === sectionId && i.type === 'section');
+                if (sec) sectionId = sec.section_id || sectionId;
+            }
         }
 
         // Priority 3: Fallback to last section
@@ -6493,15 +6528,10 @@
         saveState();
 
         let insertIndex = items.length;
-        let targetSectionId = window.activeSectionId || null;
-
         if (selectedId) {
             const currentIdx = items.findIndex(i => i.id === selectedId);
             if (currentIdx !== -1) {
                 insertIndex = currentIdx + 1;
-                const currentItem = items[currentIdx];
-                targetSectionId = currentItem.section_id || (currentItem.type === 'section' ? currentItem.id :
-                    null);
             }
         } else if (window.activeSectionId) {
             const secIdx = items.findIndex(item => item.type === 'section' && item.id === window.activeSectionId);
@@ -6517,9 +6547,7 @@
             }
         }
 
-        if (!targetSectionId && items.length > 0) {
-            targetSectionId = items[0].section_id || (items[0].type === 'section' ? items[0].id : null);
-        }
+        let targetSectionId = window.resolveTargetSectionId(insertIndex, 'section_0');
         // Initialize name mapping for formula translation
         window.__ebmrPastedNameMapping = {};
         window.__ebmrPastedFormulaFields = [];
@@ -8116,5 +8144,323 @@
             </html>
         `);
         newWin.document.close();
+    }
+</script>
+<script>
+    let equipmentSidebarOpen = false;
+    let equipmentList = [];
+
+    function toggleEquipmentSidebar(keepMargin = false) {
+        const sidebar = document.getElementById('equipmentSidebar');
+        if (!sidebar) return;
+
+        equipmentSidebarOpen = !equipmentSidebarOpen;
+        
+        if (equipmentSidebarOpen) {
+            sidebar.classList.remove('d-none');
+            document.getElementById('mainContent').style.setProperty('margin-left', '250px', 'important');
+            setTimeout(() => sidebar.classList.add('show'), 10);
+            
+            if (typeof componentSidebarOpen !== 'undefined' && componentSidebarOpen) {
+                if(typeof toggleComponentSidebar === 'function') toggleComponentSidebar(true);
+            }
+            if (!equipmentList.length) {
+                loadEquipmentSidebarList();
+            }
+        } else {
+            sidebar.classList.remove('show');
+            if (!keepMargin) {
+                document.getElementById('mainContent').style.removeProperty('margin-left');
+            }
+            setTimeout(() => sidebar.classList.add('d-none'), 300);
+        }
+    }
+
+    function loadEquipmentSidebarList() {
+        const filter = document.getElementById('equipmentSidebarDepartmentFilter');
+        let department = filter.value;
+        
+        if (filter.options.length <= 1 && !department && window.templateDepartmentCode) {
+            department = window.templateDepartmentCode;
+        }
+
+        const container = document.getElementById('equipmentSidebarList');
+        
+        container.innerHTML = '<div class="text-center py-4 text-muted small"><div class="spinner-border spinner-border-sm text-info me-2"></div> Đang tải dữ liệu...</div>';
+        
+        $.ajax({
+            url: "{{ route('pages.ebmr.designerEquipmentList') }}",
+            type: 'GET',
+            data: { department: department },
+            success: function(res) {
+                if(res.success) {
+                    if(filter.options.length <= 1) {
+                        res.departments.forEach(dept => {
+                            const opt = document.createElement('option');
+                            opt.value = dept;
+                            opt.textContent = `Phân xưởng ${dept}`;
+                            filter.appendChild(opt);
+                        });
+                        
+                        let optionExists = Array.from(filter.options).some(opt => opt.value === department);
+                        if (optionExists) {
+                            filter.value = department;
+                        } else {
+                            filter.value = "";
+                            department = "";
+                        }
+                    }
+                    
+                    if (!department && window.templateDepartmentCode) {
+                        window.templateDepartmentCode = null;
+                        loadEquipmentSidebarList();
+                        return;
+                    }
+
+                    equipmentList = res.equipments;
+                    renderEquipmentSidebarList(equipmentList);
+                } else {
+                    container.innerHTML = '<div class="text-center py-4 text-danger small">Lỗi tải dữ liệu.</div>';
+                }
+            },
+            error: function() {
+                container.innerHTML = '<div class="text-center py-4 text-danger small">Lỗi kết nối.</div>';
+            }
+        });
+    }
+
+    function renderEquipmentSidebarList(list) {
+        const container = document.getElementById('equipmentSidebarList');
+        if(!list || list.length === 0) {
+            container.innerHTML = '<div class="text-center py-4 text-muted small">Không tìm thấy thiết bị nào.</div>';
+            return;
+        }
+
+        let html = '<div class="list-group list-group-flush pb-3">';
+        list.forEach(item => {
+            html += `
+                <label class="list-group-item list-group-item-action d-flex align-items-start p-2 gap-2" style="cursor: grab; border-radius: 4px; border: 1px solid transparent; margin-bottom: 2px;" draggable="true" ondragstart="onDragStartEquipmentTable(event)">
+                    <input class="form-check-input mt-1 equipment-checkbox" type="checkbox" value="${item.id}" data-item='${JSON.stringify(item).replace(/'/g, "&#39;")}' onclick="event.stopPropagation()">
+                    <div class="ms-1 flex-grow-1" style="min-width: 0;">
+                        <div class="fw-bold text-truncate" style="font-size: 0.8rem;" title="${item.name}">${item.name}</div>
+                        <div class="text-muted d-flex justify-content-between" style="font-size: 0.75rem;">
+                            <span><i class="fas fa-barcode"></i> ${item.code}</span>
+                            <span class="badge bg-secondary" style="font-size: 0.65rem;">${item.department_code || ''}</span>
+                        </div>
+                    </div>
+                </label>
+            `;
+        });
+        html += '</div>';
+        container.innerHTML = html;
+    }
+
+    function filterEquipmentSidebarList() {
+        const keyword = document.getElementById('equipmentSidebarSearch').value.toLowerCase();
+        const filtered = equipmentList.filter(item => {
+            return (item.name && item.name.toLowerCase().includes(keyword)) ||
+                   (item.code && item.code.toLowerCase().includes(keyword));
+        });
+        renderEquipmentSidebarList(filtered);
+    }
+
+    function onDragStartEquipmentTable(event) {
+        let checkedBoxes = document.querySelectorAll('.equipment-checkbox:checked');
+        
+        const target = event.target.closest('.list-group-item');
+        if (target) {
+            const checkbox = target.querySelector('.equipment-checkbox');
+            if (checkbox && !checkbox.checked) {
+                checkbox.checked = true;
+                checkedBoxes = document.querySelectorAll('.equipment-checkbox:checked');
+            }
+        }
+        
+        if (checkedBoxes.length === 0) {
+            alert('Vui lòng chọn ít nhất 1 thiết bị để tạo bảng!');
+            event.preventDefault();
+            return;
+        }
+        
+        const selectedEquipments = Array.from(checkedBoxes).map(cb => JSON.parse(cb.getAttribute('data-item')));
+        
+        event.dataTransfer.setData('action', 'insertEquipmentTable');
+        event.dataTransfer.setData('equipmentData', JSON.stringify(selectedEquipments));
+        
+        document.body.classList.add('component-dragging');
+    }
+
+    function insertEquipmentTable(idx, dataString) {
+        try {
+            const equipments = JSON.parse(dataString);
+            
+            const grouped = {};
+            equipments.forEach(eq => {
+                if (!grouped[eq.name]) {
+                    grouped[eq.name] = {
+                        name: eq.name,
+                        codes: [],
+                        op_sop: eq.operation_SOP_code || '',
+                        cl_sop: eq.clearing_SOP_code || ''
+                    };
+                }
+                grouped[eq.name].codes.push(eq.code);
+            });
+            
+            const rows = Object.values(grouped);
+            
+            const newBlockId = 'blk_' + Date.now();
+            
+            let columns = [
+                { label: 'STT', type: 'text', width: '8%' },
+                { label: 'Tên thiết bị', type: 'text', width: '32%' },
+                { label: 'Mã số thiết bị', type: 'text', width: '25%' },
+                { label: 'Số SOP vận hành', type: 'text', width: '17.5%' },
+                { label: 'Số SOP vệ sinh', type: 'text', width: '17.5%' }
+            ];
+
+            let data = [];
+            
+            data.push([
+                { content: '<p style="text-align: center;"><strong>STT</strong></p>', rs: 1, cs: 1, hidden: false },
+                { content: '<p style="text-align: center;"><strong>Tên thiết bị</strong></p>', rs: 1, cs: 1, hidden: false },
+                { content: '<p style="text-align: center;"><strong>Mã số thiết bị</strong></p>', rs: 1, cs: 1, hidden: false },
+                { content: '<p style="text-align: center;"><strong>Số SOP vận hành</strong></p>', rs: 1, cs: 1, hidden: false },
+                { content: '<p style="text-align: center;"><strong>Số SOP vệ sinh</strong></p>', rs: 1, cs: 1, hidden: false }
+            ]);
+            
+            const docBaseUrl = "{{ route('pages.ebmr.viewDocumentByCode', ['code' => '__CODE__']) }}";
+
+            rows.forEach((row, i) => {
+                let opContent = '';
+                if (row.op_sop) {
+                    let opUrl = docBaseUrl.replace('__CODE__', encodeURIComponent(row.op_sop));
+                    opContent = `<a href="${opUrl}" target="_blank" class="badge bg-light text-primary border border-primary text-decoration-none" title="Xem SOP Vận Hành: ${row.op_sop}" contenteditable="false"><i class="fas fa-file-pdf text-primary me-1"></i> ${row.op_sop}</a>`;
+                }
+                
+                let clContent = '';
+                if (row.cl_sop) {
+                    let clUrl = docBaseUrl.replace('__CODE__', encodeURIComponent(row.cl_sop));
+                    clContent = `<a href="${clUrl}" target="_blank" class="badge bg-light text-primary border border-primary text-decoration-none" title="Xem SOP Vệ Sinh: ${row.cl_sop}" contenteditable="false"><i class="fas fa-file-pdf text-primary me-1"></i> ${row.cl_sop}</a>`;
+                }
+
+                data.push([
+                    { content: `<p style="text-align: center;">${i+1}.</p>`, rs: 1, cs: 1, hidden: false },
+                    { content: `<p>${row.name}</p>`, rs: 1, cs: 1, hidden: false },
+                    { content: `<p style="text-align: center;">${row.codes.join('<br>')}</p>`, rs: 1, cs: 1, hidden: false },
+                    { content: `<p style="text-align: center;">${opContent}</p>`, rs: 1, cs: 1, hidden: false },
+                    { content: `<p style="text-align: center;">${clContent}</p>`, rs: 1, cs: 1, hidden: false }
+                ]);
+            });
+
+            // Determine the correct section_id based on the insertion point
+            let calculatedInsertIndex = idx >= 0 ? idx : (items.length > 0 ? items.length : 0);
+            let targetSectionId = window.resolveTargetSectionId(calculatedInsertIndex, 'section_0');
+            
+            let insertIndex = calculatedInsertIndex;
+            let sectionId = targetSectionId;
+
+            const tableBlock = {
+                id: newBlockId,
+                type: 'table',
+                section_id: sectionId,
+                label: 'Danh sách thiết bị liên quan',
+                rows: rows.length + 1,
+                cols: 5,
+                columns: columns,
+                data: data,
+                align: 'center',
+                hideHeader: true,
+                properties: {
+                    allowRowSplit: true,
+                    repeatHeader: true
+                }
+            };
+            
+            if (insertIndex > items.length) insertIndex = items.length;
+            items.splice(insertIndex, 0, tableBlock);
+            
+            renderBlocks();
+            updateStructureTree();
+            
+            document.querySelectorAll('.equipment-checkbox:checked').forEach(cb => cb.checked = false);
+            
+        } catch(e) {
+            console.error('Lỗi khi chèn bảng thiết bị:', e);
+            alert('Có lỗi xảy ra khi xử lý dữ liệu thiết bị.');
+        }
+    }
+    
+    window.handleEquipmentTableDrop = function(e, blockId) {
+        e.preventDefault();
+        e.currentTarget.classList.remove('table-drag-over');
+        
+        const action = e.dataTransfer.getData('action');
+        if (action !== 'insertEquipmentTable') return;
+
+        const equipmentDataStr = e.dataTransfer.getData('equipmentData');
+        if (!equipmentDataStr) return;
+
+        try {
+            const equipments = JSON.parse(equipmentDataStr);
+            const block = items.find(i => i.id === blockId);
+            if (!block || block.type !== 'table') return;
+
+            // Group equipment by name
+            const grouped = {};
+            equipments.forEach(eq => {
+                if (!grouped[eq.name]) {
+                    grouped[eq.name] = {
+                        name: eq.name,
+                        codes: [],
+                        op_sop: eq.operation_SOP_code || '',
+                        cl_sop: eq.clearing_SOP_code || ''
+                    };
+                }
+                if (eq.code && !grouped[eq.name].codes.includes(eq.code)) {
+                    grouped[eq.name].codes.push(eq.code);
+                }
+            });
+            const rows = Object.values(grouped);
+
+            const docBaseUrl = "{{ route('pages.ebmr.viewDocumentByCode', ['code' => '__CODE__']) }}";
+
+            // Append to block.data
+            rows.forEach((row) => {
+                const currentSTT = block.data.length; // STT is based on existing data length (since row 0 is header, length = 1 means STT 1)
+                
+                let opContent = '';
+                if (row.op_sop) {
+                    let opUrl = docBaseUrl.replace('__CODE__', encodeURIComponent(row.op_sop));
+                    opContent = `<a href="${opUrl}" target="_blank" class="badge bg-light text-primary border border-primary text-decoration-none" title="Xem SOP Vận Hành: ${row.op_sop}" contenteditable="false"><i class="fas fa-file-pdf text-primary me-1"></i> ${row.op_sop}</a>`;
+                }
+                
+                let clContent = '';
+                if (row.cl_sop) {
+                    let clUrl = docBaseUrl.replace('__CODE__', encodeURIComponent(row.cl_sop));
+                    clContent = `<a href="${clUrl}" target="_blank" class="badge bg-light text-primary border border-primary text-decoration-none" title="Xem SOP Vệ Sinh: ${row.cl_sop}" contenteditable="false"><i class="fas fa-file-pdf text-primary me-1"></i> ${row.cl_sop}</a>`;
+                }
+
+                block.data.push([
+                    { content: `<p style="text-align: center;">${currentSTT}.</p>`, rs: 1, cs: 1, hidden: false },
+                    { content: `<p>${row.name}</p>`, rs: 1, cs: 1, hidden: false },
+                    { content: `<p style="text-align: center;">${row.codes.join('<br>')}</p>`, rs: 1, cs: 1, hidden: false },
+                    { content: `<p style="text-align: center;">${opContent}</p>`, rs: 1, cs: 1, hidden: false },
+                    { content: `<p style="text-align: center;">${clContent}</p>`, rs: 1, cs: 1, hidden: false }
+                ]);
+            });
+            
+            block.rows = block.data.length;
+            
+            renderBlocks();
+            updateStructureTree();
+            
+            document.querySelectorAll('.equipment-checkbox:checked').forEach(cb => cb.checked = false);
+            document.body.classList.remove('component-dragging');
+            
+        } catch(err) {
+            console.error('Lỗi khi thêm thiết bị vào bảng:', err);
+            alert('Có lỗi xảy ra khi bổ sung dữ liệu thiết bị.');
+        }
     }
 </script>

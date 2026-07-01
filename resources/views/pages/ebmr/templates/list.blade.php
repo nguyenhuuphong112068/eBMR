@@ -2623,7 +2623,8 @@
             $(document).on('click', '.btn-manage-images', function() {
                 const row = $(this).closest('tr');
                 currentManagingRowId = row.attr('data-row-id');
-                const name = row.find('input[name="indicator_name"]').val().trim() || 'Chỉ tiêu không tên';
+                const nameObj = row.find('[name="indicator_name"]');
+                const name = nameObj.length ? nameObj.val().trim() : 'Chỉ tiêu không tên';
 
                 $('#manageImagesRowTitle').text('Chỉ tiêu: ' + name);
 

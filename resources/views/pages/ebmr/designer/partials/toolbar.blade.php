@@ -149,6 +149,10 @@
                     <i class="fas fa-file-import"></i>
                 </button>
                 <button class="btn btn-toolbar-action text-info fw-bold" onmousedown="event.preventDefault();"
+                    onclick="toggleEquipmentSidebar()" title="Thêm danh sách thiết bị liên quan">
+                    <i class="fas fa-tools"></i>
+                </button>
+                <button class="btn btn-toolbar-action text-info fw-bold" onmousedown="event.preventDefault();"
                     onclick="toggleComponentSidebar()" title="Chèn Thành phần (CO)">
                     <i class="fas fa-layer-group"></i>
                 </button>

@@ -130,6 +130,9 @@
                 const sourceRowIndex = item.rows - offset;
                 const sourceRow = item.data[sourceRowIndex];
                 
+                window.__ebmrPastedNameMapping = {};
+                window.__ebmrPastedFormulaFields = [];
+                
                 // Create a deep copy of the source row's structure and content
                 // Tag with is_dynamic: true so we know this row was added during execution
                 let newRow = sourceRow.map(cell => {
@@ -187,8 +190,16 @@
                                     configObj[newId] = {
                                         ...oldConfig,
                                         id: newId,
-                                        name: newName
+                                        name: newName,
+                                        sum_group: oldConfig.sum_group || oldConfig.name || newName
                                     };
+                                    
+                                    if (oldConfig.name) {
+                                        window.__ebmrPastedNameMapping[oldConfig.name] = newName;
+                                    }
+                                    if (oldConfig.type === 'formula' || oldConfig.type === 'checkbox') {
+                                        window.__ebmrPastedFormulaFields.push(newId);
+                                    }
                                     
                                     badge.setAttribute('data-field-id', newId);
                                     badge.setAttribute('onclick', `selectField(event, '${newId}')`);
@@ -208,6 +219,10 @@
                 });
 
                 item.data.push(newRow);
+                
+                if (typeof window.translateFormulaReferencesOfPastedFields === 'function') {
+                    window.translateFormulaReferencesOfPastedFields();
+                }
                 
                 // Handle row heights if defined
                 if (item.rowHeights) {

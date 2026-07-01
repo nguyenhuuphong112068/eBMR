@@ -614,11 +614,14 @@
                     }
                 }
 
+                // Determine the correct section_id based on the insertion point
+                let targetSectionId = window.resolveTargetSectionId(insertIndex, 'section_0');
+
                 // Chèn các khối đã chọn
                 selectedBlocks.forEach(block => {
                     const newItem = Object.assign({}, block.data, {
                         id: 'item_' + Date.now() + '_' + Math.floor(Math.random() * 100000) + Math.random().toString(36).substr(2, 5),
-                        section_id: window.activeSectionId || 'section_0'
+                        section_id: targetSectionId
                     });
                     items.splice(insertIndex++, 0, newItem);
                 });

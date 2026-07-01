@@ -1,25 +1,8 @@
-<?php
-require __DIR__.'/vendor/autoload.php';
-$app = require_once __DIR__.'/bootstrap/app.php';
-$kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
-$kernel->bootstrap();
+<?php 
+require __DIR__."/vendor/autoload.php"; 
+$app = require_once __DIR__."/bootstrap/app.php"; 
+$app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap(); 
 
-use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Facades\DB;
-
-$tables = ['notifications', 'notification_recipients'];
-$results = [];
-foreach ($tables as $table) {
-    if (Schema::hasTable($table)) {
-        $columns = Schema::getColumnListing($table);
-        $details = [];
-        foreach ($columns as $column) {
-            $details[$column] = Schema::getColumnType($table, $column);
-        }
-        $results[$table] = $details;
-    } else {
-        $results[$table] = "NOT FOUND";
-    }
-}
-file_put_contents('db_structure.json', json_encode($results, JSON_PRETTY_PRINT));
-echo "DONE";
+$r = DB::table('ebmr_template_blocks')->where('id', 1339)->first();
+$f = json_decode($r->properties, true);
+echo json_encode($f, JSON_PRETTY_PRINT);

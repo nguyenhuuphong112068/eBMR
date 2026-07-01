@@ -18,6 +18,7 @@
         @include('pages.ebmr.designer.partials.criteria_sidebar') {{-- Nhúng thanh trượt liên kết tiêu chuẩn --}}
         @include('pages.ebmr.designer.partials.properties_sidebar') {{-- Nhúng thanh quản lý thuộc tính tài liệu --}}
         @include('pages.ebmr.designer.partials.components_sidebar') {{-- Nhúng thanh thành phần kéo thả --}}
+        @include('pages.ebmr.designer.partials.equipment_sidebar') {{-- Nhúng thanh thiết bị kéo thả --}}
     </div>
 
     <script> {{-- Khởi tạo các biến Javascript toàn cục từ dữ liệu phía Backend (Laravel) --}}

@@ -34,8 +34,10 @@ class EquipmentController extends Controller
             ->select('instrument.*', 'room_logbooks.current_status as eq_status')
             ->orderBy('instrument.code', 'asc');
         
-        if ($request->has('department') && $request->department !== '') {
-            $query->where('department_code', $request->department);
+        $selectedDepartment = $request->has('department') ? $request->department : 'PXV1';
+        
+        if ($selectedDepartment !== '') {
+            $query->where('department_code', $selectedDepartment);
         }
         
         $datas = $query->get();
@@ -53,7 +55,7 @@ class EquipmentController extends Controller
             'datas' => $datas,
             'stages' => self::$stages,
             'departments' => $departments,
-            'selectedDepartment' => $request->department
+            'selectedDepartment' => $selectedDepartment
         ]);
     }
 

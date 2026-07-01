@@ -15,6 +15,9 @@
 
     let currentTemplateId = {{ $template->id ?? 'null' }};
     let historyEnabled = {{ $template->log_history ?? 0 }} == 1;
+    window.templateId = '{{ $template->id ?? 0 }}';
+    window.templateType = '{{ $template->type ?? '' }}';
+    window.templateDepartmentCode = '{{ $template->department_code ?? '' }}';
     let selectedId = null;
     let selectedFieldId = null;
     let selectedFieldIds = [];

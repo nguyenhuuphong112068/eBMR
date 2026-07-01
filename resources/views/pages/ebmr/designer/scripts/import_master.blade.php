@@ -79,18 +79,27 @@
 
     let componentSidebarOpen = false;
 
-    function toggleComponentSidebar() {
+    function toggleComponentSidebar(keepMargin = false) {
         const sidebar = document.getElementById('componentsSidebar');
         if (!sidebar) return;
         
         componentSidebarOpen = !componentSidebarOpen;
         if (componentSidebarOpen) {
             sidebar.classList.remove('d-none');
+            document.getElementById('mainContent').style.setProperty('margin-left', '250px', 'important');
             // Give it a tiny delay to ensure d-none is removed before triggering CSS transition
             setTimeout(() => sidebar.classList.add('show'), 10);
+            
+            if (typeof equipmentSidebarOpen !== 'undefined' && equipmentSidebarOpen) {
+                if (typeof toggleEquipmentSidebar === 'function') toggleEquipmentSidebar(true);
+            }
+            
             loadComponentsSidebar();
         } else {
             sidebar.classList.remove('show');
+            if (!keepMargin) {
+                document.getElementById('mainContent').style.removeProperty('margin-left');
+            }
             setTimeout(() => sidebar.classList.add('d-none'), 300); // wait for transition
         }
     }
@@ -160,6 +169,40 @@
         document.body.classList.remove('component-dragging');
         // Clear drag over styles
         document.querySelectorAll('.insert-divider').forEach(el => el.classList.remove('drag-over-active'));
+        
+        // Stop auto scroll if active
+        if (window.dragScrollInterval) {
+            clearInterval(window.dragScrollInterval);
+            window.dragScrollInterval = null;
+        }
+    });
+
+    // Handle auto scroll when dragging near the edge of the window
+    document.addEventListener('dragover', function(e) {
+        if (!document.body.classList.contains('component-dragging')) return;
+        
+        const threshold = 80; // pixels from edge to trigger scroll
+        const scrollSpeed = 15; // pixels to scroll per interval
+        const windowHeight = window.innerHeight;
+        
+        // Clear previous interval if any
+        if (window.dragScrollInterval) {
+            clearInterval(window.dragScrollInterval);
+            window.dragScrollInterval = null;
+        }
+
+        // Determine if mouse is near top or bottom
+        if (e.clientY < threshold) {
+            // Scroll UP
+            window.dragScrollInterval = setInterval(() => {
+                window.scrollBy(0, -scrollSpeed);
+            }, 20);
+        } else if (e.clientY > windowHeight - threshold) {
+            // Scroll DOWN
+            window.dragScrollInterval = setInterval(() => {
+                window.scrollBy(0, scrollSpeed);
+            }, 20);
+        }
     });
 
     // Import logic (Deep Copy)
@@ -203,7 +246,9 @@
                 if (data && data.blocks) {
                     const importedBlocks = data.blocks;
                     const importedConfig = data.fields || {};
-                    const targetSectionId = window.activeSectionId || (Array.isArray(items) ? (items.find(i => i.type === 'section')?.section_id) : null) || 'section_0';
+                    // Determine the correct section_id based on the insertion point
+                    let calculatedInsertIndex = insertIndex >= 0 ? insertIndex : (items.length > 0 ? items.length : 0);
+                    let targetSectionId = window.resolveTargetSectionId(calculatedInsertIndex, 'section_0');
 
                     // 1. Map old field IDs (variables) to new UUIDs to prevent collisions
                     let fieldMap = {};

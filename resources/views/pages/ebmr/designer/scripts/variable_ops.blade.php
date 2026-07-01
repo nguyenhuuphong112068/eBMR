@@ -293,6 +293,7 @@
 
         if (sidebar.classList.contains('d-none')) {
             sidebar.classList.remove('d-none');
+            document.getElementById('mainContent').style.setProperty('margin-right', '250px', 'important');
             loadCriteriaSidebarData();
         } else {
             closeCriteriaSidebar();
@@ -303,6 +304,7 @@
         const sidebar = document.getElementById('criteriaSidebar');
         if (sidebar) {
             sidebar.classList.add('d-none');
+            document.getElementById('mainContent').style.removeProperty('margin-right');
         }
     };
 
@@ -1064,6 +1066,7 @@
                                 ...oldConfig,
                                 id: newId,
                                 name: newName,
+                                sum_group: oldConfig.sum_group || oldConfig.name || newName,
                                 block_id: blockId,
                                 section_id: item.section_id || null
                             };

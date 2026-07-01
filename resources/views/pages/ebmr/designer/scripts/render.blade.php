@@ -439,6 +439,10 @@
                     if (displayContent === null || displayContent === 'null' || displayContent === undefined) {
                         displayContent = '';
                     }
+
+                    if (displayContent.includes('#STT#')) {
+                        displayContent = displayContent.replace(/#STT#/g, '<span class="ebmr-css-stt"></span>');
+                    }
                     
                     let cellClass = isSoloBadge ? "solo-badge-cell " : "";
                     let onclickAttr = "";
@@ -631,7 +635,16 @@
                 `;
             }
 
-            content = `${titleHtml}${progressHtml}<div class="table-responsive-wrapper"><table class="mini-table ${borderClass}" style="--table-border-width: ${item.borderWeight || '1px'}; --table-border-color: #dee2e6;">${thead}<tbody>${rowsHtml}</tbody></table></div>${addRowBtn}`;
+            let dropHandlerHtml = '';
+            if (!window.isReadOnly && !window.isExecutionMode && item.label === 'Danh sách thiết bị liên quan') {
+                dropHandlerHtml = `
+                    ondragover="event.preventDefault(); this.classList.add('table-drag-over');"
+                    ondragleave="this.classList.remove('table-drag-over');"
+                    ondrop="window.handleEquipmentTableDrop(event, '${item.id}')"
+                `;
+            }
+
+            content = `${titleHtml}${progressHtml}<div class="table-responsive-wrapper" ${dropHandlerHtml}><table class="mini-table ${borderClass}" style="--table-border-width: ${item.borderWeight || '1px'}; --table-border-color: #dee2e6;">${thead}<tbody>${rowsHtml}</tbody></table></div>${addRowBtn}`;
         }
 
         // --- XỬ LÝ KHỐI VĂN BẢN TĨNH (STATIC TEXT) ---
@@ -831,6 +844,15 @@
                 }
             }
 
+            const secIdxInItems = items.indexOf(sectionBlock);
+            
+            // Draw the insertion divider BEFORE creating the new group
+            // This ensures the divider visually belongs to the BOTTOM of the previous section,
+            // which perfectly matches the functional logic (insertIndex - 1).
+            if (!window.isReadOnly && !window.isExecutionMode) {
+                addInsertionDivider(currentGroup, secIdxInItems);
+            }
+
             if (window.isViewAllMode || !window.activeSectionId) {
                 if (lastSectionId === null || itemSectionId !== lastSectionId) {
                     if (lastSectionId !== null) {
@@ -871,12 +893,6 @@
                 }
             } else {
                 currentGroup = container;
-            }
-
-            // Draw section block itself
-            const secIdxInItems = items.indexOf(sectionBlock);
-            if (!window.isReadOnly && !window.isExecutionMode) {
-                addInsertionDivider(currentGroup, secIdxInItems);
             }
 
             const secDiv = document.createElement('div');
@@ -1173,6 +1189,15 @@
         divider.ondrop = (e) => {
             e.preventDefault();
             divider.classList.remove('drag-over-active');
+            const action = e.dataTransfer.getData('action');
+            if (action === 'insertEquipmentTable') {
+                const equipmentData = e.dataTransfer.getData('equipmentData');
+                if (typeof insertEquipmentTable === 'function') {
+                    insertEquipmentTable(idx, equipmentData);
+                }
+                return;
+            }
+
             const componentId = e.dataTransfer.getData('componentId');
             const componentName = e.dataTransfer.getData('componentName');
             if (componentId) {
@@ -1367,8 +1392,9 @@
                         const dPlaces = (field.validation && field.validation.decimal_places !== null) ? field
                             .validation.decimal_places : 2;
                         const result = calculateFormula(field.formula || '', dPlaces, field.id, loopSuffix);
-                        badge.innerHTML = `<span style="color: #2563eb; font-weight: 500;">${result}</span>`;
-                        badge.className = 'ebmr-field-value formula-result';
+                        applyFormulaLimits(badge, field, result);
+                        badge.className = 'ebmr-field-badge ebmr-field-value formula-result';
+                        if (badge.hasAttribute('data-limit-info')) badge.className += ' formula-out-of-bounds';
                         badge.setAttribute('data-field-id', fieldId + loopSuffix); // Để recalculate tìm được
                         
                         const isNA = window.executionValues[`_na_state_${field.id}`] === true;
@@ -1537,9 +1563,24 @@
                             ? `<button class="btn-read-scale" onclick="event.stopPropagation(); window.readScaleValueIntoField('${fieldId + loopSuffix}')" title="⚖️ Đọc giá trị từ Cân điện tử (RS-232)"><i class="fas fa-balance-scale"></i></button>`
                             : '';
 
-                        badge.innerHTML =
-                            `<span class="execution-input-test" ${!window.isReadOnly ? 'onclick="openVariableInputModal(\''+(fieldId + loopSuffix)+'\')"' : ''} style="cursor: ${window.isReadOnly ? 'default' : 'pointer'}; border-bottom: 1px dotted #1a73e8; min-width: 30px; display: inline-block; outline: none; position: relative; ${extraStyle}">${displayVal || `<span style="color: #6c757d; font-style: italic;">${placeholder}</span>`}</span>${scaleBtnHtml}`;
-                        badge.className = 'ebmr-field-badge ebmr-field-value';
+                        const meta = fieldData && fieldData._meta && fieldData._meta['default'];
+                        if (meta && meta.device) {
+                            badge.innerHTML = `
+                                <div style="margin-top: 4px; padding: 6px 10px; background: #fff; border: 1px solid #111; border-radius: 2px; text-align: left; font-family: 'Courier New', Courier, monospace; font-size: 11px; color: #000; line-height: 1.5; min-width: 160px; box-shadow: 2px 2px 4px rgba(0,0,0,0.1); cursor: ${window.isReadOnly ? 'default' : 'pointer'}; display: inline-block; position: relative;" ${!window.isReadOnly ? 'onclick="openVariableInputModal(\''+(fieldId + loopSuffix)+'\')"' : ''}>
+                                    <div style="text-align: center; font-weight: bold; font-size: 12px; border-bottom: 1px dashed #111; padding-bottom: 4px; margin-bottom: 4px;">MÃ THIẾT BỊ: ${meta.deviceCode || '---'}</div>
+                                    <div style="margin-bottom: 2px; white-space: normal;"><b>Tên TB:</b> ${meta.device}</div>
+                                    <div style="margin-bottom: 2px;"><b>T.gian:</b> ${meta.at || ''}</div>
+                                    <div style="margin-bottom: 2px;"><b>K.Lượng:</b> <span style="font-size: 14px; font-weight: bold;">${displayVal || ''} ${meta.unit || ''}</span></div>
+                                    <div><b>Người Cân:</b> ${meta.by || ''}</div>
+                                    ${scaleBtnHtml ? `<div style="position:absolute; top:-10px; right:-10px; z-index: 10;" onclick="event.stopPropagation();">${scaleBtnHtml}</div>` : ''}
+                                </div>
+                            `;
+                            badge.className = 'ebmr-field-receipt ebmr-field-value';
+                        } else {
+                            badge.innerHTML =
+                                `<span class="execution-input-test" ${!window.isReadOnly ? 'onclick="openVariableInputModal(\''+(fieldId + loopSuffix)+'\')"' : ''} style="cursor: ${window.isReadOnly ? 'default' : 'pointer'}; border-bottom: 1px dotted #1a73e8; min-width: 30px; display: inline-block; outline: none; position: relative; ${extraStyle}">${displayVal || `<span style="color: #6c757d; font-style: italic;">${placeholder}</span>`}</span>${scaleBtnHtml}`;
+                            badge.className = 'ebmr-field-badge ebmr-field-value';
+                        }
                     }
                     
                     if (isNA) {
@@ -1757,7 +1798,60 @@
         return isNaN(parsed) ? 0 : parsed;
     };
 
+    window.showFormulaLimitWarning = function(el) {
+        if (window.Swal) {
+            Swal.fire({
+                title: 'Cảnh báo giới hạn',
+                html: `Giá trị tính toán: <b class="text-danger">${el.getAttribute('data-result')}</b><br>Nằm ngoài giới hạn cho phép: <b>${el.getAttribute('data-limit-info')}</b>`,
+                icon: 'warning'
+            });
+        }
+    };
+
+    window.applyFormulaLimits = function(badge, field, resultStr) {
+        badge.innerHTML = `<span style="color: #2563eb; font-weight: 500;">${resultStr}</span>`;
+        if (window.isExecutionMode && field.validation) {
+            const minStr = field.validation.min;
+            const maxStr = field.validation.max;
+            if ((minStr !== undefined && minStr !== null && minStr !== '') || 
+                (maxStr !== undefined && maxStr !== null && maxStr !== '')) {
+                
+                const numericResult = parseFloat(String(resultStr).replace(/,/g, ''));
+                if (!isNaN(numericResult)) {
+                    let isOut = false;
+                    let limitInfo = [];
+                    if (minStr !== undefined && minStr !== null && minStr !== '') {
+                        const min = parseFloat(minStr);
+                        if (numericResult < min) isOut = true;
+                        limitInfo.push(`Min: ${minStr}`);
+                    }
+                    if (maxStr !== undefined && maxStr !== null && maxStr !== '') {
+                        const max = parseFloat(maxStr);
+                        if (numericResult > max) isOut = true;
+                        limitInfo.push(`Max: ${maxStr}`);
+                    }
+
+                    if (isOut) {
+                        badge.setAttribute('title', 'Vượt giới hạn: ' + limitInfo.join(' - '));
+                        badge.setAttribute('data-limit-info', limitInfo.join(' - '));
+                        badge.setAttribute('data-result', resultStr);
+                        badge.setAttribute('onclick', 'window.showFormulaLimitWarning(this)');
+                        badge.style.cursor = 'pointer';
+                        badge.innerHTML = `<span style="color: #dc3545; font-weight: bold;">${resultStr}</span>`;
+                    } else {
+                        badge.removeAttribute('title');
+                        badge.removeAttribute('data-limit-info');
+                        badge.removeAttribute('data-result');
+                        badge.removeAttribute('onclick');
+                        badge.style.cursor = '';
+                    }
+                }
+            }
+        }
+    };
+
     /**
+
      * Tính toán giá trị của một công thức toán học.
      * Nó tự động tìm kiếm các giá trị từ các ô có ID hoặc các biến số được định nghĩa trong công thức.
      * @param {string} formula - Chuỗi công thức, ví dụ: "(kl_tong) - (kl_bao)".
@@ -1775,6 +1869,7 @@
         let processed = formula;
         try {
             const valMap = {};
+            const valArrayMap = {};
             const dPlaces = (decimalPlaces !== null && decimalPlaces !== '') ? parseInt(decimalPlaces) : 2;
 
             // BƯỚC 1: Thu thập giá trị từ các ô bảng (Table Cells) có đặt ID (cellId)
@@ -1793,8 +1888,12 @@
                                 if (raw === undefined || raw === null || raw === '') {
                                     raw = (cell.defaultValue !== undefined && cell.defaultValue !== '') ? cell.defaultValue : (cell.content || '0');
                                 }
-                                valMap[cell.cellId] = parseNumberSafe(raw);
-                                valMap[cell.cellId + loopSuffix] = parseNumberSafe(raw);
+                                const parsedVal = parseNumberSafe(raw);
+                                valMap[cell.cellId] = parsedVal;
+                                valMap[cell.cellId + loopSuffix] = parsedVal;
+                                
+                                if (!valArrayMap[cell.cellId]) valArrayMap[cell.cellId] = [];
+                                valArrayMap[cell.cellId].push(parsedVal);
                             }
                         });
                     });
@@ -1804,6 +1903,25 @@
             // BƯỚC 2: Thu thập giá trị từ các "Trường động" (Dynamic Fields) theo Tên hoặc Nhãn
             Object.values(fieldsConfig).forEach(field => {
                 if (field.label || field.name) {
+                    // CẢI TIẾN HIỆU SUẤT: Tránh vòng lặp O(N!) bằng cách chỉ tính toán giá trị của biến số 
+                    // nếu tên hoặc nhãn của nó CÓ XUẤT HIỆN trong chuỗi công thức hiện tại.
+                    let isUsed = false;
+                    const loopedName = field.name ? field.name + loopSuffix : null;
+                    const loopedLabel = field.label ? field.label + loopSuffix : null;
+                    
+                    if (field.name) {
+                        if (formula.includes(field.name)) isUsed = true;
+                        else if (field.sum_group && formula.includes(field.sum_group)) isUsed = true;
+                    }
+                    if (!isUsed && loopedName) {
+                        if (formula.includes(loopedName)) isUsed = true;
+                        else if (field.sum_group && formula.includes(field.sum_group + loopSuffix)) isUsed = true;
+                    }
+                    if (!isUsed && field.label && formula.includes(field.label)) isUsed = true;
+                    if (!isUsed && loopedLabel && formula.includes(loopedLabel)) isUsed = true;
+                    
+                    if (!isUsed) return; // BỎ QUA nều biến này không được dùng trong công thức!
+
                     let val = 0;
                     const loopedFieldId = field.id + loopSuffix;
                     if (field.type === 'formula') {
@@ -1831,29 +1949,73 @@
                     if (field.label) {
                         valMap[field.label] = parsedVal;
                         valMap[field.label + loopSuffix] = parsedVal;
+                        if (!valArrayMap[field.label]) valArrayMap[field.label] = [];
+                        valArrayMap[field.label].push(parsedVal);
                     }
                     if (field.name) {
                         valMap[field.name] = parsedVal;
                         valMap[field.name + loopSuffix] = parsedVal;
+                        if (!valArrayMap[field.name]) valArrayMap[field.name] = [];
+                        valArrayMap[field.name].push(parsedVal);
+                        
+                        // Sử dụng sum_group để nhóm chính xác các biến nhân bản
+                        if (field.sum_group && field.sum_group !== field.name) {
+                            if (!valArrayMap[field.sum_group]) valArrayMap[field.sum_group] = [];
+                            valArrayMap[field.sum_group].push(parsedVal);
+                        }
                     }
                 }
             });
 
+            // BƯỚC 2.5: Xử lý các hàm tổng hợp _ALL
+            const aggregateRegex = /(SUM_ALL|AVG_ALL|MAX_ALL|MIN_ALL)\(\s*\(*(.*?)\)*\s*\)/gi;
+            processed = processed.replace(aggregateRegex, (match, funcRaw, id) => {
+                const func = funcRaw.toUpperCase();
+                const trimmedId = id.trim();
+                let arr = valArrayMap[trimmedId] || [];
+                
+                // Cải tiến: Nếu mảng chỉ có 1 phần tử (do user click trực tiếp vào biến KL thực1 thay vì KL thực), 
+                // thử tìm xem nó có thuộc sum_group nào không để gom nhóm lại.
+                if (arr.length <= 1) {
+                    const field = Object.values(fieldsConfig).find(f => f.name === trimmedId || f.label === trimmedId);
+                    if (field && field.sum_group && valArrayMap[field.sum_group] && valArrayMap[field.sum_group].length > arr.length) {
+                        arr = valArrayMap[field.sum_group];
+                    }
+                }
+
+                if (arr.length === 0) return '0';
+                
+                if (func === 'SUM_ALL') return `(${arr.join(' + ')})`;
+                if (func === 'AVG_ALL') {
+                    const sum = arr.reduce((a, b) => a + b, 0);
+                    return `(${sum} / ${arr.length})`;
+                }
+                if (func === 'MAX_ALL') return `Math.max(${arr.join(', ')})`;
+                if (func === 'MIN_ALL') return `Math.min(${arr.join(', ')})`;
+                
+                return '0';
+            });
+
             // BƯỚC 3: Thay thế các định danh trong công thức bằng giá trị thực tế
             // Ví dụ: "(kl_tong) - (kl_bao)" -> "100 - 5"
-            processed = formula.replace(/\(([^()]+)\)/g, (match, id) => {
+            processed = processed.replace(/\(([^()]+)\)/g, (match, id) => {
                 const trimmedId = id.trim();
                 const loopedKey = trimmedId + loopSuffix;
                 if (valMap[loopedKey] !== undefined) {
                     return valMap[loopedKey];
                 }
-                return valMap[trimmedId] !== undefined ? valMap[trimmedId] : 0;
+                if (valMap[trimmedId] !== undefined) {
+                    return valMap[trimmedId];
+                }
+                // Nếu không có trong valMap, giữ nguyên (vì có thể là biểu thức toán học như (5 + 2) hoặc (SUM_ALL...))
+                return match;
             });
 
             // BƯỚC 4: Tính toán biểu thức toán học cơ bản bằng hàm Function (an toàn hơn eval một chút)
             const result = new Function(`
                 const MAX = Math.max; const max = Math.max;
                 const MIN = Math.min; const min = Math.min;
+                const SUM = function(...args) { return args.reduce((a,b)=>a+b,0); }; const sum = SUM;
                 const AVG = function(...args) { return args.length ? args.reduce((a,b)=>a+b,0)/args.length : 0; }; const avg = AVG;
                 const ROUND = function(val, dec) { const p = Math.pow(10, dec||0); return Math.round(val * p) / p; }; const round = ROUND;
                 return ${processed};
@@ -1897,7 +2059,13 @@
                 if (field && field.type === 'formula') {
                     const dPlaces = (field.validation && field.validation.decimal_places !== null) ? field
                         .validation.decimal_places : 2;
-                    badge.innerHTML = calculateFormula(field.formula || '', dPlaces, loopedFieldId, loopSuffix);
+                    const resultStr = calculateFormula(field.formula || '', dPlaces, loopedFieldId, loopSuffix);
+                    applyFormulaLimits(badge, field, resultStr);
+                    if (badge.hasAttribute('data-limit-info')) {
+                        badge.classList.add('formula-out-of-bounds');
+                    } else {
+                        badge.classList.remove('formula-out-of-bounds');
+                    }
                 }
             }
         });
