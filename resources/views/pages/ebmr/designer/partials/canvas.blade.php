@@ -2,7 +2,7 @@
     <div class="row justify-content-center">
         @if (!($isExecutionMode ?? false))
             <!-- Outline Sidebar -->
-            <div id="outline-col" class="col-lg-1 transition-all p-0">
+            <div id="outline-col" class="col-lg-1 transition-all p-0 d-none">
                 <div class="p-3 bg-white rounded shadow-sm outline-sidebar h-100 d-none">
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <h6 class="mb-0 text-muted fw-bold" style="font-size: 0.85rem;">
@@ -38,7 +38,7 @@
 
             @if (!$isReadOnly)
                 <!-- Editor Ruler -->
-                <div class="editor-ruler" id="editor-ruler">
+                <div class="editor-ruler d-none" id="editor-ruler">
                     <div class="ruler-scale"></div>
                     <div class="ruler-margin-left" id="ruler-margin-left"></div>
                     <div class="ruler-margin-right" id="ruler-margin-right"></div>

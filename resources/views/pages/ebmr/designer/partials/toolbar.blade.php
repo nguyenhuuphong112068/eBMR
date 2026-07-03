@@ -215,7 +215,7 @@
                 </div>
                 {{-- Paste variable --}}
                 <button class="btn btn-toolbar-action text-primary" onmousedown="event.preventDefault();"
-                    onclick="pasteVariable()" title="Dán Biến số (Ctrl+Shift+V)">
+                    onclick="pasteVariable()" title="Dán Biến số (Ctrl+V)">
                     <i class="fas fa-paste"></i>
                 </button>
                 {{-- Link criteria --}}
@@ -248,6 +248,10 @@
                 <button class="btn btn-toolbar-action text-info fw-bold" onmousedown="event.preventDefault();"
                     onclick="togglePropertiesSidebar()" title="Thuộc tính tài liệu (Document Properties)">
                     <i class="fas fa-file-alt"></i>
+                </button>
+                <button class="btn btn-toolbar-action text-primary fw-bold" onmousedown="event.preventDefault();"
+                    onclick="toggleOutlineVisibility()" title="Hiển thị / Ẩn Mục lục">
+                    <i class="fas fa-list-ul"></i>
                 </button>
             </div>
             <div class="toolbar-group-label">Hồ Sơ</div>
@@ -387,6 +391,11 @@
                         <button class="dropdown-item rounded mb-1" onclick="applyTextChangeCase('toggle')">tOGGLE cASE</button>
                     </div>
                 </div>
+
+                {{-- Typography Normalization --}}
+                <button class="btn btn-toolbar text-primary" onmousedown="event.preventDefault();" onclick="openTypographySettings()" title="Chuẩn hóa cỡ chữ (Typography)">
+                    <i class="fas fa-text-height"></i>
+                </button>
 
                 {{-- Text Color (dual action: click apply / dropdown choose) (TẠM ẨN THEO YÊU CẦU) --}}
                 <div class="btn-group d-none" role="group">
@@ -547,23 +556,33 @@
         {{-- ── Nhóm: Ký Hiệu & Ảnh ── --}}
         <div class="toolbar-group">
             <div class="toolbar-group-btns">
-                {{-- Quick symbol insert dropdown (α β γ ...) --}}
+                {{-- Quick symbol insert dropdown --}}
                 <div class="dropdown d-inline-block">
                     <button class="btn btn-toolbar dropdown-toggle" type="button"
-                        data-toggle="dropdown" aria-expanded="false" title="Ký tự nhanh (α β γ °...)">
-                        <i class="fas fa-omega"></i>
+                        data-toggle="dropdown" aria-expanded="false" title="Ký tự nhanh (Ω, α, β...)">
+                        <span style="font-family: 'Times New Roman', Times, serif; font-weight: bold; font-size: 1.1em; line-height: 1;">&Omega;</span>
                     </button>
-                    <div class="dropdown-menu p-2" style="min-width:180px;">
-                        <button class="btn btn-sm btn-light m-1" onclick="formatDoc('insertText', 'α')">α</button>
-                        <button class="btn btn-sm btn-light m-1" onclick="formatDoc('insertText', 'β')">β</button>
-                        <button class="btn btn-sm btn-light m-1" onclick="formatDoc('insertText', 'γ')">γ</button>
-                        <button class="btn btn-sm btn-light m-1" onclick="formatDoc('insertText', 'Δ')">Δ</button>
-                        <button class="btn btn-sm btn-light m-1" onclick="formatDoc('insertText', '°')">°</button>
-                        <button class="btn btn-sm btn-light m-1" onclick="formatDoc('insertText', '±')">±</button>
-                        <button class="btn btn-sm btn-light m-1" onclick="formatDoc('insertText', '≤')">≤</button>
-                        <button class="btn btn-sm btn-light m-1" onclick="formatDoc('insertText', '≥')">≥</button>
-                        <button class="btn btn-sm btn-light m-1" onclick="formatDoc('insertText', 'µ')">µ</button>
-                        <button class="btn btn-sm btn-light m-1" onclick="formatDoc('insertText', '©')">©</button>
+                    <div class="dropdown-menu p-2 shadow" style="min-width: 280px;">
+                        <div class="small fw-bold text-muted mb-1 px-1">Toán & Khoa học</div>
+                        <div class="d-flex flex-wrap mb-2">
+                            @foreach(['±', '≠', '≤', '≥', '÷', '×', '∞', '√', '∫', '≈', '≡', '°', '℃', '℉', '‰', '¼', '½', '¾'] as $sym)
+                                <button class="btn btn-light border m-0" style="width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; margin-right: 2px !important; margin-bottom: 2px !important;" onmousedown="event.preventDefault();" onclick="formatDoc('insertText', '{{ $sym }}')">{{ $sym }}</button>
+                            @endforeach
+                        </div>
+                        
+                        <div class="small fw-bold text-muted mb-1 px-1">Ký tự Hy Lạp</div>
+                        <div class="d-flex flex-wrap mb-2">
+                            @foreach(['α', 'β', 'γ', 'Δ', 'Ω', 'Σ', 'Φ', 'π', 'θ', 'μ', 'λ', 'ρ', 'σ', 'ω'] as $sym)
+                                <button class="btn btn-light border m-0" style="width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; margin-right: 2px !important; margin-bottom: 2px !important;" onmousedown="event.preventDefault();" onclick="formatDoc('insertText', '{{ $sym }}')">{{ $sym }}</button>
+                            @endforeach
+                        </div>
+                        
+                        <div class="small fw-bold text-muted mb-1 px-1">Ký hiệu khác</div>
+                        <div class="d-flex flex-wrap">
+                            @foreach(['©', '®', '™', '€', '£', '¥', '✓', '✗', '•', '○', '●', '□', '■', '←', '↑', '→', '↓', '↔', '↕'] as $sym)
+                                <button class="btn btn-light border m-0" style="width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; margin-right: 2px !important; margin-bottom: 2px !important;" onmousedown="event.preventDefault();" onclick="formatDoc('insertText', '{{ $sym }}')">{{ $sym }}</button>
+                            @endforeach
+                        </div>
                     </div>
                 </div>
                 <button class="btn btn-toolbar" onmousedown="event.preventDefault();"

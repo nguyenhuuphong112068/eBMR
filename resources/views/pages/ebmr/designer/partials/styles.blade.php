@@ -915,6 +915,25 @@
 
 
     /* Sidebar Columns & Layout Custom Widths (Reduced by 30% for cleaner presentation) */
+    #outline-col {
+        position: fixed !important;
+        left: 0;
+        top: 60px; /* DÆ°á»›i thanh cÃ´ng cá»¥ */
+        height: calc(100vh - 60px);
+        z-index: 1040;
+        background: transparent;
+    }
+
+    #sidebar-col {
+        position: fixed !important;
+        right: 0;
+        top: 60px; /* DÆ°á»›i thanh cÃ´ng cá»¥ */
+        height: calc(100vh - 60px);
+        z-index: 1040;
+        background: transparent;
+        overflow-y: auto; /* Cho phÃ©p cuá»™n néº¿u ná»™i dung vÆ°á»£t quÃ¡ mÃ n hÃ¬nh */
+    }
+
     #outline-col.col-lg-2 {
         width: 220px !important;
         flex: 0 0 220px !important;

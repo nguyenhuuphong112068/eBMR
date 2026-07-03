@@ -462,6 +462,20 @@ class EbmrDesignerController extends Controller
                     }
                 }
 
+                // SECURITY/INTEGRITY FIX: If the frontend sends a frontend ID (blk_sec_...) for section_id,
+                // we MUST resolve it to the real section_id (e.g. 6_1) to prevent cascading corruption.
+                if ($finalSectionId && strpos($finalSectionId, 'blk_sec_') === 0) {
+                    $secBlock = DB::table('ebmr_template_blocks')
+                        ->where('template_id', $id)
+                        ->where('properties', 'LIKE', '%"id":"' . $finalSectionId . '"%')
+                        ->first();
+                    
+                    if ($secBlock && $secBlock->section_id && strpos($secBlock->section_id, 'blk_sec_') !== 0) {
+                        $finalSectionId = $secBlock->section_id;
+                        $field['section_id'] = $finalSectionId;
+                    }
+                }
+
                 $properties = $field;
 
                 // Process table data separately to avoid saving large text in 'properties' column
@@ -1502,6 +1516,40 @@ class EbmrDesignerController extends Controller
             Log::error('Dynamic Options Fetch Error: '.$e->getMessage());
 
             return response()->json(['success' => false, 'message' => 'Lỗi truy vấn: '.$e->getMessage()]);
+        }
+    }
+
+    public function getEquipmentList(Request $request)
+    {
+        try {
+            $department = $request->input('department', '');
+            
+            $query = DB::table('instrument')
+                ->select('id', 'name', 'code', 'department_code')
+                ->orderBy('code', 'asc');
+                
+            if ($department !== '' && $department !== '-') {
+                $query->where('department_code', $department);
+            }
+            
+            $equipments = $query->get();
+            
+            $departments = DB::table('instrument')
+                ->select('department_code')
+                ->whereNotNull('department_code')
+                ->where('department_code', '!=', '')
+                ->distinct()
+                ->orderBy('department_code', 'asc')
+                ->pluck('department_code');
+                
+            return response()->json([
+                'success' => true,
+                'departments' => $departments,
+                'equipments' => $equipments
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Get Equipment List Error: '.$e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Lỗi: '.$e->getMessage()]);
         }
     }
 }

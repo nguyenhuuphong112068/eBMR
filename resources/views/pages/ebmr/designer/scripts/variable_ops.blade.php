@@ -772,6 +772,32 @@
                 
                 badge.setAttribute('data-field-id', newId);
                 badge.setAttribute('onclick', `selectField(event, '${newId}')`);
+                
+                // Trình duyệt thường bóc mất innerHTML của contenteditable="false" khi Cắt/Dán.
+                // Ta cần tái tạo lại nội dung HTML hiển thị của badge để nó không bị trống.
+                let icon = 'fa-edit';
+                let typeLabel = '';
+                if (oldConfig.type === 'signature') {
+                    if (oldConfig.is_checker) { icon = 'fa-check-double text-warning'; typeLabel = 'Người kiểm tra'; }
+                    else { icon = 'fa-signature'; typeLabel = 'Chữ ký'; }
+                } else if (oldConfig.type === 'date') { icon = 'fa-clock'; typeLabel = 'Thời Gian'; }
+                else if (oldConfig.type === 'checkbox') { icon = 'fa-check-square'; typeLabel = 'Tick'; }
+                else if (oldConfig.type === 'number') { icon = 'fa-calculator'; typeLabel = 'Số'; }
+                else if (oldConfig.type === 'formula') { icon = 'fa-square-root-alt'; typeLabel = 'Công thức'; }
+                else if (oldConfig.type === 'select') { icon = 'fa-list-ul'; typeLabel = 'Chọn'; }
+                else { typeLabel = 'Text'; }
+
+                const displayLabel = oldConfig.label || `[${typeLabel}]`;
+                badge.innerHTML = `
+                    <span class="badge-drag-handle badge-left-handle" onmousedown="window.initBadgeResize(event, '${newId}', 'left')"></span>
+                    <i class="fas ${icon}"></i> ${displayLabel}
+                    <span class="badge-drag-handle badge-right-handle" onmousedown="window.initBadgeResize(event, '${newId}', 'right')"></span>
+                `;
+                
+                // Add basic formula preview if needed
+                if (oldConfig.type === 'formula') {
+                    badge.classList.add('formula-preview');
+                }
             }
         });
         
@@ -814,7 +840,18 @@
         const field = fieldsConfig[fieldId];
         if (!field) return;
         window.copiedVariableConfig = JSON.parse(JSON.stringify(field));
+        window.copiedVariableConfig.__isCut = false;
+        window.copiedVariableConfig.__sourceFieldId = null;
         toastr.success('Đã sao chép cấu hình biến số: ' + (field.label || field.name));
+    };
+
+    window.cutVariable = function(fieldId) {
+        const field = fieldsConfig[fieldId];
+        if (!field) return;
+        window.copiedVariableConfig = JSON.parse(JSON.stringify(field));
+        window.copiedVariableConfig.__isCut = true;
+        window.copiedVariableConfig.__sourceFieldId = fieldId;
+        toastr.info('Đã cắt biến số: ' + (field.label || field.name) + '. Hãy chọn vị trí mới và nhấn Ctrl+V để dán.');
     };
 
     window.pasteVariable = function() {
@@ -1010,10 +1047,25 @@
                 if (typeof syncBlockContent === 'function') {
                     syncBlockContent(span);
                 }
+                // Nếu là Cut thì xoá biến gốc
+                if (oldConfig.__isCut && oldConfig.__sourceFieldId && oldConfig.__sourceFieldId !== newId) {
+                    const srcId = oldConfig.__sourceFieldId;
+                    items.forEach(item => {
+                        if (item.type === 'table' && item.data) {
+                            item.data.forEach(row => row.forEach(cell => {
+                                if (cell.content && cell.content.includes(`data-field-id="${srcId}"`)) {
+                                    cell.content = '';
+                                }
+                            }));
+                        }
+                    });
+                    delete fieldsConfig[srcId];
+                    window.copiedVariableConfig = null;
+                }
                 saveStateDebounced();
                 renderBlocks();
                 selectField(null, newId);
-                toastr.success('Đã dán biến số thành công');
+                toastr.success(oldConfig.__isCut ? 'Đã di chuyển biến số thành công' : 'Đã dán biến số thành công');
                 return;
             }
         }
@@ -1079,9 +1131,24 @@
                                 item.data[r][c].content = cellBadgeHtml;
                             }
                             item.dirty = true;
+                            // Nếu là Cut thì xoá biến gốc
+                            if (oldConfig.__isCut && oldConfig.__sourceFieldId && oldConfig.__sourceFieldId !== newId) {
+                                const srcId = oldConfig.__sourceFieldId;
+                                items.forEach(srcItem => {
+                                    if (srcItem.type === 'table' && srcItem.data) {
+                                        srcItem.data.forEach(row => row.forEach(cell => {
+                                            if (cell.content && cell.content.includes(`data-field-id="${srcId}"`)) {
+                                                cell.content = '';
+                                            }
+                                        }));
+                                    }
+                                });
+                                delete fieldsConfig[srcId];
+                                window.copiedVariableConfig = null;
+                            }
                             renderBlocks();
                             selectField(null, newId);
-                            toastr.success('Đã dán biến số vào ô đang chọn');
+                            toastr.success(oldConfig.__isCut ? 'Đã di chuyển biến số thành công' : 'Đã dán biến số vào ô đang chọn');
                             return;
                         }
                     }

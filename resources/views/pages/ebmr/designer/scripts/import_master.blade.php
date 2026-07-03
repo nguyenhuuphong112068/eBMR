@@ -340,7 +340,6 @@
                     if (importedCount > 0) {
                         saveState();
                         renderBlocks();
-                        updateVariableSummary();
                         $('#masterFormModal').modal('hide');
                         if (typeof componentSidebarOpen !== 'undefined' && componentSidebarOpen) toggleComponentSidebar();
                         Swal.close();

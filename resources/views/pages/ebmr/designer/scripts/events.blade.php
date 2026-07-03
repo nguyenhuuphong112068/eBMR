@@ -426,8 +426,9 @@
             if (e.key === 'Delete' || e.key === 'Backspace') {
                 const selectedCells = document.querySelectorAll('.selected-cell');
                 const isWriting = e.target.closest('[contenteditable="true"]') || e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
+                const hasMultiSelection = selectedCells.length > 1;
                 
-                if (!isWriting && selectedCells.length > 0) {
+                if (hasMultiSelection || (!isWriting && selectedCells.length > 0)) {
                     e.preventDefault();
                     saveState();
                     let dataChanged = false;
@@ -458,6 +459,7 @@
                         if (r === 0) {
                             if (item.columns && item.columns[c]) {
                                 item.columns[c].label = '';
+                                item.dirty = true;
                                 dataChanged = true;
                             }
                         } else {
@@ -468,6 +470,7 @@
                                     cellRef = item.data[r - 1][c];
                                 }
                                 cellRef.content = '';
+                                item.dirty = true;
                                 dataChanged = true;
                             }
                         }
@@ -475,6 +478,7 @@
 
                     if (dataChanged) {
                         renderBlocks();
+                        saveStateDebounced();
                         // Re-highlight selection after render
                         setTimeout(() => {
                             const newTable = document.querySelector('.block-item.active .mini-table');
@@ -499,6 +503,11 @@
             } else if (e.ctrlKey && e.key.toLowerCase() === 'e') {
                 e.preventDefault();
                 if (typeof setDesignerMode === 'function') setDesignerMode(!window.isExecutionMode);
+            } else if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'v' && window.copiedVariableConfig) {
+                // Ctrl+V: Dán biến số nếu có biến đã copy/cut trong clipboard
+                // Ngăn browser paste bình thường chỉ khi đang có biến chờ dán
+                e.preventDefault();
+                if (typeof window.pasteVariable === 'function') window.pasteVariable();
             }
             handleTableNavigation(e);
         });
@@ -827,8 +836,24 @@
             }
         }
         if (grid.length === 0) {
-            const plainText = (e.clipboardData || window.clipboardData).getData('text/plain');
-            if (plainText) grid = plainText.trim().split(/\r\n|\n/).map(row => row.split('\t'));
+            if (htmlData) {
+                // HTML paste but no table (e.g. text + variable spans)
+                let sanitized = sanitizePastedHtml(htmlData);
+                if (typeof window.duplicateFieldBadgesInHtml === 'function') {
+                    sanitized = window.duplicateFieldBadgesInHtml(sanitized, item.id);
+                }
+                grid = [[ { content: sanitized, rs: 1, cs: 1, hidden: false, isHtml: true } ]];
+            } else {
+                const plainText = (e.clipboardData || window.clipboardData).getData('text/plain');
+                if (plainText) {
+                    const rows = plainText.trim().split(/\r\n|\n/);
+                    if (rows.length === 1 && !rows[0].includes('\t')) {
+                        grid = [[ { content: rows[0], rs: 1, cs: 1, hidden: false, isHtml: false } ]];
+                    } else {
+                        grid = rows.map(row => row.split('\t'));
+                    }
+                }
+            }
         }
         if (grid.length === 0) return;
 
@@ -853,9 +878,6 @@
                     
                     let cellObj = grid[0][0];
                     let cellContentToPaste = cellObj.content || cellObj;
-                    if (typeof cellContentToPaste === 'string' && window.duplicateFieldBadgesInHtml) {
-                        cellContentToPaste = window.duplicateFieldBadgesInHtml(cellContentToPaste, item.id);
-                    }
                     
                     if (r === 0) {
                         item.columns[c].label = cellContentToPaste;
@@ -872,6 +894,26 @@
                     item.dirty = true;
                 });
                 renderBlocks();
+                return;
+            } else {
+                // SINGLE CELL, SINGLE VALUE -> INLINE PASTE
+                e.preventDefault();
+                saveState();
+                let cellObj = grid[0][0];
+                let contentToPaste = cellObj.content || cellObj;
+                const isHtml = cellObj.isHtml !== undefined ? cellObj.isHtml : true; // assume HTML if from table
+                
+                if (document.activeElement !== target && !target.contains(document.activeElement)) {
+                    target.focus();
+                }
+                
+                if (isHtml) {
+                    document.execCommand('insertHTML', false, contentToPaste);
+                } else {
+                    document.execCommand('insertText', false, contentToPaste);
+                }
+                
+                target.dispatchEvent(new Event('input', { bubbles: true }));
                 return;
             }
         }

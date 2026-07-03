@@ -29,6 +29,7 @@
     </script>
 
     @include('pages.ebmr.designer.partials.modals') {{-- Nhúng các cửa sổ popup (Modals) như: chèn ảnh, cấu hình bảng, AI translate... --}}
+    @include('pages.ebmr.designer.partials.typography_modal')
     @include('pages.ebmr.designer.partials.master_form_modal')
     @include('pages.ebmr.designer.partials.styles') {{-- Nhúng các định dạng CSS riêng cho trình thiết kế (layout trang giấy, hiệu ứng hover...) --}}
 

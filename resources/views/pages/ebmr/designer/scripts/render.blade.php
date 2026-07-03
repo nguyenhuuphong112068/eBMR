@@ -36,7 +36,8 @@
         transform: translateY(-50%);
         flex-direction: column;
         padding: 4px;
-        padding-right: 8px; /* Cầu nối hover để chuột không bị mất tiêu điểm */
+        padding-right: 8px;
+        /* Cầu nối hover để chuột không bị mất tiêu điểm */
     }
 
     .table-header-cell:hover .col-actions,
@@ -144,6 +145,7 @@
         border-bottom: 2px solid #e2e8f0;
         padding-bottom: 8px;
     }
+
     .section-loop-tabs-header .btn {
         font-weight: 600;
         font-size: 0.8rem;
@@ -151,32 +153,45 @@
         padding: 4px 12px;
         transition: all 0.2s ease;
     }
+
     .section-loop-tabs-header .btn.active {
         background-color: #0ea5e9;
         border-color: #0ea5e9;
         color: #ffffff;
         box-shadow: 0 2px 4px rgba(14, 165, 233, 0.25);
     }
+
     .section-loop-tab-content {
         animation: fadeInTab 0.3s ease-in-out;
     }
+
     @keyframes fadeInTab {
-        from { opacity: 0; transform: translateY(4px); }
-        to { opacity: 1; transform: translateY(0); }
+        from {
+            opacity: 0;
+            transform: translateY(4px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
     }
 
     @media print {
         .section-loop-tabs-header {
             display: none !important;
         }
+
         .section-loop-tab-content {
             display: block !important;
             margin-bottom: 30px !important;
             page-break-after: always;
         }
+
         .section-loop-tab-content:last-child {
             page-break-after: avoid;
         }
+
         .section-loop-tab-content::before {
             content: "Lần thực hiện thứ " attr(data-loop-idx);
             display: block;
@@ -198,6 +213,7 @@
         position: relative;
         box-shadow: 0 0 8px rgba(14, 165, 233, 0.2);
     }
+
     .selected-range-member::after {
         content: 'Đã chọn';
         position: absolute;
@@ -211,11 +227,13 @@
         border-radius: 4px;
         z-index: 100;
         pointer-events: none;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     }
+
     .designer-loop-group-wrapper {
         transition: all 0.2s ease;
     }
+
     .designer-loop-group-wrapper:hover {
         border-color: #0ea5e9 !important;
         box-shadow: 0 4px 12px rgba(14, 165, 233, 0.08);
@@ -247,12 +265,12 @@
 
     /* Dải màu nền rộng toàn bộ chiều ngang */
     .page-break-band {
-        height: 12px;
+        height: 8px;
         background: #f1f3f4 !important;
-        margin-top: 20px !important;
-        margin-bottom: 20px !important;
-        margin-left: -41px !important;
-        margin-right: -41px !important;
+        margin-left: -23px !important;
+        margin-right: -23px !important;
+        margin-top: 50px !important;
+        margin-bottom: 50px !important;
         border-top: 1px solid #ddd;
         border-bottom: 1px solid #ddd;
         box-shadow: inset 0 4px 6px -4px rgba(0, 0, 0, 0.1), inset 0 -4px 6px -4px rgba(0, 0, 0, 0.1);
@@ -271,18 +289,24 @@
     .cell-na-state {
         position: relative;
     }
+
     .cell-na-state::after {
         content: '';
         position: absolute;
-        top: 0; left: 0; right: 0; bottom: 0;
-        background: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(0,0,0,0.06) 10px, rgba(0,0,0,0.06) 20px);
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(0, 0, 0, 0.06) 10px, rgba(0, 0, 0, 0.06) 20px);
         pointer-events: none;
         z-index: 5;
     }
+
     .cell-na-state .cell-wrapper {
         opacity: 0.4;
         pointer-events: none !important;
     }
+
     .cell-na-state .ebmr-field-badge,
     .cell-na-state input,
     .cell-na-state select,
@@ -317,6 +341,7 @@
         .type-page-break .page-break-block {
             display: none !important;
         }
+
         .type-page-break {
             page-break-after: always !important;
             break-after: page !important;
@@ -335,7 +360,7 @@
         let iconClass = 'fa-check-circle text-success';
         if (type === 'executor') iconClass = 'fa-user-check text-primary';
         if (type === 'checker') iconClass = 'fa-user-shield text-success';
-        
+
         if (runVal.startsWith('data:image/')) {
             return `<div class="e-signature-done" style="display: inline-flex; align-items: center; justify-content: center; gap: 4px;">
                 <img src="${runVal}" style="max-height: 45px; max-width: 130px; object-fit: contain; mix-blend-mode: multiply; vertical-align: middle;" />
@@ -349,10 +374,12 @@
      */
     function renderSingleBlock(item, idx, loopSuffix = '') {
         const blockKey = (item.uuid || item.id) + loopSuffix;
-        const selectedRangeIds = (typeof window.getSelectedBlockRangeIds === 'function') ? window.getSelectedBlockRangeIds() : [];
+        const selectedRangeIds = (typeof window.getSelectedBlockRangeIds === 'function') ? window
+            .getSelectedBlockRangeIds() : [];
         const isRangeMember = selectedRangeIds.includes(item.id);
         const div = document.createElement('div');
-        div.className = `block-item type-${item.type} ${selectedId === item.id ? 'active' : ''} ${isRangeMember ? 'selected-range-member' : ''} ${window.isExecutionMode ? 'execution-mode' : ''}`;
+        div.className =
+            `block-item type-${item.type} ${selectedId === item.id ? 'active' : ''} ${isRangeMember ? 'selected-range-member' : ''} ${window.isExecutionMode ? 'execution-mode' : ''}`;
         div.setAttribute('data-id', item.id);
         div.setAttribute('data-block-key', blockKey);
 
@@ -375,7 +402,7 @@
 
             let thead = '';
             if (!item.hideHeader && item.columns) {
-                thead = `<thead><tr>${item.columns.map((c, cIdx) => {
+                let colsHtml = item.columns.map((c, cIdx) => {
                     const s = c.style || {};
                     const bg = s.backgroundColor || '';
                     const align = s.textAlign || '';
@@ -386,23 +413,26 @@
                     const tc = s.textColor || '';
                     const wm = s.writingMode || '';
                     const tf = s.transform || '';
-                    return `<th contenteditable="false"
-                    spellcheck="false"
-                    data-row="0"
-                    data-col="${cIdx}"
-                    class="table-header-cell"
-                    style="position: relative; width: ${c.width || 'auto'}; background-color: ${bg}; text-align: ${align}; font-weight: ${fw}; font-style: ${fs}; text-decoration: ${td}; font-size: ${fsz}; color: ${tc}; border-top: ${s.borderTop ? s.borderTop + ' !important' : ''}; border-bottom: ${s.borderBottom ? s.borderBottom + ' !important' : ''}; border-left: ${s.borderLeft ? s.borderLeft + ' !important' : ''}; border-right: ${s.borderRight ? s.borderRight + ' !important' : ''}; writing-mode: ${wm};">
-                        <div class="header-content" style="transform: ${tf}; transform-origin: center center; display: inline-block; width: 100%;">${c.label}</div>
-                        ${!window.isExecutionMode ? `
-                        <div class="col-actions">
-                            <button class="btn-col-add" onclick="event.stopPropagation(); tableAddColumn(${cIdx+1})" title="Thêm cột bên phải"><i class="fas fa-plus"></i></button>
-                            <button class="btn-col-del" onclick="event.stopPropagation(); tableRemoveColumn(${cIdx})" title="Xóa cột"><i class="fas fa-times"></i></button>
-                        </div>` : ''}
-                        ${!window.isExecutionMode ? `<div class="col-resizer" onmousedown="initResize(event, '${item.id}', 'col', ${cIdx})"></div>` : ''}
-                    </th>`;
-                }).join('')}
-                ${window.isExecutionMode && item.canAddRows ? '<th class="execution-delete-cell no-print" style="width: 30px; border: none; background: transparent;"></th>' : ''}
-                </tr></thead>`;
+                    
+                    let st = 'position: relative; width: ' + (c.width || 'auto') + '; background-color: ' + bg + '; text-align: ' + align + '; font-weight: ' + fw + '; font-style: ' + fs + '; text-decoration: ' + td + '; font-size: ' + fsz + '; color: ' + tc + '; border-top: ' + (s.borderTop ? s.borderTop + ' !important' : '') + '; border-bottom: ' + (s.borderBottom ? s.borderBottom + ' !important' : '') + '; border-left: ' + (s.borderLeft ? s.borderLeft + ' !important' : '') + '; border-right: ' + (s.borderRight ? s.borderRight + ' !important' : '') + '; writing-mode: ' + wm + ';';
+                    
+                    let html = '<th contenteditable="false" spellcheck="false" data-row="0" data-col="' + cIdx + '" class="table-header-cell" style="' + st + '">';
+                    html += '<div class="header-content" style="transform: ' + tf + '; transform-origin: center center; display: inline-block; width: 100%;">' + (c.label || '') + '</div>';
+                    
+                    if (!window.isExecutionMode) {
+                        html += '<div class="col-actions">';
+                        html += '<button class="btn-col-add" onclick="event.stopPropagation(); tableAddColumn(\'' + item.id + '\', ' + (cIdx+1) + ')" title="Thêm cột bên phải"><i class="fas fa-plus"></i></button>';
+                        html += '<button class="btn-col-del" onclick="event.stopPropagation(); tableRemoveColumn(\'' + item.id + '\', ' + cIdx + ')" title="Xóa cột"><i class="fas fa-times"></i></button>';
+                        html += '</div>';
+                        html += '<div class="col-resizer" onmousedown="initResize(event, \'' + item.id + '\', \'col\', ' + cIdx + ')"></div>';
+                    }
+                    html += '</th>';
+                    return html;
+                }).join('');
+                
+                let extraCell = (window.isExecutionMode && item.canAddRows) ? '<th class="execution-delete-cell no-print" style="width: 30px; border: none; background: transparent;"></th>' : '';
+                
+                thead = '<thead><tr>' + colsHtml + extraCell + '</tr></thead>';
             }
 
             let rowsHtml = '';
@@ -449,8 +479,9 @@
                     let finalEditable = "false";
 
                     if (window.isExecutionMode) {
-                        const runVal = runDataForBlock[`${r}_${c}`];
-                        const isNA = runDataForBlock._na_state && runDataForBlock._na_state[`${r}_${c}`];
+                        const cellKey = r + '_' + c;
+                        const runVal = runDataForBlock[cellKey];
+                        const isNA = runDataForBlock._na_state && runDataForBlock._na_state[cellKey];
 
                         // Bỏ qua logic cũ nếu trong ô có chứa thẻ biến số động (tránh ghi đè toàn bộ nội dung ô)
                         const hasDynamicFields = cell.content && cell.content.includes('ebmr-field-badge');
@@ -458,58 +489,69 @@
                         if (!hasDynamicFields) {
                             if (displayContent.includes('[Nhập dữ liệu]')) {
                                 cellClass += "execution-input-cell ";
-                                onclickAttr = isNA ? '' : `onclick="if(event.ctrlKey || event.shiftKey) return; openExecutionInputModal('${blockKey}', ${r}, ${c}, 'text')"`;
-                                displayContent = runVal ? `<span style="color: #2563eb; font-weight: 500;">${runVal}</span>` : `<span class="execution-badge input"><i class="fas fa-edit"></i> [Nhập dữ liệu]</span>`;
-                            } else if (displayContent.includes('[Ký tên]')) {
-                                cellClass += "execution-input-cell execution-input-cell--sig ";
-                                onclickAttr = isNA ? '' : `onclick="if(event.ctrlKey || event.shiftKey) return; openExecutionInputModal('${blockKey}', ${r}, ${c}, 'signature')"`;
-                                displayContent = runVal ? getSignatureDisplayHtml(runVal, 'signature') : `<span class="execution-badge signature"><i class="fas fa-pen"></i> [Ký tên]</span>`;
-                            } else if (displayContent.includes('[Tự động lấy thời gian]')) {
-                                cellClass += "execution-input-cell ";
-                                onclickAttr = isNA ? '' : `ondblclick="if(event.ctrlKey || event.shiftKey) return; autoFillTime('${blockKey}', ${r}, ${c})" title="Nháy đúp chuột (Double-click) để lấy ngày giờ hệ thống"`;
-                                displayContent = runVal ? `<span style="color: #2563eb; font-weight: 500;">${runVal}</span>` : `<span class="execution-badge time"><i class="fas fa-clock"></i> [Double-click lấy giờ]</span>`;
-                            } else if (displayContent.includes('[Người thực hiện]')) {
-                                cellClass += "execution-input-cell execution-input-cell--sig ";
-                                onclickAttr = isNA ? '' : `onclick="if(event.ctrlKey || event.shiftKey) return; autoFillExecutor('${blockKey}', ${r}, ${c})" title="Click để xác nhận người thực hiện"`;
-                                displayContent = runVal ? getSignatureDisplayHtml(runVal, 'executor') : `<span class="execution-badge executor"><i class="fas fa-user-edit"></i> [Người thực hiện]</span>`;
-                            } else if (displayContent.includes('[Người kiểm tra]')) {
-                                cellClass += "execution-input-cell execution-input-cell--sig ";
-                                onclickAttr = isNA ? '' : `onclick="if(event.ctrlKey || event.shiftKey) return; openCheckerAuthModal('${blockKey}', ${r}, ${c})" title="Click để xác thực người kiểm tra"`;
-                                displayContent = runVal ? getSignatureDisplayHtml(runVal, 'checker') : `<span class="execution-badge checker"><i class="fas fa-check-double"></i> [Người kiểm tra]</span>`;
+                                onclickAttr = isNA ? '' : 'onclick="if(event.ctrlKey || event.shiftKey) return; openExecutionInputModal(\'' + blockKey + '\', ' + r + ', ' + c + ', \'text\')"';
+                                displayContent = runVal ? '<span style="color: #2563eb; font-weight: 500;">' + runVal + '</span>' : '<span class="execution-badge input"><i class="fas fa-edit"></i> [Nhập dữ liệu]</span>';
                             }
-                        }
+    else if (displayContent.includes('[Ký tên]')) {
+        cellClass += "execution-input-cell execution-input-cell--sig ";
+        onclickAttr = isNA ? '' :
+            `onclick="if(event.ctrlKey || event.shiftKey) return; openExecutionInputModal('${blockKey}', ${r}, ${c}, 'signature')"`;
+        displayContent = runVal ? getSignatureDisplayHtml(runVal, 'signature') :
+            `<span class="execution-badge signature"><i class="fas fa-pen"></i> [Ký tên]</span>`;
+    } else if (displayContent.includes('[Tự động lấy thời gian]')) {
+        cellClass += "execution-input-cell ";
+        onclickAttr = isNA ? '' :
+            `ondblclick="if(event.ctrlKey || event.shiftKey) return; autoFillTime('${blockKey}', ${r}, ${c})" title="Nháy đúp chuột (Double-click) để lấy ngày giờ hệ thống"`;
+        displayContent = runVal ? `<span style="color: #2563eb; font-weight: 500;">${runVal}</span>` :
+            `<span class="execution-badge time"><i class="fas fa-clock"></i> [Double-click lấy giờ]</span>`;
+    } else if (displayContent.includes('[Người thực hiện]')) {
+        cellClass += "execution-input-cell execution-input-cell--sig ";
+        onclickAttr = isNA ? '' :
+            `onclick="if(event.ctrlKey || event.shiftKey) return; autoFillExecutor('${blockKey}', ${r}, ${c})" title="Click để xác nhận người thực hiện"`;
+        displayContent = runVal ? getSignatureDisplayHtml(runVal, 'executor') :
+            `<span class="execution-badge executor"><i class="fas fa-user-edit"></i> [Người thực hiện]</span>`;
+    } else if (displayContent.includes('[Người kiểm tra]')) {
+        cellClass += "execution-input-cell execution-input-cell--sig ";
+        onclickAttr = isNA ? '' :
+            `onclick="if(event.ctrlKey || event.shiftKey) return; openCheckerAuthModal('${blockKey}', ${r}, ${c})" title="Click để xác thực người kiểm tra"`;
+        displayContent = runVal ? getSignatureDisplayHtml(runVal, 'checker') :
+            `<span class="execution-badge checker"><i class="fas fa-check-double"></i> [Người kiểm tra]</span>`;
+    }
+    }
 
-                        if (isNA) {
-                            cellClass += "cell-na-state strike-through-zone ";
-                        }
-                    } else {
-                        finalEditable = (item.locked || window.isReadOnly) ? 'false' : 'true';
-                    }
+    if (isNA) {
+        cellClass += "cell-na-state strike-through-zone ";
+    }
+    } else {
+        finalEditable = (item.locked || window.isReadOnly) ? 'false' : 'true';
+    }
 
-                    let metaHtml = '';
-                    if (window.isExecutionMode) {
-                        const naMeta = runDataForBlock._na_state && runDataForBlock._na_state[`${r}_${c}_meta`];
-                        const meta = runDataForBlock._meta && runDataForBlock._meta[`${r}_${c}`];
-                        
-                        let historyBadge = '';
-                        if (meta && meta.history_count && meta.history_count > 0) {
-                            historyBadge = `<span class="badge bg-warning text-dark ms-1" style="cursor:pointer;" onclick="showRunDataHistory(event, '${window.currentRecordId}', '${item.id}', '${r}_${c}')" title="Xem lịch sử thay đổi">Lịch sử (${meta.history_count})</span>`;
-                        }
-                        
-                        let metaText = '';
-                        if (naMeta) {
-                            const reasonText = naMeta.reason || 'N/A';
-                            metaText = `<span style="color: #2563eb; font-weight: bold; margin-right: 4px;">${reasonText} -</span> ${naMeta.by || ''} ${naMeta.at || ''}`;
-                        } else if (meta && (meta.by || meta.at)) {
-                            metaText = `${meta.by || ''} ${meta.at || ''}`;
-                        }
-                        
-                        if (metaText || historyBadge) {
-                            metaHtml = `<div class="execution-meta">${metaText} ${historyBadge}</div>`;
-                        }
-                    }
+    let metaHtml = '';
+    if (window.isExecutionMode) {
+        const naMeta = runDataForBlock._na_state && runDataForBlock._na_state[`${r}_${c}_meta`];
+        const meta = runDataForBlock._meta && runDataForBlock._meta[`${r}_${c}`];
 
-                    cellsHtml += `<td contenteditable="${finalEditable}"
+        let historyBadge = '';
+        if (meta && meta.history_count && meta.history_count > 0) {
+            historyBadge =
+                `<span class="badge bg-warning text-dark ms-1" style="cursor:pointer;" onclick="showRunDataHistory(event, '${window.currentRecordId}', '${item.id}', '${r}_${c}')" title="Xem lịch sử thay đổi">Lịch sử (${meta.history_count})</span>`;
+        }
+
+        let metaText = '';
+        if (naMeta) {
+            const reasonText = naMeta.reason || 'N/A';
+            metaText =
+                `<span style="color: #2563eb; font-weight: bold; margin-right: 4px;">${reasonText} -</span> ${naMeta.by || ''} ${naMeta.at || ''}`;
+        } else if (meta && (meta.by || meta.at)) {
+            metaText = `${meta.by || ''} ${meta.at || ''}`;
+        }
+
+        if (metaText || historyBadge) {
+            metaHtml = `<div class="execution-meta">${metaText} ${historyBadge}</div>`;
+        }
+    }
+
+    cellsHtml += `<td contenteditable="${finalEditable}"
                     spellcheck="false"
                     data-row="${r+1}"
                     data-col="${c}"
@@ -533,46 +575,47 @@
                         ${!window.isExecutionMode ? `<div class="col-resizer" onmousedown="initResize(event, '${item.id}', 'col', ${c + (cell.cs || 1) - 1})"></div>
                         <div class="row-resizer" onmousedown="initResize(event, '${item.id}', 'row', ${r + (cell.rs || 1) - 1})"></div>` : ''}
                     </td>`;
-                }
+    }
 
-                let deleteCell = '';
-                if (window.isExecutionMode && item.canAddRows) {
-                    const isDynamicRow = item.data[r] && item.data[r][0] && item.data[r][0].is_dynamic;
-                    if (isDynamicRow) {
-                        deleteCell = `<td class="execution-delete-cell no-print" style="width: 30px; border: none; background: transparent; vertical-align: middle;">
+    let deleteCell = '';
+    if (window.isExecutionMode && item.canAddRows) {
+        const isDynamicRow = item.data[r] && item.data[r][0] && item.data[r][0].is_dynamic;
+        if (isDynamicRow) {
+            deleteCell = `<td class="execution-delete-cell no-print" style="width: 30px; border: none; background: transparent; vertical-align: middle;">
                                                                 <button class="btn btn-link text-danger p-0" title="Xóa dòng" onclick="executeDeleteTableRow('${item.id}', ${r})">
                                                                     <i class="fas fa-times-circle"></i>
                                                                 </button>
                                                               </td>`;
-                    } else {
-                        deleteCell = `<td class="execution-delete-cell no-print" style="width: 30px; border: none; background: transparent;"></td>`;
-                    }
-                }
-                rowsHtml += `<tr>${cellsHtml}${deleteCell}</tr>`;
-            }
+        } else {
+            deleteCell =
+                `<td class="execution-delete-cell no-print" style="width: 30px; border: none; background: transparent;"></td>`;
+        }
+    }
+    rowsHtml += `<tr>${cellsHtml}${deleteCell}</tr>`;
+    }
 
-            let addRowBtn = '';
-            if (item.canAddRows) {
-                const btnLabel = window.isExecutionMode ? 'THÊM DÒNG CUỐI' : 'THỬ THÊM DÒNG (CẤP 2)';
-                addRowBtn = `
+    let addRowBtn = '';
+    if (item.canAddRows) {
+        const btnLabel = window.isExecutionMode ? 'THÊM DÒNG CUỐI' : 'THỬ THÊM DÒNG (CẤP 2)';
+        addRowBtn = `
                                             <div class="mt-2 text-start no-print">
                                                 <button class="btn btn-xs btn-outline-primary py-0 px-2 fw-bold" style="font-size: 0.65rem; border-radius: 4px;" onclick="executeAddTableRow('${item.id}')">
                                                     <i class="fas fa-plus me-1"></i> ${btnLabel}
                                                 </button>
                                             </div>
                                         `;
-            }
+    }
 
-            let titleHtml = '';
-            if (item.isAbbreviationTable) {
-                let titleText = 'Danh Sách Viết Tắt';
-                const langMode = window.currentLangMode || 'vi';
-                if (langMode === 'en') {
-                    titleText = 'List of Abbreviations';
-                } else if (langMode === 'dual') {
-                    titleText = 'Danh Sách Viết Tắt / List of Abbreviations';
-                }
-                titleHtml = `
+    let titleHtml = '';
+    if (item.isAbbreviationTable) {
+        let titleText = 'Danh Sách Viết Tắt';
+        const langMode = window.currentLangMode || 'vi';
+        if (langMode === 'en') {
+            titleText = 'List of Abbreviations';
+        } else if (langMode === 'dual') {
+            titleText = 'Danh Sách Viết Tắt / List of Abbreviations';
+        }
+        titleHtml = `
                     <div class="ebmr-section-header d-flex align-items-center mb-3 mt-4">
                         <div class="section-icon bg-info text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px; min-width: 40px;">
                             <i class="fas fa-list-ul"></i>
@@ -585,44 +628,44 @@
                         </div>
                     </div>
                 `;
-            }
+    }
 
-            let progressHtml = '';
-            if (window.isExecutionMode && item.freq_minutes) {
-                const countdownState = window._activeCountdowns && window._activeCountdowns[blockKey];
-                const isRunning = !!countdownState;
-                
-                let initialWidth = '100%';
-                let initialText = '--:--';
-                let initialClass = 'bg-success';
-                
-                if (isRunning) {
-                    const elapsed = Date.now() - countdownState.startTime;
-                    const remaining = countdownState.freqMs - elapsed;
-                    if (remaining > 0) {
-                        const percent = (remaining / countdownState.freqMs) * 100;
-                        initialWidth = `${percent}%`;
-                        
-                        if (percent > 50) {
-                            initialClass = 'bg-success';
-                        } else if (percent > 20) {
-                            initialClass = 'bg-warning';
-                        } else {
-                            initialClass = 'bg-danger';
-                        }
-                        
-                        const totalSeconds = Math.ceil(remaining / 1000);
-                        const mins = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
-                        const secs = (totalSeconds % 60).toString().padStart(2, '0');
-                        initialText = `${mins}:${secs}`;
-                    } else {
-                        initialWidth = '0%';
-                        initialText = 'Đã đến giờ lấy mẫu!';
-                        initialClass = 'bg-danger';
-                    }
+    let progressHtml = '';
+    if (window.isExecutionMode && item.freq_minutes) {
+        const countdownState = window._activeCountdowns && window._activeCountdowns[blockKey];
+        const isRunning = !!countdownState;
+
+        let initialWidth = '100%';
+        let initialText = '--:--';
+        let initialClass = 'bg-success';
+
+        if (isRunning) {
+            const elapsed = Date.now() - countdownState.startTime;
+            const remaining = countdownState.freqMs - elapsed;
+            if (remaining > 0) {
+                const percent = (remaining / countdownState.freqMs) * 100;
+                initialWidth = `${percent}%`;
+
+                if (percent > 50) {
+                    initialClass = 'bg-success';
+                } else if (percent > 20) {
+                    initialClass = 'bg-warning';
+                } else {
+                    initialClass = 'bg-danger';
                 }
-                
-                progressHtml = `
+
+                const totalSeconds = Math.ceil(remaining / 1000);
+                const mins = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+                const secs = (totalSeconds % 60).toString().padStart(2, '0');
+                initialText = `${mins}:${secs}`;
+            } else {
+                initialWidth = '0%';
+                initialText = 'Đã đến giờ lấy mẫu!';
+                initialClass = 'bg-danger';
+            }
+        }
+
+        progressHtml = `
                     <div class="sampling-countdown-container my-3 px-1" id="countdown-container-${blockKey}" style="display: ${isRunning ? 'block' : 'none'};">
                         <div class="d-flex justify-content-between align-items-center mb-1" style="font-size: 0.85rem; color: #475569; font-weight: 600;">
                             <span><i class="fas fa-hourglass-half me-1 text-primary"></i> Thời gian đến lần lấy mẫu tiếp theo:</span>
@@ -633,37 +676,29 @@
                         </div>
                     </div>
                 `;
+    }
+
+    content =
+        `${titleHtml}${progressHtml}<div class="table-responsive-wrapper"><table class="mini-table ${borderClass}" style="--table-border-width: ${item.borderWeight || '1px'}; --table-border-color: #dee2e6;">${thead}<tbody>${rowsHtml}</tbody></table></div>${addRowBtn}`;
+    }
+
+    // --- XỬ LÝ KHỐI VĂN BẢN TĨNH (STATIC TEXT) ---
+    else if (item.type === 'static-text') {
+        const displayContent = decorateContent(item.content || '', null, loopSuffix);
+        const textEditable = (window.isReadOnly || window.isExecutionMode) ? 'false' : 'true';
+        const borderClass = item.borderMode === 'dashed' ? 'border-dashed' : (item.borderMode === 'visible' ?
+            'border-visible' : 'border-none');
+
+        let titleHtml = '';
+        if (item.isCalculationBlock && item.section_id === window.catId) {
+            let titleText = 'Tính Toán Công Thức';
+            const langMode = window.currentLangMode || 'vi';
+            if (langMode === 'en') {
+                titleText = 'Formula Calculation';
+            } else if (langMode === 'dual') {
+                titleText = 'Tính Toán Công Thức / Formula Calculation';
             }
-
-            let dropHandlerHtml = '';
-            if (!window.isReadOnly && !window.isExecutionMode && item.label === 'Danh sách thiết bị liên quan') {
-                dropHandlerHtml = `
-                    ondragover="event.preventDefault(); this.classList.add('table-drag-over');"
-                    ondragleave="this.classList.remove('table-drag-over');"
-                    ondrop="window.handleEquipmentTableDrop(event, '${item.id}')"
-                `;
-            }
-
-            content = `${titleHtml}${progressHtml}<div class="table-responsive-wrapper" ${dropHandlerHtml}><table class="mini-table ${borderClass}" style="--table-border-width: ${item.borderWeight || '1px'}; --table-border-color: #dee2e6;">${thead}<tbody>${rowsHtml}</tbody></table></div>${addRowBtn}`;
-        }
-
-        // --- XỬ LÝ KHỐI VĂN BẢN TĨNH (STATIC TEXT) ---
-        else if (item.type === 'static-text') {
-            const displayContent = decorateContent(item.content || '', null, loopSuffix);
-            const textEditable = (window.isReadOnly || window.isExecutionMode) ? 'false' : 'true';
-            const borderClass = item.borderMode === 'dashed' ? 'border-dashed' : (item.borderMode === 'visible' ?
-                'border-visible' : 'border-none');
-
-            let titleHtml = '';
-            if (item.isCalculationBlock && item.section_id === window.catId) {
-                let titleText = 'Tính Toán Công Thức';
-                const langMode = window.currentLangMode || 'vi';
-                if (langMode === 'en') {
-                    titleText = 'Formula Calculation';
-                } else if (langMode === 'dual') {
-                    titleText = 'Tính Toán Công Thức / Formula Calculation';
-                }
-                titleHtml = `
+            titleHtml = `
                     <div class="ebmr-section-header d-flex align-items-center mb-3 mt-4">
                         <div class="section-icon bg-info text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px; min-width: 40px;">
                             <i class="fas fa-calculator"></i>
@@ -676,21 +711,22 @@
                         </div>
                     </div>
                 `;
-            }
-
-            content = `${titleHtml}<div class="static-text-display ${borderClass}" contenteditable="${textEditable}" spellcheck="false" 
-                                                oninput="updateStaticTextInline('${item.id}', this.innerHTML); handleAutoCapitalize(this)">${displayContent}</div>`;
         }
 
-        // --- XỬ LÝ KHỐI BIỂU MẪU NHÚNG (LINKED TEMPLATE) ---
-        else if (item.type === 'linked-template') {
-            const isPreviewing = window.isExecutionMode || item.showPreview || false;
-            const hideControls = window.isExecutionMode;
-            const previewContent = isPreviewing ? `<div id="preview-${item.id}" class="mt-3 p-4 border rounded bg-white w-100 shadow-sm" style="${window.isExecutionMode ? '' : 'pointer-events: none; opacity: 0.9;'}">
+        content =
+            `${titleHtml}<div class="static-text-display ${borderClass}" contenteditable="${textEditable}" spellcheck="false" 
+                                                oninput="updateStaticTextInline('${item.id}', this.innerHTML); handleAutoCapitalize(this)">${displayContent}</div>`;
+    }
+
+    // --- XỬ LÝ KHỐI BIỂU MẪU NHÚNG (LINKED TEMPLATE) ---
+    else if (item.type === 'linked-template') {
+        const isPreviewing = window.isExecutionMode || item.showPreview || false;
+        const hideControls = window.isExecutionMode;
+        const previewContent = isPreviewing ? `<div id="preview-${item.id}" class="mt-3 p-4 border rounded bg-white w-100 shadow-sm" style="${window.isExecutionMode ? '' : 'pointer-events: none; opacity: 0.9;'}">
                                     <div class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>
                                 </div>` : '';
 
-            content = `<div class="block-mock d-flex flex-column align-items-center justify-content-center py-4 px-3 position-relative" style="background-color: #f8f9fa; border: 2px dashed #0d6efd; border-radius: 12px; min-height: 120px;">
+        content = `<div class="block-mock d-flex flex-column align-items-center justify-content-center py-4 px-3 position-relative" style="background-color: #f8f9fa; border: 2px dashed #0d6efd; border-radius: 12px; min-height: 120px;">
                                              ${!hideControls ? `<div class="position-absolute" style="top: 10px; right: 10px; z-index: 100;">
                                                 <button class="btn btn-sm btn-primary shadow-sm px-3" onclick="event.stopPropagation(); toggleGfPreview('${item.id}')" style="border-radius: 20px;">
                                                     <i class="fas ${isPreviewing ? 'fa-eye-slash' : 'fa-eye'} me-1"></i> ${isPreviewing ? 'Ẩn nội dung' : 'Xem nội dung'}
@@ -702,17 +738,18 @@
                                              ${previewContent}
                                            </div>`;
 
-            if (isPreviewing) {
-                setTimeout(() => fetchAndRenderGfPreview(item.id, item.template_id), 50);
-            }
+        if (isPreviewing) {
+            setTimeout(() => fetchAndRenderGfPreview(item.id, item.template_id), 50);
         }
+    }
 
-        // --- XỬ LÝ KHỐI PHÂN ĐOẠN (SECTION) ---
-        else if (item.type === 'section') {
-            const labelEditable = (window.isReadOnly || window.isExecutionMode) ? 'false' : 'true';
-            const isRecalc = (item.stage_code === 'recalc' || (item.label && item.label.toUpperCase().includes('TÍNH TOÁN CÔNG THỨC')));
-            const iconClass = isRecalc ? 'fas fa-calculator' : 'fas fa-layer-group';
-            content = `<div class="ebmr-section-header d-flex align-items-center" id="section-${item.id}">
+    // --- XỬ LÝ KHỐI PHÂN ĐOẠN (SECTION) ---
+    else if (item.type === 'section') {
+        const labelEditable = (window.isReadOnly || window.isExecutionMode) ? 'false' : 'true';
+        const isRecalc = (item.stage_code === 'recalc' || (item.label && item.label.toUpperCase().includes(
+            'TÍNH TOÁN CÔNG THỨC')));
+        const iconClass = isRecalc ? 'fas fa-calculator' : 'fas fa-layer-group';
+        content = `<div class="ebmr-section-header d-flex align-items-center" id="section-${item.id}">
                                              <div class="section-icon bg-info text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px; min-width: 40px;">
                                                 <i class="${iconClass}"></i>
                                              </div>
@@ -723,34 +760,34 @@
                                                 <div class="section-line mt-1" style="height: 3px; background: linear-gradient(to right, #0ea5e9, transparent); border-radius: 2px;"></div>
                                              </div>
                                            </div>`;
-        }
+    }
 
-        // --- XỬ LÝ KHỐI BIỂU ĐỒ (CHART) ---
-        else if (item.type === 'chart') {
-            const canvasId = 'chart_canvas_' + blockKey;
-            content = `<div class="chart-container" style="position: relative; height:300px; width:100%; padding: 15px; background: #fff; border: 1px solid #eee; border-radius: 8px;">
+    // --- XỬ LÝ KHỐI BIỂU ĐỒ (CHART) ---
+    else if (item.type === 'chart') {
+        const canvasId = 'chart_canvas_' + blockKey;
+        content = `<div class="chart-container" style="position: relative; height:300px; width:100%; padding: 15px; background: #fff; border: 1px solid #eee; border-radius: 8px;">
                                              <canvas id="${canvasId}"></canvas>
                                            </div>`;
-            setTimeout(() => {
-                if (typeof renderChart === 'function') {
-                    renderChart(canvasId, item.chartConfig);
-                }
-            }, 50);
-        }
+        setTimeout(() => {
+            if (typeof renderChart === 'function') {
+                renderChart(canvasId, item.chartConfig);
+            }
+        }, 50);
+    }
 
-        // --- XỬ LÝ KHỐI NGẮT TRANG (PAGE BREAK) ---
-        else if (item.type === 'page-break') {
-            const label = item.label || 'Ngắt trang';
-            const execNote = window.isExecutionMode ? ' — Bước mới' : '';
-            content = `<div class="page-break-block">
+    // --- XỬ LÝ KHỐI NGẮT TRANG (PAGE BREAK) ---
+    else if (item.type === 'page-break') {
+        const label = item.label || 'Ngắt trang';
+        const execNote = window.isExecutionMode ? ' — Bước mới' : '';
+        content = `<div class="page-break-block">
                 <div class="page-break-band">
                 </div>
             </div>`;
-        }
+    }
 
-        // --- THANH HÀNH ĐỘNG (XÓA, DI CHUYỂN) ---
-        const isPageBreak = item.type === 'page-break';
-        const actions = (item.locked || window.isReadOnly || window.isExecutionMode) ? '' : `
+    // --- THANH HÀNH ĐỘNG (XÓA, DI CHUYỂN) ---
+    const isPageBreak = item.type === 'page-break';
+    const actions = (item.locked || window.isReadOnly || window.isExecutionMode) ? '' : `
                                 <div class="block-actions">
                                     <button class="btn btn-sm btn-light border shadow-sm text-danger" onclick="removeItem('${item.id}')"><i class="fas fa-trash"></i></button>
                                     ${!isPageBreak ? `
@@ -758,12 +795,12 @@
                                     <button class="btn btn-sm btn-light border shadow-sm" onclick="moveItem(${idx}, 1)"><i class="fas fa-chevron-down"></i></button>` : ''}
                                 </div>`;
 
-        div.innerHTML = `
+    div.innerHTML = `
                                 ${actions}
                                 ${item.type !== 'static-text' && item.type !== 'section' && item.type !== 'page-break' && !window.isExecutionMode && item.label && item.label !== 'null' && !item.isGfHeader && !item.isBmrHeader && !item.isAbbreviationTable ? `<span class="block-label">${item.label} ${item.locked ? '<i class="fas fa-lock ms-1 small"></i>' : ''}</span>` : ''}
                                 ${content}
                             `;
-        return div;
+    return div;
     }
 
     /**
@@ -782,7 +819,11 @@
             const r = cell.dataset.row;
             const c = cell.dataset.col;
             if (bId && r !== undefined && c !== undefined) {
-                savedSelected.push({ bId, r, c });
+                savedSelected.push({
+                    bId,
+                    r,
+                    c
+                });
             }
         });
 
@@ -809,7 +850,7 @@
             if (!item.section_id) {
                 item.section_id = activeSectionIdTracker || 'section_0';
             }
-            
+
             if (item.type === 'section') {
                 currentSection = {
                     sectionBlock: item,
@@ -819,7 +860,12 @@
             } else {
                 if (!currentSection) {
                     currentSection = {
-                        sectionBlock: { id: 'section_0', type: 'section', label: 'PHÂN ĐOẠN MẶC ĐỊNH', locked: true },
+                        sectionBlock: {
+                            id: 'section_0',
+                            type: 'section',
+                            label: 'PHÂN ĐOẠN MẶC ĐỊNH',
+                            locked: true
+                        },
                         blocks: []
                     };
                     sections.push(currentSection);
@@ -836,7 +882,8 @@
             const blocks = sec.blocks;
             const itemSectionId = sectionBlock.id;
 
-            const isHeader = sectionBlock.isGfHeader || sectionBlock.isBmrHeader || (sectionBlock.type === 'section' && sectionBlock.locked) || sectionBlock.isAbbreviationTable;
+            const isHeader = sectionBlock.isGfHeader || sectionBlock.isBmrHeader || (sectionBlock.type ===
+                'section' && sectionBlock.locked) || sectionBlock.isAbbreviationTable;
 
             if (!window.isViewAllMode && window.activeSectionId) {
                 if (itemSectionId !== window.activeSectionId && !isHeader) {
@@ -844,32 +891,26 @@
                 }
             }
 
-            const secIdxInItems = items.indexOf(sectionBlock);
-            
-            // Draw the insertion divider BEFORE creating the new group
-            // This ensures the divider visually belongs to the BOTTOM of the previous section,
-            // which perfectly matches the functional logic (insertIndex - 1).
-            if (!window.isReadOnly && !window.isExecutionMode) {
-                addInsertionDivider(currentGroup, secIdxInItems);
-            }
-
             if (window.isViewAllMode || !window.activeSectionId) {
                 if (lastSectionId === null || itemSectionId !== lastSectionId) {
                     if (lastSectionId !== null) {
                         const pageBreak = document.createElement('div');
-                        pageBreak.className = 'page-break-divider my-4 d-flex align-items-center justify-content-center';
+                        pageBreak.className =
+                            'page-break-divider my-4 d-flex align-items-center justify-content-center';
                         const parts = (itemSectionId || '').split('_');
-                        const labelText = parts.length > 1 ? `Công đoạn ${parts[parts.length-1]}` : 'Phân đoạn mới';
+                        const labelText = parts.length > 1 ? `Công đoạn ${parts[parts.length-1]}` :
+                            'Phân đoạn mới';
                         pageBreak.innerHTML = ``;
                         container.appendChild(pageBreak);
                     }
 
                     currentGroup = document.createElement('div');
-                    currentGroup.className = 'section-group-wrapper' + (window.activeSectionId === itemSectionId ? ' active' : '');
+                    currentGroup.className = 'section-group-wrapper' + (window.activeSectionId ===
+                        itemSectionId ? ' active' : '');
                     currentGroup.onclick = (e) => {
                         if (!e.target.closest('.block-item')) {
                             window.activeSectionId = itemSectionId;
-                            selectedId = null; 
+                            selectedId = null;
                             renderBlocks();
                         }
                     };
@@ -895,8 +936,15 @@
                 currentGroup = container;
             }
 
+            // Draw section block itself
+            const secIdxInItems = items.indexOf(sectionBlock);
+            if (!window.isReadOnly && !window.isExecutionMode) {
+                addInsertionDivider(currentGroup, secIdxInItems);
+            }
+
             const secDiv = document.createElement('div');
-            secDiv.className = `block-item type-section ${selectedId === sectionBlock.id ? 'active' : ''} ${window.isExecutionMode ? 'execution-mode' : ''}`;
+            secDiv.className =
+                `block-item type-section ${selectedId === sectionBlock.id ? 'active' : ''} ${window.isExecutionMode ? 'execution-mode' : ''}`;
             secDiv.setAttribute('data-id', sectionBlock.id);
             if (sectionBlock.backgroundColor) secDiv.style.backgroundColor = sectionBlock.backgroundColor;
             if (!window.isExecutionMode) {
@@ -906,9 +954,10 @@
             }
 
             const labelEditable = (window.isReadOnly || window.isExecutionMode) ? 'false' : 'true';
-            const isRecalc = (sectionBlock.stage_code === 'recalc' || (sectionBlock.label && sectionBlock.label.toUpperCase().includes('TÍNH TOÁN CÔNG THỨC')));
+            const isRecalc = (sectionBlock.stage_code === 'recalc' || (sectionBlock.label && sectionBlock.label
+                .toUpperCase().includes('TÍNH TOÁN CÔNG THỨC')));
             const iconClass = isRecalc ? 'fas fa-calculator' : 'fas fa-layer-group';
-            
+
             let sectionBlockContent = `
                 <div class="ebmr-section-header d-flex align-items-center" id="section-${sectionBlock.id}">
                     <div class="section-icon bg-info text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px; min-width: 40px;">
@@ -944,7 +993,8 @@
                 const loopCount = block.loop_count || null;
 
                 if (loopGroupId) {
-                    if (currentRun && currentRun.isLoopGroup && currentRun.loop_group_id === loopGroupId) {
+                    if (currentRun && currentRun.isLoopGroup && currentRun.loop_group_id ===
+                        loopGroupId) {
                         currentRun.blocks.push(block);
                     } else {
                         currentRun = {
@@ -969,7 +1019,8 @@
                 if (group.isLoopGroup) {
                     if (window.isExecutionMode) {
                         const loopCount = group.loop_count;
-                        let activeLoopIdx = window.activeBlockLoopIndices ? window.activeBlockLoopIndices[group.loop_group_id] : 1;
+                        let activeLoopIdx = window.activeBlockLoopIndices ? window
+                            .activeBlockLoopIndices[group.loop_group_id] : 1;
                         if (activeLoopIdx === undefined || activeLoopIdx > loopCount) {
                             activeLoopIdx = 1;
                         }
@@ -978,7 +1029,8 @@
 
                         // Render Tab headers
                         const headerDiv = document.createElement('div');
-                        headerDiv.className = `section-loop-tabs-header block-loop-tabs-header-${group.loop_group_id} d-flex align-items-center gap-2 mt-2 mb-3`;
+                        headerDiv.className =
+                            `section-loop-tabs-header block-loop-tabs-header-${group.loop_group_id} d-flex align-items-center gap-2 mt-2 mb-3`;
                         for (let i = 1; i <= loopCount; i++) {
                             const isActive = (i === activeLoopIdx) ? 'active' : '';
                             const btn = document.createElement('button');
@@ -993,13 +1045,15 @@
                         // Render tab contents
                         for (let i = 1; i <= loopCount; i++) {
                             const tabContentDiv = document.createElement('div');
-                            tabContentDiv.className = `section-loop-tab-content block-loop-tab-content-${group.loop_group_id}`;
+                            tabContentDiv.className =
+                                `section-loop-tab-content block-loop-tab-content-${group.loop_group_id}`;
                             tabContentDiv.setAttribute('data-loop-idx', i);
                             tabContentDiv.style.display = (i === activeLoopIdx) ? 'block' : 'none';
 
                             group.blocks.forEach((block) => {
                                 const blockIdx = items.indexOf(block);
-                                const blockDiv = renderSingleBlock(block, blockIdx, `_loop_${i}`);
+                                const blockDiv = renderSingleBlock(block, blockIdx,
+                                    `_loop_${i}`);
                                 tabContentDiv.appendChild(blockDiv);
                             });
 
@@ -1008,11 +1062,13 @@
                     } else {
                         // Designer mode: Draw loop group boundary wrapper
                         const loopGroupWrapper = document.createElement('div');
-                        loopGroupWrapper.className = 'designer-loop-group-wrapper border border-dashed border-primary rounded p-3 my-3 position-relative';
+                        loopGroupWrapper.className =
+                            'designer-loop-group-wrapper border border-dashed border-primary rounded p-3 my-3 position-relative';
                         loopGroupWrapper.style.backgroundColor = 'rgba(14, 165, 233, 0.03)';
-                        
+
                         const badge = document.createElement('div');
-                        badge.className = 'position-absolute bg-primary text-white px-2 py-1 rounded-bottom small fw-bold';
+                        badge.className =
+                            'position-absolute bg-primary text-white px-2 py-1 rounded-bottom small fw-bold';
                         badge.style.top = '0';
                         badge.style.left = '15px';
                         badge.style.zIndex = '5';
@@ -1026,7 +1082,8 @@
                                 }
                             };
                         }
-                        badge.innerHTML = `<i class="fas fa-redo me-1"></i> Lặp nhóm: ${group.loop_count} lần`;
+                        badge.innerHTML =
+                            `<i class="fas fa-redo me-1"></i> Lặp nhóm: ${group.loop_count} lần`;
                         loopGroupWrapper.appendChild(badge);
 
                         group.blocks.forEach((block) => {
@@ -1053,52 +1110,53 @@
                     });
                 }
             });
-    });
-
-    if (!window.isReadOnly && !window.isExecutionMode) {
-        if (window.isViewAllMode || !window.activeSectionId) {
-            // Chế độ xem tất cả: Thêm dấu cộng ở cuối cùng hồ sơ
-            addInsertionDivider(currentGroup, items.length);
-        } else {
-            // Chế độ xem 1 phân đoạn: Tìm index cuối cùng của phân đoạn này để chèn vào cuối phân đoạn
-            let lastIdxInSection = -1;
-            for (let i = items.length - 1; i >= 0; i--) {
-                if (items[i].section_id === window.activeSectionId || items[i].id === window.activeSectionId) {
-                    lastIdxInSection = i;
-                    break;
+            
+            if (!window.isReadOnly && !window.isExecutionMode) {
+                let lastIdxInSection = -1;
+                const secIdToMatch = sectionBlock ? (sectionBlock.section_id || sectionBlock.id) : null;
+                if (secIdToMatch) {
+                    for (let i = items.length - 1; i >= 0; i--) {
+                        if (items[i].section_id === secIdToMatch || items[i].id === secIdToMatch) {
+                            lastIdxInSection = i;
+                            break;
+                        }
+                    }
+                } else {
+                    lastIdxInSection = items.indexOf(blocks[blocks.length - 1] || sectionBlock);
+                }
+                
+                if (lastIdxInSection !== -1) {
+                    addInsertionDivider(currentGroup, lastIdxInSection + 1);
                 }
             }
-            if (lastIdxInSection !== -1) {
-                addInsertionDivider(currentGroup, lastIdxInSection + 1);
-            }
+        });
+
+        // Rebuild Outline when DOM changes
+        if (typeof buildOutline === 'function') {
+            setTimeout(buildOutline, 100);
         }
-    }
 
-    // Rebuild Outline when DOM changes
-    if (typeof buildOutline === 'function') {
-        setTimeout(buildOutline, 100);
-    }
+        // Load dynamic options for any master data select fields
+        if (window.isExecutionMode) {
+            setTimeout(loadDynamicSelectOptions, 100);
+        }
 
-    // Load dynamic options for any master data select fields
-    if (window.isExecutionMode) {
-        setTimeout(loadDynamicSelectOptions, 100);
-    }
+        // Refresh comments positioning after rendering blocks
+        if (typeof window.renderComments === 'function') {
+            window.renderComments();
+        }
 
-    // Refresh comments positioning after rendering blocks
-    if (typeof window.renderComments === 'function') {
-        window.renderComments();
-    }
+        // Sync split screen preview if active
+        if (typeof window.syncPreviewContent === 'function') {
+            window.syncPreviewContent();
+        }
 
-    // Sync split screen preview if active
-    if (typeof window.syncPreviewContent === 'function') {
-        window.syncPreviewContent();
-    }
-
-    // Restore selection state
-    savedSelected.forEach(sel => {
-        const cell = document.querySelector(`.block-item[data-id="${sel.bId}"] [data-row="${sel.r}"][data-col="${sel.c}"]`);
-        if (cell) cell.classList.add('selected-cell');
-    });
+        // Restore selection state
+        savedSelected.forEach(sel => {
+            const cell = document.querySelector(
+                `.block-item[data-id="${sel.bId}"] [data-row="${sel.r}"][data-col="${sel.c}"]`);
+            if (cell) cell.classList.add('selected-cell');
+        });
     }
 
     window.dynamicOptionsCache = {};
@@ -1189,15 +1247,16 @@
         divider.ondrop = (e) => {
             e.preventDefault();
             divider.classList.remove('drag-over-active');
+            
             const action = e.dataTransfer.getData('action');
             if (action === 'insertEquipmentTable') {
-                const equipmentData = e.dataTransfer.getData('equipmentData');
-                if (typeof insertEquipmentTable === 'function') {
-                    insertEquipmentTable(idx, equipmentData);
+                const equipmentDataStr = e.dataTransfer.getData('equipmentData');
+                if (equipmentDataStr && typeof insertEquipmentTable === 'function') {
+                    insertEquipmentTable(idx, equipmentDataStr);
                 }
                 return;
             }
-
+            
             const componentId = e.dataTransfer.getData('componentId');
             const componentName = e.dataTransfer.getData('componentName');
             if (componentId) {
@@ -1338,7 +1397,7 @@
         const div = document.createElement('div');
         div.innerHTML = html;
         const badges = div.querySelectorAll('.ebmr-field-badge');
-        
+
         // Use customConfig if provided (for linked templates), otherwise use global fieldsConfig
         const config = customConfig || fieldsConfig;
 
@@ -1396,7 +1455,7 @@
                         badge.className = 'ebmr-field-badge ebmr-field-value formula-result';
                         if (badge.hasAttribute('data-limit-info')) badge.className += ' formula-out-of-bounds';
                         badge.setAttribute('data-field-id', fieldId + loopSuffix); // Để recalculate tìm được
-                        
+
                         const isNA = window.executionValues[`_na_state_${field.id}`] === true;
                         if (isNA) {
                             badge.className += ' cell-na-state strike-through-zone';
@@ -1426,26 +1485,30 @@
                     let metaHtml = '';
                     const fieldData = window.executionValues[fieldId + loopSuffix];
                     const isNA = window.executionValues[`_na_state_${field.id}`] === true;
-                    
+
                     if (window.isExecutionMode) {
                         const naMeta = window.executionValues[`_na_state_${field.id}_meta`];
                         const meta = fieldData && fieldData._meta && fieldData._meta['default'];
-                        
+
                         let historyBadge = '';
                         if (meta && meta.history_count && meta.history_count > 0) {
-                            historyBadge = `<span class="badge bg-warning text-dark ms-1" style="cursor:pointer;" onclick="showRunDataHistory(event, '${window.currentRecordId}', '${fieldId + loopSuffix}', 'default')" title="Xem lịch sử thay đổi">Lịch sử (${meta.history_count})</span>`;
+                            historyBadge =
+                                `<span class="badge bg-warning text-dark ms-1" style="cursor:pointer;" onclick="showRunDataHistory(event, '${window.currentRecordId}', '${fieldId + loopSuffix}', 'default')" title="Xem lịch sử thay đổi">Lịch sử (${meta.history_count})</span>`;
                         }
-                        
+
                         let metaText = '';
                         if (naMeta) {
                             const reasonText = naMeta.reason || 'N/A';
-                            metaText = `<span style="color: #2563eb; font-weight: bold; margin-right: 4px;">${reasonText} -</span> ${naMeta.at || ''}<br><span style="font-size: 9px; color: #6c757d;">${naMeta.by || ''}</span>`;
+                            metaText =
+                                `<span style="color: #2563eb; font-weight: bold; margin-right: 4px;">${reasonText} -</span> ${naMeta.at || ''}<br><span style="font-size: 9px; color: #6c757d;">${naMeta.by || ''}</span>`;
                         } else if (meta && (meta.by || meta.at)) {
-                            metaText = `${meta.at || ''}<br><span style="font-size: 9px; color: #6c757d;">${meta.by || ''}</span>`;
+                            metaText =
+                                `${meta.at || ''}<br><span style="font-size: 9px; color: #6c757d;">${meta.by || ''}</span>`;
                         }
-                        
+
                         if (metaText || historyBadge) {
-                            metaHtml = `<div class="execution-meta execution-meta-variable" style="font-size: 10px; margin-top: 2px; text-align: center; white-space: nowrap; line-height: 1.1; pointer-events: none;">${metaText} <span style="pointer-events: auto;">${historyBadge}</span></div>`;
+                            metaHtml =
+                                `<div class="execution-meta execution-meta-variable" style="font-size: 10px; margin-top: 2px; text-align: center; white-space: nowrap; line-height: 1.1; pointer-events: none;">${metaText} <span style="pointer-events: auto;">${historyBadge}</span></div>`;
                         }
                     }
 
@@ -1455,24 +1518,30 @@
                         let clickAttr = '';
                         if (!window.isReadOnly) {
                             if (field.is_checker) {
-                                clickAttr = `onclick="openCheckerAuthModal('${fieldId + loopSuffix}', 'default', 'default')" title="Click để xác thực người kiểm tra"`;
+                                clickAttr =
+                                    `onclick="openCheckerAuthModal('${fieldId + loopSuffix}', 'default', 'default')" title="Click để xác thực người kiểm tra"`;
                             } else {
-                                clickAttr = `onclick="openExecutionInputModal('${fieldId + loopSuffix}', 'default', 'default', 'signature')"`;
+                                clickAttr =
+                                    `onclick="openExecutionInputModal('${fieldId + loopSuffix}', 'default', 'default', 'signature')"`;
                             }
                         }
-                        
+
                         let signatureHtml = '';
                         if (val) {
                             if (val.startsWith('data:image/')) {
-                                signatureHtml = `<img src="${val}" style="max-height: 40px; max-width: 120px; object-fit: contain; mix-blend-mode: multiply; vertical-align: middle; cursor: ${window.isReadOnly ? 'default' : 'pointer'};" ${clickAttr} />`;
+                                signatureHtml =
+                                    `<img src="${val}" style="max-height: 40px; max-width: 120px; object-fit: contain; mix-blend-mode: multiply; vertical-align: middle; cursor: ${window.isReadOnly ? 'default' : 'pointer'};" ${clickAttr} />`;
                             } else {
-                                signatureHtml = `<span class="badge bg-light text-success border" style="cursor: ${window.isReadOnly ? 'default' : 'pointer'}; font-weight: 600;" ${clickAttr}><i class="fas fa-check-circle me-1"></i>${val}</span>`;
+                                signatureHtml =
+                                    `<span class="badge bg-light text-success border" style="cursor: ${window.isReadOnly ? 'default' : 'pointer'}; font-weight: 600;" ${clickAttr}><i class="fas fa-check-circle me-1"></i>${val}</span>`;
                             }
                         } else {
                             if (field.is_checker) {
-                                signatureHtml = `<span class="badge bg-light text-warning border border-warning" style="cursor: ${window.isReadOnly ? 'default' : 'pointer'};" ${clickAttr}><i class="fas fa-check-double me-1"></i> [Người kiểm tra]</span>`;
+                                signatureHtml =
+                                    `<span class="badge bg-light text-warning border border-warning" style="cursor: ${window.isReadOnly ? 'default' : 'pointer'};" ${clickAttr}><i class="fas fa-check-double me-1"></i> [Người kiểm tra]</span>`;
                             } else {
-                                signatureHtml = `<span class="badge bg-light text-primary border" style="cursor: ${window.isReadOnly ? 'default' : 'pointer'};" ${clickAttr}><i class="fas fa-signature me-1"></i> [Ký tên]</span>`;
+                                signatureHtml =
+                                    `<span class="badge bg-light text-primary border" style="cursor: ${window.isReadOnly ? 'default' : 'pointer'};" ${clickAttr}><i class="fas fa-signature me-1"></i> [Ký tên]</span>`;
                             }
                         }
                         badge.innerHTML = `${signatureHtml}`;
@@ -1486,9 +1555,10 @@
                             const result = calculateFormula(field.formula || '', 2, field.id, loopSuffix);
                             isChecked = parseFloat(result) > 0;
                             disabledAttr = 'disabled'; // Khóa không cho tick tay
-                            
+
                             // Cập nhật giá trị vào executionValues để đồng bộ
-                            if (typeof window.executionValues[fieldId + loopSuffix] !== 'object' || window.executionValues[fieldId + loopSuffix] === null) {
+                            if (typeof window.executionValues[fieldId + loopSuffix] !== 'object' || window
+                                .executionValues[fieldId + loopSuffix] === null) {
                                 window.executionValues[fieldId + loopSuffix] = {};
                             }
                             window.executionValues[fieldId + loopSuffix]['default'] = isChecked;
@@ -1497,12 +1567,14 @@
                                 isChecked = val;
                             } else if (val !== undefined && val !== null) {
                                 const valStr = String(val).toLowerCase().trim();
-                                isChecked = (valStr === '1' || valStr === 'true' || valStr === 'yes' || valStr === 'có' || valStr === 'checked');
+                                isChecked = (valStr === '1' || valStr === 'true' || valStr === 'yes' ||
+                                    valStr === 'có' || valStr === 'checked');
                             }
                         }
 
+                        const checkboxLabel = field.label ? `<label class="ms-1 cursor-pointer" style="font-size: inherit; color: inherit; cursor: pointer; user-select: none;">${field.label}</label>` : '';
                         badge.innerHTML =
-                            `<span class="execution-checkbox-wrapper"><input type="checkbox" class="execution-checkbox" ${isChecked ? 'checked' : ''} ${disabledAttr} onchange="window.handleCheckboxChange('${fieldId + loopSuffix}', this.checked, this)"></span>`;
+                            `<span class="execution-checkbox-wrapper d-inline-flex align-items-center gap-1"><input type="checkbox" id="chk_${fieldId + loopSuffix}" class="execution-checkbox" ${isChecked ? 'checked' : ''} ${disabledAttr} onchange="window.handleCheckboxChange('${fieldId + loopSuffix}', this.checked, this)">${checkboxLabel.replace('<label', `<label for="chk_${fieldId + loopSuffix}"`)}</span>`;
                         badge.className = 'ebmr-field-badge ebmr-field-value';
                     } else if (field.type === 'select') {
                         const dsType = field.dataSource ? field.dataSource.type : 'manual';
@@ -1526,7 +1598,7 @@
                         const displayVal = val || '';
                         const isNow = (field.autoSystemTime !== false);
                         const titleAttr = isNow ? 'title="Nhấp chuột để tự động điền ngày giờ hệ thống"' : '';
-                        
+
                         badge.innerHTML =
                             `<span class="execution-input-test" ${!window.isReadOnly ? `onclick="handleDateVariableClick(event, '${fieldId + loopSuffix}', ${isNow})"` : ''} style="cursor: ${window.isReadOnly ? 'default' : 'pointer'}; border-bottom: 1px dotted #1a73e8; min-width: 30px; display: inline-block; outline: none; position: relative;" ${titleAttr}>${displayVal || `<span style="color: #6c757d; font-style: italic;">${placeholder}</span>`}</span>`;
                         badge.className = 'ebmr-field-badge ebmr-field-value';
@@ -1534,7 +1606,7 @@
                         // Các loại khác: Văn bản, Số
                         const placeholder = field.label || '...';
                         const displayVal = val || '';
-                        
+
                         let extraStyle = '';
                         if (field.type === 'number' && val !== null && val !== undefined && val !== '') {
                             const numVal = Number(val);
@@ -1542,26 +1614,29 @@
                                 let isOutOfBounds = false;
                                 const minVal = field.validation.min;
                                 const maxVal = field.validation.max;
-                                if (minVal !== null && minVal !== undefined && minVal !== '' && !isNaN(Number(minVal)) && numVal < Number(minVal)) {
+                                if (minVal !== null && minVal !== undefined && minVal !== '' && !isNaN(Number(
+                                        minVal)) && numVal < Number(minVal)) {
                                     isOutOfBounds = true;
                                 }
-                                if (maxVal !== null && maxVal !== undefined && maxVal !== '' && !isNaN(Number(maxVal)) && numVal > Number(maxVal)) {
+                                if (maxVal !== null && maxVal !== undefined && maxVal !== '' && !isNaN(Number(
+                                        maxVal)) && numVal > Number(maxVal)) {
                                     isOutOfBounds = true;
                                 }
                                 if (isOutOfBounds) {
-                                    extraStyle = 'color: #d93025; font-weight: bold; background-color: #fce8e6; border: 1px solid #fad2cf; padding: 2px 4px; border-radius: 4px;';
+                                    extraStyle =
+                                        'color: #d93025; font-weight: bold; background-color: #fce8e6; border: 1px solid #fad2cf; padding: 2px 4px; border-radius: 4px;';
                                 }
                             }
                         }
-     
+
                         // Nút đọc cân: chỉ hiện khi người thiết kế bật "Lấy dữ liệu từ cân" trong cấu hình biến số
-                        const scaleEnabled = field.type === 'number'
-                            && !window.isReadOnly
-                            && field.scaleEnabled === true
-                            && ('serial' in navigator);
-                        const scaleBtnHtml = scaleEnabled
-                            ? `<button class="btn-read-scale" onclick="event.stopPropagation(); window.readScaleValueIntoField('${fieldId + loopSuffix}')" title="⚖️ Đọc giá trị từ Cân điện tử (RS-232)"><i class="fas fa-balance-scale"></i></button>`
-                            : '';
+                        const scaleEnabled = field.type === 'number' &&
+                            !window.isReadOnly &&
+                            field.scaleEnabled === true &&
+                            ('serial' in navigator);
+                        const scaleBtnHtml = scaleEnabled ?
+                            `<button class="btn-read-scale" onclick="event.stopPropagation(); window.readScaleValueIntoField('${fieldId + loopSuffix}')" title="⚖️ Đọc giá trị từ Cân điện tử (RS-232)"><i class="fas fa-balance-scale"></i></button>` :
+                            '';
 
                         const meta = fieldData && fieldData._meta && fieldData._meta['default'];
                         if (meta && meta.device) {
@@ -1582,13 +1657,13 @@
                             badge.className = 'ebmr-field-badge ebmr-field-value';
                         }
                     }
-                    
+
                     if (isNA) {
                         badge.className += ' cell-na-state strike-through-zone';
                         badge.style.pointerEvents = 'none';
                         badge.innerHTML = `<span style="opacity:0.4">${badge.innerHTML}</span>`;
                     }
-                    
+
                     if (metaHtml) {
                         const wrapper = document.createElement('div');
                         wrapper.className = 'ebmr-field-with-meta';
@@ -1597,7 +1672,7 @@
                         wrapper.style.alignItems = 'center';
                         wrapper.style.verticalAlign = 'middle';
                         wrapper.style.margin = '0 2px';
-                        
+
                         // Apply alignment config to the wrapper as well
                         if (field.style) {
                             if (field.style.badgeAlign) {
@@ -1617,11 +1692,11 @@
                                 wrapper.style.setProperty('margin-left', field.style.marginLeft, 'important');
                             }
                         }
-                        
+
                         // Move badge into wrapper
                         badge.parentNode.insertBefore(wrapper, badge);
                         wrapper.appendChild(badge);
-                        
+
                         // Add meta below badge
                         wrapper.insertAdjacentHTML('beforeend', metaHtml);
                     }
@@ -1631,7 +1706,7 @@
                     let icon = 'fa-edit';
                     let typeLabel = '';
                     let extra = '';
- 
+
                     // Xác định Icon dựa theo loại trường (field type)
                     if (field.type === 'signature') {
                         if (field.is_checker) {
@@ -1656,14 +1731,14 @@
                         const dPlaces = (field.validation && field.validation.decimal_places !== null) ? field
                             .validation.decimal_places : 2;
                         const testResult = calculateFormula(field.formula || '', dPlaces, field.id);
- 
+
                         // Resolve IDs to Labels for display
                         const formulaDisplay = (field.formula || '').replace(/\(([^()]+)\)/g, (match, id) => {
                             const targetField = Object.values(fieldsConfig).find(f => f.name === id || f
                                 .label === id);
                             return targetField ? (targetField.label || id) : id;
                         });
- 
+
                         extra =
                             `<span class="ms-1 border-start ps-1 text-primary">${testResult}</span>${formulaDisplay ? `<span class="ms-2 small text-muted" style="font-size: 0.8em; font-style: italic;">(${formulaDisplay})</span>` : ''}`;
                     } else if (field.type === 'select') {
@@ -1672,11 +1747,11 @@
                     } else {
                         typeLabel = 'Text';
                     }
- 
+
                     const label = field.label || `[${typeLabel}]`;
-                    const scaleIndicator = (field.type === 'number' && field.scaleEnabled) 
-                        ? `<span class="ms-1 text-danger" title="⚖️ Đã bật kết nối Cân điện tử" style="cursor: pointer;" onclick="event.stopPropagation(); window.openScaleConnectionModal('${fieldId}')"><i class="fas fa-balance-scale"></i></span>` 
-                        : '';
+                    const scaleIndicator = (field.type === 'number' && field.scaleEnabled) ?
+                        `<span class="ms-1 text-danger" title="⚖️ Đã bật kết nối Cân điện tử" style="cursor: pointer;" onclick="event.stopPropagation(); window.openScaleConnectionModal('${fieldId}')"><i class="fas fa-balance-scale"></i></span>` :
+                        '';
                     badge.className =
                         `ebmr-field-badge ${selectedFieldId === fieldId ? 'active' : ''} ${field.type === 'formula' ? 'formula-preview' : ''}`;
                     badge.innerHTML = `
@@ -1701,9 +1776,9 @@
                     const keys = Object.keys(val);
                     if (keys.length > 0) val = val[keys[0]];
                 }
-                
+
                 inp.setAttribute('value', val); // populate value in DOM
-                
+
                 if (window.isExecutionMode) {
                     // Activate execution class
                     inp.classList.remove('criteria-design-mode');
@@ -1719,10 +1794,10 @@
                         const min = parseFloat(minAttr);
                         const max = parseFloat(maxAttr);
                         const numVal = parseFloat(val);
-                        
+
                         let pass = false;
                         let isNumeric = !isNaN(numVal) && !isNaN(parseFloat(minAttr)) && op !== 'N/A';
-                        
+
                         if (isNumeric) {
                             if (op === 'range') {
                                 pass = (numVal >= min && numVal <= max);
@@ -1755,7 +1830,7 @@
                                 return; // Không đủ thông tin
                             }
                         }
-                        
+
                         inp.classList.remove('criteria-pass', 'criteria-fail');
                         if (pass) {
                             inp.classList.add('criteria-pass');
@@ -1813,9 +1888,9 @@
         if (window.isExecutionMode && field.validation) {
             const minStr = field.validation.min;
             const maxStr = field.validation.max;
-            if ((minStr !== undefined && minStr !== null && minStr !== '') || 
+            if ((minStr !== undefined && minStr !== null && minStr !== '') ||
                 (maxStr !== undefined && maxStr !== null && maxStr !== '')) {
-                
+
                 const numericResult = parseFloat(String(resultStr).replace(/,/g, ''));
                 if (!isNaN(numericResult)) {
                     let isOut = false;
@@ -1886,13 +1961,16 @@
                                     raw = runDataForBlock[`${r}_${c}`];
                                 }
                                 if (raw === undefined || raw === null || raw === '') {
-                                    raw = (cell.defaultValue !== undefined && cell.defaultValue !== '') ? cell.defaultValue : (cell.content || '0');
+                                    raw = (cell.defaultValue !== undefined && cell
+                                        .defaultValue !== '') ? cell.defaultValue : (
+                                        cell.content || '0');
                                 }
                                 const parsedVal = parseNumberSafe(raw);
                                 valMap[cell.cellId] = parsedVal;
                                 valMap[cell.cellId + loopSuffix] = parsedVal;
-                                
-                                if (!valArrayMap[cell.cellId]) valArrayMap[cell.cellId] = [];
+
+                                if (!valArrayMap[cell.cellId]) valArrayMap[cell
+                                    .cellId] = [];
                                 valArrayMap[cell.cellId].push(parsedVal);
                             }
                         });
@@ -1908,18 +1986,19 @@
                     let isUsed = false;
                     const loopedName = field.name ? field.name + loopSuffix : null;
                     const loopedLabel = field.label ? field.label + loopSuffix : null;
-                    
+
                     if (field.name) {
                         if (formula.includes(field.name)) isUsed = true;
                         else if (field.sum_group && formula.includes(field.sum_group)) isUsed = true;
                     }
                     if (!isUsed && loopedName) {
                         if (formula.includes(loopedName)) isUsed = true;
-                        else if (field.sum_group && formula.includes(field.sum_group + loopSuffix)) isUsed = true;
+                        else if (field.sum_group && formula.includes(field.sum_group + loopSuffix)) isUsed =
+                            true;
                     }
                     if (!isUsed && field.label && formula.includes(field.label)) isUsed = true;
                     if (!isUsed && loopedLabel && formula.includes(loopedLabel)) isUsed = true;
-                    
+
                     if (!isUsed) return; // BỎ QUA nều biến này không được dùng trong công thức!
 
                     let val = 0;
@@ -1929,9 +2008,11 @@
                         if (calculatingFields.has(loopedFieldId)) {
                             val = 0; // Tránh lặp vô hạn
                         } else {
-                            val = window.calculateFormula(field.formula || '', field.validation ? field.validation.decimal_places : 2, loopedFieldId, loopSuffix);
+                            val = window.calculateFormula(field.formula || '', field.validation ? field
+                                .validation.decimal_places : 2, loopedFieldId, loopSuffix);
                         }
-                    } else if (window.isExecutionMode && window.executionValues && window.executionValues[loopedFieldId] !== undefined) {
+                    } else if (window.isExecutionMode && window.executionValues && window.executionValues[
+                            loopedFieldId] !== undefined) {
                         let raw = window.executionValues[loopedFieldId];
                         if (raw && typeof raw === 'object' && raw.hasOwnProperty('default')) {
                             val = raw.default;
@@ -1942,9 +2023,10 @@
                             val = raw;
                         }
                     } else {
-                        val = (field.defaultValue !== undefined && field.defaultValue !== '') ? field.defaultValue : 0;
+                        val = (field.defaultValue !== undefined && field.defaultValue !== '') ? field
+                            .defaultValue : 0;
                     }
-                    
+
                     const parsedVal = parseNumberSafe(val);
                     if (field.label) {
                         valMap[field.label] = parsedVal;
@@ -1957,7 +2039,7 @@
                         valMap[field.name + loopSuffix] = parsedVal;
                         if (!valArrayMap[field.name]) valArrayMap[field.name] = [];
                         valArrayMap[field.name].push(parsedVal);
-                        
+
                         // Sử dụng sum_group để nhóm chính xác các biến nhân bản
                         if (field.sum_group && field.sum_group !== field.name) {
                             if (!valArrayMap[field.sum_group]) valArrayMap[field.sum_group] = [];
@@ -1973,18 +2055,20 @@
                 const func = funcRaw.toUpperCase();
                 const trimmedId = id.trim();
                 let arr = valArrayMap[trimmedId] || [];
-                
+
                 // Cải tiến: Nếu mảng chỉ có 1 phần tử (do user click trực tiếp vào biến KL thực1 thay vì KL thực), 
                 // thử tìm xem nó có thuộc sum_group nào không để gom nhóm lại.
                 if (arr.length <= 1) {
-                    const field = Object.values(fieldsConfig).find(f => f.name === trimmedId || f.label === trimmedId);
-                    if (field && field.sum_group && valArrayMap[field.sum_group] && valArrayMap[field.sum_group].length > arr.length) {
+                    const field = Object.values(fieldsConfig).find(f => f.name === trimmedId || f.label ===
+                        trimmedId);
+                    if (field && field.sum_group && valArrayMap[field.sum_group] && valArrayMap[field
+                            .sum_group].length > arr.length) {
                         arr = valArrayMap[field.sum_group];
                     }
                 }
 
                 if (arr.length === 0) return '0';
-                
+
                 if (func === 'SUM_ALL') return `(${arr.join(' + ')})`;
                 if (func === 'AVG_ALL') {
                     const sum = arr.reduce((a, b) => a + b, 0);
@@ -1992,7 +2076,7 @@
                 }
                 if (func === 'MAX_ALL') return `Math.max(${arr.join(', ')})`;
                 if (func === 'MIN_ALL') return `Math.min(${arr.join(', ')})`;
-                
+
                 return '0';
             });
 
@@ -2059,7 +2143,8 @@
                 if (field && field.type === 'formula') {
                     const dPlaces = (field.validation && field.validation.decimal_places !== null) ? field
                         .validation.decimal_places : 2;
-                    const resultStr = calculateFormula(field.formula || '', dPlaces, loopedFieldId, loopSuffix);
+                    const resultStr = calculateFormula(field.formula || '', dPlaces, loopedFieldId,
+                        loopSuffix);
                     applyFormulaLimits(badge, field, resultStr);
                     if (badge.hasAttribute('data-limit-info')) {
                         badge.classList.add('formula-out-of-bounds');
@@ -2069,7 +2154,7 @@
                 }
             }
         });
-        
+
         if (typeof window.evaluateAllConditions === 'function') {
             window.evaluateAllConditions();
         }
@@ -2087,29 +2172,35 @@
 
                 let runVal = null;
                 const searchId = String(targetId).trim().toLowerCase();
-                const targetField = Object.values(fieldsConfig).find(f => 
-                    String(f.id).trim().toLowerCase() === searchId || 
-                    String(f.name).trim().toLowerCase() === searchId || 
+                const targetField = Object.values(fieldsConfig).find(f =>
+                    String(f.id).trim().toLowerCase() === searchId ||
+                    String(f.name).trim().toLowerCase() === searchId ||
                     String(f.label || '').trim().toLowerCase() === searchId
                 );
-                
+
                 if (targetField) {
                     if (window.executionValues[targetField.id] !== undefined) {
                         runVal = window.executionValues[targetField.id];
-                    } else if (targetField.defaultValue !== undefined && targetField.defaultValue !== null) {
+                    } else if (targetField.defaultValue !== undefined && targetField.defaultValue !==
+                        null) {
                         runVal = targetField.defaultValue;
                     }
                 }
-                
+
                 if (runVal === null || runVal === undefined) {
                     items.forEach(item => {
                         if (item.type === 'table' && item.data) {
                             const blockKey = item.uuid || item.id;
                             for (let tr = 0; tr < item.rows; tr++) {
                                 for (let tc = 0; tc < item.cols; tc++) {
-                                    if (item.data[tr][tc] && String(item.data[tr][tc].cellId || '').trim().toLowerCase() === searchId) {
-                                        if (window.executionValues[blockKey] && window.executionValues[blockKey][`${tr}_${tc}`] !== undefined) {
-                                            runVal = window.executionValues[blockKey][`${tr}_${tc}`];
+                                    if (item.data[tr][tc] && String(item.data[tr][tc].cellId || '')
+                                        .trim().toLowerCase() === searchId) {
+                                        if (window.executionValues[blockKey] && window
+                                            .executionValues[blockKey][`${tr}_${tc}`] !== undefined
+                                        ) {
+                                            runVal = window.executionValues[blockKey][
+                                                `${tr}_${tc}`
+                                            ];
                                         } else if (item.data[tr][tc].defaultValue !== undefined) {
                                             runVal = item.data[tr][tc].defaultValue;
                                         } else {
@@ -2134,22 +2225,28 @@
 
                 if (runVal !== null && runVal !== undefined) {
                     let conditionMet = false;
-                    
+
                     // Xử lý giá trị cho checkbox (boolean)
                     let runValStr = String(runVal).trim().toLowerCase();
                     let targetValStr = String(targetValue || '').trim().toLowerCase();
-                    
-                    console.log(`[evaluateAllConditions] ID: ${field.id}, targetId: ${targetId}, runVal:`, runVal, `targetValue:`, targetValue);
+
+                    console.log(`[evaluateAllConditions] ID: ${field.id}, targetId: ${targetId}, runVal:`,
+                        runVal, `targetValue:`, targetValue);
 
                     if (typeof runVal === 'boolean') {
                         runValStr = runVal ? 'true' : 'false';
                     }
-                    if (targetValStr === '1' || targetValStr === 'yes' || targetValStr === 'có') targetValStr = 'true';
-                    if (targetValStr === '0' || targetValStr === 'no' || targetValStr === 'không') targetValStr = 'false';
+                    if (targetValStr === '1' || targetValStr === 'yes' || targetValStr === 'có')
+                        targetValStr = 'true';
+                    if (targetValStr === '0' || targetValStr === 'no' || targetValStr === 'không')
+                        targetValStr = 'false';
                     if (runValStr === '1' || runValStr === 'yes' || runValStr === 'có') runValStr = 'true';
-                    if (runValStr === '0' || runValStr === 'no' || runValStr === 'không') runValStr = 'false';
+                    if (runValStr === '0' || runValStr === 'no' || runValStr === 'không') runValStr =
+                        'false';
 
-                    console.log(`[evaluateAllConditions] runValStr: ${runValStr}, targetValStr: ${targetValStr}, operator: ${operator}`);
+                    console.log(
+                        `[evaluateAllConditions] runValStr: ${runValStr}, targetValStr: ${targetValStr}, operator: ${operator}`
+                    );
 
                     if (operator === '=') {
                         conditionMet = (runValStr === targetValStr);
@@ -2161,9 +2258,14 @@
                     const isCurrentlyNA = window.executionValues[naKey];
 
                     if (conditionMet && !isCurrentlyNA) {
-                        const user = '{{ session("user.fullName") ?? (session("user.username") ?? "Hệ thống (Auto)") }}';
+                        const user =
+                            '{{ session('user.fullName') ?? (session('user.username') ?? 'Hệ thống (Auto)') }}';
                         window.executionValues[naKey] = true;
-                        window.executionValues[`${naKey}_meta`] = { by: user, at: new Date().toLocaleString('vi-VN'), reason: 'ĐK Không áp dụng' };
+                        window.executionValues[`${naKey}_meta`] = {
+                            by: user,
+                            at: new Date().toLocaleString('vi-VN'),
+                            reason: 'ĐK Không áp dụng'
+                        };
                         hasChanges = true;
                     } else if (!conditionMet && isCurrentlyNA) {
                         window.executionValues[naKey] = false;
@@ -2181,7 +2283,7 @@
     window.activeSectionLoopIndices = {};
     window.switchSectionLoopTab = function(sectionId, loopIdx) {
         window.activeSectionLoopIndices[sectionId] = loopIdx;
-        
+
         // Hide all tab contents for this section
         const contents = document.querySelectorAll(`.section-loop-tab-content-${sectionId}`);
         contents.forEach(content => {
@@ -2191,7 +2293,7 @@
                 content.style.display = 'none';
             }
         });
-        
+
         // Update active class on tab buttons
         const header = document.querySelector(`.section-loop-tabs-header-${sectionId}`);
         if (header) {
@@ -2210,7 +2312,7 @@
     window.switchBlockLoopTab = function(loopGroupId, loopIdx) {
         if (!window.activeBlockLoopIndices) window.activeBlockLoopIndices = {};
         window.activeBlockLoopIndices[loopGroupId] = loopIdx;
-        
+
         // Hide all tab contents for this group
         const contents = document.querySelectorAll(`.block-loop-tab-content-${loopGroupId}`);
         contents.forEach(content => {
@@ -2220,7 +2322,7 @@
                 content.style.display = 'none';
             }
         });
-        
+
         // Update active class on tab buttons
         const header = document.querySelector(`.block-loop-tabs-header-${loopGroupId}`);
         if (header) {

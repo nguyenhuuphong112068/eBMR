@@ -6,22 +6,26 @@
     window.resolveTargetSectionId = function(insertIndex, fallbackSectionId) {
         // 1. Try to find the section block upwards from insertIndex
         for (let i = insertIndex - 1; i >= 0; i--) {
-            if (window.items && window.items[i] && window.items[i].type === 'section') {
-                return window.items[i].section_id || window.items[i].id; // Fallback to id only if section_id is really missing (shouldn't happen)
+            if (typeof items !== 'undefined' && items[i] && items[i].type === 'section') {
+                return items[i].section_id || items[i].id; // Fallback to id only if section_id is really missing (shouldn't happen)
             }
         }
         
         // 2. If not found upwards, use activeSectionId by finding the block
-        if (window.activeSectionId && window.items) {
-            const sec = window.items.find(item => item.id === window.activeSectionId && item.type === 'section');
+        if (window.activeSectionId && typeof items !== 'undefined') {
+            const sec = items.find(item => (item.id === window.activeSectionId || item.section_id === window.activeSectionId) && item.type === 'section');
             if (sec && sec.section_id) {
                 return sec.section_id;
+            }
+            // If activeSectionId is set but block not found, it is likely the actual section_id
+            if (window.activeSectionId !== 'section_0') {
+                return window.activeSectionId;
             }
         }
         
         // 3. Fallback to the very first section block in the document
-        if (window.items) {
-            const firstSec = window.items.find(item => item.type === 'section');
+        if (typeof items !== 'undefined') {
+            const firstSec = items.find(item => item.type === 'section');
             if (firstSec && firstSec.section_id) {
                 return firstSec.section_id;
             }
@@ -1510,7 +1514,9 @@
             }
         };
 
-        if (selectedText.length > 0) {
+        const isAlignmentCmd = ['justifyLeft', 'justifyCenter', 'justifyRight', 'justifyFull'].includes(command);
+
+        if (selectedText.length > 0 && selectedCells.length <= 1 && !(selectedCells.length === 1 && isAlignmentCmd)) {
             handleSupSubToggle(command, value);
 
             // Force data sync for the active cell/block
@@ -1527,8 +1533,10 @@
             return;
         }
 
+        const bulkCommands = ['bold', 'italic', 'underline', 'strikethrough', 'justifyLeft', 'justifyCenter', 'justifyRight', 'justifyFull', 'foreColor', 'superscript', 'subscript'];
+
         // Priority 2: If no text selected but cells are selected, use bulk cell formatting
-        if (selectedCells.length > 0) {
+        if (selectedCells.length > 0 && bulkCommands.includes(command)) {
             saveState();
             selectedCells.forEach(cell => {
                 const rStr = cell.dataset.row;
@@ -1655,7 +1663,7 @@
                         else if (['underline', 'strikethrough'].includes(command)) selectors = ['u', 'strike',
                             's', '[style*="text-decoration"]'
                         ];
-                        else if (command.startsWith('justify')) selectors = ['[style*="text-align"]', 'center'];
+                        else if (command.startsWith('justify')) selectors = ['[style*="text-align"]', 'center', '[align]'];
 
                         const innerNodes = cell.querySelectorAll(selectors.join(', '));
                         innerNodes.forEach(node => {
@@ -1679,7 +1687,10 @@
                                     else if (command === 'italic') node.style.fontStyle = '';
                                     else if (['underline', 'strikethrough'].includes(command)) node
                                         .style.textDecoration = '';
-                                    else if (command.startsWith('justify')) node.style.textAlign = '';
+                                    else if (command.startsWith('justify')) {
+                                        node.style.textAlign = '';
+                                        node.removeAttribute('align');
+                                    }
 
                                     if (node.getAttribute('style') === '') {
                                         // Nếu span không còn style nào khác, unwrap luôn cho sạch HTML
@@ -2750,6 +2761,22 @@
     };
 
     /**
+     * áº¨n/hiá»‡n hoÃ n toÃ n thanh Má»¥c lá»¥c.
+     */
+    window.toggleOutlineVisibility = function() {
+        const col = document.getElementById('outline-col');
+        if (col) {
+            if (col.classList.contains('d-none')) {
+                col.classList.remove('d-none');
+                // Náº¿u Ä‘ang á»Ÿ tráº¡ng thÃ¡i thu nhá»  thÃ¬ má»Ÿ rá»™ng ra luÃ´n
+                if (isOutlineMinimized) toggleOutline(false);
+            } else {
+                col.classList.add('d-none');
+            }
+        }
+    };
+
+    /**
      * Thu nhỏ hoặc mở rộng bảng thuộc tính (Sidebar) bên phải.
      * Cách hoạt động: Tương tự như thanh mục lục, hàm này thay đổi class CSS của cột bên phải 
      * và điều chỉnh lại style của Property Panel để tối ưu không gian hiển thị.
@@ -2763,11 +2790,16 @@
         const full = document.getElementById('sidebar-full');
 
         if (minimize) {
-            if (col) col.className = 'col-lg-1 transition-all p-0';
+            if (col) {
+                col.className = 'col-lg-1 transition-all p-0';
+                col.style.transform = ''; // reset position to original
+                col.dataset.dragX = 0;
+                col.dataset.dragY = 0;
+            }
             if (full) full.classList.add('d-none');
             if (minimized) minimized.classList.remove('d-none');
             if (panel) {
-                panel.classList.remove('card', 'shadow-sm');
+                panel.classList.remove('card', 'shadow-lg');
                 panel.classList.add('bg-transparent', 'shadow-none', 'border-0');
                 panel.style.boxShadow = 'none';
             }
@@ -2777,7 +2809,7 @@
             if (full) full.classList.remove('d-none');
             if (minimized) minimized.classList.add('d-none');
             if (panel) {
-                panel.classList.add('card', 'shadow-sm');
+                panel.classList.add('card', 'shadow-lg');
                 panel.classList.remove('bg-transparent', 'shadow-none', 'border-0');
                 if (selectedId || selectedFieldId) panel.classList.remove('d-none');
                 else panel.classList.add('d-none');
@@ -2795,24 +2827,10 @@
         const canvas = document.getElementById('canvas-col');
         if (!canvas) return;
 
-        if (window.isExecutionMode) {
-            if (isOutlineMinimized) {
-                canvas.className = 'col-lg-12 transition-all';
-            } else {
-                canvas.className = 'col-lg-10 transition-all';
-            }
-            return;
-        }
-
-        if (isOutlineMinimized && isSidebarMinimized) {
-            canvas.className = 'col-lg-10 transition-all';
-        } else if (isOutlineMinimized) {
-            canvas.className = 'col-lg-9 transition-all';
-        } else if (isSidebarMinimized) {
-            canvas.className = 'col-lg-9 transition-all';
-        } else {
-            canvas.className = 'col-lg-8 transition-all';
-        }
+        // VÃ¬ thanh CÃ i Ä‘áº·t vÃ  Má»¥c lá»¥c Ä‘Ã£ Ä‘Æ°á»£c tÃ¡ch ra (position: fixed),
+        // canvas luÃ´n chiáº¿m 100% vÃ¹ng cÃ²n láº¡i (hoáº·c full vÃ¹ng container)
+        // Ä‘á»ƒ khÃ´ng bá»‹ trÃ´i khi zoom mÃ n hÃ¬nh.
+        canvas.className = 'col-lg-12 transition-all';
     }
 
     // Smart Signature Handler
@@ -3707,7 +3725,11 @@
             </div> <!-- End Tab Content -->
 
             <div class="mt-2 text-center p-2 border-top bg-light">
-                <button class="btn btn-sm btn-outline-primary w-100 mb-2" onclick="copyVariable('${fieldId}')"><i class="fas fa-copy me-1"></i> Sao chép biến này</button>
+                <div class="d-flex gap-2 mb-2">
+                    <button class="btn btn-sm btn-outline-primary flex-fill" onclick="copyVariable('${fieldId}')"><i class="fas fa-copy me-1"></i> Sao chép</button>
+                    <button class="btn btn-sm btn-outline-warning flex-fill" onclick="cutVariable('${fieldId}')"><i class="fas fa-cut me-1"></i> Cắt</button>
+                </div>
+                <button class="btn btn-sm btn-outline-secondary w-100 mb-2" onclick="pasteVariable()" title="Dán biến vào vị trí con trỏ (Ctrl+V)"><i class="fas fa-paste me-1"></i> Dán (Ctrl+V)</button>
                 <button class="btn btn-sm btn-outline-danger w-100" onclick="deleteDynamicField('${fieldId}')"><i class="fas fa-trash-alt me-1"></i> Xóa bỏ hoàn toàn</button>
             </div>
         `;
@@ -4133,20 +4155,16 @@
                         const tc = s.textColor || '';
                         const wm = s.writingMode || '';
                         const tf = s.transform || '';
-                        return ` < th contenteditable = "false"
-                    spellcheck = "false"
-                    data - row = "0"
-                    data - col = "${cIdx}"
-                    class = "table-header-cell"
-                    style =
-                        "width: ${c.width || 'auto'}; background-color: ${bg}; text-align: ${align}; font-weight: ${fw}; font-style: ${fs}; text-decoration: ${td}; font-size: ${fsz}; color: ${tc}; writing-mode: ${wm};" >
-                        <
-                        div class = "header-content"
-                    style =
-                        "transform: ${tf}; transform-origin: center center; display: inline-block; width: 100%;" >
-                        $ {
-                            c.label || ''
-                        } < /div></th > `;
+                        return `<th contenteditable="false" 
+                    spellcheck="false" 
+                    data-row="0" 
+                    data-col="${cIdx}" 
+                    class="table-header-cell" 
+                    style="width: ${c.width || 'auto'}; background-color: ${bg}; text-align: ${align}; font-weight: ${fw}; font-style: ${fs}; text-decoration: ${td}; font-size: ${fsz}; color: ${tc}; writing-mode: ${wm};">
+                        <div class="header-content" style="transform: ${tf}; transform-origin: center center; display: inline-block; width: 100%;">
+                            ${c.label || ''}
+                        </div>
+                    </th>`;
                     }).join('')}</tr></thead>`;
                 }
 
@@ -7301,37 +7319,37 @@
             if (typeof Swal !== 'undefined') {
                 const valObj = window.executionValues[blockId];
                 let historyHtml =
-                    '<div class="text-muted small mb-3">Lịch sử chi tiết (chỉ lưu tạm thời trong chế độ Chạy thử):</div>';
+                    '<div class="table-responsive"><table class="table table-bordered table-striped table-hover mb-0 text-center align-middle" style="font-size: 13px;">';
                 historyHtml +=
-                    '<div class="table-responsive"><table class="table table-bordered table-striped table-hover mb-0 text-center" style="font-size: 13px;">';
-                historyHtml +=
-                    '<thead class="bg-light"><tr><th width="5%">Lần</th><th width="20%">Giá trị cũ</th><th width="20%">Giá trị mới</th><th width="25%">Lý do</th><th width="15%">Người đổi</th><th width="15%">Thời gian</th></tr></thead><tbody>';
+                    '<thead class="bg-light text-primary"><tr><th width="5%" class="text-center">Lần</th><th width="20%">Giá trị cũ</th><th width="20%">Giá trị mới</th><th width="25%">Lý do</th><th width="15%">Người đổi</th><th width="15%">Thời gian</th></tr></thead><tbody>';
 
                 if (valObj && valObj._meta && valObj._meta[cellId] && valObj._meta[cellId].history_list &&
                     valObj._meta[cellId].history_list.length > 0) {
                     valObj._meta[cellId].history_list.forEach((h, index) => {
                         historyHtml += `<tr>
-                            <td>${index + 1}</td>
-                            <td>${escapeHtml(h.old_val || '')}</td>
-                            <td class="text-primary fw-bold">${escapeHtml(h.val || '')}</td>
-                            <td>${escapeHtml(h.reason || '')}</td>
-                            <td>${escapeHtml(h.by || '')}</td>
-                            <td>${escapeHtml(h.at || '')}</td>
+                            <td class="text-center fw-bold text-secondary">${index + 1}</td>
+                            <td class="text-muted text-decoration-line-through">${escapeHtml(h.old_val || '')}</td>
+                            <td class="text-success fw-bold">${escapeHtml(h.val || '')}</td>
+                            <td class="text-start fst-italic text-muted">${escapeHtml(h.reason || '')}</td>
+                            <td class="fw-semibold text-dark">${escapeHtml(h.by || '')}</td>
+                            <td class="small text-muted">${escapeHtml(h.at || '')}</td>
                         </tr>`;
                     });
                 } else {
-                    historyHtml += `<tr><td colspan="6" class="text-muted">Chưa có thay đổi nào.</td></tr>`;
+                    historyHtml += `<tr><td colspan="6" class="text-muted py-4">Chưa có thay đổi nào.</td></tr>`;
                 }
                 historyHtml += '</tbody></table></div>';
 
                 Swal.fire({
-                    title: '<i class="fas fa-history me-2"></i> LỊCH SỬ THAY ĐỔI DỮ LIỆU',
+                    title: '<div class="d-flex align-items-center justify-content-center text-primary" style="font-size: 18px; text-transform: uppercase; letter-spacing: 0.5px;"><i class="fas fa-history me-2"></i> LỊCH SỬ THAY ĐỔI DỮ LIỆU</div>',
                     html: historyHtml,
-                    width: '800px',
+                    width: '850px',
                     showConfirmButton: false,
                     showCloseButton: true,
                     customClass: {
-                        popup: 'rounded-3'
+                        popup: 'rounded-4 shadow-lg border-0',
+                        title: 'fw-bold pb-3 border-bottom mb-3',
+                        closeButton: 'btn-close shadow-none'
                     }
                 });
             } else if (typeof toastr !== 'undefined') {
@@ -8463,4 +8481,137 @@
             alert('Có lỗi xảy ra khi bổ sung dữ liệu thiết bị.');
         }
     }
+
+// --- Typography Normalization ---
+window.openTypographySettings = function() {
+    let settings = {
+        h1: '16pt',
+        h2: '14pt',
+        normal: '12pt'
+    };
+    
+    // Check if we already have global settings saved
+    const safeItems = typeof items !== 'undefined' ? items : [];
+    const settingsBlock = safeItems.find(i => i.type === 'document-settings');
+    if (settingsBlock && settingsBlock.typography) {
+        settings = Object.assign(settings, settingsBlock.typography);
+    }
+    
+    $('#typo-h1').val(settings.h1);
+    $('#typo-h2').val(settings.h2);
+    $('#typo-normal').val(settings.normal);
+    
+    $('#typographySettingsModal').modal('show');
+};
+
+window.applyTypographySettings = function() {
+    const settings = {
+        h1: $('#typo-h1').val() || '16pt',
+        h2: $('#typo-h2').val() || '14pt',
+        normal: $('#typo-normal').val() || '12pt'
+    };
+    
+    // Save to items array
+    if (typeof items === 'undefined') {
+        console.error("Lỗi: mảng items chưa khởi tạo");
+        return;
+    }
+    let settingsBlock = items.find(i => i.type === 'document-settings');
+    if (!settingsBlock) {
+        settingsBlock = {
+            id: 'blk_settings_' + Date.now(),
+            type: 'document-settings',
+            typography: settings,
+            section_id: window.catId // Bind to root
+        };
+        items.push(settingsBlock);
+    } else {
+        settingsBlock.typography = settings;
+    }
+    
+    window.injectTypographyStyles(settings);
+    
+    $('#typographySettingsModal').modal('hide');
+    settingsBlock.dirty = true;
+    if (typeof saveStateDebounced === 'function') {
+        saveStateDebounced();
+    }
+    
+    Swal.fire({
+        icon: 'success',
+        title: 'Thành công',
+        text: 'Cỡ chữ đã được chuẩn hóa và áp dụng cho toàn bộ hồ sơ!',
+        timer: 2000,
+        showConfirmButton: false
+    });
+};
+
+window.injectTypographyStyles = function(settings) {
+    if (!settings) {
+        const safeItems = typeof items !== 'undefined' ? items : [];
+        const settingsBlock = safeItems.find(i => i.type === 'document-settings');
+        if (settingsBlock && settingsBlock.typography) {
+            settings = settingsBlock.typography;
+        } else {
+            return; // No custom settings
+        }
+    }
+    
+    let styleTag = document.getElementById('ebmr-typography-style');
+    if (!styleTag) {
+        styleTag = document.createElement('style');
+        styleTag.id = 'ebmr-typography-style';
+        document.head.appendChild(styleTag);
+    }
+    
+    // Create CSS string with !important to override inline styles
+    const css = `
+        /* Normal text overrides: paragraphs, spans, table cells */
+        #editor-content p, 
+        #editor-content p *,
+        #editor-content span,
+        #editor-content td,
+        #editor-content td *,
+        #editor-content div:not(.section-header):not(.static-text-display),
+        #editor-content div.static-text-display,
+        #editor-content div.static-text-display * { 
+            font-size: ${settings.normal} !important; 
+        }
+
+        /* Typography overrides for Designer and Rendered View */
+        #editor-content h1, 
+        #editor-content h1 *,
+        #editor-content div.static-text-display h1,
+        #editor-content div.static-text-display h1 * { 
+            font-size: ${settings.h1} !important; 
+        }
+        
+        #editor-content h2, 
+        #editor-content h2 *,
+        #editor-content div.static-text-display h2,
+        #editor-content div.static-text-display h2 * { 
+            font-size: ${settings.h2} !important; 
+        }
+        
+        /* Section headers (keep at H1 size) */
+        #editor-content .section-header,
+        #editor-content .section-header *,
+        #editor-content .section-header-display,
+        #editor-content .section-header-display * {
+            font-size: ${settings.h1} !important;
+        }
+    `;
+    
+    styleTag.innerHTML = css;
+};
+
+// Auto-inject on load
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(() => {
+        if (typeof items !== 'undefined') {
+            window.injectTypographyStyles();
+        }
+    }, 500);
+});
+
 </script>

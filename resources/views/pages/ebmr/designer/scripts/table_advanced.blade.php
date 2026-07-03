@@ -38,52 +38,96 @@
         if (cells.length < 2) return;
 
         saveState();
-        const item = items.find(i => i.id === selectedId);
 
-        let minR = 999,
-            maxR = -1,
-            minC = 999,
-            maxC = -1;
-        cells.forEach(c => {
-            const r = parseInt(c.dataset.row) - 1;
-            const co = parseInt(c.dataset.col);
+        // Xác định block từ ô được chọn (không chỉ dựa vào selectedId)
+        let item = items.find(i => i.id === selectedId);
+        if (!item && cells.length > 0) {
+            const blockEl = cells[0].closest('.block-item');
+            if (blockEl) {
+                const blockId = blockEl.getAttribute('data-id');
+                item = items.find(i => i.id === blockId);
+            }
+        }
+
+        if (!item || !item.data) {
+            toastr.error('Không tìm thấy bảng dữ liệu. Vui lòng click vào bảng trước rồi thử lại.');
+            return;
+        }
+
+        // Tính toán vùng gộp dựa trên data-col và cs thực tế của từng ô được chọn
+        let minR = 999, maxR = -1, minC = 999, maxC = -1;
+
+        cells.forEach(tdEl => {
+            const r = parseInt(tdEl.dataset.row) - 1;
+            const co = parseInt(tdEl.dataset.col);
+            if (isNaN(r) || isNaN(co) || r < 0) return;
+
+            // Lấy cs, rs thực tế từ data để tính đúng phạm vi
+            const cellData = item.data[r] && item.data[r][co];
+            const cs = (cellData && cellData.cs) ? cellData.cs : 1;
+            const rs = (cellData && cellData.rs) ? cellData.rs : 1;
+
             minR = Math.min(minR, r);
-            maxR = Math.max(maxR, r);
+            maxR = Math.max(maxR, r + rs - 1);  // tính đến cuối của rs
             minC = Math.min(minC, co);
-            maxC = Math.max(maxC, co);
+            maxC = Math.max(maxC, co + cs - 1);  // tính đến cuối của cs
         });
 
+        if (minR > maxR || minC > maxC) return;
+
+        // Khởi tạo ô chính (top-left)
         if (!item.data[minR][minC] || typeof item.data[minR][minC] !== 'object') {
-            item.data[minR][minC] = {
-                content: item.data[minR][minC] || '',
-                rs: 1,
-                cs: 1,
-                hidden: false
-            };
+            item.data[minR][minC] = { content: '', rs: 1, cs: 1, hidden: false };
         }
         const mainCell = item.data[minR][minC];
         mainCell.rs = maxR - minR + 1;
         mainCell.cs = maxC - minC + 1;
+        mainCell.hidden = false;
 
-        let combinedContent = "";
+        // Gộp nội dung và đánh dấu hidden cho các ô trong vùng (trừ ô chính)
+        let combinedParts = [];
+        
+        const isContentEmpty = (html) => {
+            if (!html || typeof html !== 'string') return true;
+            let tempDiv = document.createElement('div');
+            tempDiv.innerHTML = html;
+            // Nếu có các thẻ đặc biệt mang ý nghĩa nội dung thì không trống
+            if (tempDiv.querySelector('img, .ebmr-field-badge, i.fas, i.far, i.fal')) return false;
+            // Nếu chỉ có text trắng (sau khi loại bỏ HTML tags) thì là trống
+            let text = tempDiv.textContent || tempDiv.innerText || '';
+            if (text.trim() === '') return true;
+            return false;
+        };
+
         for (let r = minR; r <= maxR; r++) {
+            if (!item.data[r]) continue;
             for (let c = minC; c <= maxC; c++) {
                 if (r === minR && c === minC) continue;
                 if (!item.data[r][c] || typeof item.data[r][c] !== 'object') {
-                    item.data[r][c] = {
-                        content: item.data[r][c] || '',
-                        rs: 1,
-                        cs: 1,
-                        hidden: false
-                    };
+                    item.data[r][c] = { content: '', rs: 1, cs: 1, hidden: false };
                 }
-                if (item.data[r][c].content) {
-                    combinedContent += (combinedContent ? " " : "") + item.data[r][c].content;
+                
+                let cellHtml = item.data[r][c].content || '';
+                if (!item.data[r][c].hidden && !isContentEmpty(cellHtml)) {
+                    combinedParts.push(cellHtml);
                 }
+                
                 item.data[r][c].hidden = true;
+                item.data[r][c].rs = 1;
+                item.data[r][c].cs = 1;
             }
         }
-        if (combinedContent) mainCell.content += (mainCell.content ? " " : "") + combinedContent;
+        
+        if (combinedParts.length > 0) {
+            if (isContentEmpty(mainCell.content)) {
+                mainCell.content = combinedParts.join(" ");
+            } else {
+                mainCell.content += " " + combinedParts.join(" ");
+            }
+        } else if (isContentEmpty(mainCell.content)) {
+            // Dọn dẹp thẻ <br> rác nếu ô chính thực sự trống
+            mainCell.content = "";
+        }
 
         item.dirty = true;
         renderBlocks();
