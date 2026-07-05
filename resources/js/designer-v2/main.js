@@ -21,6 +21,7 @@ import Highlight from '@tiptap/extension-highlight';
 import Subscript from '@tiptap/extension-subscript';
 import Superscript from '@tiptap/extension-superscript';
 import { EbmrField, FIELD_TYPES } from './ebmr-field';
+import { createSelectionController } from './selection';
 
 /** Bộ extension dùng chung cho mọi editor instance (StarterKit v3 đã gồm Underline + Link) */
 function buildExtensions() {
@@ -56,6 +57,21 @@ let activeHost = null;        // element đang mount editor
 let activeSync = null;        // hàm ghi HTML về items khi unmount
 let isDirtyDoc = false;       // có thay đổi chưa lưu
 
+// Bộ điều khiển CHỌN đối tượng (ô/hàng/cột/bảng/biến số) — xem selection.js
+const selection = createSelectionController({
+    BOOT,
+    getItems: () => items,
+    hasActiveEditor: () => !!activeEditor,
+    getActiveHost: () => activeHost,
+    unmountEditor: () => unmountEditor(),
+    saveDocState: () => saveDocState(),
+    markDirty: () => markDirty(),
+    renderDocument: () => renderDocument(),
+    refreshToolbarState: () => refreshToolbarState(),
+    openBatchFieldPanel: (ids) => openBatchFieldPanelV2(ids),
+    duplicateFieldsInHtml: (html) => duplicateFieldsInHtmlV2(html),
+});
+
 /* =========================================================
  * 0. UNDO/REDO CẤP TÀI LIỆU (thao tác block: thêm/dán/resize...)
  * Trong vùng đang gõ thì TipTap tự có history riêng; stack này
@@ -89,6 +105,7 @@ function restoreDocState(snap) {
 }
 
 function undoDoc() {
+    if (BOOT.isReadOnly || BOOT.isExecutionMode) return; // Chạy thử: không cho sửa cấu trúc
     if (docUndoStack.length === 0) return;
     unmountEditor();
     docRedoStack.push(docSnapshot());
@@ -96,6 +113,7 @@ function undoDoc() {
 }
 
 function redoDoc() {
+    if (BOOT.isReadOnly || BOOT.isExecutionMode) return; // Chạy thử: không cho sửa cấu trúc
     if (docRedoStack.length === 0) return;
     unmountEditor();
     docUndoStack.push(docSnapshot());
@@ -209,7 +227,7 @@ function renderDocument() {
             inner.className = 'v2-editable';
             inner.innerHTML = decorateBadges(item.content || '<p></p>');
             el.appendChild(inner);
-            if (!BOOT.isReadOnly && !isLocked) {
+            if (!BOOT.isReadOnly && !BOOT.isExecutionMode && !isLocked) {
                 inner.addEventListener('click', (e) => {
                     if (activeHost === inner) return;
                     e.stopPropagation();
@@ -254,7 +272,7 @@ function renderDocument() {
             // Cho chèn khối mới dưới block thường, hoặc dưới block ảo CUỐI CÙNG
             // (để thêm nội dung ngay sau vùng hệ thống)
             const isLastVirtual = item.isVirtual && (!items[idx + 1] || !items[idx + 1].isVirtual);
-            if (!BOOT.isReadOnly && (!item.isVirtual || isLastVirtual)) {
+            if (!BOOT.isReadOnly && !BOOT.isExecutionMode && (!item.isVirtual || isLastVirtual)) {
                 page.appendChild(makeInserter(idx));
             }
         }
@@ -266,8 +284,10 @@ function renderDocument() {
         hint.className = 'text-center text-muted py-4';
         hint.innerHTML = '<i class="fas fa-file-alt fa-2x mb-2 opacity-50"></i><br>Hồ sơ chưa có nội dung. Hãy thêm khối văn bản hoặc bảng bên dưới để bắt đầu.';
         page.appendChild(hint);
-        if (!BOOT.isReadOnly) page.appendChild(makeInserter(items.length - 1));
+        if (!BOOT.isReadOnly && !BOOT.isExecutionMode) page.appendChild(makeInserter(items.length - 1));
     }
+
+    selection.onAfterRender(); // gắn lại class chọn ô/biến sau khi wipe DOM
 }
 
 /* =========================================================
@@ -278,6 +298,7 @@ function newBlockId() {
 }
 
 function addBlock(type, afterIndex) {
+    if (BOOT.isReadOnly || BOOT.isExecutionMode) return; // Chạy thử: không cho thêm khối mới
     saveDocState();
     // Kế thừa section_id từ block đứng trước để khối mới nằm đúng công đoạn
     const anchor = items[afterIndex] || null;
@@ -366,11 +387,14 @@ function renderTable(item) {
             if (cell.hidden) continue;
 
             const td = document.createElement('td');
+            td.dataset.row = r;
+            td.dataset.col = c;
             if ((cell.rs || 1) > 1) td.rowSpan = cell.rs;
             if ((cell.cs || 1) > 1) td.colSpan = cell.cs;
             if (cell.backgroundColor) td.style.backgroundColor = cell.backgroundColor;
             if (cell.textAlign) td.style.textAlign = cell.textAlign;
             if (cell.fontWeight) td.style.fontWeight = cell.fontWeight;
+            if (cell.fontStyle) td.style.fontStyle = cell.fontStyle;
             if (item.columns && item.columns[c] && item.columns[c].width) td.style.width = item.columns[c].width;
 
             const inner = document.createElement('div');
@@ -378,7 +402,7 @@ function renderTable(item) {
             inner.innerHTML = decorateBadges(cell.content || '');
             td.appendChild(inner);
 
-            if (!BOOT.isReadOnly && !item.locked) {
+            if (!BOOT.isReadOnly && !BOOT.isExecutionMode && !item.locked) {
                 inner.addEventListener('click', (e) => {
                     if (activeHost === inner) return;
                     e.stopPropagation();
@@ -397,12 +421,13 @@ function renderTable(item) {
     table.appendChild(tbody);
     attachTableResizers(item, table);
     wrap.appendChild(table);
+    selection.decorateTable(item, wrap, table); // nút ⊕ + gutter chọn hàng/cột
     return wrap;
 }
 
 /** Kéo cạnh phải ô để đổi bề rộng cột, kéo cạnh dưới để đổi chiều cao hàng (như V1) */
 function attachTableResizers(item, table) {
-    if (BOOT.isReadOnly || item.locked) return;
+    if (BOOT.isReadOnly || BOOT.isExecutionMode || item.locked) return;
     const cols = table.querySelectorAll('colgroup col');
 
     const startDrag = (e, handle, onMove, onEnd) => {
@@ -592,6 +617,8 @@ function gridToTableBlock(grid, sectionId) {
 }
 
 function mountEditor(host, getHTML, setHTML, context = null) {
+    if (BOOT.isReadOnly || BOOT.isExecutionMode) return; // Chạy thử: không cho sửa cấu trúc
+    selection.clearCells(); // mở editor = thoát chế độ chọn ô
     unmountEditor(); // đóng editor đang mở (ghi dữ liệu về trước)
 
     host.classList.add('v2-editing');
@@ -612,7 +639,12 @@ function mountEditor(host, getHTML, setHTML, context = null) {
         },
     });
     activeHost = host;
-    activeSync = () => setHTML(activeEditor.getHTML());
+    const editorInstance = activeEditor;
+    activeSync = () => {
+        let html = editorInstance.getHTML() || '';
+        html = html.replace(/ ProseMirror-selectednode/g, '').replace(/ProseMirror-selectednode/g, '').replace(/ class=""/g, '');
+        setHTML(html);
+    };
     refreshToolbarState();
 
     activeEditor.on('selectionUpdate', refreshToolbarState);
@@ -710,7 +742,8 @@ function unmountEditor() {
     activeEditor = null; activeHost = null; activeSync = null;
 
     sync();                              // ghi HTML về items (TipTap xuất badge chuẩn cũ)
-    const html = editor.getHTML();
+    let html = editor.getHTML() || '';
+    html = html.replace(/ ProseMirror-selectednode/g, '').replace(/ProseMirror-selectednode/g, '').replace(/ class=""/g, '');
     editor.destroy();
     host.classList.remove('v2-editing');
     host.innerHTML = decorateBadges(html); // trở lại chế độ xem tĩnh
@@ -728,9 +761,36 @@ document.addEventListener('mousedown', (e) => {
 /* =========================================================
  * 3. TOOLBAR
  * ========================================================= */
-function cmd(fn) {
+function cmd(fn, name = null) {
+    // Không có editor nhưng đang CHỌN nhiều ô -> áp dụng cấp Ô (batch)
+    if (!activeEditor && selection.hasCells()) {
+        if (name) applyCellCommand(name);
+        return;
+    }
     if (!activeEditor) return;
     fn(activeEditor.chain().focus());
+}
+
+/** Áp dụng lệnh toolbar cho TẤT CẢ ô đang chọn (prop cấp ô, tương thích V1) */
+function applyCellCommand(name) {
+    const anchor = selection.getAnchorCell();
+    if (!anchor) return;
+    const alignMap = { 'align-left': 'left', 'align-center': 'center', 'align-right': 'right', 'align-justify': 'justify' };
+    if (alignMap[name]) {
+        selection.applyToCells((cell) => { cell.textAlign = alignMap[name]; });
+    } else if (name === 'bold') {
+        const on = anchor.cell.fontWeight !== 'bold';
+        selection.applyToCells((cell) => { cell.fontWeight = on ? 'bold' : ''; });
+    } else if (name === 'italic') {
+        const on = anchor.cell.fontStyle !== 'italic';
+        selection.applyToCells((cell) => { cell.fontStyle = on ? 'italic' : ''; });
+    } else if (name === 'clear-format') {
+        selection.applyToCells((cell) => {
+            cell.fontWeight = ''; cell.fontStyle = ''; cell.textAlign = ''; cell.backgroundColor = '';
+        });
+    } else {
+        showToast('info', 'Định dạng này chỉ áp dụng khi gõ trong ô. Click vào 1 ô để dùng.');
+    }
 }
 
 const TOOLBAR_ACTIONS = {
@@ -773,14 +833,40 @@ function promptLink() {
     else activeEditor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
 }
 
+// Các lệnh áp dụng được ở CẤP Ô khi chọn nhiều ô (không cần editor)
+const CELL_LEVEL_CMDS = ['bold', 'italic', 'align-left', 'align-center', 'align-right', 'align-justify', 'clear-format'];
+
 function refreshToolbarState() {
     const bar = document.getElementById('v2-toolbar');
     if (!bar) return;
+    const hasCellSel = selection.hasCells();
     bar.querySelectorAll('[data-cmd], [data-fmt], #v2-btn-link').forEach((el) => {
         // Undo/Redo luôn bật (hoạt động cả ở cấp tài liệu khi không gõ trong editor)
         const cmdName = el.getAttribute && el.getAttribute('data-cmd');
-        el.disabled = (cmdName === 'undo' || cmdName === 'redo') ? false : !activeEditor;
+        if (cmdName === 'undo' || cmdName === 'redo') { el.disabled = false; return; }
+        if (cmdName === 'merge-cells') { el.disabled = !(hasCellSel && selection.cellCount() >= 2); return; }
+        if (cmdName === 'split-cell') {
+            const a = selection.getAnchorCell();
+            el.disabled = !(hasCellSel && selection.cellCount() === 1 && a && ((a.cell.rs || 1) > 1 || (a.cell.cs || 1) > 1));
+            return;
+        }
+        if (!activeEditor && hasCellSel && cmdName && CELL_LEVEL_CMDS.includes(cmdName)) { el.disabled = false; return; }
+        el.disabled = !activeEditor;
     });
+
+    // Phản chiếu trạng thái từ Ô ANCHOR khi chọn nhiều ô (không có editor)
+    if (!activeEditor && hasCellSel) {
+        const a = selection.getAnchorCell();
+        const boldBtn = document.querySelector('[data-cmd="bold"]');
+        if (boldBtn) boldBtn.classList.toggle('active', !!(a && a.cell.fontWeight === 'bold'));
+        const italicBtn = document.querySelector('[data-cmd="italic"]');
+        if (italicBtn) italicBtn.classList.toggle('active', !!(a && a.cell.fontStyle === 'italic'));
+        ['left', 'center', 'right', 'justify'].forEach((al) => {
+            const btn = document.querySelector(`[data-cmd="align-${al}"]`);
+            if (btn) btn.classList.toggle('active', !!(a && a.cell.textAlign === al));
+        });
+        return;
+    }
     if (!activeEditor) return;
 
     const map = {
@@ -845,13 +931,16 @@ function initFormatControls() {
     });
     const hl = document.getElementById('v2-color-highlight');
     if (hl) hl.addEventListener('input', () => {
-        if (activeEditor) activeEditor.chain().focus().setHighlight({ color: hl.value }).run();
+        if (activeEditor) { activeEditor.chain().focus().setHighlight({ color: hl.value }).run(); return; }
+        // Chọn nhiều ô: tô màu NỀN cả ô (prop cấp ô, tương thích V1)
+        if (selection.hasCells()) selection.applyToCells((cell) => { cell.backgroundColor = hl.value; });
     });
     const hlOff = document.getElementById('v2-btn-unhighlight');
     if (hlOff) {
         hlOff.addEventListener('mousedown', (e) => e.preventDefault());
         hlOff.addEventListener('click', () => {
-            if (activeEditor) activeEditor.chain().focus().unsetHighlight().run();
+            if (activeEditor) { activeEditor.chain().focus().unsetHighlight().run(); return; }
+            if (selection.hasCells()) selection.applyToCells((cell) => { cell.backgroundColor = ''; });
         });
     }
     const linkBtn = document.getElementById('v2-btn-link');
@@ -862,7 +951,128 @@ function initFormatControls() {
 }
 
 /* =========================================================
- * 4. BIẾN SỐ — chèn node + panel cấu hình
+ * 3b. GỘP / TÁCH Ô — thao tác trên vùng ô đang chọn
+ *     (port mergeSelectedCells từ V1 table_advanced, model V2
+ *      sạch hơn: rs/cs/hidden first-class, không offset header)
+ * ========================================================= */
+
+/** Ô "trống" = không có badge/ảnh/icon và text chỉ toàn khoảng trắng (giữ nguyên logic V1) */
+function isCellContentEmpty(html) {
+    if (!html || typeof html !== 'string') return true;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    if (tmp.querySelector('img, .ebmr-field-badge, i.fas, i.far, i.fal')) return false;
+    return (tmp.textContent || '').trim() === '';
+}
+
+function mergeSelectedCellsV2() {
+    if (BOOT.isReadOnly || BOOT.isExecutionMode) return;
+    const targets = selection.getCells();
+    if (targets.length < 2) {
+        showToast('info', 'Hãy chọn từ 2 ô trở lên để gộp (kéo hoặc Ctrl+Click).');
+        return;
+    }
+    const item = targets[0].item;
+    if (targets.some((t) => t.item !== item)) {
+        showToast('warning', 'Chỉ gộp được các ô trong CÙNG một bảng.');
+        return;
+    }
+    if (item.locked) return;
+
+    saveDocState();
+
+    // Bounding box tính cả span sẵn có của từng ô được chọn
+    let minR = Infinity, maxR = -1, minC = Infinity, maxC = -1;
+    targets.forEach(({ r, c, cell }) => {
+        minR = Math.min(minR, r);
+        maxR = Math.max(maxR, r + (cell.rs || 1) - 1);
+        minC = Math.min(minC, c);
+        maxC = Math.max(maxC, c + (cell.cs || 1) - 1);
+    });
+    if (minR > maxR || minC > maxC) return;
+
+    if (!item.data[minR][minC] || typeof item.data[minR][minC] !== 'object') {
+        item.data[minR][minC] = { content: '', rs: 1, cs: 1, hidden: false };
+    }
+    const mainCell = item.data[minR][minC];
+    mainCell.rs = maxR - minR + 1;
+    mainCell.cs = maxC - minC + 1;
+    mainCell.hidden = false;
+
+    // Gom nội dung không trống (badge/ảnh không được mất) rồi ẩn các ô phủ
+    const combinedParts = [];
+    for (let r = minR; r <= maxR; r++) {
+        if (!item.data[r]) continue;
+        for (let c = minC; c <= maxC; c++) {
+            if (r === minR && c === minC) continue;
+            if (!item.data[r][c] || typeof item.data[r][c] !== 'object') {
+                item.data[r][c] = { content: '', rs: 1, cs: 1, hidden: false };
+            }
+            const cellHtml = item.data[r][c].content || '';
+            if (!item.data[r][c].hidden && !isCellContentEmpty(cellHtml)) combinedParts.push(cellHtml);
+            item.data[r][c].hidden = true;
+            item.data[r][c].rs = 1;
+            item.data[r][c].cs = 1;
+            item.data[r][c].content = '';
+        }
+    }
+    if (combinedParts.length > 0) {
+        mainCell.content = isCellContentEmpty(mainCell.content)
+            ? combinedParts.join(' ')
+            : mainCell.content + ' ' + combinedParts.join(' ');
+    } else if (isCellContentEmpty(mainCell.content)) {
+        mainCell.content = '';
+    }
+
+    item.dirty = true;
+    markDirty();
+    renderDocument();
+    // Chọn lại ô vừa gộp
+    const td = document.querySelector(`.v2-table-wrap[data-id="${item.id}"] td[data-row="${minR}"][data-col="${minC}"]`);
+    if (td) selection.setRange(td, td);
+}
+
+function splitCellV2() {
+    if (BOOT.isReadOnly || BOOT.isExecutionMode) return;
+    const targets = selection.getCells();
+    if (targets.length !== 1) {
+        showToast('info', 'Hãy chọn đúng 1 ô đã gộp để tách.');
+        return;
+    }
+    const { item, r, c, cell } = targets[0];
+    if (item.locked) return;
+    if ((cell.rs || 1) <= 1 && (cell.cs || 1) <= 1) {
+        showToast('info', 'Ô này chưa được gộp — không cần tách.');
+        return;
+    }
+
+    saveDocState();
+    const rs = cell.rs || 1, cs = cell.cs || 1;
+    for (let rr = r; rr < r + rs; rr++) {
+        if (!item.data[rr]) continue;
+        for (let cc = c; cc < c + cs; cc++) {
+            if (!item.data[rr][cc] || typeof item.data[rr][cc] !== 'object') {
+                item.data[rr][cc] = { content: '', rs: 1, cs: 1, hidden: false };
+            }
+            item.data[rr][cc].hidden = false;
+            item.data[rr][cc].rs = 1;
+            item.data[rr][cc].cs = 1;
+        }
+    }
+    // Nội dung ở lại ô anchor (trên-trái)
+
+    item.dirty = true;
+    markDirty();
+    renderDocument();
+    // Chọn lại vùng vừa tách
+    const wrapSel = `.v2-table-wrap[data-id="${item.id}"]`;
+    const tdA = document.querySelector(`${wrapSel} td[data-row="${r}"][data-col="${c}"]`);
+    const tdB = document.querySelector(`${wrapSel} td[data-row="${r + rs - 1}"][data-col="${c + cs - 1}"]`);
+    if (tdA && tdB) selection.setRange(tdA, tdB);
+}
+
+/* =========================================================
+ * 4. BIẾN SỐ — chèn node + panel cấu hình (đầy đủ V1-parity)
  * ========================================================= */
 function insertVariable(type) {
     if (!activeEditor) {
@@ -872,7 +1082,6 @@ function insertVariable(type) {
     const fieldId = 'field_v2_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     const t = FIELD_TYPES[type] || FIELD_TYPES.text;
 
-    // Đăng ký vào registry — CÙNG shape với trình soạn thảo cũ
     fieldsConfig[fieldId] = {
         id: fieldId,
         name: fieldId,
@@ -881,7 +1090,7 @@ function insertVariable(type) {
         validation: { required: false, min: null, max: null, decimal_places: null },
         options: [],
         instruction: '',
-        block_id: null,   // sẽ được đồng bộ lại lúc lưu (scan như V1)
+        block_id: null,
         section_id: null,
     };
 
@@ -890,65 +1099,909 @@ function insertVariable(type) {
     openFieldPanel(fieldId);
 }
 
-/** Panel cấu hình biến (label, type, bắt buộc) — bản gọn cho pilot */
+/* ----------------------------------------------------------
+ * 4a-bis. Nhân bản biến số trong 1 đoạn HTML (dùng khi COPY/PASTE ô)
+ *   Mỗi badge data-field-id được clone config sang id MỚI để 2 ô
+ *   không trỏ chung 1 biến. Trả về HTML đã thay id.
+ * ---------------------------------------------------------- */
+function duplicateFieldsInHtmlV2(html) {
+    if (!html || typeof html !== 'string' || html.indexOf('data-field-id') === -1) return html;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    let out = html;
+    const seen = new Set();
+    tmp.querySelectorAll('[data-field-id]').forEach((el) => {
+        const oldId = el.getAttribute('data-field-id');
+        if (!oldId || seen.has(oldId) || !fieldsConfig[oldId]) return;
+        seen.add(oldId);
+        const newId = 'field_v2_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+        const clone = JSON.parse(JSON.stringify(fieldsConfig[oldId]));
+        clone.id = newId;
+        clone.name = newId;
+        fieldsConfig[newId] = clone;
+        out = out.split(oldId).join(newId);
+    });
+    markDirty();
+    return out;
+}
+
+/* ----------------------------------------------------------
+ * 4a. syncFieldConfigV2 — deep-path update + type coercion
+ *     Clone logic từ V1 (syncFieldConfig trong ui_handlers)
+ * ---------------------------------------------------------- */
+function syncFieldConfigV2(fieldId, path, value) {
+    if (!fieldsConfig[fieldId]) return;
+    let target = fieldsConfig[fieldId];
+    const keys = path.split('.');
+    const lastKey = keys.pop();
+    for (const key of keys) {
+        if (!target[key] || typeof target[key] !== 'object') target[key] = {};
+        target = target[key];
+    }
+    // Type coercion (giống V1)
+    if (value === '' || value === undefined) value = null;
+    else if (['min', 'max', 'decimal_places'].some(k => path.includes(k))) {
+        value = value !== null ? Number(value) : null;
+    } else if (typeof value === 'string' && path.endsWith('required') || path.endsWith('is_checker') ||
+               path.endsWith('autoSystemTime') || path.endsWith('scaleEnabled') ||
+               path.endsWith('barcodeScanEnabled') || path.endsWith('allow_out_of_bounds')) {
+        // boolean giữ nguyên (đã là boolean từ checkbox.checked)
+    }
+    if (path === 'options' && typeof value === 'string' && value !== null) {
+        value = value.split(',').map(s => s.trim()).filter(Boolean);
+    }
+    target[lastKey] = value;
+    markDirty();
+}
+
+/* ----------------------------------------------------------
+ * 4b. Formula helpers (V2 — không dùng jQuery)
+ * ---------------------------------------------------------- */
+/**
+ * Chèn 1 token vào vùng nhập công thức (contenteditable).
+ * isVarRef=true → bọc token bằng span.formula-var-token để hiển thị màu đẹp.
+ */
+function insertFormulaTokenV2(fieldId, token, isVarRef = false) {
+    const el = document.getElementById(`v2-formula-input-${fieldId}`);
+    if (!el) return;
+    el.focus();
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0 && el.contains(sel.anchorNode)) {
+        const range = sel.getRangeAt(0);
+        range.deleteContents();
+        let node;
+        if (isVarRef) {
+            node = document.createElement('span');
+            node.className = 'v2-formula-var';
+            node.contentEditable = 'false';
+            node.textContent = token;
+            node.dataset.var = token;
+        } else {
+            node = document.createTextNode(token);
+        }
+        range.insertNode(node);
+        range.setStartAfter(node);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+    } else {
+        if (isVarRef) {
+            const span = document.createElement('span');
+            span.className = 'v2-formula-var';
+            span.contentEditable = 'false';
+            span.textContent = token;
+            span.dataset.var = token;
+            el.appendChild(span);
+        } else {
+            el.appendChild(document.createTextNode(token));
+        }
+    }
+    // Serialize và sync về fieldsConfig
+    const formulaStr = serializeFormulaElementV2(el);
+    syncFieldConfigV2(fieldId, 'formula', formulaStr);
+}
+
+/**
+ * Chuyển DOM contenteditable → chuỗi công thức thuần (span.v2-formula-var → (varName))
+ */
+function serializeFormulaElementV2(el) {
+    if (!el) return '';
+    let result = '';
+    el.childNodes.forEach(node => {
+        if (node.nodeType === Node.TEXT_NODE) {
+            result += node.textContent;
+        } else if (node.nodeType === Node.ELEMENT_NODE && node.classList.contains('v2-formula-var')) {
+            result += `(${node.dataset.var || node.textContent})`;
+        } else if (node.nodeType === Node.ELEMENT_NODE) {
+            result += node.textContent;
+        }
+    });
+    return result.trim();
+}
+
+/**
+ * Chuyển chuỗi công thức → HTML có màu (chuẩn bị để đổ vào contenteditable)
+ */
+function deserializeFormulaToHtmlV2(formula, fieldId) {
+    if (!formula) return '';
+    // Tách (varName) thành span màu, phần còn lại là text thuần
+    return formula.replace(/\(([^()]+)\)/g, (match, varName) => {
+        const cfg = Object.values(fieldsConfig).find(f => f.name === varName.trim());
+        const label = cfg ? (cfg.label || varName.trim()) : varName.trim();
+        return `<span class="v2-formula-var" contenteditable="false" data-var="${esc(varName.trim())}" title="${esc(label)}">${esc(varName.trim())}</span>`;
+    });
+}
+
+/* ----------------------------------------------------------
+ * 4c. Copy / Cut / Paste / Delete biến số
+ * ---------------------------------------------------------- */
+let _copiedVar = null;
+
+function copyVariableV2(fieldId) {
+    const field = fieldsConfig[fieldId];
+    if (!field) return;
+    _copiedVar = { ...JSON.parse(JSON.stringify(field)), __isCut: false, __sourceFieldId: null };
+    showToast('success', 'Đã sao chép biến: ' + (field.label || field.name));
+}
+
+function cutVariableV2(fieldId) {
+    const field = fieldsConfig[fieldId];
+    if (!field) return;
+    _copiedVar = { ...JSON.parse(JSON.stringify(field)), __isCut: true, __sourceFieldId: fieldId };
+    showToast('info', 'Đã cắt biến: ' + (field.label || field.name) + '. Hãy click vào vị trí mới và dán.');
+}
+
+/** Core xóa N biến số: gỡ badge khỏi mọi block + xóa config (dùng chung đơn lẻ/hàng loạt) */
+function deleteVariablesV2(fieldIds) {
+    const ids = (fieldIds || []).filter((id) => fieldsConfig[id]);
+    if (ids.length === 0) return;
+    ids.forEach((id) => delete fieldsConfig[id]);
+    items.forEach(item => {
+        const scanAndRemove = (html) => {
+            if (!html || !ids.some((id) => html.includes(id))) return html;
+            const tmp = document.createElement('div');
+            tmp.innerHTML = html;
+            ids.forEach((id) =>
+                tmp.querySelectorAll(`.ebmr-field-badge[data-field-id="${id}"]`).forEach(el => el.remove()));
+            return tmp.innerHTML;
+        };
+        if (item.content) item.content = scanAndRemove(item.content);
+        if (item.data) item.data.forEach(row => row.forEach(cell => {
+            if (cell && cell.content) cell.content = scanAndRemove(cell.content);
+        }));
+        item.dirty = true;
+    });
+    selection.clearFields();
+    markDirty();
+    renderDocument();
+    document.getElementById('v2-field-panel')?.classList.remove('open');
+}
+
+function deleteVariableV2(fieldId) {
+    if (!fieldsConfig[fieldId]) return;
+    deleteVariablesV2([fieldId]);
+    showToast('success', 'Đã xóa biến số');
+}
+
+function showToast(type, msg) {
+    if (window.toastr) { window.toastr[type](msg); return; }
+    if (window.Swal?.mixin) {
+        window.Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2500 })
+            .fire({ icon: type === 'info' ? 'info' : type === 'success' ? 'success' : 'warning', title: msg });
+    }
+}
+
+/* ----------------------------------------------------------
+ * 4d. openFieldPanel — Panel 3 Tab đầy đủ (V1-parity)
+ * ---------------------------------------------------------- */
 function openFieldPanel(fieldId, onSaved) {
     const cfg = fieldsConfig[fieldId];
     if (!cfg) return;
+    selection.setFields([fieldId]); // viền chọn trên badge (thao tác 10)
+    if (!cfg.validation) cfg.validation = { required: false, min: null, max: null, decimal_places: null };
+
     const panel = document.getElementById('v2-field-panel');
+    if (!panel) return;
     panel.classList.add('open');
+
+    // ── Helpers build HTML ──────────────────────────────────
+    const importantVars = (BOOT.importantVars || []);
+    const allNumberFields = Object.values(fieldsConfig).filter(f =>
+        f.id !== fieldId && (f.type === 'number' || f.type === 'formula' || f.type === 'checkbox')
+    );
+    const numberFieldsOptions = '<option value="">-- Chọn biến số --</option>' +
+        allNumberFields.map(f => `<option value="${esc(f.name)}">${esc(f.label ? f.label + ' = ' + f.name : f.name)}</option>`).join('');
+
+    // ── Tab 1: Cơ bản ────────────────────────────────────────
+    const basicHtml = `
+        <div class="mb-3">
+            <label class="v2-prop-label">Loại dữ liệu</label>
+            <select class="form-select form-select-sm border-primary" id="v2fp-type-${fieldId}"
+                onchange="syncFieldConfigV2('${fieldId}','type',this.value); openFieldPanel('${fieldId}')">
+                <option value="text"      ${cfg.type==='text'      ?'selected':''}>Văn bản tự do</option>
+                <option value="number"    ${cfg.type==='number'    ?'selected':''}>Số liệu (Tính toán)</option>
+                <option value="checkbox"  ${cfg.type==='checkbox'  ?'selected':''}>Hộp kiểm (Tick)</option>
+                <option value="formula"   ${cfg.type==='formula'   ?'selected':''}>Công thức tự động (=)</option>
+                <option value="date"      ${cfg.type==='date'      ?'selected':''}>Thời Gian</option>
+                <option value="signature" ${cfg.type==='signature' ?'selected':''}>Chữ ký điện tử</option>
+                <option value="select"    ${cfg.type==='select'    ?'selected':''}>Chọn từ danh sách</option>
+            </select>
+        </div>
+        <hr class="opacity-25 my-2">
+        <div class="mb-3">
+            <label class="v2-prop-label">Nhãn hiển thị</label>
+            <input type="text" class="form-control form-control-sm" id="v2fp-label-${fieldId}"
+                value="${esc(cfg.label || '')}"
+                oninput="syncFieldConfigV2('${fieldId}','label',this.value); _v2RepaintBadge('${fieldId}')">
+            <div class="form-text" style="font-size:0.68rem">VD: Số lượng, Kết quả</div>
+        </div>
+        <div class="mb-3">
+            <label class="v2-prop-label"><i class="fas fa-fingerprint me-1"></i>Mã biến số (ID)</label>
+            <div class="input-group input-group-sm">
+                <span class="input-group-text bg-light border-end-0">@</span>
+                <input type="text" class="form-control border-start-0 font-monospace"
+                    value="${esc(cfg.name || '')}"
+                    oninput="syncFieldConfigV2('${fieldId}','name',this.value)">
+            </div>
+            <div class="form-text" style="font-size:0.65rem">Viết liền không dấu. VD: sl, kl_tong</div>
+        </div>
+        <div class="mb-2">
+            <label class="v2-prop-label">Giá trị mặc định</label>
+            <input type="text" class="form-control form-control-sm"
+                value="${esc(cfg.defaultValue || '')}" placeholder="VD: 4.6"
+                oninput="syncFieldConfigV2('${fieldId}','defaultValue',this.value)">
+            <div class="form-text" style="font-size:0.68rem">Dùng để chạy thử trong thiết kế.</div>
+        </div>`;
+
+    // ── Tab 2: Công thức / Logic ─────────────────────────────
+    // Phần N/A condition — chung cho mọi loại
+    let logicHtml = `
+        <div class="mb-3">
+            <label class="v2-prop-label text-success"><i class="fas fa-ban me-1"></i>Điều kiện Không áp dụng (N/A)</label>
+            <div class="p-2 border border-success border-opacity-50 rounded bg-light">
+                <div class="mb-2">
+                    <label class="v2-prop-sublabel">Mã ID Biến phụ thuộc</label>
+                    <input type="text" class="form-control form-control-sm border-success"
+                        placeholder="Nhập ID biến (VD: tram_1)"
+                        value="${esc((cfg.na_condition && cfg.na_condition.target_id) || '')}"
+                        oninput="syncFieldConfigV2('${fieldId}','na_condition.target_id',this.value)">
+                </div>
+                <div class="row g-2">
+                    <div class="col-5">
+                        <label class="v2-prop-sublabel">Toán tử</label>
+                        <select class="form-select form-select-sm border-success"
+                            onchange="syncFieldConfigV2('${fieldId}','na_condition.operator',this.value)">
+                            <option value="=" ${(cfg.na_condition && cfg.na_condition.operator==='=') ?'selected':''}>Bằng (=)</option>
+                            <option value="!=" ${(cfg.na_condition && cfg.na_condition.operator==='!=') ?'selected':''}>Khác (!=)</option>
+                        </select>
+                    </div>
+                    <div class="col-7">
+                        <label class="v2-prop-sublabel">Giá trị so sánh</label>
+                        <input type="text" class="form-control form-control-sm border-success"
+                            value="${esc((cfg.na_condition && cfg.na_condition.value) || '')}"
+                            oninput="syncFieldConfigV2('${fieldId}','na_condition.value',this.value)">
+                    </div>
+                </div>
+                <div class="form-text mt-1" style="font-size:0.65rem">Nếu điều kiện đúng → biến tự động N/A.</div>
+            </div>
+        </div>`;
+
+    // Phần riêng theo type
+    if (cfg.type === 'formula') {
+        logicHtml += `
+            <hr class="opacity-25 my-2">
+            <div class="mb-3">
+                <label class="v2-prop-label text-success"><i class="fas fa-calculator me-1"></i>Công thức tính toán</label>
+                <div class="input-group input-group-sm mb-2">
+                    <select class="form-select border-success" style="max-width:65%"
+                        onchange="if(this.value){insertFormulaTokenV2('${fieldId}',this.value,true);this.value=''}">
+                        ${numberFieldsOptions}
+                    </select>
+                    <button class="btn btn-outline-success" type="button"
+                        onclick="insertFormulaTokenV2('${fieldId}',' + ')">+</button>
+                    <button class="btn btn-outline-success" type="button"
+                        onclick="insertFormulaTokenV2('${fieldId}',' - ')">-</button>
+                    <button class="btn btn-outline-success" type="button"
+                        onclick="insertFormulaTokenV2('${fieldId}',' * ')">×</button>
+                    <button class="btn btn-outline-success" type="button"
+                        onclick="insertFormulaTokenV2('${fieldId}',' / ')">÷</button>
+                </div>
+                <div class="input-group input-group-sm mb-2">
+                    <button class="btn btn-outline-success" type="button"
+                        onclick="insertFormulaTokenV2('${fieldId}','AVG(')">AVG()</button>
+                    <button class="btn btn-outline-success" type="button"
+                        onclick="insertFormulaTokenV2('${fieldId}','MAX(')">MAX()</button>
+                    <button class="btn btn-outline-success" type="button"
+                        onclick="insertFormulaTokenV2('${fieldId}','MIN(')">MIN()</button>
+                    <button class="btn btn-outline-secondary" type="button"
+                        onclick="insertFormulaTokenV2('${fieldId}',', ')">,</button>
+                    <button class="btn btn-outline-secondary" type="button"
+                        onclick="insertFormulaTokenV2('${fieldId}',')')">)</button>
+                </div>
+                <div id="v2-formula-input-${fieldId}"
+                    class="form-control form-control-sm border-success font-monospace v2-formula-editor"
+                    contenteditable="true"
+                    placeholder="Gõ công thức hoặc chọn biến từ dropdown..."
+                    oninput="syncFieldConfigV2('${fieldId}','formula',serializeFormulaElementV2(this))"
+                    >${deserializeFormulaToHtmlV2(cfg.formula || '', fieldId)}</div>
+                <div class="mt-2">
+                    <label class="v2-prop-sublabel">Làm tròn số thập phân</label>
+                    <input type="number" class="form-control form-control-sm" min="0" max="6"
+                        placeholder="VD: 2"
+                        value="${cfg.validation.decimal_places !== null && cfg.validation.decimal_places !== undefined ? cfg.validation.decimal_places : ''}"
+                        oninput="syncFieldConfigV2('${fieldId}','validation.decimal_places',this.value)">
+                </div>
+            </div>`;
+    } else if (cfg.type === 'checkbox') {
+        logicHtml += `
+            <hr class="opacity-25 my-2">
+            <div class="mb-3 p-2 bg-light rounded border border-success border-opacity-25">
+                <label class="v2-prop-label text-success"><i class="fas fa-calculator me-1"></i>Công thức tự động Tick</label>
+                <div class="input-group input-group-sm mb-2">
+                    <select class="form-select border-success" style="max-width:65%"
+                        onchange="if(this.value){insertFormulaTokenV2('${fieldId}',this.value,true);this.value=''}">
+                        ${numberFieldsOptions}
+                    </select>
+                    <button class="btn btn-outline-success" type="button"
+                        onclick="insertFormulaTokenV2('${fieldId}',' + ')">+</button>
+                    <button class="btn btn-outline-success" type="button"
+                        onclick="insertFormulaTokenV2('${fieldId}',' - ')">-</button>
+                    <button class="btn btn-outline-success" type="button"
+                        onclick="insertFormulaTokenV2('${fieldId}',' * ')">×</button>
+                    <button class="btn btn-outline-success" type="button"
+                        onclick="insertFormulaTokenV2('${fieldId}',' / ')">÷</button>
+                    <button class="btn btn-outline-success" type="button"
+                        onclick="insertFormulaTokenV2('${fieldId}',' == ')">==</button>
+                </div>
+                <div id="v2-formula-input-${fieldId}"
+                    class="form-control form-control-sm border-success font-monospace v2-formula-editor"
+                    contenteditable="true"
+                    placeholder="Công thức > 0 hoặc TRUE → tự Tick..."
+                    oninput="syncFieldConfigV2('${fieldId}','formula',serializeFormulaElementV2(this))"
+                    >${deserializeFormulaToHtmlV2(cfg.formula || '', fieldId)}</div>
+                <div class="form-text mt-1" style="font-size:0.65rem">Nếu công thức > 0 hoặc TRUE → ô tự động Tick.</div>
+            </div>`;
+    } else if (cfg.type === 'date') {
+        logicHtml += `
+            <hr class="opacity-25 my-2">
+            <div class="mb-3">
+                <label class="v2-prop-label text-success"><i class="fas fa-clock me-1"></i>Định dạng thời gian</label>
+                <select class="form-select form-select-sm border-success"
+                    onchange="syncFieldConfigV2('${fieldId}','date_format',this.value)">
+                    <option value="dd/mm/yyyy" ${(!cfg.date_format||cfg.date_format==='dd/mm/yyyy')?'selected':''}>Ngày (dd/mm/yyyy)</option>
+                    <option value="hh:mm dd/mm/yyyy" ${cfg.date_format==='hh:mm dd/mm/yyyy'?'selected':''}>Giờ và Ngày (hh:mm dd/mm/yyyy)</option>
+                </select>
+            </div>
+            <div class="mb-3 p-2 bg-light rounded border border-success border-opacity-25">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="v2fp-autotime-${fieldId}"
+                        ${(cfg.autoSystemTime !== false) ? 'checked' : ''}
+                        onchange="syncFieldConfigV2('${fieldId}','autoSystemTime',this.checked)">
+                    <label class="form-check-label small fw-bold text-muted" for="v2fp-autotime-${fieldId}">
+                        <i class="fas fa-bolt me-1 text-warning"></i>Tự động lấy giờ hệ thống
+                    </label>
+                </div>
+                <div class="form-text mt-1" style="font-size:0.65rem">Click chuột → hệ thống tự điền giờ hiện tại.</div>
+            </div>`;
+    } else if (cfg.type === 'signature') {
+        logicHtml += `
+            <hr class="opacity-25 my-2">
+            <div class="mb-3 p-3 bg-light rounded border border-success border-opacity-25 text-center">
+                <i class="fas fa-user-check text-success fa-2x mb-2"></i>
+                <div class="form-check form-switch d-inline-block text-start w-100">
+                    <input class="form-check-input" type="checkbox" id="v2fp-checker-${fieldId}"
+                        ${cfg.is_checker ? 'checked' : ''}
+                        onchange="syncFieldConfigV2('${fieldId}','is_checker',this.checked)">
+                    <label class="form-check-label small fw-bold text-muted ms-1" for="v2fp-checker-${fieldId}">
+                        Chữ ký người không đăng nhập
+                    </label>
+                </div>
+                <div class="form-text text-start mt-1" style="font-size:0.65rem">Người dùng phải nhập lại user + mật khẩu để ký.</div>
+            </div>`;
+    } else if (cfg.type === 'number') {
+        logicHtml += `
+            <hr class="opacity-25 my-2">
+            <div class="card border-success border-opacity-25 shadow-none mb-3">
+                <div class="card-header bg-light py-1">
+                    <label class="small fw-bold text-success mb-0"><i class="fas fa-balance-scale me-1"></i>Giới hạn giá trị (Min/Max)</label>
+                </div>
+                <div class="card-body p-2">
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <label class="v2-prop-sublabel">Tối thiểu (Min)</label>
+                            <input type="number" class="form-control form-control-sm"
+                                placeholder="VD: 71.0"
+                                value="${cfg.validation.min !== null && cfg.validation.min !== undefined ? cfg.validation.min : ''}"
+                                oninput="syncFieldConfigV2('${fieldId}','validation.min',this.value)">
+                        </div>
+                        <div class="col-6">
+                            <label class="v2-prop-sublabel">Tối đa (Max)</label>
+                            <input type="number" class="form-control form-control-sm"
+                                placeholder="VD: 81.0"
+                                value="${cfg.validation.max !== null && cfg.validation.max !== undefined ? cfg.validation.max : ''}"
+                                oninput="syncFieldConfigV2('${fieldId}','validation.max',this.value)">
+                        </div>
+                    </div>
+                    <div class="mt-2 pt-2 border-top">
+                        <label class="v2-prop-sublabel">Chữ số thập phân</label>
+                        <input type="number" class="form-control form-control-sm" min="0" max="6"
+                            placeholder="Bỏ trống nếu là số nguyên"
+                            value="${cfg.validation.decimal_places !== null && cfg.validation.decimal_places !== undefined ? cfg.validation.decimal_places : ''}"
+                            oninput="syncFieldConfigV2('${fieldId}','validation.decimal_places',this.value)">
+                    </div>
+                    <div class="form-check form-switch pt-2 mt-2 border-top">
+                        <input class="form-check-input" type="checkbox" id="v2fp-outofbounds-${fieldId}"
+                            ${cfg.validation && cfg.validation.allow_out_of_bounds ? 'checked' : ''}
+                            onchange="syncFieldConfigV2('${fieldId}','validation.allow_out_of_bounds',this.checked)">
+                        <label class="form-check-label small text-muted" style="font-size:0.75em" for="v2fp-outofbounds-${fieldId}">
+                            Cho phép nhập ngoài giới hạn?
+                        </label>
+                    </div>
+                </div>
+            </div>`;
+    } else if (cfg.type === 'select') {
+        const dsType = (cfg.dataSource && cfg.dataSource.type) || 'manual';
+        const ds = cfg.dataSource || {};
+        logicHtml += `
+            <hr class="opacity-25 my-2">
+            <div class="mb-3">
+                <label class="v2-prop-label text-success"><i class="fas fa-database me-1"></i>Nguồn dữ liệu Dropdown</label>
+                <select class="form-select form-select-sm mb-2 border-success"
+                    onchange="syncFieldConfigV2('${fieldId}','dataSource.type',this.value); openFieldPanel('${fieldId}')">
+                    <option value="manual"   ${dsType==='manual'   ?'selected':''}>Nhập thủ công (Tự định nghĩa)</option>
+                    <option value="database" ${dsType==='database' ?'selected':''}>Lấy tự động từ CSDL (Database)</option>
+                </select>
+                ${dsType === 'manual' ? `
+                <textarea class="form-control form-control-sm" rows="3"
+                    placeholder="Ví dụ: Đạt, Tốt, Không đạt"
+                    oninput="syncFieldConfigV2('${fieldId}','options',this.value)"
+                    >${Array.isArray(cfg.options) ? cfg.options.join(', ') : (cfg.options || '')}</textarea>
+                <div class="form-text" style="font-size:0.7rem">Mỗi lựa chọn cách nhau bởi dấu phẩy (,).</div>` : `
+                <div class="border border-success border-opacity-50 rounded p-2 bg-light">
+                    <div class="mb-2">
+                        <label class="v2-prop-sublabel">Tên Bảng (Table DB)</label>
+                        <input type="text" class="form-control form-control-sm border-success"
+                            placeholder="VD: departments"
+                            value="${esc(ds.table || '')}"
+                            oninput="syncFieldConfigV2('${fieldId}','dataSource.table',this.value)">
+                    </div>
+                    <div class="mb-2">
+                        <label class="v2-prop-sublabel">Cột hiển thị (Label Col)</label>
+                        <input type="text" class="form-control form-control-sm border-success"
+                            placeholder="VD: name"
+                            value="${esc(ds.labelCol || '')}"
+                            oninput="syncFieldConfigV2('${fieldId}','dataSource.labelCol',this.value)">
+                    </div>
+                    <div class="mb-2">
+                        <label class="v2-prop-sublabel">Cột giá trị lưu (Value Col)</label>
+                        <input type="text" class="form-control form-control-sm"
+                            placeholder="Mặc định = Label Col"
+                            value="${esc(ds.valueCol || '')}"
+                            oninput="syncFieldConfigV2('${fieldId}','dataSource.valueCol',this.value)">
+                    </div>
+                    <div class="mb-0">
+                        <label class="v2-prop-sublabel">Lọc Where (Tùy chọn)</label>
+                        <input type="text" class="form-control form-control-sm"
+                            placeholder="VD: active=1"
+                            value="${esc(ds.where || '')}"
+                            oninput="syncFieldConfigV2('${fieldId}','dataSource.where',this.value)">
+                    </div>
+                </div>`}
+            </div>`;
+    }
+
+    // ── Tab 3: Mở rộng ───────────────────────────────────────
+    const styleObj = cfg.style || {};
+    let advancedHtml = `
+        <div class="mb-3">
+            <label class="v2-prop-label"><i class="fas fa-star text-warning me-1"></i>Thông số quan trọng (CPP/CMA)</label>
+            <select class="form-select form-select-sm border-warning shadow-sm"
+                onchange="syncFieldConfigV2('${fieldId}','important_var_id',this.value)">
+                <option value="">-- Không --</option>
+                ${importantVars.map(v =>
+                    `<option value="${v.id}" ${cfg.important_var_id == v.id ? 'selected' : ''}>${esc(v.name)}${v.description ? ' (' + esc(v.description) + ')' : ''}</option>`
+                ).join('')}
+            </select>
+            <div class="form-text" style="font-size:0.65rem">Gắn cờ CPP/CMA để lọc báo cáo PVR/PQR.</div>
+        </div>
+        <hr class="opacity-25 my-2">
+        <div class="mb-3">
+            <label class="v2-prop-label text-primary"><i class="fas fa-info-circle me-1"></i>Hướng dẫn ghi chép</label>
+            <textarea class="form-control form-control-sm border-primary" rows="3"
+                placeholder="VD: Kiểm tra nhiệt độ trước khi ghi..."
+                oninput="syncFieldConfigV2('${fieldId}','instruction',this.value)"
+                >${esc(cfg.instruction || '')}</textarea>
+            <div class="form-text" style="font-size:0.68rem">Hiển thị khi người thực hiện nhấp vào ô nhập.</div>
+        </div>
+        <hr class="opacity-25 my-2">
+        <div class="mb-3">
+            <div class="form-check form-switch ps-4 pt-1">
+                <input class="form-check-input ms-n4" type="checkbox" id="v2fp-req-${fieldId}"
+                    ${cfg.validation.required ? 'checked' : ''}
+                    onchange="syncFieldConfigV2('${fieldId}','validation.required',this.checked)">
+                <label class="form-check-label small fw-bold" for="v2fp-req-${fieldId}">Bắt buộc điền</label>
+            </div>
+        </div>
+        <hr class="opacity-25 my-2">
+        <div class="card bg-light border-0 shadow-none mb-3">
+            <div class="card-body p-3">
+                <label class="v2-prop-label mb-2">Kích thước biến <i class="fas fa-arrows-alt-h me-1"></i></label>
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="v2-prop-sublabel">Rộng (px)</label>
+                        <input type="number" class="form-control form-control-sm" placeholder="Mặc định" min="50"
+                            value="${styleObj.width && !styleObj.width.includes('%') ? parseInt(styleObj.width) : ''}"
+                            oninput="const v=this.value?this.value+'px':''; syncFieldConfigV2('${fieldId}','style.width',v); _v2ApplyBadgeStyle('${fieldId}','width',v)">
+                    </div>
+                    <div class="col-6">
+                        <label class="v2-prop-sublabel">Lề trái (px)</label>
+                        <input type="number" class="form-control form-control-sm" placeholder="Mặc định" min="0"
+                            value="${styleObj.marginLeft ? parseInt(styleObj.marginLeft) : ''}"
+                            oninput="const v=this.value?this.value+'px':''; syncFieldConfigV2('${fieldId}','style.marginLeft',v); _v2ApplyBadgeStyle('${fieldId}','margin-left',v)">
+                    </div>
+                </div>
+                <div class="d-flex gap-2 mb-2">
+                    <button type="button" id="v2fp-maxw-${fieldId}"
+                        class="btn btn-sm ${styleObj.width==='100%'?'btn-primary active':'btn-outline-secondary'} flex-fill"
+                        onclick="_v2ToggleBadgeMaxDim('${fieldId}','width','100%',this)">
+                        <i class="fas fa-arrows-alt-h"></i> Max Rộng
+                    </button>
+                    <button type="button" id="v2fp-maxh-${fieldId}"
+                        class="btn btn-sm ${styleObj.height==='100%'?'btn-primary active':'btn-outline-secondary'} flex-fill"
+                        onclick="_v2ToggleBadgeMaxDim('${fieldId}','height','100%',this)">
+                        <i class="fas fa-arrows-alt-v"></i> Max Cao
+                    </button>
+                </div>
+                <div class="btn-group w-100" role="group">
+                    ${['left','center','right'].map(a => `
+                    <button type="button"
+                        class="btn btn-sm ${styleObj.badgeAlign===a?'btn-primary active':'btn-outline-secondary'}"
+                        onclick="_v2SetBadgeAlign('${fieldId}','${a}',this)">
+                        <i class="fas fa-align-${a}"></i> ${a==='left'?'Trái':a==='center'?'Giữa':'Phải'}
+                    </button>`).join('')}
+                </div>
+            </div>
+        </div>`;
+
+    // Cân RS-232 (chỉ number)
+    if (cfg.type === 'number') {
+        advancedHtml += `
+        <div class="card border-0 shadow-none mb-3" style="background:linear-gradient(135deg,#fef2f2,#fee2e2);border:1px solid #fecaca!important">
+            <div class="card-body p-3">
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <i class="fas fa-balance-scale text-danger"></i>
+                    <label class="small fw-bold mb-0 text-danger-emphasis">Kết nối Cân điện tử</label>
+                </div>
+                <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="v2fp-scale-${fieldId}"
+                        ${cfg.scaleEnabled ? 'checked' : ''}
+                        onchange="syncFieldConfigV2('${fieldId}','scaleEnabled',this.checked); document.getElementById('v2fp-scalebrand-${fieldId}').classList.toggle('d-none',!this.checked)">
+                    <label class="form-check-label small fw-bold" for="v2fp-scale-${fieldId}">Bật RS-232 / Web Serial</label>
+                </div>
+                <div id="v2fp-scalebrand-${fieldId}" class="${cfg.scaleEnabled?'':'d-none'} p-2 bg-white rounded border border-danger border-opacity-25">
+                    <label class="v2-prop-sublabel">Hãng cân mặc định</label>
+                    <select class="form-select form-select-sm" onchange="syncFieldConfigV2('${fieldId}','scalePreset',this.value)">
+                        <option value="and"      ${(cfg.scalePreset||'and')==='and'      ?'selected':''}>⚖️ A&D (AND)</option>
+                        <option value="mettler"  ${cfg.scalePreset==='mettler'           ?'selected':''}>🏋️ Mettler Toledo</option>
+                        <option value="sartorius" ${cfg.scalePreset==='sartorius'        ?'selected':''}>🔬 Sartorius</option>
+                        <option value="custom"   ${cfg.scalePreset==='custom'            ?'selected':''}>⚙️ Tùy chỉnh</option>
+                    </select>
+                </div>
+            </div>
+        </div>`;
+    }
+
+    // Barcode (chỉ text)
+    if (cfg.type === 'text') {
+        advancedHtml += `
+        <div class="card border-0 shadow-none mb-3" style="background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:1px solid #bbf7d0!important">
+            <div class="card-body p-3">
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <i class="fas fa-barcode text-success"></i>
+                    <label class="small fw-bold mb-0 text-success-emphasis">Kích hoạt Quét Barcode</label>
+                </div>
+                <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="v2fp-barcode-${fieldId}"
+                        ${cfg.barcodeScanEnabled ? 'checked' : ''}
+                        onchange="syncFieldConfigV2('${fieldId}','barcodeScanEnabled',this.checked); openFieldPanel('${fieldId}')">
+                    <label class="form-check-label small fw-bold" for="v2fp-barcode-${fieldId}">Cho phép quét Barcode</label>
+                </div>
+                ${cfg.barcodeScanEnabled ? `
+                <div class="mb-0">
+                    <label class="v2-prop-sublabel">Mã đối chiếu (Tùy chọn)</label>
+                    <input type="text" class="form-control form-control-sm border-success"
+                        placeholder="VD: 22120040279"
+                        value="${esc(cfg.barcodeMatchValue || '')}"
+                        oninput="syncFieldConfigV2('${fieldId}','barcodeMatchValue',this.value)">
+                </div>` : ''}
+            </div>
+        </div>`;
+    }
+
+    // ── Compose 3-tab panel HTML ─────────────────────────────
     panel.innerHTML = `
         <div class="v2-panel-head">
             <span><i class="fas fa-tag me-2"></i>Biến số</span>
-            <button class="btn-close-panel" id="v2-panel-close"><i class="fas fa-times"></i></button>
+            <button class="btn-close-panel" id="v2fp-close"><i class="fas fa-times"></i></button>
         </div>
-        <div class="v2-panel-body">
-            <label>Nhãn hiển thị</label>
-            <input type="text" id="v2-f-label" class="form-control form-control-sm" value="${esc(cfg.label || '')}">
-            <label class="mt-2">Loại dữ liệu</label>
-            <select id="v2-f-type" class="form-control form-control-sm">
-                ${Object.entries(FIELD_TYPES).map(([k, v]) =>
-                    `<option value="${k}" ${cfg.type === k ? 'selected' : ''}>${v.label}</option>`).join('')}
-            </select>
-            <div class="form-check mt-2">
-                <input type="checkbox" class="form-check-input" id="v2-f-req" ${cfg.validation?.required ? 'checked' : ''}>
-                <label class="form-check-label" for="v2-f-req">Bắt buộc nhập</label>
+        <div style="overflow-y:auto; height:calc(100vh - 130px)">
+            <ul class="nav nav-tabs nav-fill border-0 mb-0 v2fp-tabs" style="font-size:0.78rem; background:#f8f9fa">
+                <li class="nav-item">
+                    <button class="nav-link active v2fp-tab fw-bold px-1 py-2" data-pane="v2fp-pane-basic-${fieldId}"
+                        style="border-top:3px solid #0d6efd; background:#fff">
+                        <i class="fas fa-sliders-h d-block mb-1" style="font-size:1rem"></i>Cơ bản
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link v2fp-tab fw-bold text-success px-1 py-2" data-pane="v2fp-pane-logic-${fieldId}"
+                        style="border-top:3px solid transparent; background:#f8f9fa">
+                        <i class="fas fa-calculator d-block mb-1" style="font-size:1rem"></i>Công thức
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link v2fp-tab fw-bold text-warning px-1 py-2" data-pane="v2fp-pane-adv-${fieldId}"
+                        style="border-top:3px solid transparent; background:#f8f9fa">
+                        <i class="fas fa-tools d-block mb-1" style="font-size:1rem"></i>Mở rộng
+                    </button>
+                </li>
+            </ul>
+
+            <div id="v2fp-pane-basic-${fieldId}" class="v2fp-pane p-3">${basicHtml}</div>
+            <div id="v2fp-pane-logic-${fieldId}" class="v2fp-pane p-3 d-none">${logicHtml}</div>
+            <div id="v2fp-pane-adv-${fieldId}"   class="v2fp-pane p-3 d-none">${advancedHtml}</div>
+
+            <div class="p-3 border-top bg-light">
+                <div class="d-flex gap-2 mb-2">
+                    <button class="btn btn-sm btn-outline-primary flex-fill"
+                        onclick="copyVariableV2('${fieldId}')"><i class="fas fa-copy me-1"></i>Sao chép</button>
+                    <button class="btn btn-sm btn-outline-warning flex-fill"
+                        onclick="cutVariableV2('${fieldId}')"><i class="fas fa-cut me-1"></i>Cắt</button>
+                </div>
+                <button class="btn btn-sm btn-outline-danger w-100"
+                    onclick="if(confirm('Xóa biến số này?')) deleteVariableV2('${fieldId}')">
+                    <i class="fas fa-trash-alt me-1"></i>Xóa bỏ hoàn toàn
+                </button>
             </div>
-            <div class="text-muted small mt-2">ID: <code>${esc(fieldId)}</code></div>
-            <button class="btn btn-sm btn-navy w-100 mt-3" id="v2-f-apply"><i class="fas fa-check me-1"></i> Áp dụng</button>
         </div>`;
 
-    panel.querySelector('#v2-panel-close').onclick = () => panel.classList.remove('open');
-    panel.querySelector('#v2-f-apply').onclick = () => {
-        cfg.label = panel.querySelector('#v2-f-label').value;
-        cfg.type = panel.querySelector('#v2-f-type').value;
-        cfg.validation = cfg.validation || {};
-        cfg.validation.required = panel.querySelector('#v2-f-req').checked;
-        markDirty();
-        panel.classList.remove('open');
-        if (typeof onSaved === 'function') onSaved();
-        // repaint badge tĩnh nếu đang ở chế độ xem
-        if (!activeEditor) renderDocument();
-    };
+    // ── Tab switching (thủ công, không dùng Bootstrap JS) ───
+    const tabColors = { 0: '#0d6efd', 1: '#198754', 2: '#ffc107' };
+    panel.querySelectorAll('.v2fp-tab').forEach((btn, idx) => {
+        btn.addEventListener('click', () => {
+            panel.querySelectorAll('.v2fp-tab').forEach((b, i) => {
+                b.classList.remove('active');
+                b.style.borderTopColor = 'transparent';
+                b.style.background = '#f8f9fa';
+            });
+            btn.classList.add('active');
+            btn.style.borderTopColor = tabColors[idx] || '#0d6efd';
+            btn.style.background = '#fff';
+            panel.querySelectorAll('.v2fp-pane').forEach(p => p.classList.add('d-none'));
+            const pane = document.getElementById(btn.dataset.pane);
+            if (pane) pane.classList.remove('d-none');
+        });
+    });
+
+    panel.querySelector('#v2fp-close').onclick = () => panel.classList.remove('open');
 }
 BOOT.openFieldPanel = openFieldPanel;
 
-/* =========================================================
- * 5. LƯU — cùng payload incremental với trình soạn thảo cũ
- * ========================================================= */
+/* ----------------------------------------------------------
+ * 4d-bis. Panel SỬA HÀNG LOẠT biến số (Ctrl+Alt+quét marquee)
+ *         Port batch_field_ops.blade.php của V1 sang V2
+ * ---------------------------------------------------------- */
+function batchSyncFieldConfigV2(path, value) {
+    const ids = selection.getFieldIds();
+    if (ids.length === 0) return;
+    ids.forEach((id) => syncFieldConfigV2(id, path, value));
+    if (path === 'type') {
+        updateBatchSpecificOptionsV2(value);
+        renderDocument(); // repaint badge tĩnh theo type mới
+    }
+}
+
+function updateBatchSpecificOptionsV2(type) {
+    const container = document.getElementById('v2-batch-specific-options');
+    if (!container) return;
+    let html = '';
+    if (type === 'number') {
+        html = `
+            <div class="card bg-light border-0 shadow-none mb-3">
+                <div class="card-body p-3">
+                    <label class="small fw-bold mb-2"><i class="fas fa-balance-scale me-1"></i> Giới hạn giá trị chung</label>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <label class="small text-muted" style="font-size:0.75em;">Tối thiểu (Min)</label>
+                            <input type="number" class="form-control form-control-sm" oninput="batchSyncFieldConfigV2('validation.min', this.value)">
+                        </div>
+                        <div class="col-6">
+                            <label class="small text-muted" style="font-size:0.75em;">Tối đa (Max)</label>
+                            <input type="number" class="form-control form-control-sm" oninput="batchSyncFieldConfigV2('validation.max', this.value)">
+                        </div>
+                    </div>
+                    <div class="form-check form-switch ps-4 pt-1 mt-2">
+                        <input class="form-check-input ms-n4" type="checkbox" id="v2-batch-oob" onchange="batchSyncFieldConfigV2('validation.allow_out_of_bounds', this.checked)">
+                        <label class="form-check-label small text-muted" style="font-size:0.75em;" for="v2-batch-oob">Cho phép nhập ngoài giới hạn?</label>
+                    </div>
+                </div>
+            </div>`;
+    } else if (type === 'select') {
+        html = `
+            <div class="mb-3">
+                <label class="small fw-bold text-muted text-uppercase mb-2">Danh sách lựa chọn chung</label>
+                <textarea class="form-control form-control-sm" rows="3" placeholder="Ví dụ: Đạt, Tốt, Không đạt"
+                    oninput="batchSyncFieldConfigV2('options', this.value)"></textarea>
+            </div>`;
+    }
+    container.innerHTML = html;
+}
+
+function batchDeleteFieldsV2() {
+    const ids = selection.getFieldIds();
+    if (ids.length === 0) return;
+    window.Swal.fire({
+        title: 'Xác nhận xóa?',
+        text: `Bạn có chắc chắn muốn xóa ${ids.length} biến số đã chọn?`,
+        icon: 'warning', showCancelButton: true,
+        confirmButtonColor: '#d33', confirmButtonText: 'Xóa ngay', cancelButtonText: 'Hủy',
+    }).then((result) => {
+        if (!result.value) return;
+        saveDocState();
+        deleteVariablesV2(ids);
+        showToast('success', `Đã xóa ${ids.length} biến số`);
+    });
+}
+
+function openBatchFieldPanelV2(fieldIds) {
+    const ids = (fieldIds || []).filter((id) => fieldsConfig[id]);
+    if (ids.length === 0) return;
+    if (ids.length === 1) { openFieldPanel(ids[0]); return; } // 1 biến: panel thường
+
+    const panel = document.getElementById('v2-field-panel');
+    if (!panel) return;
+    panel.classList.add('open');
+
+    const firstField = fieldsConfig[ids[0]];
+    panel.innerHTML = `
+        <div class="v2-panel-head">
+            <span><i class="fas fa-layer-group me-2"></i>Sửa hàng loạt</span>
+            <button class="btn-close-panel" id="v2fp-close"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="p-3" style="overflow-y:auto; height:calc(100vh - 130px)">
+            <div class="alert alert-info py-2 mb-2 small">
+                <i class="fas fa-layer-group me-1"></i> Đang chỉnh sửa <strong>${ids.length} biến số</strong> cùng lúc.
+            </div>
+            <div class="text-muted mb-3" style="font-size:0.65rem; max-height:40px; overflow-y:auto;">
+                Mã: ${ids.map(esc).join(', ')}
+            </div>
+
+            <div class="mb-3">
+                <label class="v2-prop-label">Tên thẻ chung (Nhãn hiển thị)</label>
+                <input type="text" class="form-control form-control-sm" value="${esc(firstField.label || '')}"
+                    placeholder="Nhập tên thẻ chung..." oninput="batchSyncFieldConfigV2('label', this.value)">
+                <div class="form-text small" style="font-size:0.7rem;">Áp dụng nhãn cho tất cả biến đã chọn.</div>
+            </div>
+
+            <div class="mb-3">
+                <label class="v2-prop-label">Kiểu dữ liệu chung</label>
+                <select class="form-select form-select-sm" onchange="batchSyncFieldConfigV2('type', this.value)">
+                    <option value="" disabled selected>-- Chọn kiểu để áp dụng cho tất cả --</option>
+                    <option value="text">✒️ Văn bản (Text)</option>
+                    <option value="number">🔢 Số (Number)</option>
+                    <option value="date">📅 Thời gian (Date)</option>
+                    <option value="select">🔘 Khóa chọn (Dropdown)</option>
+                    <option value="signature">✍️ Chữ ký (Signature)</option>
+                    <option value="checkbox">☑️ Hộp kiểm (Checkbox)</option>
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <div class="form-check form-switch ps-4 pt-1">
+                    <input class="form-check-input ms-n4" type="checkbox" id="v2-batch-required"
+                        onchange="batchSyncFieldConfigV2('validation.required', this.checked)">
+                    <label class="form-check-label small fw-bold" for="v2-batch-required">Tất cả bắt buộc điền</label>
+                </div>
+            </div>
+
+            <hr class="my-3">
+            <div id="v2-batch-specific-options"></div>
+
+            <div class="mt-4">
+                <button class="btn btn-sm btn-outline-danger w-100" onclick="batchDeleteFieldsV2()">
+                    <i class="fas fa-trash-alt me-1"></i> Xóa tất cả ${ids.length} biến
+                </button>
+            </div>
+        </div>`;
+
+    panel.querySelector('#v2fp-close').onclick = () => {
+        panel.classList.remove('open');
+        selection.clearFields();
+    };
+}
+
+/* ----------------------------------------------------------
+ * 4e. Helpers style badge (dùng inline trong oninput/onclick)
+ * ---------------------------------------------------------- */
+window.syncFieldConfigV2 = syncFieldConfigV2;
+window.insertFormulaTokenV2 = insertFormulaTokenV2;
+window.serializeFormulaElementV2 = serializeFormulaElementV2;
+window.deserializeFormulaToHtmlV2 = deserializeFormulaToHtmlV2;
+window.copyVariableV2 = copyVariableV2;
+window.cutVariableV2 = cutVariableV2;
+window.deleteVariableV2 = deleteVariableV2;
+window.openFieldPanel = openFieldPanel;
+window.batchSyncFieldConfigV2 = batchSyncFieldConfigV2;
+window.batchDeleteFieldsV2 = batchDeleteFieldsV2;
+window.openBatchFieldPanelV2 = openBatchFieldPanelV2;
+
 function markDirty() {
     isDirtyDoc = true;
-    const el = document.getElementById('v2-save-status');
-    if (el) { el.textContent = 'Có thay đổi chưa lưu'; el.className = 'v2-status v2-status--dirty'; }
+    const btn = document.getElementById('v2-btn-save');
+    if (btn) {
+        btn.classList.remove('btn-success');
+        btn.classList.add('btn-warning');
+        btn.title = 'Có thay đổi cần lưu';
+    }
 }
 
 function markSaved() {
     isDirtyDoc = false;
-    const el = document.getElementById('v2-save-status');
-    if (el) {
-        el.textContent = 'Đã lưu lúc ' + new Date().toLocaleTimeString('vi-VN');
-        el.className = 'v2-status v2-status--saved';
+    const btn = document.getElementById('v2-btn-save');
+    if (btn) {
+        btn.classList.remove('btn-warning');
+        btn.classList.add('btn-success');
+        btn.title = 'Đã lưu (Không có thay đổi)';
     }
 }
+
+window._v2RepaintBadge = function(fieldId) {
+    document.querySelectorAll(`.v2-field-badge[data-field-id="${fieldId}"]`).forEach(el => {
+        const cfg = fieldsConfig[fieldId] || {};
+        const t = FIELD_TYPES[cfg.type] || FIELD_TYPES.text;
+        el.querySelector('span') && (el.querySelector('span').textContent = cfg.label || cfg.name || fieldId);
+    });
+};
+
+window._v2ApplyBadgeStyle = function(fieldId, prop, value) {
+    document.querySelectorAll(`.v2-field-badge[data-field-id="${fieldId}"]`).forEach(el => {
+        if (value) el.style.setProperty(prop, value, 'important');
+        else el.style.removeProperty(prop);
+    });
+};
+
+window._v2ToggleBadgeMaxDim = function(fieldId, dim, val, btn) {
+    const isActive = btn.classList.contains('active');
+    const realVal = isActive ? null : val;
+    syncFieldConfigV2(fieldId, `style.${dim}`, realVal);
+    window._v2ApplyBadgeStyle(fieldId, dim === 'width' ? 'width' : 'height', realVal || '');
+    const group = btn.parentElement;
+    group.querySelectorAll('button').forEach(b => {
+        b.classList.remove('active', 'btn-primary');
+        b.classList.add('btn-outline-secondary');
+    });
+    if (!isActive) { btn.classList.add('active', 'btn-primary'); btn.classList.remove('btn-outline-secondary'); }
+};
+
+window._v2SetBadgeAlign = function(fieldId, align, btn) {
+    syncFieldConfigV2(fieldId, 'style.badgeAlign', align);
+    const badge = document.querySelector(`.v2-field-badge[data-field-id="${fieldId}"]`);
+    if (badge) {
+        badge.style.setProperty('display', 'table', 'important');
+        badge.style.setProperty('margin-left', align === 'center' || align === 'right' ? 'auto' : '0', 'important');
+        badge.style.setProperty('margin-right', align === 'center' || align === 'left' ? 'auto' : '0', 'important');
+    }
+    btn.closest('.btn-group').querySelectorAll('button').forEach(b => {
+        b.classList.remove('active', 'btn-primary');
+        b.classList.add('btn-outline-secondary');
+    });
+    btn.classList.add('active', 'btn-primary');
+    btn.classList.remove('btn-outline-secondary');
+};
+
+/* =========================================================
+ * 5. LƯU — cùng payload incremental với trình soạn thảo cũ
+ * ========================================================= */
+
 
 window.addEventListener('beforeunload', (e) => {
     if (isDirtyDoc) { e.preventDefault(); e.returnValue = ''; }
@@ -1302,6 +2355,7 @@ function renderEquipmentList() {
 
 /** Tạo block "Danh sách thiết bị liên quan" — cấu trúc bảng y hệt V1 (5 cột + link SOP) */
 function insertEquipmentTableV2(afterIndex, equipments) {
+    if (BOOT.isReadOnly || BOOT.isExecutionMode) return; // Chạy thử: không cho chèn khối mới
     const grouped = {};
     equipments.forEach((eq) => {
         if (!grouped[eq.name]) {
@@ -1405,6 +2459,7 @@ function importUUID() {
 
 /** Deep-copy toàn bộ block + biến số của 1 Thành phần CO vào vị trí thả (port từ importMasterForm V1) */
 async function importComponentV2(templateId, templateName, afterIndex) {
+    if (BOOT.isReadOnly || BOOT.isExecutionMode) return; // Chạy thử: không cho chèn khối mới
     const ok = await window.Swal.fire({
         title: 'Chèn thành phần?',
         text: `Chèn nội dung từ "${templateName}" vào vị trí đã thả?`,
@@ -1514,13 +2569,151 @@ function initFixedToolbar() {
 }
 
 /* =========================================================
- * 6. KHỞI ĐỘNG + gắn sự kiện toolbar
+ * 6. CHẾ ĐỘ CHẠY THỬ (EXECUTION MODE)
+ * ========================================================= */
+function toggleExecutionModeV2() {
+    BOOT.isExecutionMode = !BOOT.isExecutionMode;
+    const isExec = BOOT.isExecutionMode;
+    
+    // Đổi giao diện nút Toggle
+    const btnToggle = document.getElementById('v2-btn-toggle-mode');
+    if (btnToggle) {
+        if (isExec) {
+            btnToggle.classList.remove('btn-primary');
+            btnToggle.classList.add('btn-success');
+            btnToggle.innerHTML = '<i class="fas fa-edit me-1"></i> Thiết kế';
+            btnToggle.title = "Chuyển sang Thiết kế";
+        } else {
+            btnToggle.classList.remove('btn-success');
+            btnToggle.classList.add('btn-primary');
+            btnToggle.innerHTML = '<i class="fas fa-play me-1"></i> Chạy thử';
+            btnToggle.title = "Chuyển sang Chạy thử";
+        }
+    }
+
+    // Unmount editor đang active nếu có + bỏ mọi selection
+    unmountEditor();
+    selection.clearAll();
+
+    // Thêm/Xóa class CSS cho mode
+    const contentWrapper = document.querySelector('.content-wrapper');
+    if (contentWrapper) {
+        if (isExec) contentWrapper.classList.add('execution-mode-active');
+        else contentWrapper.classList.remove('execution-mode-active');
+    }
+
+    // Repaint lại tất cả các field badge
+    renderDocument();
+
+    window.Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: isExec ? 'success' : 'info',
+        title: isExec ? 'Đã chuyển sang chế độ Chạy thử' : 'Đã quay lại chế độ Thiết kế',
+        showConfirmButton: false,
+        timer: 3000
+    });
+}
+
+window.__V2__.openExecutionModal = function(fieldId, paintCallback) {
+    if (!BOOT.isExecutionMode) return;
+    const field = fieldsConfig[fieldId];
+    if (!field) return;
+
+    let currentVal = BOOT.executionValues[fieldId] || '';
+    if (currentVal && typeof currentVal === 'object' && currentVal.hasOwnProperty('default')) {
+        currentVal = currentVal.default;
+    }
+
+    let inputType = 'text';
+    let inputAttrs = {};
+    if (field.type === 'number') {
+        inputType = 'number';
+        if (field.validation && !field.validation.allow_out_of_bounds) {
+            if (field.validation.min !== null) inputAttrs.min = field.validation.min;
+            if (field.validation.max !== null) inputAttrs.max = field.validation.max;
+        }
+    } else if (field.type === 'date') {
+        inputType = 'text';
+        inputAttrs.type = field.date_format === 'hh:mm dd/mm/yyyy' ? 'datetime-local' : 'date';
+    } else if (field.type === 'text' && field.barcodeScanEnabled) {
+        inputAttrs.placeholder = 'Nhập mã Barcode thủ công...';
+    }
+
+    let hints = [];
+    if (field.type === 'number' && field.validation) {
+        if (field.validation.min !== null && field.validation.min !== undefined && field.validation.min !== '')
+            hints.push(`Tối thiểu: <b>${field.validation.min}</b>`);
+        if (field.validation.max !== null && field.validation.max !== undefined && field.validation.max !== '')
+            hints.push(`Tối đa: <b>${field.validation.max}</b>`);
+    }
+    if (field.defaultValue !== null && field.defaultValue !== undefined && field.defaultValue !== '') {
+        hints.push(`Mặc định: <b>${field.defaultValue}</b>`);
+    }
+
+    let instructionHtml = '';
+    if (field.instruction) {
+        instructionHtml += `<div class="alert alert-info text-start small mb-3" style="font-size: 0.85rem; line-height: 1.4; border-left: 4px solid #0dcaf0;"><i class="fas fa-info-circle me-2"></i><b>Hướng dẫn:</b> ${field.instruction}</div>`;
+    }
+    if (hints.length > 0) {
+        instructionHtml += `<div class="text-start mb-2 small text-muted"><i class="fas fa-lightbulb me-1 text-warning"></i> Gợi ý: ${hints.join(' | ')}</div>`;
+    }
+
+    window.Swal.fire({
+        title: field.label || field.name || 'Nhập dữ liệu',
+        html: instructionHtml,
+        input: inputType,
+        inputValue: currentVal,
+        inputAttributes: inputAttrs,
+        showCancelButton: true,
+        confirmButtonText: 'Xác nhận',
+        cancelButtonText: 'Hủy'
+    }).then(result => {
+        if (result.isConfirmed) {
+            BOOT.executionValues[fieldId] = { 'default': result.value };
+            // Simulate saving user metadata
+            if (!BOOT.executionValues[fieldId]._meta) BOOT.executionValues[fieldId]._meta = {};
+            if (!BOOT.executionValues[fieldId]._meta['default']) BOOT.executionValues[fieldId]._meta['default'] = {};
+            BOOT.executionValues[fieldId]._meta['default'].by = BOOT.currentUserName || 'Người dùng thử';
+            const now = new Date();
+            BOOT.executionValues[fieldId]._meta['default'].at = now.toLocaleDateString('vi-VN') + ' ' + now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+            
+            if (paintCallback) paintCallback();
+            
+            // Xử lý barcode update liên kết nếu cần thiết (optional fallback)
+            if (field.type === 'text' && field.barcodeScanEnabled && typeof fetchMmsDataAndShowModal === 'function') {
+                fetchMmsDataAndShowModal(result.value, fieldId);
+            }
+        }
+    });
+};
+
+/* =========================================================
+ * 7. KHỞI ĐỘNG + gắn sự kiện toolbar
  * ========================================================= */
 document.addEventListener('DOMContentLoaded', () => {
+    selection.init(); // gắn state machine chuột/bàn phím cho chức năng CHỌN
     renderDocument();
     initFormatControls();
     initFixedToolbar();
     refreshToolbarState();
+
+    // Phím tắt lưu (Ctrl + S)
+    document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+            e.preventDefault();
+            if (BOOT.isReadOnly || BOOT.isExecutionMode) return;
+            const btnSave = document.getElementById('v2-btn-save');
+            if (btnSave && !btnSave.disabled) {
+                saveTemplate();
+            } else if (!btnSave) {
+                saveTemplate(); // Fallback if button is not present
+            }
+        }
+    });
+
+    const btnToggleMode = document.getElementById('v2-btn-toggle-mode');
+    if (btnToggleMode) btnToggleMode.addEventListener('click', toggleExecutionModeV2);
 
     // Mục lục
     document.getElementById('v2-btn-toc')?.addEventListener('click', () => {
@@ -1580,14 +2773,17 @@ document.addEventListener('DOMContentLoaded', () => {
             const name = btn.getAttribute('data-cmd');
             if (name === 'undo') return smartUndo();
             if (name === 'redo') return smartRedo();
+            if (name === 'merge-cells') return mergeSelectedCellsV2();
+            if (name === 'split-cell') return splitCellV2();
             const action = TOOLBAR_ACTIONS[name];
-            if (action) cmd(action);
+            if (action) cmd(action, name);
         });
     });
 
     // Ctrl+Z / Ctrl+Y cấp tài liệu khi KHÔNG gõ trong editor (TipTap tự xử lý khi đang gõ)
     document.addEventListener('keydown', (e) => {
         if (!(e.ctrlKey || e.metaKey) || activeEditor) return;
+        if (BOOT.isReadOnly || BOOT.isExecutionMode) return;
         const k = e.key.toLowerCase();
         if (k === 'z') { e.preventDefault(); e.shiftKey ? redoDoc() : undoDoc(); }
         else if (k === 'y') { e.preventDefault(); redoDoc(); }
@@ -1620,7 +2816,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Dán (Ctrl+V) khi CHƯA mở editor nào -> tạo block mới như V1 (handleGlobalPaste):
     // bảng thành block bảng, phần còn lại thành block văn bản, thêm vào cuối tài liệu.
     document.addEventListener('paste', (e) => {
-        if (BOOT.isReadOnly) return;
+        if (BOOT.isReadOnly || BOOT.isExecutionMode) return;
         if (activeEditor) return; // đang có editor mở: TipTap tự xử lý (handleEditorPaste)
         if (e.target.closest && (e.target.closest('input') || e.target.closest('textarea'))) return;
 

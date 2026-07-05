@@ -456,8 +456,8 @@ class EbmrExecutionController extends Controller
             $blocksQuery = DB::table('ebmr_template_blocks')
                 ->where('template_id', $template->id)
                 ->where(function ($q) use ($sectionId, $template) {
-                    $q->where('section_id', $sectionId)
-                        ->orWhere('section_id', $template->caterogy_id);
+                    $q->where('section_id', (string)$sectionId)
+                        ->orWhere('section_id', (string)$template->caterogy_id);
                 })
                 ->orderBy('order')
                 ->get();

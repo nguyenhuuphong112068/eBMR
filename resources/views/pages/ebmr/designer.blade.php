@@ -12,6 +12,21 @@
 
 @section('mainContent') {{-- Bắt đầu nội dung chính của trang thiết kế --}}
 
+    <style>
+        /* CSS tự động ẩn topNAV (main-header) ở màn hình thiết kế */
+        .main-header.navbar {
+            position: fixed;
+            width: 100%;
+            transform: translateY(-100%);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 1050;
+        }
+        .main-header.navbar.designer-show {
+            transform: translateY(0);
+        }
+        .content-wrapper { margin-top: 0 !important; padding-top: 0 !important; }
+    </style>
+
     <div class="content-wrapper hide-comment-highlights" id="mainContent" style="background-color: #f1f3f4; min-height: 100vh;"> {{-- Vùng bao quanh toàn bộ nội dung, đặt màu nền xám nhạt, mặc định ẩn bình luận --}}
         @include('pages.ebmr.designer.partials.toolbar') {{-- Nhúng thanh công cụ (Toolbar) chứa các nút Bold, Italic, Chèn bảng... --}}
         @include('pages.ebmr.designer.partials.canvas') {{-- Nhúng vùng làm việc chính (Canvas) nơi hiển thị trang giấy A4 --}}
@@ -59,4 +74,22 @@
     @include('pages.ebmr.designer.scripts.properties') {{-- Xử lý Document Properties đồng bộ --}}
     @include('pages.ebmr.designer.scripts.split_view') {{-- Tính năng chia đôi màn hình (Split View) so sánh tài liệu --}}
 
+    <script>
+        // Logic ẩn/hiện thanh topNAV ở chế độ thiết kế
+        document.addEventListener('DOMContentLoaded', () => {
+            const header = document.querySelector('.main-header.navbar');
+            if (header) {
+                document.addEventListener('mousemove', (e) => {
+                    if (e.clientY < 30 || header.contains(e.target)) {
+                        header.classList.add('designer-show');
+                    } else {
+                        const rect = header.getBoundingClientRect();
+                        if (e.clientY > rect.bottom) {
+                            header.classList.remove('designer-show');
+                        }
+                    }
+                });
+            }
+        });
+    </script>
 @endsection

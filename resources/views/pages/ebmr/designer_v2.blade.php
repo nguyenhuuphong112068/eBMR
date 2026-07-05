@@ -102,11 +102,17 @@
 
             <div class="vr mx-2"></div>
 
+            {{-- Gộp / Tách ô (thao tác trên vùng ô đang chọn) --}}
+            <button class="btn btn-sm btn-light" data-cmd="merge-cells" title="Gộp các ô đang chọn"><i class="fas fa-object-group"></i></button>
+            <button class="btn btn-sm btn-light" data-cmd="split-cell" title="Tách ô đã gộp"><i class="fas fa-object-ungroup"></i></button>
+
+            <div class="vr mx-2"></div>
+
             {{-- Chèn biến số --}}
             <div class="dropdown">
-                <button class="btn btn-sm btn-navy dropdown-toggle text-white" data-bs-toggle="dropdown" data-toggle="dropdown"
+                <button class="btn btn-sm btn-navy text-white px-2" data-bs-toggle="dropdown" data-toggle="dropdown"
                     title="Chèn biến số vào vị trí con trỏ">
-                    <i class="fas fa-plus-circle me-1"></i> Chèn biến số
+                    <i class="fas fa-plus-circle"></i> <i class="fas fa-caret-down ms-1"></i>
                 </button>
                 <div class="dropdown-menu shadow border-0">
                     <a class="dropdown-item" href="javascript:void(0)" data-insert-field="text"><i class="fas fa-font me-2 text-muted"></i>Văn bản</a>
@@ -119,11 +125,13 @@
                 </div>
             </div>
 
-            <div class="ms-auto d-flex align-items-center gap-3">
-                <span id="v2-save-status" class="v2-status v2-status--saved">Chưa có thay đổi</span>
+            <div class="ms-auto d-flex align-items-center gap-2">
+                <button id="v2-btn-toggle-mode" class="btn btn-sm btn-primary text-white px-2" title="Chuyển đổi Thiết kế / Chạy thử">
+                    <i class="fas fa-play"></i>
+                </button>
                 @if (!$isReadOnly)
-                    <button id="v2-btn-save" class="btn btn-sm btn-navy text-white px-3">
-                        <i class="fas fa-save me-1"></i> Lưu
+                    <button id="v2-btn-save" class="btn btn-sm btn-success text-white px-2" title="Lưu lại (Không có thay đổi)">
+                        <i class="fas fa-save"></i>
                     </button>
                 @endif
             </div>
@@ -196,6 +204,19 @@
     </div>
 
     <style>
+        /* CSS tự động ẩn topNAV (main-header) ở màn hình thiết kế */
+        .main-header.navbar {
+            position: fixed;
+            width: 100%;
+            transform: translateY(-100%);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 1050;
+        }
+        .main-header.navbar.designer-show {
+            transform: translateY(0);
+        }
+        .content-wrapper { margin-top: 0 !important; padding-top: 0 !important; }
+
         .btn-navy { background-color: #003A4F; border-color: #003A4F; }
         .btn-navy:hover { background-color: #00506e; border-color: #00506e; }
 
@@ -224,9 +245,9 @@
 
         .v2-page {
             background: #fff;
-            width: 900px;
+            width: 1123px;
             max-width: 100%;
-            min-height: 1123px;
+            min-height: 794px;
             padding: 48px 56px;
             border-radius: 4px;
             position: relative;
@@ -373,8 +394,7 @@
             white-space: nowrap; vertical-align: baseline;
         }
         .v2-field-badge:hover { background: #bae6fd; }
-        .ProseMirror-selectednode.v2-field-badge,
-        .ProseMirror .v2-field-badge.ProseMirror-selectednode {
+        .v2-editing .v2-field-badge.ProseMirror-selectednode {
             outline: 2px solid #003A4F; outline-offset: 1px;
         }
 
@@ -385,10 +405,11 @@
 
         /* Panel cấu hình biến */
         .v2-field-panel {
-            position: fixed; top: 70px; right: -320px; width: 300px;
+            position: fixed; top: 70px; right: -340px; width: 320px;
             background: #fff; border-radius: 10px 0 0 10px;
             transition: right 0.25s ease; z-index: 1040;
             border: 1px solid #e2e8f0; border-right: none;
+            display: flex; flex-direction: column;
         }
         .v2-field-panel.open { right: 0; }
         .v2-panel-head {
@@ -463,6 +484,113 @@
             font-size: 0.58rem; font-weight: 700; padding: 0 4px; min-width: 14px;
         }
         .v2-comment-btn.has-comments { opacity: 1; border-color: #f59e0b; }
+
+        /* ===== CSS cho panel biến số (v2-field-panel) ===== */
+        .v2-prop-label {
+            display: block; font-size: 0.72rem; font-weight: 700;
+            text-transform: uppercase; color: #64748b; margin-bottom: 4px;
+        }
+        .v2-prop-sublabel {
+            display: block; font-size: 0.68rem; font-weight: 600;
+            color: #94a3b8; margin-bottom: 3px;
+        }
+        .v2-formula-editor {
+            min-height: 72px; height: auto; background: #fff;
+            cursor: text; white-space: pre-wrap;
+            overflow-wrap: break-word; word-break: break-word;
+            line-height: 1.6;
+        }
+        .v2-formula-var {
+            display: inline-block; background: #dbeafe; color: #1e40af;
+            border: 1px solid #93c5fd; border-radius: 10px;
+            padding: 1px 7px; font-size: 0.75em; font-weight: 700;
+            margin: 0 1px; cursor: default; white-space: nowrap;
+        }
+        .v2fp-tabs .nav-link { border: none; border-top: 3px solid transparent; }
+        .v2fp-tabs .nav-link:not(.active):hover { background: #f1f5f9 !important; }
+
+        /* ===== CSS cho CHỌN đối tượng (Selection — kiểu Word/Excel) ===== */
+        .v2-table td.v2-cell-selected {
+            background-color: rgba(59, 130, 246, 0.18) !important;
+            outline: 2px solid #2563eb;   /* viền xanh rõ, nổi trên border ô kề */
+            outline-offset: -2px;
+            z-index: 5;                    /* td đã position:relative — đè lên ô lân cận */
+        }
+        .v2-table td.v2-cell-selected .v2-field-badge,
+        .v2-table td.v2-cell-selected .ebmr-field-badge {
+            outline: 2px solid #2563eb;
+            outline-offset: 1px;
+            border-radius: 4px;
+        }
+        body.v2-cell-dragging, body.v2-cell-dragging .v2-table { user-select: none; }
+        .v2-table-wrap.v2-table-selected .v2-table { outline: 2.5px solid #2563eb; outline-offset: 2px; border-radius: 2px; }
+
+        /* Nút ⊕ chọn cả bảng (góc trên-trái, hiện khi hover — kiểu Word) */
+        .v2-table-handle {
+            position: absolute; top: -13px; left: -13px; width: 22px; height: 22px;
+            display: flex; align-items: center; justify-content: center;
+            background: #fff; border: 1px solid #cbd5e1; border-radius: 5px;
+            color: #64748b; font-size: 0.62rem; cursor: pointer;
+            opacity: 0; transition: opacity 0.15s; z-index: 20;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+        }
+        .v2-table-wrap:hover .v2-table-handle { opacity: 1; }
+        .v2-table-handle:hover { background: #eff6ff; color: #1d4ed8; border-color: #93c5fd; }
+
+        /* Gutter chọn HÀNG (dải trái) / CỘT (dải trên) — D-Click để chọn */
+        .v2-row-gutter {
+            position: absolute; left: -16px; top: 0; bottom: 0; width: 16px; z-index: 15;
+            cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="14" viewBox="0 0 20 14"><path d="M2 7 L14 1 L14 5 L19 5 L19 9 L14 9 L14 13 Z" transform="rotate(180 10 7)" fill="black"/></svg>') 10 7, e-resize;
+        }
+        .v2-col-gutter {
+            position: absolute; top: -14px; left: 0; right: 0; height: 14px; z-index: 15;
+            cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="20" viewBox="0 0 14 20"><path d="M7 19 L1 7 L5 7 L5 1 L9 1 L9 7 L13 7 Z" fill="black"/></svg>') 7 10, s-resize;
+        }
+        .v2-row-gutter:hover { background: rgba(59, 130, 246, 0.08); border-radius: 3px; }
+        .v2-col-gutter:hover { background: rgba(59, 130, 246, 0.08); border-radius: 3px; }
+
+        /* Cursor mũi tên đen khi rê gần mép trái/trên của ô (chọn ô) */
+        .v2-table td.v2-cur-cellsel {
+            cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><path d="M3 14 L3 2 L13 10 L8 10 L10 15 L7 16 L6 11 Z" fill="black" stroke="white" stroke-width="1"/></svg>') 3 2, cell;
+        }
+
+        /* Khung marquee quét biến số (Ctrl+Alt+kéo) */
+        .v2-marquee {
+            position: fixed; z-index: 999999; pointer-events: none;
+            background: rgba(59, 130, 246, 0.12);
+            border: 1.5px dashed #3b82f6; border-radius: 2px;
+        }
+
+        /* Biến số đang được chọn (đơn lẻ hoặc hàng loạt) — viền xanh đồng bộ */
+        .v2-field-badge.v2-field-selected,
+        .ebmr-field-badge.v2-field-selected {
+            outline: 2px solid #2563eb !important;
+            outline-offset: 1px;
+            border-radius: 4px;
+            box-shadow: 0 0 6px rgba(37, 99, 235, 0.5);
+            background-color: rgba(59, 130, 246, 0.12);
+        }
+
+        /* ===== CSS cho Chế độ Chạy thử (Execution Mode) ===== */
+        .execution-mode-active .v2-editable {
+            outline: none !important;
+            cursor: default !important;
+        }
+        .execution-mode-active .v2-field-badge {
+            background-color: transparent !important;
+            border: none !important;
+            color: inherit !important;
+            cursor: pointer;
+            padding: 0 4px;
+            box-shadow: none !important;
+            border-bottom: 1px dashed #94a3b8 !important;
+            border-radius: 0 !important;
+            font-weight: 500;
+        }
+        .execution-mode-active .v2-field-badge:hover {
+            background-color: #f8fafc !important;
+            border-bottom-color: #3b82f6 !important;
+        }
     </style>
 @endsection
 
@@ -476,6 +604,8 @@
             items: @json($template->schema->fields ?? []),
             fieldsConfig: @json($template->schema->fieldsConfig ?? (object) []),
             isReadOnly: @json($isReadOnly),
+            isExecutionMode: false,
+            executionValues: {},
             pageOrientation: @json($template->schema->pageOrientation ?? 'portrait'),
             saveUrl: "{{ route('pages.ebmr.storeTemplate') }}",
             csrf: "{{ csrf_token() }}",
@@ -485,6 +615,7 @@
                 reply: "{{ route('pages.ebmr.replyComment') }}",
                 remove: "{{ route('pages.ebmr.deleteComment') }}",
             },
+            importantVars: @json($importantVars ?? []),
             currentUserName: @json(session('user')['fullName'] ?? ''),
             templateDepartmentCode: @json($template->department_code ?? ''),
             urls: {
@@ -494,6 +625,26 @@
                 docViewBase: "{{ route('pages.ebmr.viewDocumentByCode', ['code' => '__CODE__']) }}",
             },
         };
+
+        // Logic ẩn/hiện thanh topNAV ở chế độ thiết kế
+        document.addEventListener('DOMContentLoaded', () => {
+            const header = document.querySelector('.main-header.navbar');
+            if (header) {
+                document.addEventListener('mousemove', (e) => {
+                    // Hiện khi chuột di chuyển lên 30px phía trên cùng màn hình, 
+                    // hoặc nếu chuột vẫn nằm trong phạm vi của topNAV đang hiển thị
+                    if (e.clientY < 30 || header.contains(e.target)) {
+                        header.classList.add('designer-show');
+                    } else {
+                        const rect = header.getBoundingClientRect();
+                        // Nếu chuột kéo ra khỏi phạm vi Y của header, thu hồi nó
+                        if (e.clientY > rect.bottom) {
+                            header.classList.remove('designer-show');
+                        }
+                    }
+                });
+            }
+        });
     </script>
     @vite('resources/js/designer-v2/main.js')
 @endsection

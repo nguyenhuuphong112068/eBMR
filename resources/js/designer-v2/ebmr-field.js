@@ -71,19 +71,47 @@ export const EbmrField = Node.create({
 
             const paint = () => {
                 const cfg = (window.__V2__?.fieldsConfig || {})[node.attrs.fieldId] || {};
-                const t = FIELD_TYPES[cfg.type] || FIELD_TYPES.text;
-                dom.innerHTML =
-                    `<i class="fas ${t.icon} me-1" style="font-size:0.7em;"></i>` +
-                    `<span>${escapeHtml(cfg.label || cfg.name || node.attrs.fieldId || '?')}</span>`;
-                dom.title = `${t.label}${cfg.name ? ' — ' + cfg.name : ''}`;
+                
+                if (window.__V2__?.isExecutionMode) {
+                    // Chế độ chạy thử: Render giá trị thực tế
+                    let val = (window.__V2__?.executionValues || {})[node.attrs.fieldId]?.default;
+                    if (val === undefined || val === null || val === '') val = cfg.defaultValue || '';
+                    
+                    if (cfg.type === 'checkbox') {
+                        const isChecked = val === true || val === 'true' || val === '1' || val === 'yes' || val === 'có';
+                        dom.innerHTML = `<span style="display:inline-flex; align-items:center; gap:4px;"><input type="checkbox" ${isChecked ? 'checked' : ''} onclick="event.preventDefault()"><span>${escapeHtml(cfg.label || '')}</span></span>`;
+                    } else if (cfg.type === 'signature') {
+                        if (val) {
+                            if (String(val).startsWith('data:image/')) dom.innerHTML = `<img src="${val}" style="max-height:30px; vertical-align:middle;">`;
+                            else dom.innerHTML = `<span class="badge bg-light text-success border"><i class="fas fa-check-circle me-1"></i>${escapeHtml(val)}</span>`;
+                        } else {
+                            dom.innerHTML = `<span class="badge bg-light text-primary border"><i class="fas fa-signature me-1"></i> [Ký tên]</span>`;
+                        }
+                    } else {
+                        dom.innerHTML = val ? `<span>${escapeHtml(val)}</span>` : `<span style="opacity:0.3; font-style:italic;">[Nhập dữ liệu]</span>`;
+                    }
+                    dom.title = "Click để nhập liệu (Chạy thử)";
+                } else {
+                    // Chế độ thiết kế
+                    const t = FIELD_TYPES[cfg.type] || FIELD_TYPES.text;
+                    dom.innerHTML =
+                        `<i class="fas ${t.icon} me-1" style="font-size:0.7em;"></i>` +
+                        `<span>${escapeHtml(cfg.label || cfg.name || node.attrs.fieldId || '?')}</span>`;
+                    dom.title = `${t.label}${cfg.name ? ' — ' + cfg.name : ''}`;
+                }
             };
             paint();
 
             dom.addEventListener('click', (e) => {
                 e.preventDefault();
-                // Mở panel cấu hình biến của pilot (main.js đăng ký hàm này)
-                if (typeof window.__V2__?.openFieldPanel === 'function') {
-                    window.__V2__.openFieldPanel(node.attrs.fieldId, paint);
+                if (window.__V2__?.isExecutionMode) {
+                    if (typeof window.__V2__?.openExecutionModal === 'function') {
+                        window.__V2__.openExecutionModal(node.attrs.fieldId, paint);
+                    }
+                } else {
+                    if (typeof window.__V2__?.openFieldPanel === 'function') {
+                        window.__V2__.openFieldPanel(node.attrs.fieldId, paint);
+                    }
                 }
             });
 
