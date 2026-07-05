@@ -1,6 +1,8 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Pages\Ebmr\Templates;
+
+use App\Http\Controllers\Controller;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -555,7 +557,7 @@ class EbmrTemplateController extends Controller
         ]);
 
         if ($newStatus === 'active') {
-            $this->expirePreviousVersions($validated['id']);
+            \App\Services\DocumentActivationService::expirePreviousEbmrVersions($validated['id']);
         }
 
         return response()->json([
@@ -657,8 +659,10 @@ class EbmrTemplateController extends Controller
     public function getHistory($id)
     {
         $history = DB::table('ebmr_revision_history')
-            ->where('template_id', $id)
-            ->orderBy('created_at', 'desc')
+            ->leftJoin('user_management', 'ebmr_revision_history.user_id', '=', 'user_management.id')
+            ->where('ebmr_revision_history.template_id', $id)
+            ->select('ebmr_revision_history.*', 'user_management.fullName as user_name')
+            ->orderBy('ebmr_revision_history.created_at', 'desc')
             ->get();
 
         return response()->json($history);

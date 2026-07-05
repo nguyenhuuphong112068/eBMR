@@ -140,6 +140,11 @@
                     <div class="row g-4" id="rooms-grid">
                         @forelse($rooms as $room)
                             @php
+                                // Phải tính lại $hasActive riêng cho từng phòng ở đây — biến này KHÔNG
+                                // được kế thừa từ vòng lặp thẻ công đoạn phía trên (biến PHP thường không
+                                // scope theo từng vòng lặp Blade khác nhau).
+                                $hasActive = count($room->active_records) > 0;
+
                                 // Mock sensor readings dynamically based on room ID (fluctuating with time)
                                 $time = time();
                                 $mockTemp = number_format(
@@ -285,17 +290,49 @@
                                                             <span class="fw-bold text-navy small"><i
                                                                     class="fas fa-barcode me-1 text-success"></i> Số lô:
                                                                 {{ $rec->batch_number }}</span>
-                                                            <span class="badge bg-success text-white"
-                                                                style="font-size: 0.65rem;">Đang ghi</span>
+                                                            @if ($rec->can_write)
+                                                                <span class="badge bg-success text-white"
+                                                                    style="font-size: 0.65rem;">Đang ghi</span>
+                                                            @elseif ($rec->is_distributed)
+                                                                <span class="badge bg-info text-white"
+                                                                    style="font-size: 0.65rem;"
+                                                                    title="Đã phân phối xuống phòng &#10;Sản phẩm: {{ $rec->product_name }} &#10;Số lô: {{ $rec->batch_number }} &#10;Người nhận: {{ $rec->assigned_user_names ?: 'Chưa gán người' }}">
+                                                                    <i class="fas fa-check-circle me-1"></i>Hồ sơ sẵn sàng
+                                                                </span>
+                                                            @endif
                                                         </div>
-                                                        <p class="mb-2 text-muted text-truncate fw-medium"
+                                                        <p class="mb-1 text-muted text-truncate fw-medium"
                                                             style="font-size: 0.75rem;" title="{{ $rec->product_name }}">
                                                             {{ $rec->product_name }}</p>
-                                                        <a href="{{ route('pages.ebmr.execute', $rec->id) }}?section={{ $rec->section_id }}"
-                                                            class="btn btn-sm btn-navy w-100 py-1 text-white shadow-sm font-weight-bold"
-                                                            style="font-size: 0.75rem; border-radius: 6px;">
-                                                            <i class="fas fa-edit me-1 text-white"></i> Ghi chép dữ liệu
-                                                        </a>
+                                                        @if ($rec->is_distributed)
+                                                            <p class="mb-2 text-truncate" style="font-size: 0.68rem;"
+                                                                title="Người nhận: {{ $rec->assigned_user_names ?: 'Chưa gán người' }}">
+                                                                <i class="fas fa-user-check me-1 text-info"></i>
+                                                                <span class="text-muted">Người nhận:</span>
+                                                                <span class="fw-medium text-navy">{{ $rec->assigned_user_names ?: 'Chưa gán người' }}</span>
+                                                            </p>
+                                                        @endif
+                                                        {{-- Chỉ được "Ghi chép" khi công đoạn này của lô đã được Phân phối
+                                                             tới phòng, user hiện tại nằm trong danh sách được phân phối,
+                                                             VÀ phòng + thiết bị đã đạt điều kiện vệ sinh + dọn quang.
+                                                             Nếu chưa đủ điều kiện, chỉ xem (read-only). --}}
+                                                        @if ($rec->can_write)
+                                                            <a href="{{ route('pages.ebmr.execute', $rec->id) }}?section={{ $rec->section_id }}&dist={{ $rec->distribution_id }}"
+                                                                class="btn btn-sm btn-navy w-100 py-1 text-white shadow-sm font-weight-bold"
+                                                                style="font-size: 0.75rem; border-radius: 6px;">
+                                                                <i class="fas fa-edit me-1 text-white"></i> Ghi chép dữ liệu
+                                                            </a>
+                                                        @else
+                                                            <a href="{{ route('pages.ebmr.execute', $rec->id) }}?section={{ $rec->section_id }}"
+                                                                class="btn btn-sm btn-outline-secondary w-100 py-1 fw-bold"
+                                                                style="font-size: 0.75rem; border-radius: 6px;"
+                                                                title="{{ !$rec->is_distributed ? 'Chưa được phân phối tới phòng này' : 'Phòng/thiết bị chưa đủ điều kiện vệ sinh & dọn quang' }}">
+                                                                <i class="fas fa-eye me-1"></i> Xem hồ sơ
+                                                                <span class="d-block" style="font-size: 0.62rem; opacity: 0.85;">
+                                                                    {{ !$rec->is_distributed ? '(Chưa phân phối)' : '(Chưa đủ điều kiện)' }}
+                                                                </span>
+                                                            </a>
+                                                        @endif
                                                     </div>
                                                 @endforeach
                                             </div>

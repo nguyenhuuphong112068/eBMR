@@ -40,6 +40,7 @@
     
     {{-- Nhóm các Module Script - Chia nhỏ code Javascript để dễ quản lý --}}
     @include('pages.ebmr.designer.scripts.state') {{-- Quản lý trạng thái dữ liệu (mảng items, lịch sử undo/redo) --}}
+    @include('pages.ebmr.designer.scripts.selection') {{-- Nguồn sự thật duy nhất cho việc chọn đối tượng (block/section, ô bảng, biến số) --}}
     @include('pages.ebmr.designer.scripts.render') {{-- Chứa hàm renderBlocks() để vẽ dữ liệu ra màn hình --}}
     @include('pages.ebmr.designer.scripts.table_ops') {{-- Các thao tác cơ bản với bảng (thêm/xóa hàng cột) --}}
     @include('pages.ebmr.designer.scripts.table_advanced') {{-- Các thao tác bảng nâng cao (gộp ô, tách ô) --}}

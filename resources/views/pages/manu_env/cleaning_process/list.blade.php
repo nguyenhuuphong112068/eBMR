@@ -97,7 +97,7 @@
                                                             Nháp</span>
                                                     @elseif($item->status === 'submitted')
                                                         <span class="badge bg-warning text-dark" style="cursor: pointer;"
-                                                            onclick="showWorkflowHistory('cleaning', {{ $item->id }})"
+                                                            onclick="showWorkflowHistory('cleaning_{{ $type }}', {{ $item->id }})"
                                                             title="Xem lịch sử duyệt"><i class="fas fa-clock me-1"></i> Chờ
                                                             duyệt</span>
                                                         @if ($item->current_workflow_step)
@@ -107,7 +107,7 @@
                                                         @endif
                                                     @elseif($item->status === 'approved')
                                                         <span class="badge bg-success" style="cursor: pointer;"
-                                                            onclick="showWorkflowHistory('cleaning', {{ $item->id }})"
+                                                            onclick="showWorkflowHistory('cleaning_{{ $type }}', {{ $item->id }})"
                                                             title="Xem lịch sử duyệt"><i
                                                                 class="fas fa-check-circle me-1"></i> Đã duyệt</span>
                                                     @elseif($item->status === 'issued')
@@ -188,7 +188,7 @@
                                                         @elseif($item->status === 'submitted')
                                                             <span class="badge bg-warning text-dark"
                                                                 style="cursor: pointer;"
-                                                                onclick="showWorkflowHistory('cleaning', {{ $item->id }})"
+                                                                onclick="showWorkflowHistory('cleaning_{{ $type }}', {{ $item->id }})"
                                                                 title="Xem lịch sử duyệt"><i class="fas fa-clock me-1"></i>
                                                                 Chờ duyệt</span>
                                                             @if ($item->current_workflow_step)
@@ -198,7 +198,7 @@
                                                             @endif
                                                         @elseif($item->status === 'approved')
                                                             <span class="badge bg-success" style="cursor: pointer;"
-                                                                onclick="showWorkflowHistory('cleaning', {{ $item->id }})"
+                                                                onclick="showWorkflowHistory('cleaning_{{ $type }}', {{ $item->id }})"
                                                                 title="Xem lịch sử duyệt"><i
                                                                     class="fas fa-check-circle me-1"></i> Đã duyệt</span>
                                                         @elseif($item->status === 'issued')

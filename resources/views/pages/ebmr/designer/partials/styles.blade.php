@@ -61,6 +61,10 @@
         box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.1);
     }
 
+    /* Bề rộng co giãn theo màn hình (không khoá cứng theo A4) — khoá cứng từng
+       làm bảng nhiều cột bị bóp nghẹt lúc thiết kế. Việc "vừa khổ A4 khi in"
+       được xử lý riêng lúc in (xem computePrintFitScale trong ui_handlers.blade.php),
+       không đánh đổi bằng trải nghiệm thiết kế. */
     .page-a4 {
         background: white;
         min-height: 100vh;
@@ -685,6 +689,10 @@
             padding: 0 !important;
             border: none !important;
             display: block !important;
+            /* KHÔNG ép zoom:1 !important ở đây — cố ý để JS (computePrintFitScale
+               trong ui_handlers.blade.php) được quyền đặt zoom nhỏ hơn 1 ngay
+               trước khi in, cho các bảng quá nhiều cột không vừa khổ A4. Stylesheet
+               !important sẽ ghi đè inline style, nên không thể ép cứng ở đây được. */
         }
 
         .no-print, .editor-toolbar, .leftNAV, .topNAV, .outline-sidebar, .properties-sidebar, 
@@ -1083,13 +1091,17 @@
         border: 1px solid #dadce0;
     }
 
-    /* Editor Ruler */
+    /* Editor Ruler — bề rộng được đồng bộ bằng JS (syncRulerWidth) để luôn khớp
+       đúng bề rộng trang đang hiển thị (thay đổi theo khổ dọc/ngang và mức zoom).
+       Giá trị width mặc định dưới đây chỉ là fallback khi JS chưa kịp chạy. */
     .editor-ruler {
         position: sticky;
         top: 170px;
         /* 57px header + ~113px toolbar/header margins */
         z-index: 990;
         height: 24px;
+        width: 794px;
+        margin: 0 auto;
         background-color: #f8f9fa;
         border: 1px solid #dadce0;
         border-bottom: none;
@@ -1828,6 +1840,34 @@
 
     .row-resizer:hover,
     .row-resizer:active {
+        background-color: #007bff;
+    }
+
+    /* Tay cầm kéo mép trái/phải để thu hẹp bề rộng khối văn bản tĩnh (marginLeft/marginRight) */
+    .margin-resizer-left,
+    .margin-resizer-right {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 8px;
+        cursor: ew-resize;
+        z-index: 100;
+        background-color: transparent;
+        transition: background-color 0.2s;
+    }
+
+    .margin-resizer-left {
+        left: -4px;
+    }
+
+    .margin-resizer-right {
+        right: -4px;
+    }
+
+    .margin-resizer-left:hover,
+    .margin-resizer-left:active,
+    .margin-resizer-right:hover,
+    .margin-resizer-right:active {
         background-color: #007bff;
     }
 

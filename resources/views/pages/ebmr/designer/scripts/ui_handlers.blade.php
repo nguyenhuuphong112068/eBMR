@@ -240,7 +240,7 @@
 
         if (isExecute) {
             // Bỏ chọn khối hiện tại khi chạy thử
-            selectedId = null;
+            EbmrSelection.item.clear();
         } else {
             // Xóa các dòng được sinh ra trong lúc chạy thử
             if (typeof items !== 'undefined') {
@@ -308,7 +308,12 @@
      * @param {boolean} doRender - Có thực hiện render lại giao diện hay không.
      */
     function selectItem(id, doRender = true) {
-        selectedId = id;
+        if (id) {
+            EbmrSelection.item.set([id]);
+            EbmrSelection.field.clear();
+        } else {
+            EbmrSelection.item.clear();
+        }
         if (doRender) renderBlocks();
         if (window.isReadOnly) return;
 
@@ -334,7 +339,7 @@
 
         if (!item) {
             if (panel) panel.classList.remove('d-none');
-            // ... (keep common settings)
+            if (body) body.innerHTML = '';
             return;
         }
 
@@ -790,6 +795,61 @@
         item.dirty = true;
         renderBlocks();
     }
+
+    /**
+     * Kéo tay cầm ở mép trái/phải của khối văn bản tĩnh để thu hẹp/nới rộng
+     * bề rộng vùng văn bản (điều chỉnh marginLeft/marginRight). Cùng cơ chế
+     * kéo-số với initResize() của bảng (table_ops.blade.php), áp dụng cho khối.
+     */
+    let marginResizing = false;
+    function initMarginResize(e, itemId, side) {
+        if (window.isExecutionMode) return;
+        e.preventDefault();
+        e.stopPropagation();
+
+        const item = items.find(i => i.id === itemId);
+        if (!item) return;
+
+        marginResizing = true;
+        saveState();
+
+        const blockEl = e.target.closest('.block-item');
+        const parentEl = blockEl ? blockEl.parentElement : null;
+        const containerWidth = parentEl ? parentEl.clientWidth : 800;
+        const maxMargin = Math.max(0, Math.floor(containerWidth * 0.4)); // luôn chừa tối thiểu ~20% bề rộng ở giữa
+
+        const startMouseX = e.pageX;
+        const startMarginLeft = parseInt(item.marginLeft) || 0;
+        const startMarginRight = parseInt(item.marginRight) || 0;
+
+        const onMouseMove = (moveEvent) => {
+            if (!marginResizing) return;
+            const delta = moveEvent.pageX - startMouseX;
+
+            if (side === 'left') {
+                const newMargin = Math.min(maxMargin, Math.max(0, startMarginLeft + delta));
+                item.marginLeft = newMargin + 'px';
+                if (blockEl) blockEl.style.marginLeft = item.marginLeft;
+            } else {
+                const newMargin = Math.min(maxMargin, Math.max(0, startMarginRight - delta));
+                item.marginRight = newMargin + 'px';
+                if (blockEl) blockEl.style.marginRight = item.marginRight;
+            }
+        };
+
+        const onMouseUp = () => {
+            marginResizing = false;
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+            item.dirty = true;
+            saveStateDebounced();
+            renderBlocks();
+        };
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+    }
+    window.initMarginResize = initMarginResize;
 
     /**
      * QUẢN LÝ BẢNG NÂNG CAO (Thêm/Xóa dòng cột nhanh)
@@ -1328,7 +1388,7 @@
 
         saveState();
         items = items.filter(i => i.id !== id);
-        selectedId = null;
+        EbmrSelection.item.clear();
         if (!isSidebarMinimized) {
             const panel = document.getElementById('property-panel');
             if (panel) panel.classList.add('d-none');
@@ -1380,6 +1440,23 @@
         const item = items.find(i => i.id === id);
         if (!item) return;
         item.dirty = true;
+
+        // FIX: Làm sạch val trước khi lưu vào model
+        // 1. Xoá ký tự zero-width space (\u200B) ẩn được tạo ra sau mỗi badge
+        val = val.replace(/\u200B/g, '');
+        // 2. Nếu browser bọc nội dung paste vào <div>, unwrap để giữ inline
+        if (val.indexOf('<div>') !== -1 || val.indexOf('<div ') !== -1) {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = val;
+            // Chỉ unwrap nếu là một <div> duy nhất bao ngoài (không phải bảng hay cấu trúc phức tạp)
+            const children = Array.from(tempDiv.children);
+            const onlyDivs = children.every(c => c.tagName === 'DIV' && !c.querySelector('table'));
+            if (onlyDivs && children.length > 0) {
+                // Nối tất cả nội dung bên trong các div lại, cách nhau bằng khoảng trắng
+                val = children.map(d => d.innerHTML).join(' ').trim();
+            }
+        }
+
         if (type === 'col') item.columns[c].label = val;
         else if (type === 'cell') {
             if (!item.data[r][c] || typeof item.data[r][c] !== 'object') {
@@ -1400,6 +1477,7 @@
             recalculateAllFormulas();
         }
     }
+
 
     /**
      * Cập nhật nội dung văn bản tĩnh trực tiếp khi người dùng gõ.
@@ -2662,6 +2740,11 @@
         document.addEventListener('mousemove', (e) => {
             if (!isDraggingRuler) return;
 
+            // Thước không bị zoom (nằm ngoài trang), nên deltaX là px màn hình thật —
+            // đúng đơn vị với vị trí marker (cũng đo bằng px màn hình). Nhưng marginLeft/
+            // marginRight gán lên khối lại là px "nội dung" bên trong trang đang bị zoom,
+            // nên phải chia cho zoom trước khi gán để không bị lệch tay so với con trỏ.
+            const zoom = (typeof currentZoom === 'number' && currentZoom > 0) ? currentZoom : 1;
             const deltaX = e.clientX - startX;
             const activeBlock = document.querySelector('.block-item.active');
             if (!activeBlock) return;
@@ -2674,7 +2757,7 @@
 
                 markerLeft.style.left = newPos + 'px';
                 marginL.style.width = newPos + 'px';
-                activeBlock.style.marginLeft = (newPos - 48) + 'px';
+                activeBlock.style.marginLeft = ((newPos / zoom) - 40) + 'px';
             } else {
                 newPos = startLeft - deltaX;
                 if (newPos < 0) newPos = 0;
@@ -2682,7 +2765,7 @@
 
                 markerRight.style.right = newPos + 'px';
                 marginR.style.width = newPos + 'px';
-                activeBlock.style.marginRight = (newPos - 48) + 'px';
+                activeBlock.style.marginRight = ((newPos / zoom) - 40) + 'px';
             }
         });
 
@@ -2718,7 +2801,7 @@
         if (!markerLeft) return;
 
         const item = items.find(i => i.id === selectedId);
-        let leftPx = 40; // matching padding 40px
+        let leftPx = 40; // matching padding 40px (đơn vị px nội dung, chưa nhân zoom)
         let rightPx = 40;
 
         if (item) {
@@ -2726,11 +2809,157 @@
             if (item.marginRight) rightPx = 40 + parseFloat(item.marginRight);
         }
 
-        markerLeft.style.left = leftPx + 'px';
-        marginL.style.width = leftPx + 'px';
-        markerRight.style.right = rightPx + 'px';
-        marginR.style.width = rightPx + 'px';
+        // Thước đứng ngoài trang (không bị zoom), nên phải quy đổi ra px màn hình
+        // bằng cách nhân với mức zoom hiện tại để marker khớp đúng mép trang đã zoom.
+        const zoom = (typeof currentZoom === 'number' && currentZoom > 0) ? currentZoom : 1;
+        const leftScreenPx = leftPx * zoom;
+        const rightScreenPx = rightPx * zoom;
+
+        markerLeft.style.left = leftScreenPx + 'px';
+        marginL.style.width = leftScreenPx + 'px';
+        markerRight.style.right = rightScreenPx + 'px';
+        marginR.style.width = rightScreenPx + 'px';
     }
+
+    /**
+     * ======================================================
+     * THU PHÓNG TRANG (Zoom — giống Google Docs)
+     * ======================================================
+     * Áp dụng CSS `zoom` (không dùng transform: scale) lên trang thiết kế vì
+     * `zoom` khiến trình duyệt tính lại layout đúng theo tỉ lệ (offsetWidth,
+     * getBoundingClientRect... của các phần tử bên trong đều phản ánh kích
+     * thước đã zoom), tránh phải tự tính toán lại kích thước khung chứa như
+     * khi dùng transform. Bản in luôn bị ép về zoom:1 (xem @media print).
+     */
+    let currentZoom = 1; // 1 = 100%
+    const ZOOM_MIN = 0.25;
+    const ZOOM_MAX = 2;
+    const ZOOM_STORAGE_KEY = 'ebmr_zoom_level';
+
+    function applyZoom() {
+        const page = document.getElementById('document-page');
+        if (page) page.style.zoom = currentZoom;
+
+        const previewPage = document.getElementById('preview-document-page');
+        if (previewPage) previewPage.style.zoom = currentZoom;
+
+        const display = document.getElementById('zoomDisplay');
+        if (display) display.textContent = Math.round(currentZoom * 100) + '%';
+
+        try {
+            localStorage.setItem(ZOOM_STORAGE_KEY, String(currentZoom));
+        } catch (e) {
+            /* localStorage có thể bị chặn (chế độ ẩn danh...), bỏ qua an toàn */
+        }
+
+        syncRulerWidth();
+        if (typeof updateRulerForCurrentBlock === 'function') updateRulerForCurrentBlock();
+    }
+
+    window.setZoomLevel = function(percent) {
+        const clamped = Math.min(ZOOM_MAX * 100, Math.max(ZOOM_MIN * 100, percent));
+        currentZoom = clamped / 100;
+        applyZoom();
+    };
+
+    window.changeZoomLevel = function(deltaPercent) {
+        window.setZoomLevel(Math.round(currentZoom * 100) + deltaPercent);
+    };
+
+    window.zoomToFit = function() {
+        // Trang thiết kế co giãn theo màn hình (width:100% của khung chứa), nên
+        // ở zoom 100% nó LUÔN đã "vừa khung hình" theo đúng nghĩa — không cần
+        // tính tỉ lệ theo một bề rộng A4 cố định như trước (đã bỏ để tránh bóp
+        // nghẹt bảng nhiều cột). "Vừa khung hình" ở đây tương đương đưa về 100%.
+        window.setZoomLevel(100);
+    };
+
+    /**
+     * Đồng bộ bề rộng thước kẻ (#editor-ruler) khớp đúng bề rộng đã render (đã
+     * nhân zoom) của trang, để thước luôn nằm sát 2 mép trang bất kể khổ dọc/
+     * ngang hay mức zoom đang chọn.
+     */
+    function syncRulerWidth() {
+        const ruler = document.getElementById('editor-ruler');
+        const page = document.getElementById('document-page');
+        if (!ruler || !page) return;
+        const renderedWidth = page.getBoundingClientRect().width;
+        if (renderedWidth > 0) ruler.style.width = renderedWidth + 'px';
+    }
+    window.syncRulerWidth = syncRulerWidth;
+
+    // Khôi phục mức zoom đã lưu (nếu có) khi tải lại trang
+    document.addEventListener('DOMContentLoaded', () => {
+        let savedZoom = null;
+        try {
+            savedZoom = localStorage.getItem(ZOOM_STORAGE_KEY);
+        } catch (e) {
+            /* bỏ qua nếu không truy cập được localStorage */
+        }
+        if (savedZoom) {
+            const parsed = parseFloat(savedZoom);
+            if (!isNaN(parsed) && parsed >= ZOOM_MIN && parsed <= ZOOM_MAX) {
+                currentZoom = parsed;
+            }
+        }
+        applyZoom();
+    });
+
+    /**
+     * ======================================================
+     * TỰ ĐỘNG THU NHỎ TỈ LỆ KHI IN nếu bảng quá nhiều cột không vừa khổ A4
+     * ======================================================
+     * Trang thiết kế cố tình để co giãn theo màn hình (không khoá cứng theo A4)
+     * để không bóp nghẹt bảng nhiều cột lúc thiết kế. Nhưng khi IN, phải đảm
+     * bảo mọi thứ vẫn nằm gọn trong khổ giấy thật. Nếu có bảng nào rộng hơn
+     * bề rộng in được của A4 (do người dùng tự kéo cột rộng bằng px cụ thể),
+     * tự động thu nhỏ toàn trang bằng CSS `zoom` (chỉ thu nhỏ khi thật sự cần,
+     * không bao giờ phóng to) ngay trước khi in, rồi khôi phục lại sau khi in xong.
+     */
+    let _preprintZoomBackup = null;
+
+    function computePrintFitScale() {
+        const page = document.getElementById('document-page');
+        if (!page) return 1;
+
+        const isLandscape = page.classList.contains('page-landscape') ||
+            document.body.classList.contains('printing-landscape');
+        // Bề rộng in được thật của A4 (trừ lề 10mm mỗi bên, khớp @page trong styles.blade.php), quy đổi ra px @96dpi
+        const printableWidthMm = isLandscape ? (297 - 20) : (210 - 20);
+        const printableWidthPx = printableWidthMm * (96 / 25.4);
+
+        // Bảng nào có tổng bề rộng cột (px cố định do người dùng tự kéo) vượt quá
+        // bề rộng hiện có sẽ tự "tràn" (scrollWidth > clientWidth) — đó chính là
+        // trường hợp cần thu nhỏ để vừa khổ giấy khi in.
+        let requiredWidth = 0;
+        page.querySelectorAll('.mini-table').forEach(t => {
+            requiredWidth = Math.max(requiredWidth, t.scrollWidth);
+        });
+        if (requiredWidth <= 0) return 1;
+
+        const scale = printableWidthPx / requiredWidth;
+        return Math.min(1, scale); // chỉ thu nhỏ khi cần, không bao giờ phóng to
+    }
+
+    function prepareForPrint() {
+        const page = document.getElementById('document-page');
+        if (!page) return;
+        _preprintZoomBackup = page.style.zoom || '';
+        const fitScale = computePrintFitScale();
+        if (fitScale < 1) {
+            page.style.zoom = fitScale;
+        }
+    }
+
+    function restoreAfterPrint() {
+        const page = document.getElementById('document-page');
+        if (!page) return;
+        page.style.zoom = _preprintZoomBackup || (typeof currentZoom === 'number' ? currentZoom : 1);
+        _preprintZoomBackup = null;
+    }
+
+    window.addEventListener('beforeprint', prepareForPrint);
+    window.addEventListener('afterprint', restoreAfterPrint);
 
     let isOutlineMinimized = true;
     let isSidebarMinimized = true;
@@ -3288,8 +3517,28 @@
             return; // Chặn luồng chọn biến thông thường
         }
 
-        selectedFieldId = fieldId;
-        selectedId = null;
+        // Ctrl+click: thêm/bớt biến này khỏi tập đang chọn (chọn rời rạc nhiều biến)
+        if (event && (event.ctrlKey || event.metaKey)) {
+            EbmrSelection.field.toggle(fieldId);
+            EbmrSelection.item.clear();
+            EbmrSelection.cell.clear(); // Bug: click biến số không được để sót highlight ô cũ
+            document.querySelectorAll('.block-item').forEach(el => el.classList.remove('active'));
+
+            const ids = EbmrSelection.field.getIds();
+            if (ids.length > 1) {
+                if (typeof selectMultipleFields === 'function') selectMultipleFields(ids);
+            } else if (ids.length === 1) {
+                selectField(null, ids[0]); // đệ quy: hiển thị panel biến đơn theo đường thường bên dưới
+            } else {
+                const body = document.getElementById('prop-body');
+                if (body) body.innerHTML = '';
+            }
+            return;
+        }
+
+        EbmrSelection.field.set([fieldId]);
+        EbmrSelection.item.clear();
+        EbmrSelection.cell.clear(); // Bug: click biến số không được để sót highlight ô cũ
 
         document.querySelectorAll('.block-item').forEach(el => el.classList.remove('active'));
 
@@ -6258,80 +6507,81 @@
         if (typeof window.renderBlocks === 'function') window.renderBlocks();
     }
 
-    // --- Block Range Selection & Loop Modal Control ---
-    window.selectedBlockRange = {
-        startId: null,
-        endId: null
-    };
-
+    // --- Block Range / Discrete Selection & Loop Modal Control ---
+    // Trạng thái sống trong EbmrSelection.item — window.selectedBlockRange/
+    // getSelectedBlockRangeIds đã bị loại bỏ vì gây trùng lặp với selectedId
+    // và là nguồn gốc của bug "Shift+click chọn dải không hoạt động" (marquee
+    // chặn mất mọi Shift+click đứng yên trước khi tới được đây).
     window.handleBlockClick = function(e, item) {
         if (window.isExecutionMode) return;
         e.stopPropagation();
 
-        if (e.shiftKey) {
-            if (!window.selectedBlockRange) {
-                window.selectedBlockRange = {
-                    startId: null,
-                    endId: null
-                };
-            }
-            // Nếu chưa có startId nhưng đã có block đang active (selectedId), dùng nó làm startId
-            let startId = window.selectedBlockRange.startId || selectedId;
-
-            if (!startId) {
-                window.selectedBlockRange.startId = item.id;
-                window.selectedBlockRange.endId = null;
-                selectItem(item.id, true);
-            } else {
-                window.selectedBlockRange.startId = startId;
-                const startItem = items.find(i => i.id === startId);
-                if (!startItem) {
-                    window.selectedBlockRange.startId = item.id;
-                    window.selectedBlockRange.endId = null;
-                    selectItem(item.id, true);
-                    return;
-                }
-                const startSectionId = startItem.type === 'section' ? startItem.id : startItem.section_id;
-                const currentSectionId = item.type === 'section' ? item.id : item.section_id;
-                if (startSectionId !== currentSectionId) {
-                    Swal.fire({
-                        icon: 'warning',
-                        title: 'Không hợp lệ',
-                        text: 'Các khối được chọn để lặp phải nằm trong cùng một phân đoạn!',
-                        confirmButtonText: 'Đồng ý'
-                    });
-                    return;
-                }
-                window.selectedBlockRange.endId = item.id;
-                renderBlocks();
-            }
-        } else {
-            window.selectedBlockRange = {
-                startId: null,
-                endId: null
-            };
+        // Nếu click nằm trong 1 ô bảng, Ctrl/Shift đã được engine chọn-ô (events.blade.php)
+        // xử lý riêng cho việc chọn ô rồi — không áp dụng thêm logic chọn-nhiều-khối ở đây,
+        // nếu không Ctrl/Shift+click 1 ô sẽ vô tình vừa chọn ô vừa chọn/mở-rộng dải khối.
+        if (e.target.closest('td, th')) {
+            EbmrSelection.field.clear();
             if (selectedId !== item.id) {
                 selectItem(item.id, true);
             }
+            return;
         }
-    };
 
-    window.getSelectedBlockRangeIds = function() {
-        if (!window.selectedBlockRange || !window.selectedBlockRange.startId || !window.selectedBlockRange.endId) {
-            return [];
+        EbmrSelection.field.clear();
+
+        if (e.ctrlKey || e.metaKey) {
+            EbmrSelection.item.toggle(item.id);
+            renderBlocks();
+            return;
         }
-        const startIdx = items.findIndex(i => i.id === window.selectedBlockRange.startId);
-        const endIdx = items.findIndex(i => i.id === window.selectedBlockRange.endId);
-        if (startIdx === -1 || endIdx === -1) return [];
 
-        const minIdx = Math.min(startIdx, endIdx);
-        const maxIdx = Math.max(startIdx, endIdx);
+        if (e.shiftKey) {
+            // Nếu chưa có anchor nhưng đã có block đang active (selectedId), dùng nó làm điểm bắt đầu
+            let startId = EbmrSelection.item.getAnchorId() || selectedId;
 
-        return items.slice(minIdx, maxIdx + 1).map(i => i.id);
+            if (!startId) {
+                EbmrSelection.item.set([item.id]);
+                selectItem(item.id, true);
+                return;
+            }
+
+            const startItem = items.find(i => i.id === startId);
+            if (!startItem) {
+                EbmrSelection.item.set([item.id]);
+                selectItem(item.id, true);
+                return;
+            }
+            const startSectionId = startItem.type === 'section' ? startItem.id : startItem.section_id;
+            const currentSectionId = item.type === 'section' ? item.id : item.section_id;
+            if (startSectionId !== currentSectionId) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Không hợp lệ',
+                    text: 'Các khối được chọn để lặp phải nằm trong cùng một phân đoạn!',
+                    confirmButtonText: 'Đồng ý'
+                });
+                return;
+            }
+            const startIdx = items.findIndex(i => i.id === startId);
+            const endIdx = items.findIndex(i => i.id === item.id);
+            const minIdx = Math.min(startIdx, endIdx);
+            const maxIdx = Math.max(startIdx, endIdx);
+            const rangeIds = items.slice(minIdx, maxIdx + 1).map(i => i.id);
+            EbmrSelection.item.set(rangeIds, { mode: 'range', anchorId: startId });
+            renderBlocks();
+        } else {
+            EbmrSelection.item.clear();
+            if (selectedId !== item.id) {
+                selectItem(item.id, true);
+            } else {
+                EbmrSelection.item.set([item.id]);
+            }
+        }
     };
 
     window.openBlockLoopModal = function() {
-        if (!window.selectedBlockRange || !window.selectedBlockRange.startId || !window.selectedBlockRange.endId) {
+        const rangeIds = EbmrSelection.item.getIds();
+        if (rangeIds.length < 2 || EbmrSelection.item.getMode() !== 'range') {
             Swal.fire({
                 icon: 'info',
                 title: 'Hướng dẫn chọn nhóm khối',
@@ -6340,9 +6590,6 @@
             });
             return;
         }
-
-        const rangeIds = window.getSelectedBlockRangeIds();
-        if (rangeIds.length === 0) return;
 
         let existingLoopCount = 3;
         for (let id of rangeIds) {
@@ -6367,12 +6614,7 @@
         const blocksInGroup = items.filter(i => i.loop_group_id === groupId);
         if (blocksInGroup.length === 0) return;
 
-        window.selectedBlockRange = {
-            startId: blocksInGroup[0].id,
-            endId: blocksInGroup[blocksInGroup.length - 1].id
-        };
-
-        selectedId = null;
+        EbmrSelection.item.set(blocksInGroup.map(b => b.id), { mode: 'range', anchorId: blocksInGroup[0].id });
         renderBlocks();
 
         const existingLoopCount = blocksInGroup[0].loop_count || 3;
@@ -6383,7 +6625,7 @@
     };
 
     window.applyBlockLoopGroup = function() {
-        const rangeIds = window.getSelectedBlockRangeIds();
+        const rangeIds = EbmrSelection.item.getIds();
         if (rangeIds.length === 0) return;
 
         const loopCountInput = document.getElementById('blockLoopCount');
@@ -6408,10 +6650,7 @@
             }
         });
 
-        window.selectedBlockRange = {
-            startId: null,
-            endId: null
-        };
+        EbmrSelection.item.clear();
 
         $('#blockLoopModal').modal('hide');
         renderBlocks();
@@ -6420,7 +6659,7 @@
     };
 
     window.removeBlockLoopGroup = function() {
-        const rangeIds = window.getSelectedBlockRangeIds();
+        const rangeIds = EbmrSelection.item.getIds();
         if (rangeIds.length === 0) return;
 
         saveState();
@@ -6433,10 +6672,7 @@
             }
         });
 
-        window.selectedBlockRange = {
-            startId: null,
-            endId: null
-        };
+        EbmrSelection.item.clear();
 
         $('#blockLoopModal').modal('hide');
         renderBlocks();
@@ -6449,13 +6685,7 @@
     window.copyBlock = function() {
         if (window.isExecutionMode) return;
 
-        let targetIds = [];
-        const rangeIds = (typeof getSelectedBlockRangeIds === 'function') ? getSelectedBlockRangeIds() : [];
-        if (rangeIds && rangeIds.length > 0) {
-            targetIds = [...rangeIds];
-        } else if (selectedId) {
-            targetIds = [selectedId];
-        }
+        let targetIds = EbmrSelection.item.getIds();
 
         if (targetIds.length === 0) {
             toastr.warning('Vui lòng chọn ít nhất 1 khối để sao chép.');
@@ -6483,13 +6713,7 @@
     window.cutBlock = function() {
         if (window.isExecutionMode) return;
 
-        let targetIds = [];
-        const rangeIds = (typeof getSelectedBlockRangeIds === 'function') ? getSelectedBlockRangeIds() : [];
-        if (rangeIds && rangeIds.length > 0) {
-            targetIds = [...rangeIds];
-        } else if (selectedId) {
-            targetIds = [selectedId];
-        }
+        let targetIds = EbmrSelection.item.getIds();
 
         if (targetIds.length === 0) {
             toastr.warning('Vui lòng chọn ít nhất 1 khối để cắt.');
@@ -6522,11 +6746,7 @@
         };
 
         items = items.filter(i => !targetIds.includes(i.id));
-        selectedId = null;
-        window.selectedBlockRange = {
-            startId: null,
-            endId: null
-        };
+        EbmrSelection.item.clear();
 
         const panel = document.getElementById('property-panel');
         if (panel) panel.classList.add('d-none');
@@ -6605,13 +6825,9 @@
         items.splice(insertIndex, 0, ...clonedBlocks);
 
         if (clonedBlocks.length === 1) {
-            selectedId = clonedBlocks[0].id;
+            EbmrSelection.item.set([clonedBlocks[0].id]);
         } else if (clonedBlocks.length > 1) {
-            window.selectedBlockRange = {
-                startId: clonedBlocks[0].id,
-                endId: clonedBlocks[clonedBlocks.length - 1].id
-            };
-            selectedId = null;
+            EbmrSelection.item.set(clonedBlocks.map(b => b.id), { mode: 'range', anchorId: clonedBlocks[0].id });
         }
 
         if (typeof window.translateFormulaReferencesOfPastedFields === 'function') {
@@ -7402,7 +7618,9 @@
     // ==========================================
     // TÍNH NĂNG ĐÁNH DẤU N/A (KHÔNG ÁP DỤNG)
     // ==========================================
-    let executionSelectedCells = [];
+    // Trạng thái chọn ô ở chế độ Chạy thử sống trong EbmrSelection.execCell
+    // (theo dõi bằng {blockId,row,col} thay vì tham chiếu DOM trực tiếp, để không
+    // bị mất highlight khi renderBlocks() chạy lại, vd sau khi tính lại công thức).
 
     // Gắn sự kiện chọn nhiều ô và context menu trong chế độ thực thi
     document.addEventListener('DOMContentLoaded', () => {
@@ -7424,13 +7642,7 @@
                 return;
             }
             if (e.ctrlKey || e.shiftKey) {
-                if (executionSelectedCells.includes(targetCell)) {
-                    targetCell.classList.remove('cell-selected-execution');
-                    executionSelectedCells = executionSelectedCells.filter(c => c !== targetCell);
-                } else {
-                    targetCell.classList.add('cell-selected-execution');
-                    executionSelectedCells.push(targetCell);
-                }
+                EbmrSelection.execCell.toggle(targetCell);
             } else {
                 clearExecutionSelection();
             }
@@ -7468,10 +7680,8 @@
         e.preventDefault();
 
         // Nếu ô click không nằm trong danh sách đang chọn, chọn riêng ô đó
-        if (!executionSelectedCells.includes(targetCell)) {
-            clearExecutionSelection();
-            targetCell.classList.add('cell-selected-execution');
-            executionSelectedCells.push(targetCell);
+        if (!EbmrSelection.execCell.isSelected(targetCell)) {
+            EbmrSelection.execCell.setSingle(targetCell);
         }
 
         // Hiển thị menu N/A tùy chỉnh (cũng dùng clientX/clientY)
@@ -7659,15 +7869,14 @@
     window.removePageBreak = removePageBreak;
 
     function clearExecutionSelection() {
-        executionSelectedCells.forEach(c => c.classList.remove('cell-selected-execution'));
-        executionSelectedCells = [];
+        EbmrSelection.execCell.clear();
         toggleNAZoneButton();
     }
 
     function toggleNAZoneButton() {
         const btn = document.getElementById('btn-na-zone');
         if (!btn) return;
-        if (executionSelectedCells.length > 0 && window.isExecutionMode) {
+        if (!EbmrSelection.execCell.isEmpty() && window.isExecutionMode) {
             btn.classList.remove('d-none');
         } else {
             btn.classList.add('d-none');
@@ -7676,9 +7885,11 @@
 
     window.markSelectedZoneAsNA = function() {
         hideNAMenu();
-        if (executionSelectedCells.length === 0) return;
+        if (EbmrSelection.execCell.isEmpty()) return;
 
-        const cellsToMark = [...executionSelectedCells];
+        // Resolve các ô sống hiện tại từ khoá {blockId,row,col} thay vì tham chiếu DOM đã lưu,
+        // để không bị lỗi tham chiếu "chết" nếu renderBlocks() chạy lại trong lúc hộp thoại đang mở.
+        const cellsToMark = EbmrSelection.execCell.getElements();
 
         Swal.fire({
             title: '<i class="fas fa-ban me-2 text-danger"></i>Xác nhận N/A',
@@ -7710,8 +7921,8 @@
 
     window.unmarkNAZone = function() {
         hideNAMenu();
-        if (executionSelectedCells.length === 0) return;
-        applyNAToCells(executionSelectedCells, false);
+        if (EbmrSelection.execCell.isEmpty()) return;
+        applyNAToCells(EbmrSelection.execCell.getElements(), false);
         clearExecutionSelection();
         renderBlocks();
         if (typeof toastr !== 'undefined') toastr.info('Đã hủy đánh dấu N/A.');
@@ -8563,7 +8774,21 @@ window.injectTypographyStyles = function(settings) {
         styleTag.id = 'ebmr-typography-style';
         document.head.appendChild(styleTag);
     }
-    
+
+    // Khung badge biến số (.ebmr-field-badge) co giãn theo tỉ lệ cỡ chữ "Văn bản
+    // & Bảng" đã chọn, lấy 12pt (giá trị mặc định của modal) làm mốc gốc — ở đúng
+    // 12pt, badge giữ nguyên kích thước gốc trong styles.blade.php (padding 4px
+    // 10px, min-width 30px, min-height 38px cho ô solo-badge-cell). Trước đây
+    // Typography chỉ đổi font-size của badge (vì badge cũng là span/td *) mà
+    // không đổi khung, nên badge luôn chiếm nhiều chỗ bất kể đã thu nhỏ chữ.
+    const BADGE_BASELINE_PT = 12;
+    const normalPt = parseFloat(settings.normal) || BADGE_BASELINE_PT;
+    const badgeScale = normalPt / BADGE_BASELINE_PT;
+    const badgePadV = (4 * badgeScale).toFixed(2);
+    const badgePadH = (10 * badgeScale).toFixed(2);
+    const badgeMinWidth = (30 * badgeScale).toFixed(2);
+    const badgeMinHeight = (38 * badgeScale).toFixed(2);
+
     // Create CSS string with !important to override inline styles
     const css = `
         /* Normal text overrides: paragraphs, spans, table cells */
@@ -8599,6 +8824,15 @@ window.injectTypographyStyles = function(settings) {
         #editor-content .section-header-display,
         #editor-content .section-header-display * {
             font-size: ${settings.h1} !important;
+        }
+
+        /* Khung badge biến số co giãn theo tỉ lệ cỡ chữ "Văn bản & Bảng" đã chọn */
+        #editor-content .ebmr-field-badge {
+            padding: ${badgePadV}px ${badgePadH}px !important;
+            min-width: ${badgeMinWidth}px !important;
+        }
+        #editor-content td.solo-badge-cell .ebmr-field-badge {
+            min-height: ${badgeMinHeight}px !important;
         }
     `;
     

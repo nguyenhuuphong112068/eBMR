@@ -259,6 +259,15 @@
 
         {{-- ── Phải: Mode / View / Save ── --}}
         <div class="ms-auto d-flex gap-2 align-items-center pb-1">
+            {{-- Thử trình soạn thảo mới (Pilot ProseMirror/TipTap) --}}
+            @if (isset($template) && $template->id)
+                <a href="{{ route('pages.ebmr.designer', $template->id) }}?editor=v2"
+                    class="btn btn-sm btn-outline-warning px-3 fw-bold" style="border-radius: 20px;"
+                    title="Mở bản thử nghiệm trình soạn thảo mới (engine ProseMirror/TipTap). Dữ liệu dùng chung — lưu ở đâu cũng mở được ở cả hai bản.">
+                    <i class="fas fa-flask me-1"></i> Editor V2 (Beta)
+                </a>
+            @endif
+
             {{-- N/A Zone (ẩn mặc định, hiện khi execution mode) --}}
             <button class="btn btn-sm btn-outline-danger px-3 d-none fw-bold" id="btn-na-zone"
                 onclick="markSelectedZoneAsNA()" style="border-radius: 20px;"
@@ -272,6 +281,39 @@
                 title="Trích xuất Cây Dữ Liệu Ngữ Cảnh">
                 <i class="fas fa-sitemap me-1"></i> Xem Cây Dữ Liệu
             </button> --}}
+
+            {{-- Thu phóng trang (giống Google Docs) --}}
+            <div class="d-flex align-items-center gap-1 zoom-control" title="Thu phóng trang">
+                <button class="btn btn-toolbar-action p-0 d-flex align-items-center justify-content-center"
+                    style="width:28px; height:28px; border-radius:4px;" onclick="changeZoomLevel(-10)"
+                    title="Thu nhỏ">
+                    <i class="fas fa-search-minus" style="font-size:0.75rem;"></i>
+                </button>
+                <div class="dropdown d-inline-block" title="Mức thu phóng">
+                    <button class="btn btn-toolbar dropdown-toggle px-2 fw-bold" type="button"
+                        data-toggle="dropdown" aria-expanded="false" style="min-width:58px;">
+                        <span id="zoomDisplay">100%</span>
+                    </button>
+                    <div class="dropdown-menu shadow-lg p-2" style="min-width:150px;">
+                        <button class="dropdown-item rounded mb-1" onclick="setZoomLevel(50)">50%</button>
+                        <button class="dropdown-item rounded mb-1" onclick="setZoomLevel(75)">75%</button>
+                        <button class="dropdown-item rounded mb-1" onclick="setZoomLevel(90)">90%</button>
+                        <button class="dropdown-item rounded mb-1" onclick="setZoomLevel(100)">100%</button>
+                        <button class="dropdown-item rounded mb-1" onclick="setZoomLevel(125)">125%</button>
+                        <button class="dropdown-item rounded mb-1" onclick="setZoomLevel(150)">150%</button>
+                        <button class="dropdown-item rounded mb-1" onclick="setZoomLevel(200)">200%</button>
+                        <hr class="my-1">
+                        <button class="dropdown-item rounded fw-bold text-primary" onclick="zoomToFit()">
+                            <i class="fas fa-arrows-alt-h me-1"></i> Vừa khung hình
+                        </button>
+                    </div>
+                </div>
+                <button class="btn btn-toolbar-action p-0 d-flex align-items-center justify-content-center"
+                    style="width:28px; height:28px; border-radius:4px;" onclick="changeZoomLevel(10)"
+                    title="Phóng to">
+                    <i class="fas fa-search-plus" style="font-size:0.75rem;"></i>
+                </button>
+            </div>
 
             {{-- Designer / Execution mode toggle --}}
             <button type="button" id="btn-mode-toggle"

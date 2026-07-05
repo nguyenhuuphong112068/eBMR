@@ -1,10 +1,10 @@
 <?php
 
-use App\Http\Controllers\EbmrApprovalController;
-use App\Http\Controllers\EbmrDesignerController;
-use App\Http\Controllers\EbmrExecutionController;
-use App\Http\Controllers\EbmrIssuanceController;
-use App\Http\Controllers\EbmrTemplateController;
+use App\Http\Controllers\Pages\Ebmr\Approvals\EbmrApprovalController;
+use App\Http\Controllers\Pages\Ebmr\Designer\EbmrDesignerController;
+use App\Http\Controllers\Pages\Ebmr\Records\EbmrExecutionController;
+use App\Http\Controllers\Pages\Ebmr\Issuance\EbmrIssuanceController;
+use App\Http\Controllers\Pages\Ebmr\Templates\EbmrTemplateController;
 use Illuminate\Support\Facades\Route;
 Route::group(['prefix' => 'ebmr', 'as' => 'pages.ebmr.'], function () {
     // 1. Template Management
@@ -40,6 +40,8 @@ Route::group(['prefix' => 'ebmr', 'as' => 'pages.ebmr.'], function () {
     Route::get('/templates/{id}/workflow', [EbmrApprovalController::class, 'getTemplateWorkflow'])->name('getTemplateWorkflow');
     Route::post('/templates/{id}/workflow', [EbmrApprovalController::class, 'storeTemplateWorkflow'])->name('storeTemplateWorkflow');
     Route::post('/approvals/process', [EbmrApprovalController::class, 'process'])->name('processApproval');
+    Route::get('/approvals/eligible-users', [EbmrApprovalController::class, 'getEligibleUsers'])->name('getEligibleUsers');
+    Route::post('/approvals/reassign', [EbmrApprovalController::class, 'reassignWorkflowUser'])->name('reassignWorkflowUser');
 
     // 4. Issuance
     Route::get('/issue-center', [EbmrIssuanceController::class, 'index'])->name('issueCenter');
@@ -58,6 +60,10 @@ Route::group(['prefix' => 'ebmr', 'as' => 'pages.ebmr.'], function () {
     Route::get('/run-data-history/{record_id}/{block_uuid}/{cell_id}', [EbmrExecutionController::class, 'getRunDataHistory'])->name('getRunDataHistory');
     Route::post('/verify-password', [EbmrExecutionController::class, 'verifyPassword'])->name('verifyPassword');
     Route::post('/verify-checker', [EbmrExecutionController::class, 'verifyChecker'])->name('verifyChecker');
+    Route::get('/records/{recordId}/distribution', [EbmrExecutionController::class, 'getRecordDistribution'])->name('getRecordDistribution');
+    Route::post('/records/distribute', [EbmrExecutionController::class, 'distributeSections'])->name('distributeSections');
+    Route::get('/production/room-options', [EbmrExecutionController::class, 'getRoomOptions'])->name('getRoomOptions');
+    Route::get('/records/{recordId}/workshop-users', [EbmrExecutionController::class, 'getRecordWorkshopUsers'])->name('getRecordWorkshopUsers');
     Route::post('/log-error', [EbmrDesignerController::class, 'logError'])->name('logError');
     Route::post('/dynamic-options', [EbmrDesignerController::class, 'getDynamicOptions'])->name('dynamicOptions');
     Route::get('/designer-api/equipment', [EbmrDesignerController::class, 'getEquipmentList'])->name('designerEquipmentList');

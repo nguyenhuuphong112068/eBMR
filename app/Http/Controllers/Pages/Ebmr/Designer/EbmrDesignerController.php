@@ -1,6 +1,8 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Pages\Ebmr\Designer;
+
+use App\Http\Controllers\Controller;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -107,7 +109,10 @@ class EbmrDesignerController extends Controller
 
                     // Determine read-only state
                     $currentUserId = session('user')['userId'] ?? null;
-                    if ($template->owner_id != $currentUserId || $template->status !== 'draft') {
+                    $isAdmin = (session('user')['userGroup'] ?? '') === 'Admin';
+                    // Read-only nếu: không phải owner, hoặc không ở trạng thái draft
+                    // Admin luôn có thể xem (read-only) nhưng không bị redirect
+                    if (!$currentUserId || ($template->owner_id != $currentUserId && !$isAdmin) || $template->status !== 'draft') {
                         $isReadOnly = true;
                     }
 
@@ -317,7 +322,11 @@ class EbmrDesignerController extends Controller
                         ->get();
                     $template->workflows = $workflows;
 
-                    return view('pages.ebmr.designer', [
+                    // Pilot trình soạn thảo mới (ProseMirror/TipTap) — chạy song song,
+                    // dùng chung toàn bộ dữ liệu đã nạp ở trên. Vào bằng ?editor=v2.
+                    $viewName = $request->query('editor') === 'v2' ? 'pages.ebmr.designer_v2' : 'pages.ebmr.designer';
+
+                    return view($viewName, [
                         'template' => $template,
                         'isReadOnly' => ($lang === 'dual') ? true : $isReadOnly,
                         'comments' => $comments,
@@ -329,10 +338,11 @@ class EbmrDesignerController extends Controller
                 }
             }
         } catch (\Exception $e) {
-            Log::error('Designer error: '.$e->getMessage());
+            Log::error('Designer error: '.$e->getMessage().' | File: '.$e->getFile().' | Line: '.$e->getLine());
+            return redirect()->back()->with('error', 'Không thể mở hồ sơ. Lỗi hệ thống: '.$e->getMessage());
         }
 
-        return redirect()->back();
+        return redirect()->back()->with('error', 'Không tìm thấy hồ sơ hoặc bạn không có quyền truy cập.');
     }
 
     public function save(Request $request)
@@ -824,6 +834,20 @@ class EbmrDesignerController extends Controller
 
     public function deleteComment(Request $request)
     {
+        $currentUserId = session('user')['userId'] ?? null;
+        $isAdmin = (session('user')['userGroup'] ?? '') === 'Admin';
+
+        $comment = DB::table('ebmr_template_comments')->where('id', $request->id)->first();
+
+        if (!$comment) {
+            return response()->json(['success' => false, 'message' => 'Bình luận không tồn tại.'], 404);
+        }
+
+        // Chỉ cho phép xóa nếu là chủ sở hữu comment hoặc Admin
+        if (!$isAdmin && $comment->user_id != $currentUserId) {
+            return response()->json(['success' => false, 'message' => 'Bạn không có quyền xóa bình luận này.'], 403);
+        }
+
         DB::table('ebmr_template_comments')->where('id', $request->id)->delete();
 
         return response()->json(['success' => true]);
@@ -889,13 +913,12 @@ class EbmrDesignerController extends Controller
             }
         }
 
-        if (! $contentBlocks || empty($block->content)) {
+        if (empty($block->content)) {
             return;
         }
 
-        if (! $contentBlocks) {
-            Log::warning("AI Translation: No content blocks found for block #{$block->id}");
-
+        if (! $contentBlocks || $contentBlocks->isEmpty()) {
+            Log::warning("Designer injectContent: No content blocks found for block #{$block->id} (type: {$block->type})");
             return;
         }
 

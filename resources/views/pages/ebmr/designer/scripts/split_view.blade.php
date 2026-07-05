@@ -42,7 +42,7 @@
                             <span class="badge bg-secondary text-white py-2 px-3 fw-bold" style="font-size: 0.8rem;"><i class="fas fa-eye me-1"></i>Vùng so sánh (Xem/Read-only)</span>
                             <button class="btn btn-xs btn-outline-primary py-1 px-2 fw-bold" onclick="swapSplitWorkspace()" title="Soạn thảo tại đây"><i class="fas fa-exchange-alt fa-rotate-90"></i> Soạn thảo tại đây</button>
                         </div>
-                        <div id="preview-workspace" class="d-flex justify-content-start align-items-start" style="width: 100%; margin: 0; padding-right: 20px;">
+                        <div id="preview-workspace" class="d-flex justify-content-center align-items-start" style="width: 100%; margin: 0; padding-right: 20px;">
                             <div class="page-a4 shadow mt-2" style="border-radius: 4px; flex-shrink: 0; position: relative;" id="preview-document-page">
                                 <div id="preview-editor-content" class="p-0"></div>
                             </div>
@@ -58,9 +58,17 @@
                 if (topPane) {
                     topPane.appendChild(designerWorkspace);
                 }
-                
+
+                // Trang preview phải khớp khổ dọc/ngang (và do đó bề rộng thật) với trang chính
+                const livePage = document.getElementById('document-page');
+                const previewPage = document.getElementById('preview-document-page');
+                if (livePage && previewPage && livePage.classList.contains('page-landscape')) {
+                    previewPage.classList.add('page-landscape');
+                }
+
                 // Sync content to preview
                 syncPreviewContent();
+                if (typeof applyZoom === 'function') applyZoom();
                 
             } else {
                 // Remove split active class

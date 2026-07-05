@@ -210,8 +210,13 @@
                                                         @if ($t->status === 'draft')
                                                             <a href="{{ route('pages.ebmr.designer', $t->id) }}"
                                                                 class="btn btn-sm btn-white text-navy"
-                                                                title="Thiết kế nội dung">
-                                                                <i class="fas fa-pencil-ruler"></i> Thiết kế
+                                                                title="Thiết kế nội dung (trình soạn thảo hiện tại)">
+                                                                <i class="fas fa-pencil-ruler"></i> Thiết kế V1
+                                                            </a>
+                                                            <a href="{{ route('pages.ebmr.designer', $t->id) }}?editor=v2"
+                                                                class="btn btn-sm btn-white text-warning fw-bold"
+                                                                title="Thiết kế bằng trình soạn thảo mới TipTap/ProseMirror (Beta)">
+                                                                <i class="fas fa-flask"></i> Thiết kế V2
                                                             </a>
                                                             @if ($current_type !== 'CO')
                                                             <button class="btn btn-sm btn-white text-success"
@@ -403,8 +408,13 @@
                                                         @if ($t->status === 'draft')
                                                             <a href="{{ route('pages.ebmr.designer', $t->id) }}"
                                                                 class="btn btn-sm btn-navy rounded-pill px-3 py-1"
-                                                                title="Thiết kế nội dung">
-                                                                <i class="fas fa-pencil-ruler me-1"></i> Thiết kế
+                                                                title="Thiết kế nội dung (trình soạn thảo hiện tại)">
+                                                                <i class="fas fa-pencil-ruler me-1"></i> Thiết kế V1
+                                                            </a>
+                                                            <a href="{{ route('pages.ebmr.designer', $t->id) }}?editor=v2"
+                                                                class="btn btn-sm btn-warning rounded-pill px-3 py-1 fw-bold"
+                                                                title="Thiết kế bằng trình soạn thảo mới TipTap/ProseMirror (Beta)">
+                                                                <i class="fas fa-flask me-1"></i> Thiết kế V2
                                                             </a>
                                                             @if ($current_type !== 'CO')
                                                             <button class="btn btn-sm btn-success rounded-pill px-3 py-1"

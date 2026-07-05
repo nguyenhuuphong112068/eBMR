@@ -9,7 +9,11 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [
       laravel({
-        input: ['resources/js/app.jsx'],
+        // LƯU Ý: app.jsx đang import các file không tồn tại (./Components/NoteModal,
+        // ./Pages/...) nên không thể "vite build" — chỉ chạy được qua "npm run dev".
+        // Tạm loại khỏi input build; khi chạy dev server thì @vite('resources/js/app.jsx')
+        // vẫn hoạt động bình thường (dev server không phụ thuộc danh sách input).
+        input: ['resources/js/designer-v2/main.js'],
         refresh: true,
       }),
       react(),

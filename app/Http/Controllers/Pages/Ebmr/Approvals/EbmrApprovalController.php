@@ -1,6 +1,9 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Pages\Ebmr\Approvals;
+
+use App\Http\Controllers\Controller;
+use App\Http\Controllers\Pages\AuditTrail\AuditTrialController;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
@@ -331,10 +334,13 @@ class EbmrApprovalController extends Controller
     public function getWorkflowHistory($type, $id)
     {
         if ($type === 'ebmr') {
+            // Kèm theo owner_id của hồ sơ trên từng dòng để frontend biết có nên
+            // hiện nút "Đổi người trình ký" hay không (chỉ chủ sở hữu mới được đổi).
             $workflows = DB::table('ebmr_template_workflows')
                 ->join('user_management', 'ebmr_template_workflows.user_id', '=', 'user_management.id')
-                ->where('template_id', $id)
-                ->select('ebmr_template_workflows.*', 'user_management.fullName as user_name', 'user_management.signature_image')
+                ->leftJoin('ebmr_templates', 'ebmr_template_workflows.template_id', '=', 'ebmr_templates.id')
+                ->where('ebmr_template_workflows.template_id', $id)
+                ->select('ebmr_template_workflows.*', 'user_management.fullName as user_name', 'user_management.signature_image', 'ebmr_templates.owner_id')
                 ->orderBy('ebmr_template_workflows.id', 'asc')
                 ->get();
         } elseif ($type === 'clearance_room') {
@@ -352,13 +358,89 @@ class EbmrApprovalController extends Controller
                 ->orderBy('clearance_equip_process_workflows.id', 'asc')
                 ->get();
         } else {
-            $workflows = DB::table('cleaning_process_workflows')
+            // cleaning_room / cleaning_equipment: process_list_id là 2 dãy ID độc lập
+            // (từ cleaning_room_processes_list và cleaning_equip_processes_list), nên
+            // BẮT BUỘC lọc thêm theo cột "type" — nếu không, 1 process_list_id trùng số
+            // giữa phòng và thiết bị sẽ bị gộp nhầm lịch sử trình ký của nhau.
+            $subType = str_starts_with($type, 'cleaning_') ? substr($type, strlen('cleaning_')) : null;
+
+            $query = DB::table('cleaning_process_workflows')
                 ->join('user_management', 'cleaning_process_workflows.user_id', '=', 'user_management.id')
-                ->where('process_list_id', $id)
+                ->where('process_list_id', $id);
+
+            if ($subType) {
+                $query->where('cleaning_process_workflows.type', $subType);
+            }
+
+            $workflows = $query
                 ->select('cleaning_process_workflows.*', 'user_management.fullName as user_name', 'user_management.signature_image')
                 ->orderBy('cleaning_process_workflows.id', 'asc')
                 ->get();
         }
         return response()->json($workflows);
+    }
+
+    /**
+     * Danh sách người dùng để chọn khi đổi người trình ký (dùng cho dropdown reassign).
+     */
+    public function getEligibleUsers()
+    {
+        $users = DB::table('user_management')->select('id', 'fullName as name')->orderBy('fullName')->get();
+        return response()->json($users);
+    }
+
+    /**
+     * Đổi người phụ trách 1 bước trình ký (Kiểm tra/Phê duyệt/Ban hành) đang CHỜ
+     * DUYỆT — chỉ chủ sở hữu hồ sơ (owner_id) mới được thực hiện. Bước đã xử lý
+     * (đã duyệt/từ chối/hủy) không thể đổi. Mọi thay đổi được ghi vào Audit Trail.
+     */
+    public function reassignWorkflowUser(Request $request)
+    {
+        $validated = $request->validate([
+            'workflow_id' => 'required|integer',
+            'new_user_id' => 'required|integer',
+        ]);
+
+        $workflow = DB::table('ebmr_template_workflows')->where('id', $validated['workflow_id'])->first();
+        if (!$workflow) {
+            return response()->json(['success' => false, 'message' => 'Không tìm thấy bước trình ký']);
+        }
+        if ($workflow->status !== 'pending') {
+            return response()->json(['success' => false, 'message' => 'Chỉ có thể đổi người khi bước này đang chờ duyệt']);
+        }
+
+        $template = DB::table('ebmr_templates')->where('id', $workflow->template_id)->first();
+        if (!$template) {
+            return response()->json(['success' => false, 'message' => 'Hồ sơ không tồn tại']);
+        }
+        if ((int) $template->owner_id !== (int) (session('user')['userId'] ?? 0)) {
+            return response()->json(['success' => false, 'message' => 'Chỉ chủ sở hữu hồ sơ mới được đổi người trình ký']);
+        }
+
+        if ((int) $validated['new_user_id'] === (int) $workflow->user_id) {
+            return response()->json(['success' => false, 'message' => 'Người được chọn trùng với người hiện tại']);
+        }
+
+        $newUser = DB::table('user_management')->where('id', $validated['new_user_id'])->first();
+        if (!$newUser) {
+            return response()->json(['success' => false, 'message' => 'Người dùng không tồn tại']);
+        }
+        $oldUser = DB::table('user_management')->where('id', $workflow->user_id)->first();
+
+        DB::table('ebmr_template_workflows')->where('id', $workflow->id)->update([
+            'user_id' => $validated['new_user_id'],
+            'updated_at' => now(),
+        ]);
+
+        $roleLabel = $workflow->role === 'reviewer' ? 'Kiểm tra' : ($workflow->role === 'approver' ? 'Phê duyệt' : 'Ban hành');
+        AuditTrialController::log(
+            'ReassignApprover',
+            'ebmr_template_workflows',
+            $workflow->id,
+            $roleLabel . ': ' . ($oldUser->fullName ?? ('#' . $workflow->user_id)),
+            $roleLabel . ': ' . ($newUser->fullName ?? ('#' . $validated['new_user_id']))
+        );
+
+        return response()->json(['success' => true, 'message' => 'Đã đổi người trình ký thành công']);
     }
 }

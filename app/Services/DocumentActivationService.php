@@ -63,7 +63,7 @@ class DocumentActivationService
     /**
      * Expire previous versions of the same category and type for BMR templates
      */
-    private static function expirePreviousEbmrVersions($templateId)
+    public static function expirePreviousEbmrVersions($templateId)
     {
         $current = DB::table('ebmr_templates')->where('id', $templateId)->first();
         if (!$current) return;

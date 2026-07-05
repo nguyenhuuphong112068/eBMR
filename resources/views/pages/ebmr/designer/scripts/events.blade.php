@@ -1,34 +1,23 @@
 <script>
     function initTableAdvancedFeatures() {
-        let marqueeDiv = null;
-        let marqueeStartX = 0;
-        let marqueeStartY = 0;
-        let isMarqueeActive = false;
-
+        // Ngưỡng khoảng cách (px) để phân biệt "click đứng yên" và "kéo thật sự".
+        // Trước đây Shift+mousedown lập tức tạo marquee ngay cả khi không hề kéo,
+        // khiến Shift+click chọn dải block/ô không bao giờ chạy tới nơi (bug đã xác
+        // minh). Nay mousedown chỉ "arm" (ghi nhớ ý định), chỉ thật sự commit thành
+        // marquee/kéo-chọn-ô khi chuột đã di chuyển vượt ngưỡng này.
+        const DRAG_THRESHOLD_PX = 4;
+        let _drag = null; // { kind:'marquee'|'edge-drag', startX, startY, committed, startCell?, marqueeDiv? }
+        let justFinishedMarquee = false;
 
         // 1. Selection Logic
         document.addEventListener('mousedown', (e) => {
             if (window.isExecutionMode) return; // Chặn chọn khối ở chế độ ghi chép
             if (window.isSelectVarMode) return; // Chặn chọn khối/ô khi đang bắt biến
 
-            // -- MARQUEE SELECTOR LOGIC (Shift + Left Click) --
+            // -- MARQUEE SELECTOR (Shift + Left Click) — chỉ "arm", chưa commit --
             if (e.shiftKey && e.button === 0 && e.target.closest('#editor-content')) {
                 e.preventDefault();
-                window.getSelection().removeAllRanges();
-                
-                isMarqueeActive = true;
-                marqueeStartX = e.clientX;
-                marqueeStartY = e.clientY;
-                
-                marqueeDiv = document.createElement('div');
-                marqueeDiv.className = 'marquee-selector';
-                marqueeDiv.style.left = marqueeStartX + 'px';
-                marqueeDiv.style.top = marqueeStartY + 'px';
-                marqueeDiv.style.width = '0px';
-                marqueeDiv.style.height = '0px';
-                document.body.appendChild(marqueeDiv);
-                
-                clearSelection();
+                _drag = { kind: 'marquee', startX: e.clientX, startY: e.clientY, committed: false };
                 return; // Dừng lại, không chạy logic chọn ô cũ
             }
 
@@ -36,21 +25,28 @@
             if (cell && cell.closest('.mini-table')) {
                 const blockItem = cell.closest('.block-item');
                 const bId = blockItem ? blockItem.getAttribute('data-id') : null;
-                
+
                 // Nếu click chuột phải
                 if (e.button === 2) {
                     // Nếu ô click phải chưa được chọn, thì mới xoá chọn cũ và chọn ô này. Nếu đã chọn rồi thì giữ nguyên.
                     if (!cell.classList.contains('selected-cell')) {
-                        clearSelection();
-                        cell.classList.add('selected-cell');
+                        EbmrSelection.cell.set([cell]);
                         if (bId) selectItem(bId, false);
                     }
                     return;
                 }
+                if (e.button !== 0) return;
 
                 // Nếu click vào block khác, chuyển active block sang block mới
                 if (bId && bId !== selectedId) {
                     selectItem(bId, false);
+                }
+
+                // Ctrl+click: chọn/bỏ chọn rời rạc ngay lập tức, không cần kéo
+                if (e.ctrlKey || e.metaKey) {
+                    e.preventDefault();
+                    EbmrSelection.cell.toggle(cell);
+                    return;
                 }
 
                 // Kiểm tra xem click có ở sát lề ô không (dành cho chọn ô)
@@ -59,87 +55,94 @@
                 const isNearTopEdge = (e.clientY - rect.top) < 15;
                 const isNearEdge = isNearLeftEdge || isNearTopEdge;
 
-                // Nếu KHÔNG phải đang giữ Shift, KHÔNG click sát lề 
+                // Nếu KHÔNG phải đang giữ Shift, KHÔNG click sát lề
                 // => Xử lý như bôi đen văn bản bình thường (Native Text Selection)
                 if (!e.shiftKey && !isNearEdge) {
-                    activeRowIdx = parseInt(cell.dataset.row);
-                    activeColIdx = parseInt(cell.dataset.col);
-                    clearSelection();
-                    cell.classList.add('selected-cell');
-                    if (bId) selectItem(bId, false); // Vẫn báo cho panel biết đang ở block nào
-                    return; // Dừng lại ở đây, KHÔNG bật isSelecting để tránh đụng độ
+                    EbmrSelection.cell.set([cell]);
+                    return; // Dừng lại ở đây, KHÔNG arm kéo-chọn để tránh đụng độ
                 }
 
-                // Bắt đầu chế độ chọn Ô (Cell Selection cũ - rê mép lề)
+                // Bắt đầu chế độ chọn Ô (Cell Selection cũ - rê mép lề) — chỉ "arm"
                 // Ngăn chặn native text selection flash khi kéo thả nhiều ô
                 if (isNearEdge) {
-                    e.preventDefault(); 
+                    e.preventDefault();
                 }
 
-                isSelecting = true;
-                startCell = cell;
-                activeRowIdx = parseInt(cell.dataset.row);
-                activeColIdx = parseInt(cell.dataset.col);
-                
-                clearSelection();
-                cell.classList.add('selected-cell');
-                
-                if (bId) selectItem(bId, false);
+                EbmrSelection.cell.set([cell]); // chọn lạc quan ô bắt đầu, phòng trường hợp không kéo
+                _drag = { kind: 'edge-drag', startX: e.clientX, startY: e.clientY, committed: false, startCell: cell };
             } else if (!e.target.closest('#property-panel') && !e.target.closest('.editor-toolbar') && !e.target.closest('#design-context-menu') && !e.target.closest('#na-context-menu')) {
-                clearSelection();
+                EbmrSelection.cell.clear();
             }
         });
 
         document.addEventListener('mousemove', (e) => {
+            if (!_drag) return;
 
-            if (isMarqueeActive && marqueeDiv) {
+            if (!_drag.committed) {
+                const dx = e.clientX - _drag.startX;
+                const dy = e.clientY - _drag.startY;
+                if (Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return; // vẫn chỉ là "armed", chưa phải kéo thật
+
+                _drag.committed = true;
+                if (_drag.kind === 'marquee') {
+                    window.getSelection().removeAllRanges();
+                    EbmrSelection.cell.clear();
+                    _drag.marqueeDiv = document.createElement('div');
+                    _drag.marqueeDiv.className = 'marquee-selector';
+                    _drag.marqueeDiv.style.left = _drag.startX + 'px';
+                    _drag.marqueeDiv.style.top = _drag.startY + 'px';
+                    _drag.marqueeDiv.style.width = '0px';
+                    _drag.marqueeDiv.style.height = '0px';
+                    document.body.appendChild(_drag.marqueeDiv);
+                }
+            }
+
+            if (_drag.kind === 'marquee') {
                 const currentX = e.clientX;
                 const currentY = e.clientY;
-                
-                const x = Math.min(marqueeStartX, currentX);
-                const y = Math.min(marqueeStartY, currentY);
-                const w = Math.abs(currentX - marqueeStartX);
-                const h = Math.abs(currentY - marqueeStartY);
-                
-                marqueeDiv.style.left = x + 'px';
-                marqueeDiv.style.top = y + 'px';
-                marqueeDiv.style.width = w + 'px';
-                marqueeDiv.style.height = h + 'px';
-                
+
+                const x = Math.min(_drag.startX, currentX);
+                const y = Math.min(_drag.startY, currentY);
+                const w = Math.abs(currentX - _drag.startX);
+                const h = Math.abs(currentY - _drag.startY);
+
+                _drag.marqueeDiv.style.left = x + 'px';
+                _drag.marqueeDiv.style.top = y + 'px';
+                _drag.marqueeDiv.style.width = w + 'px';
+                _drag.marqueeDiv.style.height = h + 'px';
+
                 // Dùng toạ độ toán học trực tiếp thay vì getBoundingClientRect để tránh độ trễ DOM render
-                const rect = {
-                    left: x,
-                    right: x + w,
-                    top: y,
-                    bottom: y + h
-                };
-                
+                const rect = { left: x, right: x + w, top: y, bottom: y + h };
+
                 const cells = document.querySelectorAll('#editor-content td, #editor-content th');
+                let lastCell = null;
                 cells.forEach(cell => {
                     const cellRect = cell.getBoundingClientRect();
-                    const intersect = !(rect.right < cellRect.left || 
-                                      rect.left > cellRect.right || 
-                                      rect.bottom < cellRect.top || 
-                                      rect.top > cellRect.bottom);
+                    const intersect = !(rect.right < cellRect.left ||
+                        rect.left > cellRect.right ||
+                        rect.bottom < cellRect.top ||
+                        rect.top > cellRect.bottom);
                     if (intersect) {
                         cell.classList.add('selected-cell');
+                        lastCell = cell;
                     } else {
                         cell.classList.remove('selected-cell');
                     }
                 });
+                if (lastCell) {
+                    activeRowIdx = parseInt(lastCell.dataset.row);
+                    activeColIdx = parseInt(lastCell.dataset.col);
+                }
                 return;
             }
-        });
 
-        document.addEventListener('mouseover', (e) => {
-            if (window.isExecutionMode || !isSelecting || isMarqueeActive) return;
-            const cell = e.target.closest('td, th');
-            if (cell && cell.closest('.mini-table') === startCell.closest('.mini-table')) {
-                highlightRange(startCell, cell);
+            if (_drag.kind === 'edge-drag') {
+                const cell = e.target.closest('td, th');
+                if (cell && cell.closest('.mini-table') === _drag.startCell.closest('.mini-table')) {
+                    EbmrSelection.cell.setRange(_drag.startCell, cell);
+                }
             }
         });
-
-        let justFinishedMarquee = false;
 
         // Chặn sự kiện click ngay sau khi kết thúc quét khối
         document.addEventListener('click', (e) => {
@@ -150,19 +153,37 @@
         }, true); // Dùng capture phase để chặn sớm nhất
 
         document.addEventListener('mouseup', (e) => {
-            isSelecting = false;
+            if (_drag) {
+                const dragInfo = _drag;
+                _drag = null;
 
-            if (isMarqueeActive) {
-                isMarqueeActive = false;
-                justFinishedMarquee = true;
-                setTimeout(() => justFinishedMarquee = false, 150); // Chặn click trong 150ms
-                
-                if (marqueeDiv) {
-                    marqueeDiv.remove();
-                    marqueeDiv = null;
+                if (dragInfo.kind === 'marquee') {
+                    if (dragInfo.committed) {
+                        if (dragInfo.marqueeDiv) dragInfo.marqueeDiv.remove();
+                        justFinishedMarquee = true;
+                        setTimeout(() => justFinishedMarquee = false, 150); // Chặn click trong 150ms
+                    } else {
+                        // Shift+click đứng yên (không kéo thật): xử lý như "chọn dải" từ ô
+                        // active gần nhất tới ô vừa click, giống Shift+click trong Excel.
+                        // Nếu không đứng trên ô nào, để nguyên cho click gốc tự xử lý
+                        // (vd handleBlockClick của block sẽ tự lo phần Shift-range của nó).
+                        const cell = e.target.closest('td, th');
+                        if (cell && cell.closest('.mini-table')) {
+                            const blockItem = cell.closest('.block-item');
+                            const bId = blockItem ? blockItem.getAttribute('data-id') : null;
+                            const anchor = EbmrSelection.cell.getActiveEl();
+                            if (anchor && anchor !== cell && anchor.closest('.mini-table') === cell.closest('.mini-table')) {
+                                EbmrSelection.cell.setRange(anchor, cell);
+                            } else {
+                                EbmrSelection.cell.set([cell]);
+                            }
+                            if (bId) selectItem(bId, false);
+                        }
+                    }
                 }
+                // edge-drag: không cần xử lý thêm, EbmrSelection.cell đã ở trạng thái đúng.
             }
-            
+
             // --- Cập nhật Properties Panel sau khi nhả chuột ---
             if (e.target.closest('#property-panel')) return;
             if (window.isSelectVarMode) return;
@@ -185,18 +206,10 @@
                         }
                     }, 50);
                 }
-            } else {
-                // Lựa chọn thông minh: Chỉ chọn cấu hình biến nếu chuột click trực tiếp vào biến số
-                const badge = e.target.closest('.ebmr-field-badge');
-                if (badge) {
-                    const fid = badge.getAttribute('data-field-id');
-                    if (fid) {
-                        setTimeout(() => {
-                            selectField(null, fid);
-                        }, 50);
-                    }
-                }
             }
+            // Lưu ý: click trực tiếp vào 1 biến số (.ebmr-field-badge) đã được xử lý đồng
+            // bộ ngay bởi onclick="selectField(...)" gắn trên chính badge đó — không gọi
+            // lại selectField() ở đây nữa (trước đây gọi trùng 2 lần cho cùng 1 click).
         });
 
         // 2. Paste Logic (Smart Paste)
@@ -513,18 +526,30 @@
         });
     }
 
-    function sanitizePastedHtml(html) {
+    function sanitizePastedHtml(html, singleLine = false) {
         if (!html) return html;
         if (typeof window.duplicateFieldBadgesInHtml === 'function') {
             html = window.duplicateFieldBadgesInHtml(html);
         }
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
-        
+
+        // Loại bỏ các phần tử điều khiển nội bộ của designer (nút thêm/xoá dòng-cột, tay kéo, nút chèn...).
+        // Chúng luôn tồn tại trong DOM (chỉ ẩn bằng CSS, hiện khi hover) nên nếu người dùng copy bằng
+        // thao tác chọn/Ctrl+C thông thường của trình duyệt, HTML lấy được sẽ chứa luôn các nút này.
+        doc.querySelectorAll('.row-actions, .col-actions, .badge-drag-handle, .insert-btn, .insert-divider, .drag-handle, .col-resizer, .row-resizer, .block-actions')
+            .forEach(el => el.remove());
+
         // Remove style attributes that might cause issues, but keep important ones
         // AND enforce min font size 14pt
         const allElements = doc.querySelectorAll('*');
         allElements.forEach(el => {
+            // Remove meta, title, style, script, link tags
+            if (['META', 'TITLE', 'STYLE', 'SCRIPT', 'LINK'].includes(el.tagName)) {
+                el.remove();
+                return;
+            }
+
             if (el.style.fontSize) {
                 const size = parseFloat(el.style.fontSize);
                 const unit = el.style.fontSize.replace(/[0-9.]/g, '').trim().toLowerCase();
@@ -544,7 +569,63 @@
             if (el.style.lineHeight && parseFloat(el.style.lineHeight) < 1.5) el.style.lineHeight = '1.5';
         });
 
-        return doc.body.innerHTML;
+        let body = doc.body;
+        // Remove empty whitespace text nodes that might interfere with wrapper detection
+        Array.from(body.childNodes).forEach(node => {
+            if (node.nodeType === Node.TEXT_NODE && node.textContent.trim() === '') {
+                node.remove();
+            }
+        });
+
+        // Unwrap if the entire content is wrapped in a single <div>, <p>, or <span>
+        while (body.children.length === 1 && ['DIV', 'P', 'SPAN'].includes(body.firstElementChild.tagName) && body.childNodes.length === 1) {
+            const wrapper = body.firstElementChild;
+            // Nếu wrapper là thẻ div chứa nội dung inline (như cell-wrapper), lấy nội dung của nó ra
+            while (wrapper.firstChild) {
+                body.insertBefore(wrapper.firstChild, wrapper);
+            }
+            wrapper.remove();
+
+            // Dọn lại whitespace text node vừa được đẩy ra nếu có
+            Array.from(body.childNodes).forEach(node => {
+                if (node.nodeType === Node.TEXT_NODE && node.textContent.trim() === '') {
+                    node.remove();
+                }
+            });
+        }
+
+        // Bóc tiếp mọi <div>/<p> còn sót lại ở cấp cao nhất, kể cả khi có từ 2 wrapper trở lên.
+        // Trình duyệt (Chrome/Edge) thường tách vùng chọn trong contenteditable thành nhiều <div>,
+        // mỗi <div> một "dòng" — dù nội dung đó (vd: nhãn + badge biến số) vốn chỉ nên nằm trên 1 dòng
+        // trong ô bảng. Nếu không bóc hết, mỗi <div> còn sót sẽ luôn tự xuống dòng vì là phần tử block.
+        // Chỉ áp dụng khi đích đến là nội dung 1 ô bảng (singleLine=true) — khối văn bản tự do trên
+        // canvas (static-text) vẫn cần giữ nguyên các đoạn <p>/<div> để không mất xuống dòng cố ý.
+        if (singleLine) {
+            let hasTopLevelBlock = true;
+            while (hasTopLevelBlock) {
+                hasTopLevelBlock = false;
+                Array.from(body.children).forEach(el => {
+                    if (['DIV', 'P'].includes(el.tagName)) {
+                        hasTopLevelBlock = true;
+                        // Chèn khoảng trắng phân cách nếu wrapper này không phải phần tử đầu tiên,
+                        // tránh nội dung của 2 wrapper liền kề bị dính chữ vào nhau.
+                        if (el.previousSibling) {
+                            body.insertBefore(document.createTextNode(' '), el);
+                        }
+                        while (el.firstChild) {
+                            body.insertBefore(el.firstChild, el);
+                        }
+                        el.remove();
+                    }
+                });
+            }
+        }
+
+        // Remove trailing <br> tags which cause invisible newlines when pasting
+        let htmlStr = doc.body.innerHTML;
+        htmlStr = htmlStr.replace(/(<br\s*\/?>\s*)+$/i, '');
+        
+        return htmlStr;
     }
 
     function handleGlobalPaste(e, forcedIndex = null) {
@@ -675,7 +756,7 @@
                 
                 const rs = parseInt(cell.getAttribute('rowspan')) || 1;
                 const cs = parseInt(cell.getAttribute('colspan')) || 1;
-                let cellHtml = sanitizePastedHtml(cell.innerHTML);
+                let cellHtml = sanitizePastedHtml(cell.innerHTML, true);
                 
                 const style = cell.style || {};
                 const bgColor = cell.getAttribute('bgcolor') || style.backgroundColor || '';
@@ -801,7 +882,7 @@
                         
                         const rs = parseInt(cell.getAttribute('rowspan')) || 1;
                         const cs = parseInt(cell.getAttribute('colspan')) || 1;
-                        const content = sanitizePastedHtml(cell.innerHTML);
+                        const content = sanitizePastedHtml(cell.innerHTML, true);
                         
                         // Extract styling
                         const style = cell.style || {};
@@ -838,7 +919,9 @@
         if (grid.length === 0) {
             if (htmlData) {
                 // HTML paste but no table (e.g. text + variable spans)
-                let sanitized = sanitizePastedHtml(htmlData);
+                let sanitized = sanitizePastedHtml(htmlData, true);
+                // Strip zero-width spaces that come from badge creation (​ after each badge)
+                sanitized = sanitized.replace(/\u200B/g, '');
                 if (typeof window.duplicateFieldBadgesInHtml === 'function') {
                     sanitized = window.duplicateFieldBadgesInHtml(sanitized, item.id);
                 }
@@ -901,18 +984,55 @@
                 saveState();
                 let cellObj = grid[0][0];
                 let contentToPaste = cellObj.content || cellObj;
-                const isHtml = cellObj.isHtml !== undefined ? cellObj.isHtml : true; // assume HTML if from table
-                
+                const isHtml = cellObj.isHtml !== undefined ? cellObj.isHtml : true;
+
                 if (document.activeElement !== target && !target.contains(document.activeElement)) {
                     target.focus();
                 }
-                
-                if (isHtml) {
-                    document.execCommand('insertHTML', false, contentToPaste);
+
+                if (isHtml && typeof contentToPaste === 'string') {
+                    // FIX: Dùng Range API thay vì execCommand('insertHTML') để tránh trình duyệt bọc badge vào <div>
+                    const sel = window.getSelection();
+                    if (sel && sel.rangeCount > 0) {
+                        const range = sel.getRangeAt(0);
+                        range.deleteContents();
+
+                        // Parse content thành DOM nodes thật
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = contentToPaste;
+
+                        // Chèn từng node vào đúng vị trí con trỏ (inline, không qua parse lại)
+                        const frag = document.createDocumentFragment();
+                        let lastNode = null;
+                        Array.from(tempDiv.childNodes).forEach(node => {
+                            lastNode = node.cloneNode(true);
+                            frag.appendChild(lastNode);
+                        });
+                        range.insertNode(frag);
+
+                        // Đặt lại con trỏ về cuối nội dung vừa dán
+                        if (lastNode) {
+                            const newRange = document.createRange();
+                            newRange.setStartAfter(lastNode);
+                            newRange.collapse(true);
+                            sel.removeAllRanges();
+                            sel.addRange(newRange);
+                        }
+                    } else {
+                        // Fallback nếu không có selection
+                        document.execCommand('insertHTML', false, contentToPaste);
+                    }
                 } else {
                     document.execCommand('insertText', false, contentToPaste);
                 }
-                
+
+                // Xoá zero-width space ẩn còn sót lại sau khi dán
+                Array.from(target.childNodes).forEach(node => {
+                    if (node.nodeType === Node.TEXT_NODE && node.textContent === '\u200B') {
+                        node.remove();
+                    }
+                });
+
                 target.dispatchEvent(new Event('input', { bubbles: true }));
                 return;
             }
@@ -1008,8 +1128,8 @@
         if (mainContent) {
             mainContent.onclick = (e) => {
                 if (window.isSelectVarMode) return; // Chặn clear selection khi đang bắt biến
-                if (!e.target.closest('.block-item') && !e.target.closest('#property-panel') && !e.target.closest('.editor-toolbar') && !e.target.closest('.insert-divider')) {
-                    selectedId = null;
+                if (!e.target.closest('.block-item') && !e.target.closest('#property-panel') && !e.target.closest('.editor-toolbar') && !e.target.closest('.insert-divider') && !e.target.closest('#design-context-menu') && !e.target.closest('#na-context-menu')) {
+                    EbmrSelection.clearAll();
                     document.querySelectorAll('.insert-menu').forEach(m => m.classList.remove('show'));
                     selectItem(null);
                 }

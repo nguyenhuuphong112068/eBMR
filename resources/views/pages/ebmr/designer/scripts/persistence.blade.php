@@ -1,14 +1,14 @@
 <script>
     function saveScrollPosition() {
         const scrollPositions = [];
-        
+
         // 1. Save window scroll
         scrollPositions.push({
             element: window,
             top: window.scrollY || window.pageYOffset || 0,
             left: window.scrollX || window.pageXOffset || 0
         });
-        
+
         // 2. Save scroll position of designer-workspace and all its parents
         const workspace = document.getElementById('designer-workspace');
         if (workspace) {
@@ -24,7 +24,7 @@
                 parent = parent.parentElement;
             }
         }
-        
+
         return scrollPositions;
     }
 
@@ -44,7 +44,7 @@
         if (window.isSelectVarMode && typeof window.toggleSelectVarMode === 'function') {
             window.toggleSelectVarMode(window.targetFormulaFieldId);
         }
-        
+
         if (window.isExecutionMode) {
             Swal.fire({
                 icon: 'warning',
@@ -69,6 +69,7 @@
         });
 
         // INCREMENTAL SAVE LOGIC: Only send dirty or new non-virtual blocks
+        // Bug #7 Fix: Th\u00eam \u0111\u1ee7 t\u1ea5t c\u1ea3 props \u0111\u1ec3 kh\u00f4ng m\u1ea5t d\u1eef li\u1ec7u \u00e2m th\u1ea7m
         const dirtyFields = items.filter(i => !i.isVirtual && (i.dirty || !i.db_id)).map(i => ({
             db_id: i.db_id || null,
             content_db_id: i.content_db_id || null,
@@ -82,6 +83,10 @@
             data: i.data || [],
             rowHeights: i.rowHeights || [],
             borderMode: i.borderMode || 'visible',
+            borderWeight: i.borderWeight || null,
+            borderColor: i.borderColor || null,
+            borderStyle: i.borderStyle || null,
+            cellBorders: i.cellBorders || null,
             hideHeader: i.hideHeader || false,
             canAddRows: i.canAddRows || false,
             addRowsCount: i.addRowsCount || 1,
@@ -97,7 +102,13 @@
             isAbbreviationTable: i.isAbbreviationTable || false,
             loop_group_id: i.loop_group_id || null,
             loop_count: i.loop_count || null,
-            typography: i.typography || null
+            typography: i.typography || null,
+            // Bug #7 Fix: Th\u00eam c\u00e1c props m\u1edbi \u0111\u01b0\u1ee3c b\u1ecf s\u00f3t tr\u01b0\u1edbc \u0111\u00e2y
+            cell_notes: i.cell_notes || null,
+            conditional_logic: i.conditional_logic || null,
+            textAlign: i.textAlign || null,
+            verticalAlign: i.verticalAlign || null,
+            pageBreakBefore: i.pageBreakBefore || false,
         }));
 
         // --- PRUNING & LOCATION SYNC: Only send fieldsConfig for variables that actually exist in the document ---
@@ -106,7 +117,7 @@
             const fid = el.getAttribute('data-field-id');
             if (fid) {
                 usedFieldIds.add(fid);
-                
+
                 // Cập nhật lại vị trí thực tế của biến ngay lúc lưu
                 const blockEl = el.closest('.block-item');
                 if (blockEl && fieldsConfig[fid]) {
@@ -118,7 +129,7 @@
                 }
             }
         });
-        
+
         // Also check if any field is used in a formula
         Object.values(fieldsConfig).forEach(f => {
             if (f.type === 'formula' && f.formula) {
@@ -137,7 +148,8 @@
             pageOrientation: pageOrientation,
             fieldsConfig: prunedFieldsConfig,
             fields: dirtyFields, // Only dirty fields
-            block_order: items.filter(i => !i.isVirtual).map(i => i.id), // Send current order of all non-virtual blocks
+            block_order: items.filter(i => !i.isVirtual).map(i => i
+            .id), // Send current order of all non-virtual blocks
             deleted_ids: window.deletedBlockIds || [],
             incremental: true
         };
@@ -168,11 +180,11 @@
             .then(res => {
                 if (res.success) {
                     currentTemplateId = res.id;
-                    
+
                     // Reset dirty flags and deleted IDs
                     items.forEach(i => i.dirty = false);
                     window.deletedBlockIds = [];
-                    
+
                     // Update IDs and data for items if returned
                     if (res.block_ids) {
                         Object.keys(res.block_ids).forEach(fId => {
@@ -188,7 +200,7 @@
                     }
 
                     renderBlocks();
-                    
+
                     // Restore scroll position immediately
                     restoreScrollPosition(savedScroll);
                     setTimeout(() => restoreScrollPosition(savedScroll), 0);
@@ -300,11 +312,12 @@
         }
         timeline.innerHTML = history.map(h => {
             const details = JSON.parse(h.details);
+            const userName = h.user_name || 'Không xác định';
             return `
                 <div class="card mb-3 border-0 shadow-sm" style="border-left: 4px solid #ffc107;">
                     <div class="card-body p-3">
                         <div class="d-flex justify-content-between mb-2">
-                            <span class="badge bg-light text-dark fw-bold"><i class="fas fa-user me-1"></i> Admin</span>
+                            <span class="badge bg-light text-dark fw-bold"><i class="fas fa-user me-1"></i> ${userName}</span>
                             <span class="small text-muted">${new Date(h.created_at).toLocaleString()}</span>
                         </div>
                         <div class="fw-bold small mb-2 text-navy">${h.change_summary}</div>
@@ -322,4 +335,3 @@
     // Ngôn ngữ mặc định: Tiếng Việt (chỉ hỗ trợ 1 ngôn ngữ)
     window.currentLangMode = 'vi';
 </script>
-

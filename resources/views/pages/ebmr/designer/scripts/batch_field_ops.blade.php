@@ -4,11 +4,10 @@
      */
     function selectMultipleFields(fieldIds) {
         if (!fieldIds || fieldIds.length === 0) return;
-        
-        selectedFieldIds = fieldIds;
-        selectedFieldId = fieldIds[0]; // Primary field for initial display
-        selectedId = null;
-        
+
+        EbmrSelection.field.set(fieldIds);
+        EbmrSelection.item.clear();
+
         // Remove active class from blocks
         document.querySelectorAll('.block-item').forEach(el => el.classList.remove('active'));
         
@@ -160,8 +159,7 @@
                     delete fieldsConfig[id];
                 });
 
-                selectedFieldIds = [];
-                selectedFieldId = null;
+                EbmrSelection.field.clear();
                 renderBlocks();
                 document.getElementById('property-panel').classList.add('d-none');
                 saveStateDebounced();

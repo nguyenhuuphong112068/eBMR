@@ -1,25 +1,7 @@
 <script>
     // Dynamic Fields Data Handling
     function insertDynamicField(defaultType = 'text') {
-        const selectedCells = document.querySelectorAll('.selected-cell');
-
-        let useBatch = false;
-        if (selectedCells.length > 1) {
-            useBatch = true;
-        } else if (selectedCells.length === 1) {
-            let hasCursorInCell = false;
-            const selForCheck = savedTextSelection ? [savedTextSelection] : (window.getSelection().rangeCount > 0 ? [window.getSelection().getRangeAt(0)] : []);
-            if (selForCheck.length > 0) {
-                let node = selForCheck[0].commonAncestorContainer;
-                if (node.nodeType === 3) node = node.parentNode;
-                if (node.closest && node.closest('td, th') === selectedCells[0]) {
-                    hasCursorInCell = true;
-                }
-            }
-            if (!hasCursorInCell) {
-                useBatch = true;
-            }
-        }
+        const { cells: selectedCells, useBatch } = EbmrSelection.cell.resolveOperationTargets();
 
         if (useBatch) {
             // MULTI-CELL BATCH CONVERSION
@@ -866,25 +848,7 @@
         window.__ebmrExistingFieldNamesCache = null;
 
         // Check if there is an active table cell selection or selected cells
-        const selectedCells = document.querySelectorAll('.selected-cell');
-
-        let useBatch = false;
-        if (selectedCells.length > 1) {
-            useBatch = true;
-        } else if (selectedCells.length === 1) {
-            let hasCursorInCell = false;
-            const selForCheck = savedTextSelection ? [savedTextSelection] : (window.getSelection().rangeCount > 0 ? [window.getSelection().getRangeAt(0)] : []);
-            if (selForCheck.length > 0) {
-                let node = selForCheck[0].commonAncestorContainer;
-                if (node.nodeType === 3) node = node.parentNode;
-                if (node.closest && node.closest('td, th') === selectedCells[0]) {
-                    hasCursorInCell = true;
-                }
-            }
-            if (!hasCursorInCell) {
-                useBatch = true;
-            }
-        }
+        const { cells: selectedCells, useBatch } = EbmrSelection.cell.resolveOperationTargets();
 
         if (useBatch) {
             saveState();
@@ -1235,27 +1199,8 @@
     };
 
     window.deleteVariablesInSelection = function(targetFieldId) {
-        const selectedCells = document.querySelectorAll('.selected-cell');
-        
+        const { cells: selectedCells, useBatch } = EbmrSelection.cell.resolveOperationTargets();
         let deletedCount = 0;
-        let useBatch = false;
-
-        if (selectedCells.length > 1) {
-            useBatch = true;
-        } else if (selectedCells.length === 1) {
-            let hasCursorInCell = false;
-            const selForCheck = savedTextSelection ? [savedTextSelection] : (window.getSelection().rangeCount > 0 ? [window.getSelection().getRangeAt(0)] : []);
-            if (selForCheck.length > 0) {
-                let node = selForCheck[0].commonAncestorContainer;
-                if (node.nodeType === 3) node = node.parentNode;
-                if (node.closest && node.closest('td, th') === selectedCells[0]) {
-                    hasCursorInCell = true;
-                }
-            }
-            if (!hasCursorInCell) {
-                useBatch = true;
-            }
-        }
 
         if (useBatch) {
             saveState();
@@ -1314,7 +1259,7 @@
             }
             if (selectedFieldId === targetFieldId) {
                 closePropertiesSidebar();
-                selectedFieldId = null;
+                EbmrSelection.field.clear();
             }
         } else if (targetFieldId === null) {
             toastr.info('Vui lòng chọn biến số cần xóa.');

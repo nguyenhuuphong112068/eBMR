@@ -1,6 +1,8 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Pages\Ebmr\Issuance;
+
+use App\Http\Controllers\Controller;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
@@ -12,9 +14,19 @@ class EbmrIssuanceController extends Controller
      */
     public function index()
     {
-        session(['title' => 'Ban Hành Hồ Sơ Lô']);
+        // Mỗi loại tài liệu (BMR/BPR/GF) có 1 trang ban hành riêng, lọc theo query
+        // param ?type=..., cùng cơ chế với trang "Hồ Sơ Gốc" (EbmrTemplateController).
+        $type = request('type', 'BMR');
+        $titleMap = [
+            'BMR' => 'Ban Hành Hồ Sơ Lô Sản Xuất',
+            'BPR' => 'Ban Hành Hồ Sơ Đóng Gói',
+            'GF' => 'Ban Hành Biểu Mẫu Chung',
+        ];
+        session(['title' => $titleMap[$type] ?? 'Ban Hành Hồ Sơ Lô']);
+
         $templates = DB::table('ebmr_templates')
             ->where('status', 'active')
+            ->where('type', $type)
             ->orderBy('updated_at', 'desc')
             ->get();
 
@@ -71,7 +83,8 @@ class EbmrIssuanceController extends Controller
         }
 
         return view('pages.ebmr.issuance.index', [
-            'templates' => $templates
+            'templates' => $templates,
+            'current_type' => $type,
         ]);
     }
 

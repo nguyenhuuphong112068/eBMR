@@ -1,12 +1,15 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Pages\Ebmr\Records;
+
+use App\Http\Controllers\Controller;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use App\Services\RunDataEncryptionService;
+use Carbon\Carbon;
 
 class EbmrExecutionController extends Controller
 {
@@ -78,6 +81,12 @@ class EbmrExecutionController extends Controller
                         'label' => $prop->label ?? 'N/A'
                     ];
                 });
+
+            // --- Trạng thái phân phối hiện tại của từng công đoạn (nếu đã phân phối) ---
+            $r->distributions = DB::table('ebmr_record_distributions')
+                ->where('record_id', $r->id)
+                ->get()
+                ->keyBy('section_id');
         }
 
         return view('pages.ebmr.records.list', [
@@ -99,15 +108,30 @@ class EbmrExecutionController extends Controller
             ->orderBy('code')
             ->get();
 
-        // 2. Fetch active records (non-completed BMR/BPR) joined with ebmr_template_rooms mappings
-        $activeRecords = DB::table('ebmr_records')
+        // 2. Fetch active records (non-completed BMR/BPR) trực tiếp từ ebmr_record_distributions —
+        // đây là nguồn sự thật duy nhất cho "công đoạn nào của lô nào đang ở phòng nào". Mỗi dòng
+        // kết quả tương ứng đúng 1 công đoạn đã được Phân phối; công đoạn chưa phân phối sẽ không
+        // xuất hiện ở bất kỳ phòng nào (không còn dựa vào ebmr_template_rooms — bảng "phòng khả dụng"
+        // cấu hình theo template cũ, không đồng nhất với phòng đích thực tế chọn khi Phân phối).
+        $activeRecords = DB::table('ebmr_record_distributions')
+            ->join('ebmr_records', 'ebmr_record_distributions.record_id', '=', 'ebmr_records.id')
             ->join('ebmr_templates', 'ebmr_records.template_id', '=', 'ebmr_templates.id')
-            ->leftJoin('ebmr_template_rooms', 'ebmr_templates.id', '=', 'ebmr_template_rooms.template_id')
-            ->select('ebmr_records.*', 'ebmr_templates.type', 'ebmr_templates.caterogy_id', 'ebmr_template_rooms.room_id', 'ebmr_template_rooms.section_id')
+            ->select(
+                'ebmr_records.*',
+                'ebmr_templates.type',
+                'ebmr_templates.caterogy_id',
+                'ebmr_record_distributions.section_id',
+                'ebmr_record_distributions.section_label',
+                'ebmr_record_distributions.room_id',
+                'ebmr_record_distributions.id as distribution_id',
+                'ebmr_record_distributions.user_ids as distribution_user_ids'
+            )
             ->whereNotIn('ebmr_records.status', ['completed', 'reviewed'])
             ->get();
 
-        // Populate product name for each active record
+        $currentUserId = (int) (session('user')['userId'] ?? 0);
+
+        // Populate product name + phân phối/ghi chép cho từng hồ sơ đang hoạt động
         foreach ($activeRecords as $r) {
             if ($r->type === 'GF') {
                 $r->product_name = DB::table('gf_category')->where('id', $r->caterogy_id)->value('name') ?? 'N/A';
@@ -124,6 +148,28 @@ class EbmrExecutionController extends Controller
                     ->where('intermediate_category.id', $r->caterogy_id)
                     ->value('product_name.name') ?? 'N/A';
             }
+
+            // Chỉ được "Ghi chép" khi: đã phân phối công đoạn này cho 1 phòng CỤ THỂ, user hiện tại
+            // nằm trong danh sách được phân phối, VÀ phòng + thiết bị trong phòng đã đạt điều kiện
+            // vệ sinh + dọn quang. Nếu chưa đủ điều kiện, chỉ được "Xem hồ sơ" (read-only).
+            $r->is_distributed = !is_null($r->distribution_id);
+            $r->distribution_user_id_list = $r->distribution_user_ids ? (json_decode($r->distribution_user_ids, true) ?: []) : [];
+            $isAssigned = in_array($currentUserId, array_map('intval', $r->distribution_user_id_list), true);
+            $r->can_write = $r->is_distributed && $isAssigned && $r->room_id && $this->isRoomCleared($r->room_id);
+        }
+
+        // Resolve tên người nhận (được phân phối) 1 lần cho toàn bộ danh sách, tránh N+1 query
+        $allAssignedUserIds = $activeRecords->flatMap(function ($r) {
+            return $r->distribution_user_id_list;
+        })->unique()->filter()->values();
+        $userNamesById = DB::table('user_management')
+            ->whereIn('id', $allAssignedUserIds)
+            ->pluck('fullName', 'id');
+        foreach ($activeRecords as $r) {
+            $names = array_map(function ($uid) use ($userNamesById) {
+                return $userNamesById[$uid] ?? null;
+            }, $r->distribution_user_id_list);
+            $r->assigned_user_names = implode(', ', array_filter($names));
         }
 
         // Group active records by room_id
@@ -515,15 +561,223 @@ class EbmrExecutionController extends Controller
 
         $template->schema = (object)['fields' => $fields, 'fieldsConfig' => $fieldsConfig];
 
+        $isReadOnly = $this->computeIsReadOnly($request, $record);
+
         return view('pages.ebmr.execute', [
             'record' => $record,
             'template' => $template,
             'executionValues' => $executionValues,
             'isExecutionMode' => true,
-            'isReadOnly' => in_array($record->status, ['completed', 'reviewed']),
+            'isReadOnly' => $isReadOnly,
             'activeSectionId' => $sectionId,
             'activeSectionLabel' => $activeSectionLabel
         ]);
+    }
+
+    /**
+     * Hồ sơ đã hoàn thành/đã duyệt thì luôn chỉ xem. Nếu hồ sơ CHƯA từng được
+     * "Phân phối" (bảng ebmr_record_distributions rỗng cho record này), giữ
+     * nguyên hành vi cũ: cho ghi chép trực tiếp — không phá vỡ các hồ sơ/luồng
+     * chưa dùng tính năng phân phối. Một khi ĐÃ phân phối, mặc định chỉ xem;
+     * chỉ mở khóa ghi chép khi truy cập đúng ngữ cảnh phân phối hợp lệ (?dist=)
+     * VÀ user hiện tại nằm trong danh sách được phân phối VÀ phòng đã đạt điều
+     * kiện vệ sinh + dọn quang.
+     */
+    private function computeIsReadOnly(Request $request, $record)
+    {
+        if (in_array($record->status, ['completed', 'reviewed'])) {
+            return true;
+        }
+
+        $hasDistribution = DB::table('ebmr_record_distributions')->where('record_id', $record->id)->exists();
+        if (!$hasDistribution) {
+            return false;
+        }
+
+        $distId = $request->query('dist');
+        if (!$distId) {
+            return true;
+        }
+
+        $dist = DB::table('ebmr_record_distributions')->where('id', $distId)->where('record_id', $record->id)->first();
+        if (!$dist) {
+            return true;
+        }
+
+        $userIds = array_map('intval', json_decode($dist->user_ids ?? '[]', true) ?: []);
+        $currentUserId = (int) (session('user')['userId'] ?? 0);
+        $isAssigned = in_array($currentUserId, $userIds, true);
+
+        return !($isAssigned && $this->isRoomCleared($dist->room_id));
+    }
+
+    /**
+     * Kiểm tra phòng (và toàn bộ thiết bị được khai báo trong phòng) đã đạt cả
+     * 2 điều kiện: (a) nhãn vệ sinh gần nhất còn hiệu lực (current_status =
+     * 'cleaned', chưa quá clean_expiry_date), (b) đã có 1 chiến dịch dọn quang
+     * (clearance) hoàn tất cho phòng/thiết bị đó.
+     */
+    private function isRoomCleared($roomId)
+    {
+        if (!$roomId) return false;
+
+        $roomLog = DB::table('room_logbooks')
+            ->where('room_id', $roomId)
+            ->whereNull('equipment_id')
+            ->orderByDesc('id')
+            ->first();
+        if (!$roomLog || $roomLog->current_status !== 'cleaned') return false;
+        if ($roomLog->clean_expiry_date && Carbon::parse($roomLog->clean_expiry_date)->isPast()) return false;
+
+        $roomClearanceDone = DB::table('clearance_room_campaigns')
+            ->where('room_id', $roomId)
+            ->where('status', 'completed')
+            ->exists();
+        if (!$roomClearanceDone) return false;
+
+        $equipIds = DB::table('equipment_in_room')->where('room_id', $roomId)->pluck('equipment_id');
+        foreach ($equipIds as $equipId) {
+            $eqLog = DB::table('room_logbooks')
+                ->where('equipment_id', $equipId)
+                ->orderByDesc('id')
+                ->first();
+            if (!$eqLog || $eqLog->current_status !== 'cleaned') return false;
+            if ($eqLog->clean_expiry_date && Carbon::parse($eqLog->clean_expiry_date)->isPast()) return false;
+
+            $eqClearanceDone = DB::table('clearance_equip_campaigns')
+                ->where('equipment_id', $equipId)
+                ->where('status', 'completed')
+                ->exists();
+            if (!$eqClearanceDone) return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Danh sách phòng (active) để chọn khi phân phối công đoạn.
+     */
+    public function getRoomOptions()
+    {
+        // Trả kèm stage_code để frontend tự lọc phòng theo công đoạn (client-side,
+        // tránh gọi API riêng cho từng công đoạn khi mở modal Phân phối).
+        $rooms = DB::connection('pms')->table('room')
+            ->where('active', 1)
+            ->orderBy('code')
+            ->select('id', 'code', 'name', 'deparment_code', 'stage_code')
+            ->get();
+
+        return response()->json($rooms);
+    }
+
+    /**
+     * Danh sách người dùng để chọn khi phân phối, lọc theo phân xưởng (deparment_code)
+     * của sản phẩm/hồ sơ này — chỉ những người thuộc đúng phân xưởng mới hiện ra.
+     * BMR (intermediate_category) và BPR (finished_product_category) có mã phân xưởng;
+     * GF/MF hiện chưa có khái niệm này ở category nên trả về toàn bộ user (không lọc).
+     */
+    public function getRecordWorkshopUsers($recordId)
+    {
+        $record = DB::table('ebmr_records')->where('id', $recordId)->first();
+        if (!$record) return response()->json([]);
+
+        $template = DB::table('ebmr_templates')->where('id', $record->template_id)->first();
+        if (!$template) return response()->json([]);
+
+        $deparmentCode = null;
+        if ($template->type === 'BPR') {
+            $deparmentCode = DB::table('finished_product_category')->where('id', $template->caterogy_id)->value('deparment_code');
+        } elseif (!in_array($template->type, ['GF', 'MF'])) {
+            // Mặc định còn lại (BMR/CO) dùng intermediate_category
+            $deparmentCode = DB::table('intermediate_category')->where('id', $template->caterogy_id)->value('deparment_code');
+        }
+
+        $query = DB::table('user_management')->select('id', 'fullName as name', 'deparment');
+        if ($deparmentCode) {
+            $query->where('deparment', $deparmentCode);
+        }
+
+        return response()->json($query->orderBy('fullName')->get());
+    }
+
+    /**
+     * Trạng thái phân phối hiện tại của 1 hồ sơ (để hiển thị lại khi mở lại modal Phân phối).
+     */
+    public function getRecordDistribution($recordId)
+    {
+        $rows = DB::table('ebmr_record_distributions')
+            ->where('record_id', $recordId)
+            ->get()
+            ->map(function ($d) {
+                $d->user_ids = json_decode($d->user_ids ?? '[]', true) ?: [];
+                return $d;
+            });
+
+        return response()->json($rows);
+    }
+
+    /**
+     * Phân phối từng công đoạn (section) của 1 lô đến 1 phòng sản xuất cụ thể,
+     * kèm danh sách user được phép ghi chép công đoạn đó của lô này.
+     */
+    public function distributeSections(Request $request)
+    {
+        $validated = $request->validate([
+            'record_id' => 'required|integer',
+            'distributions' => 'required|array',
+            'distributions.*.section_id' => 'required|string',
+            'distributions.*.section_label' => 'nullable|string',
+            'distributions.*.room_id' => 'nullable|integer',
+            'distributions.*.user_ids' => 'nullable|array',
+        ]);
+
+        $recordId = $validated['record_id'];
+        $record = DB::table('ebmr_records')->where('id', $recordId)->first();
+        if (!$record) {
+            return response()->json(['success' => false, 'message' => 'Hồ sơ không tồn tại']);
+        }
+
+        $distributedBy = session('user')['userId'] ?? null;
+        $now = now();
+        $count = 0;
+
+        foreach ($validated['distributions'] as $dist) {
+            if (empty($dist['room_id'])) continue; // Bỏ qua công đoạn chưa chọn phòng
+
+            $room = DB::connection('pms')->table('room')->where('id', $dist['room_id'])->first();
+
+            $payload = [
+                'section_label' => $dist['section_label'] ?? null,
+                'room_id' => $dist['room_id'],
+                'room_code' => $room->code ?? null,
+                'room_name' => $room->name ?? null,
+                'user_ids' => json_encode(array_values($dist['user_ids'] ?? [])),
+                'distributed_by' => $distributedBy,
+                'updated_at' => $now,
+            ];
+
+            $existing = DB::table('ebmr_record_distributions')
+                ->where('record_id', $recordId)
+                ->where('section_id', $dist['section_id'])
+                ->first();
+
+            if ($existing) {
+                DB::table('ebmr_record_distributions')->where('id', $existing->id)->update($payload);
+            } else {
+                DB::table('ebmr_record_distributions')->insert(array_merge($payload, [
+                    'record_id' => $recordId,
+                    'section_id' => $dist['section_id'],
+                    'created_at' => $now,
+                ]));
+            }
+            $count++;
+        }
+
+        if ($count === 0) {
+            return response()->json(['success' => false, 'message' => 'Vui lòng chọn ít nhất 1 phòng cho 1 công đoạn.']);
+        }
+
+        return response()->json(['success' => true, 'message' => "Đã phân phối $count công đoạn thành công"]);
     }
 
     /**

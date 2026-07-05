@@ -230,6 +230,30 @@
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     }
 
+    /* Chọn rời rạc bằng Ctrl+click (khác với dải liên tục Shift+click ở trên) */
+    .selected-discrete-member {
+        outline: 2px dashed #9333ea !important;
+        background-color: rgba(147, 51, 234, 0.04) !important;
+        position: relative;
+        box-shadow: 0 0 8px rgba(147, 51, 234, 0.2);
+    }
+
+    .selected-discrete-member::after {
+        content: 'Đã chọn';
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        background-color: #9333ea;
+        color: #ffffff;
+        font-size: 0.65rem;
+        font-weight: bold;
+        padding: 2px 6px;
+        border-radius: 4px;
+        z-index: 100;
+        pointer-events: none;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
     .designer-loop-group-wrapper {
         transition: all 0.2s ease;
     }
@@ -374,12 +398,13 @@
      */
     function renderSingleBlock(item, idx, loopSuffix = '') {
         const blockKey = (item.uuid || item.id) + loopSuffix;
-        const selectedRangeIds = (typeof window.getSelectedBlockRangeIds === 'function') ? window
-            .getSelectedBlockRangeIds() : [];
-        const isRangeMember = selectedRangeIds.includes(item.id);
+        const multiSelectedIds = (typeof window.EbmrSelection !== 'undefined') ? window.EbmrSelection.item.getIds() : [];
+        const multiSelectedMode = (typeof window.EbmrSelection !== 'undefined') ? window.EbmrSelection.item.getMode() : null;
+        const isMultiMember = multiSelectedIds.length > 1 && multiSelectedIds.includes(item.id);
+        const multiMemberClass = isMultiMember ? (multiSelectedMode === 'discrete' ? 'selected-discrete-member' : 'selected-range-member') : '';
         const div = document.createElement('div');
         div.className =
-            `block-item type-${item.type} ${selectedId === item.id ? 'active' : ''} ${isRangeMember ? 'selected-range-member' : ''} ${window.isExecutionMode ? 'execution-mode' : ''}`;
+            `block-item type-${item.type} ${selectedId === item.id ? 'active' : ''} ${multiMemberClass} ${window.isExecutionMode ? 'execution-mode' : ''}`;
         div.setAttribute('data-id', item.id);
         div.setAttribute('data-block-key', blockKey);
 
@@ -795,8 +820,14 @@
                                     <button class="btn btn-sm btn-light border shadow-sm" onclick="moveItem(${idx}, 1)"><i class="fas fa-chevron-down"></i></button>` : ''}
                                 </div>`;
 
+    const marginHandles = (item.type === 'static-text' && !item.locked && !window.isReadOnly && !window.isExecutionMode) ? `
+                                <div class="margin-resizer-left" onmousedown="initMarginResize(event, '${item.id}', 'left')" title="Kéo để chỉnh lề trái"></div>
+                                <div class="margin-resizer-right" onmousedown="initMarginResize(event, '${item.id}', 'right')" title="Kéo để chỉnh lề phải"></div>
+                            ` : '';
+
     div.innerHTML = `
                                 ${actions}
+                                ${marginHandles}
                                 ${item.type !== 'static-text' && item.type !== 'section' && item.type !== 'page-break' && !window.isExecutionMode && item.label && item.label !== 'null' && !item.isGfHeader && !item.isBmrHeader && !item.isAbbreviationTable ? `<span class="block-label">${item.label} ${item.locked ? '<i class="fas fa-lock ms-1 small"></i>' : ''}</span>` : ''}
                                 ${content}
                             `;
@@ -828,7 +859,7 @@
         });
 
         if (window.isExecutionMode) {
-            selectedId = null;
+            EbmrSelection.item.clear();
         }
 
         container.innerHTML = '';
@@ -910,7 +941,7 @@
                     currentGroup.onclick = (e) => {
                         if (!e.target.closest('.block-item')) {
                             window.activeSectionId = itemSectionId;
-                            selectedId = null;
+                            EbmrSelection.item.clear();
                             renderBlocks();
                         }
                     };
@@ -918,7 +949,7 @@
                         if (!e.target.closest('.block-item') && window.isViewAllMode) {
                             window.activeSectionId = itemSectionId;
                             window.isViewAllMode = false;
-                            selectedId = null;
+                            EbmrSelection.item.clear();
                             renderBlocks();
                             const toggleBtn = document.getElementById('viewModeToggle');
                             if (toggleBtn) {
@@ -942,9 +973,13 @@
                 addInsertionDivider(currentGroup, secIdxInItems);
             }
 
+            const secMultiIds = (typeof window.EbmrSelection !== 'undefined') ? window.EbmrSelection.item.getIds() : [];
+            const secMultiMode = (typeof window.EbmrSelection !== 'undefined') ? window.EbmrSelection.item.getMode() : null;
+            const secIsMultiMember = secMultiIds.length > 1 && secMultiIds.includes(sectionBlock.id);
+            const secMultiClass = secIsMultiMember ? (secMultiMode === 'discrete' ? 'selected-discrete-member' : 'selected-range-member') : '';
             const secDiv = document.createElement('div');
             secDiv.className =
-                `block-item type-section ${selectedId === sectionBlock.id ? 'active' : ''} ${window.isExecutionMode ? 'execution-mode' : ''}`;
+                `block-item type-section ${selectedId === sectionBlock.id ? 'active' : ''} ${secMultiClass} ${window.isExecutionMode ? 'execution-mode' : ''}`;
             secDiv.setAttribute('data-id', sectionBlock.id);
             if (sectionBlock.backgroundColor) secDiv.style.backgroundColor = sectionBlock.backgroundColor;
             if (!window.isExecutionMode) {
@@ -1157,6 +1192,13 @@
                 `.block-item[data-id="${sel.bId}"] [data-row="${sel.r}"][data-col="${sel.c}"]`);
             if (cell) cell.classList.add('selected-cell');
         });
+
+        // Áp lại highlight ô đang chọn ở chế độ Chạy thử (N/A) — EbmrSelection.execCell
+        // theo dõi bằng {blockId,row,col} nên vẫn tìm đúng ô mới sau khi DOM bị vẽ lại
+        // (vd render lại do tính lại công thức), thay vì mất highlight như trước đây.
+        if (window.isExecutionMode && typeof window.EbmrSelection !== 'undefined') {
+            window.EbmrSelection.execCell.reapplyAfterRender();
+        }
     }
 
     window.dynamicOptionsCache = {};
@@ -1752,8 +1794,9 @@
                     const scaleIndicator = (field.type === 'number' && field.scaleEnabled) ?
                         `<span class="ms-1 text-danger" title="⚖️ Đã bật kết nối Cân điện tử" style="cursor: pointer;" onclick="event.stopPropagation(); window.openScaleConnectionModal('${fieldId}')"><i class="fas fa-balance-scale"></i></span>` :
                         '';
+                    const isFieldSelected = selectedFieldId === fieldId || (selectedFieldIds && selectedFieldIds.includes(fieldId));
                     badge.className =
-                        `ebmr-field-badge ${selectedFieldId === fieldId ? 'active' : ''} ${field.type === 'formula' ? 'formula-preview' : ''}`;
+                        `ebmr-field-badge ${isFieldSelected ? 'active' : ''} ${field.type === 'formula' ? 'formula-preview' : ''}`;
                     badge.innerHTML = `
                         <span class="badge-drag-handle badge-left-handle" onmousedown="window.initBadgeResize(event, '${fieldId}', 'left')"></span>
                         <i class="fas ${icon}"></i> ${label}${extra}${scaleIndicator}

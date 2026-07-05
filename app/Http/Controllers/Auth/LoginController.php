@@ -60,7 +60,7 @@ class LoginController extends Controller
         AuditTrialController::log('Log Out', 'NA', 0, 'NA', 'Đăng Xuất');
         $request->session()->flush();
 
-        return redirect()->route('login');
+        return redirect()->route('login', $request->boolean('timeout') ? ['timeout' => 'true'] : []);
     }
 
     public function changePassword(Request $request)

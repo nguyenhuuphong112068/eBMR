@@ -246,6 +246,11 @@
                     <i class="bi bi-exclamation-circle-fill"></i>
                     <div>{{ session('error') }}</div>
                 </div>
+            @elseif (request('timeout') == 'true')
+                <div class="alert-custom">
+                    <i class="bi bi-exclamation-circle-fill"></i>
+                    <div>Phiên đăng nhập đã hết hạn do không thao tác, vui lòng đăng nhập lại.</div>
+                </div>
             @endif
 
             <!-- ✅ Form đăng nhập -->

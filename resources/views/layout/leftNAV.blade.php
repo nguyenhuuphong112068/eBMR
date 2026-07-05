@@ -376,9 +376,23 @@
                     <ul class="nav nav-treeview pl-3">
                         <li class="nav-item">
                             <a href="{{ route('pages.ebmr.issueCenter') }}"
-                                class="nav-link {{ str_contains(url()->current(), 'ebmr/issue-center') ? 'active' : '' }}">
+                                class="nav-link {{ str_contains(url()->current(), 'ebmr/issue-center') && request('type', 'BMR') == 'BMR' ? 'active' : '' }}">
                                 <i class="fas fa-rocket"></i>
                                 <p>Hồ Sơ Sản Xuất </p>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="{{ route('pages.ebmr.issueCenter') }}?type=BPR"
+                                class="nav-link {{ str_contains(url()->current(), 'ebmr/issue-center') && request('type') == 'BPR' ? 'active' : '' }}">
+                                <i class="fas fa-box-open"></i>
+                                <p>Hồ Sơ Đóng Gói</p>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="{{ route('pages.ebmr.issueCenter') }}?type=GF"
+                                class="nav-link {{ str_contains(url()->current(), 'ebmr/issue-center') && request('type') == 'GF' ? 'active' : '' }}">
+                                <i class="fas fa-layer-group"></i>
+                                <p>Biểu Mẫu Chung</p>
                             </a>
                         </li>
                         <li class="nav-item">

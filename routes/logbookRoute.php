@@ -1,7 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\LogbookController;
+use App\Http\Controllers\Pages\Ebmr\Logbook\LogbookController;
 
 Route::middleware(['web'])->group(function () {
     Route::get('/ebmr/logbooks/room', [LogbookController::class, 'indexRoom'])->name('pages.ebmr.logbooks.room');

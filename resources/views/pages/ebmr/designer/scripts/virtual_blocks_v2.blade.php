@@ -1,225 +1,13 @@
+{{-- =============================================================
+   VIRTUAL BLOCKS cho Designer V2 (TipTap) — TRÍCH NGUYÊN VĂN từ
+   state.blade.php của V1 (injectVirtualBlocks + các generator).
+   KHÔNG sửa logic ở đây; khi V1 bị gỡ bỏ thì hợp nhất lại một nơi.
+   Xuất ra: window.__V2_buildVirtualBlocks() -> mảng block ảo (locked)
+            window.__V2_sysLabels -> nhãn block hệ thống cần lọc bỏ
+============================================================= --}}
 <script>
-    window.isReadOnly = @json($isReadOnly ?? false);
-    window.isExecutionMode = @json($isExecutionMode ?? false);
-    window.activeSectionId = @json($activeSectionId ?? null);
-    window.isViewAllMode = !window.activeSectionId;
-    window.executionValues = @json($executionValues ?? (object) []);
-
-    let items = @json($template->schema->fields ?? []);
-
-    // Bug #6 Fix: Chỉ dùng một nguồn duy nhất là template->schema->fieldsConfig
-    // (không dùng biến $fieldsConfig rơi vì controller designer không truyền nó)
-    let fieldsConfigInit = @json($template->schema->fieldsConfig ?? (object) []);
-    let pageOrientation = @json($template->schema->pageOrientation ?? 'portrait');
-
-    // Ensure fieldsConfig is strictly an Object so JSON.stringify doesn't drop assigned properties
-    let fieldsConfig = (!fieldsConfigInit || Array.isArray(fieldsConfigInit)) ? {} : fieldsConfigInit;
-
-    let currentTemplateId = {{ $template->id ?? 'null' }};
-    let historyEnabled = {{ $template->log_history ?? 0 }} == 1;
-    window.templateId = '{{ $template->id ?? 0 }}';
-    window.templateType = '{{ $template->type ?? '' }}';
-    window.templateDepartmentCode = '{{ $template->department_code ?? '' }}';
-    let selectedId = null;
-    let selectedFieldId = null;
-    let selectedFieldIds = [];
-    let cellClipboard = null;
-    window.deletedBlockIds = [];
-    window.catId = "{{ $template->caterogy_id ?? 0 }}";
-
-    // Inject all dynamic virtual blocks at runtime
-    function injectVirtualBlocks() {
-        const type = "{{ $template->type ?? 'BMR' }}";
-        const catId = window.catId;
-
-        let virtualBlocks = [];
-
-        if (type === 'GF') {
-            // 1. GF HEADER (Section)
-            virtualBlocks.push({
-                id: 'sys_gf_sec_header',
-                type: 'section',
-                label: 'HEADER',
-                section_id: catId,
-                locked: true,
-                isVirtual: true
-            });
-
-            // 2. GF Header (Table)
-            let gfHeader = generateDefaultGfHeader();
-            gfHeader.id = 'sys_gf_tbl_header';
-            gfHeader.isVirtual = true;
-            virtualBlocks.push(gfHeader);
-
-            // 3. QUY TRÌNH PHÊ DUYỆT (Section)
-            virtualBlocks.push({
-                id: 'sys_gf_sec_approval',
-                type: 'section',
-                label: 'PHÊ DUYỆT',
-                section_id: catId,
-                locked: true,
-                isVirtual: true
-            });
-
-            // 4. Trình Ký (Table)
-            let sigTable = generateSignatureTable();
-            sigTable.id = 'sys_gf_tbl_signatures';
-            virtualBlocks.push(sigTable);
-        } else if (type === 'CO') {
-            // Không sinh virtual block nào cho Component
-        } else {
-            // 1. BMR HEADER (Section)
-            virtualBlocks.push({
-                id: 'sys_bmr_sec_header',
-                type: 'section',
-                label: 'HEADER',
-                section_id: catId,
-                locked: true,
-                isVirtual: true
-            });
-
-            // 2. BMR Header (Table)
-            let bmrHeader = generateDefaultBmrHeader();
-            bmrHeader.id = 'sys_bmr_tbl_header';
-            bmrHeader.isVirtual = true;
-            virtualBlocks.push(bmrHeader);
-
-            // QUY TRÌNH PHÊ DUYỆT
-            virtualBlocks.push({
-                id: 'sys_bmr_sec_approval',
-                type: 'section',
-                label: 'PHÊ DUYỆT',
-                section_id: catId,
-                locked: true,
-                isVirtual: true
-            });
-
-            let sigTable = generateSignatureTable();
-            sigTable.id = 'sys_bmr_tbl_signatures';
-            virtualBlocks.push(sigTable);
-
-
-            if (type !== 'MF' && type !== 'BPR') {
-                // 3. THÔNG TIN CHUNG SẢN PHẨM (Section)
-                virtualBlocks.push({
-                    id: 'sys_bmr_sec_common_info',
-                    type: 'section',
-                    label: 'THÔNG TIN SẢN PHẨM',
-                    section_id: catId,
-                    locked: true,
-                    isVirtual: true
-                });
-
-                // 4. MÔ TẢ SẢN PHẨM (Table)
-                let descTable = generateProductDescriptionTable();
-                descTable.id = 'sys_bmr_tbl_desc';
-                descTable.isVirtual = true;
-                virtualBlocks.push(descTable);
-
-                // 5. CÔNG THỨC PHA CHẾ (Section)
-                virtualBlocks.push({
-                    id: 'sys_bmr_sec_recipe',
-                    type: 'section',
-                    label: 'CÔNG THỨC PHA CHẾ',
-                    section_id: catId,
-                    locked: true,
-                    isVirtual: true
-                });
-
-                // 6. Recipe Tables & Notes
-                let recipes = generateRecipeTables();
-                recipes.forEach((tbl, idx) => {
-                    tbl.id = 'sys_bmr_tbl_recipe_' + idx;
-                    tbl.isVirtual = true;
-                    virtualBlocks.push(tbl);
-                });
-            }
-        }
-
-        // Load abbreviation table from ebmr_templates.abbreviations_List
-        let abbrevListStr = `{!! addslashes($template->abbreviations_List ?? '') !!}`;
-        let abbrevTable = null;
-        if (abbrevListStr) {
-            try {
-                abbrevTable = JSON.parse(abbrevListStr);
-            } catch (e) {
-                console.error("Error parsing abbreviations_List", e);
-            }
-        }
-
-        // Find if there is an old abbreviation table in items
-        const abbrevIdx = items.findIndex(i => i.isAbbreviationTable === true && !i.isVirtual);
-        if (abbrevIdx !== -1) {
-            let extracted = items.splice(abbrevIdx, 1)[0];
-            if (!abbrevTable) {
-                abbrevTable = extracted;
-            }
-        }
-
-        // Biểu mẫu dùng chung (GF) không dùng các nhãn hệ thống để lọc, tránh xóa nhãn tự thiết kế
-        let sysLabels = ['BMR HEADER', 'BMR Header', 'GF Header', 'QUY TRÌNH PHÊ DUYỆT', 'THÔNG TIN CHUNG SẢN PHẨM',
-            'MÔ TẢ SẢN PHẨM', 'CÔNG THỨC PHA CHẾ', '1. NGUYÊN LIỆU PHA CHẾ', '2. NGUYÊN LIỆU KHÁC (BAO PHIM/NANG)',
-            'Ghi chú nguyên liệu pha chế', 'Ghi chú nguyên liệu khác', 'THÔNG TIN CHUNG', 'Trình Ký'
-        ];
-        if (type === 'GF') {
-            sysLabels = [];
-        }
-        items = items.filter(i => !sysLabels.includes(i.label));
-
-        // Prepend virtual blocks
-        items.unshift(...virtualBlocks);
-
-        let insertIdx = virtualBlocks.length;
-        // If abbreviation table was found, insert it right after the virtual blocks
-        if (abbrevTable) {
-            abbrevTable.section_id = window.catId || 'section_0'; // Ensure it belongs to header section
-            items.splice(insertIdx, 0, abbrevTable);
-            insertIdx++;
-        }
-    }
-
-    injectVirtualBlocks();
-
-    // Auto-unlock existing linked templates that were locked by previous logic
-    items.forEach(item => {
-        if (item.type === 'linked-template' && item.locked === true) {
-            item.locked = false;
-        }
-    });
-
-    if (items.length > 0 || pageOrientation !== 'portrait') {
-        // Wait for DOM
-        document.addEventListener('DOMContentLoaded', () => {
-            const nameField = document.getElementById('templateName');
-            if (nameField) nameField.value = "{{ $template->category_name ?? ($template->name ?? '') }}";
-            const hint = document.getElementById('drop-hint');
-            if (hint) {
-                if (items.length > 0) hint.classList.add('d-none');
-            }
-            if (pageOrientation === 'landscape') {
-                setOrientation('landscape');
-            }
-            renderBlocks();
-        });
-    }
-
-    function setOrientation(orr) {
-        pageOrientation = orr;
-        const page = document.getElementById('document-page');
-        if (!page) return;
-
-        if (orr === 'landscape') {
-            page.classList.add('page-landscape');
-            document.body.classList.add('printing-landscape');
-        } else {
-            page.classList.remove('page-landscape');
-            document.body.classList.remove('printing-landscape');
-        }
-
-        // Đồng bộ lại thước kẻ (bề rộng trang có thể đã đổi do đổi khổ dọc/ngang)
-        if (typeof syncRulerWidth === 'function') syncRulerWidth();
-        if (typeof updateRulerForCurrentBlock === 'function') updateRulerForCurrentBlock();
-    }
+(function () {
+    const catId = "{{ $template->caterogy_id ?? 0 }}";
 
     function generateDefaultGfHeader() {
         const id = 'blk_header_' + Date.now();
@@ -1363,65 +1151,123 @@
         };
     }
 
-    // Undo/Redo History
-    let undoStack = [];
-    let redoStack = [];
-    const MAX_HISTORY = 10;
-    let debounceTimer = null;
+    window.__V2_buildVirtualBlocks = function () {
+        const type = "{{ $template->type ?? 'BMR' }}";
+        // catId đã khai báo ở closure ngoài
 
-    function saveState() {
-        const currentState = JSON.stringify(items);
-        // Don't save if it's the same as the last snapshot
-        if (undoStack.length > 0 && undoStack[undoStack.length - 1] === currentState) return;
+        let virtualBlocks = [];
 
-        undoStack.push(currentState);
-        if (undoStack.length > MAX_HISTORY) {
-            undoStack.shift(); // Remove oldest
-        }
-        redoStack = []; // Clear redo on new action
-    }
+        if (type === 'GF') {
+            // 1. GF HEADER (Section)
+            virtualBlocks.push({
+                id: 'sys_gf_sec_header',
+                type: 'section',
+                label: 'HEADER',
+                section_id: catId,
+                locked: true,
+                isVirtual: true
+            });
 
-    function saveStateDebounced() {
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(saveState, 500);
-    }
+            // 2. GF Header (Table)
+            let gfHeader = generateDefaultGfHeader();
+            gfHeader.id = 'sys_gf_tbl_header';
+            gfHeader.isVirtual = true;
+            virtualBlocks.push(gfHeader);
 
-    function undo() {
-        if (undoStack.length <= 1) {
-            if (undoStack.length === 1 && items.length > 0) {
-                // If we have one state left, it might be the initial non-empty state.
-            } else {
-                return;
+            // 3. QUY TRÌNH PHÊ DUYỆT (Section)
+            virtualBlocks.push({
+                id: 'sys_gf_sec_approval',
+                type: 'section',
+                label: 'PHÊ DUYỆT',
+                section_id: catId,
+                locked: true,
+                isVirtual: true
+            });
+
+            // 4. Trình Ký (Table)
+            let sigTable = generateSignatureTable();
+            sigTable.id = 'sys_gf_tbl_signatures';
+            virtualBlocks.push(sigTable);
+        } else if (type === 'CO') {
+            // Không sinh virtual block nào cho Component
+        } else {
+            // 1. BMR HEADER (Section)
+            virtualBlocks.push({
+                id: 'sys_bmr_sec_header',
+                type: 'section',
+                label: 'HEADER',
+                section_id: catId,
+                locked: true,
+                isVirtual: true
+            });
+
+            // 2. BMR Header (Table)
+            let bmrHeader = generateDefaultBmrHeader();
+            bmrHeader.id = 'sys_bmr_tbl_header';
+            bmrHeader.isVirtual = true;
+            virtualBlocks.push(bmrHeader);
+
+            // QUY TRÌNH PHÊ DUYỆT
+            virtualBlocks.push({
+                id: 'sys_bmr_sec_approval',
+                type: 'section',
+                label: 'PHÊ DUYỆT',
+                section_id: catId,
+                locked: true,
+                isVirtual: true
+            });
+
+            let sigTable = generateSignatureTable();
+            sigTable.id = 'sys_bmr_tbl_signatures';
+            virtualBlocks.push(sigTable);
+
+
+            if (type !== 'MF' && type !== 'BPR') {
+                // 3. THÔNG TIN CHUNG SẢN PHẨM (Section)
+                virtualBlocks.push({
+                    id: 'sys_bmr_sec_common_info',
+                    type: 'section',
+                    label: 'THÔNG TIN SẢN PHẨM',
+                    section_id: catId,
+                    locked: true,
+                    isVirtual: true
+                });
+
+                // 4. MÔ TẢ SẢN PHẨM (Table)
+                let descTable = generateProductDescriptionTable();
+                descTable.id = 'sys_bmr_tbl_desc';
+                descTable.isVirtual = true;
+                virtualBlocks.push(descTable);
+
+                // 5. CÔNG THỨC PHA CHẾ (Section)
+                virtualBlocks.push({
+                    id: 'sys_bmr_sec_recipe',
+                    type: 'section',
+                    label: 'CÔNG THỨC PHA CHẾ',
+                    section_id: catId,
+                    locked: true,
+                    isVirtual: true
+                });
+
+                // 6. Recipe Tables & Notes
+                let recipes = generateRecipeTables();
+                recipes.forEach((tbl, idx) => {
+                    tbl.id = 'sys_bmr_tbl_recipe_' + idx;
+                    tbl.isVirtual = true;
+                    virtualBlocks.push(tbl);
+                });
             }
         }
+        // Mọi block ảo đều bị khóa (không cho sửa trong V2)
+        virtualBlocks.forEach(function (b) { b.locked = true; });
+        return virtualBlocks;
+    };
 
-        // Save current state to redo stack before moving back
-        redoStack.push(JSON.stringify(items));
-        if (redoStack.length > MAX_HISTORY) redoStack.shift();
-
-        // Pop the "current" saved state
-        undoStack.pop();
-        // Get the previous one
-        const prevState = undoStack[undoStack.length - 1];
-        if (prevState) {
-            items = JSON.parse(prevState);
-            renderBlocks();
-            if (selectedId) selectItem(selectedId, false);
-        } else {
-            items = [];
-            renderBlocks();
-        }
-    }
-
-    function redo() {
-        if (redoStack.length === 0) return;
-
-        const nextState = redoStack.pop();
-        undoStack.push(nextState);
-        if (undoStack.length > MAX_HISTORY) undoStack.shift();
-
-        items = JSON.parse(nextState);
-        renderBlocks();
-        if (selectedId) selectItem(selectedId, false);
-    }
+    // Nhãn các block hệ thống bản cũ còn lưu trong DB cần lọc bỏ (trừ GF)
+        window.__V2_sysLabels = ['BMR HEADER', 'BMR Header', 'GF Header', 'QUY TRÌNH PHÊ DUYỆT', 'THÔNG TIN CHUNG SẢN PHẨM',
+            'MÔ TẢ SẢN PHẨM', 'CÔNG THỨC PHA CHẾ', '1. NGUYÊN LIỆU PHA CHẾ', '2. NGUYÊN LIỆU KHÁC (BAO PHIM/NANG)',
+            'Ghi chú nguyên liệu pha chế', 'Ghi chú nguyên liệu khác', 'THÔNG TIN CHUNG', 'Trình Ký'
+        ];
+    if ("{{ $template->type ?? 'BMR' }}" === "GF") { window.__V2_sysLabels = []; }
+})();
 </script>

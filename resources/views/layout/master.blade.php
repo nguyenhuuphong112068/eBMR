@@ -1002,6 +1002,10 @@
     @include('layout.js')
 
     <script>
+        // Dùng để quyết định có hiện nút "Đổi người trình ký" hay không — chỉ chủ
+        // sở hữu hồ sơ (owner_id) mới được đổi người ở bước đang chờ duyệt.
+        const _wfCurrentUserId = {{ session('user')['userId'] ?? 'null' }};
+
         function showWorkflowHistory(type, id) {
             Swal.fire({
                 title: 'Đang tải dữ liệu...',
@@ -1046,12 +1050,23 @@
                             let d = new Date(wf.updated_at);
                             let dateStr = isNaN(d.getTime()) ? '' : d.toLocaleString('vi-VN');
 
+                            // Chỉ chủ sở hữu hồ sơ mới được đổi người ở bước ĐANG CHỜ DUYỆT
+                            // (bước đã xử lý rồi thì khóa, không cho đổi nữa).
+                            let canReassign = type === 'ebmr' && wf.status === 'pending' &&
+                                _wfCurrentUserId !== null && String(wf.owner_id) === String(_wfCurrentUserId);
+                            let reassignBtn = canReassign ? `
+                                <button type="button" class="btn btn-sm btn-outline-secondary border-0 ms-2 py-0 px-1"
+                                    title="Đổi người ${roleName}"
+                                    onclick="openReassignApprover(${wf.id}, '${type}', ${id}, '${roleName}', '${(wf.user_name || '').replace(/'/g, "\\'")}')">
+                                    <i class="fas fa-user-edit"></i>
+                                </button>` : '';
+
                             html += `
                             <div>
                                 <i class="fas ${statusIcon} ${statusColor}"></i>
                                 <div class="timeline-item shadow-sm">
                                     <span class="time"><i class="fas fa-calendar-alt"></i> ${dateStr}</span>
-                                    <h3 class="timeline-header font-weight-bold" style="color: var(--navy);">${roleName} - ${wf.user_name}</h3>
+                                    <h3 class="timeline-header font-weight-bold" style="color: var(--navy);">${roleName} - ${wf.user_name}${reassignBtn}</h3>
                                     <div class="timeline-body">
                                         <div class="d-flex justify-content-between align-items-start">
                                             <div>
@@ -1081,6 +1096,74 @@
                 },
                 error: function(err) {
                     Swal.fire('Lỗi', 'Không thể lấy dữ liệu lịch sử', 'error');
+                }
+            });
+        }
+
+        /**
+         * Mở hộp thoại chọn người thay thế cho 1 bước trình ký đang chờ duyệt.
+         * Chỉ dùng cho hồ sơ eBMR (type === 'ebmr'); server sẽ kiểm tra lại quyền
+         * chủ sở hữu và trạng thái "pending" trước khi cho phép đổi.
+         */
+        function openReassignApprover(workflowId, type, templateId, roleName, currentUserName) {
+            $.ajax({
+                url: '/ebmr/approvals/eligible-users',
+                method: 'GET',
+                success: function(users) {
+                    let options = users.map(u => `<option value="${u.id}">${u.name}</option>`).join('');
+                    Swal.fire({
+                        title: `Đổi người ${roleName}`,
+                        html: `
+                            <div class="text-start mb-2 small text-muted">Người hiện tại: <strong>${currentUserName}</strong></div>
+                            <select id="swalNewApprover" class="form-select">
+                                <option value="">-- Chọn người thay thế --</option>
+                                ${options}
+                            </select>
+                        `,
+                        showCancelButton: true,
+                        confirmButtonText: 'Xác nhận đổi',
+                        cancelButtonText: 'Hủy',
+                        preConfirm: () => {
+                            const val = document.getElementById('swalNewApprover').value;
+                            if (!val) {
+                                Swal.showValidationMessage('Vui lòng chọn người thay thế');
+                                return false;
+                            }
+                            return val;
+                        }
+                    }).then((result) => {
+                        if (result.isConfirmed && result.value) {
+                            $.ajax({
+                                url: '/ebmr/approvals/reassign',
+                                method: 'POST',
+                                data: {
+                                    workflow_id: workflowId,
+                                    new_user_id: result.value,
+                                    _token: '{{ csrf_token() }}'
+                                },
+                                success: function(res) {
+                                    if (res.success) {
+                                        Swal.fire({
+                                            icon: 'success',
+                                            title: 'Thành công',
+                                            text: res.message,
+                                            timer: 1800,
+                                            showConfirmButton: false
+                                        });
+                                        showWorkflowHistory(type, templateId);
+                                    } else {
+                                        Swal.fire('Không thể đổi', res.message, 'error');
+                                    }
+                                },
+                                error: function() {
+                                    Swal.fire('Lỗi', 'Không thể kết nối máy chủ', 'error');
+                                }
+                            });
+                        }
+                    });
+                },
+                error: function() {
+                    Swal.fire('Lỗi', 'Không thể tải danh sách người dùng', 'error');
                 }
             });
         }
@@ -1122,8 +1205,10 @@
             }
 
             function logout() {
-                // Chuyển hướng người dùng về trang login kèm tham số báo hết hạn
-                window.location.replace("{{ route('login') }}?timeout=true");
+                // Gọi route logout thật (giống nút "Đăng xuất" thủ công) để server flush session
+                // sạch sẽ trước khi quay lại trang login — tránh session/CSRF token rơi vào trạng
+                // thái không nhất quán (nguyên nhân gây lỗi 419 khi đăng nhập lại).
+                window.location.replace("{{ route('logout') }}?timeout=true");
             }
 
             // Các sự kiện được coi là người dùng đang hoạt động

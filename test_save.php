@@ -17,6 +17,6 @@ $request = \Illuminate\Http\Request::create('/ebmr/store-template', 'POST', [
     ]
 ]);
 
-$controller = app()->make(\App\Http\Controllers\EbmrDesignerController::class);
+$controller = app()->make(\App\Http\Controllers\Pages\Ebmr\Designer\EbmrDesignerController::class);
 $response = $controller->save($request);
 echo $response->getContent();

@@ -9,11 +9,11 @@ Quản lý quy trình sản xuất điện tử (Electronic Batch Manufacturing 
 
 | Chức năng chính | Chức năng con | File liên quan | Trạng thái |
 | :--- | :--- | :--- | :--- |
-| **Thiết kế Biểu mẫu (Designer)** | Thiết kế bảng (kiểu Google Docs), Editor kéo thả, Comment, Dịch thuật AI | `EbmrDesignerController.php`, `ebmrRoute.php`, `resources/views/pages/ebmr/designer.blade.php` | Hoàn thành |
-| **Quản lý Template** | Lưu metadata, phiên bản (versioning), lịch sử thay đổi | `EbmrTemplateController.php`, `EbmrTemplate.php` | Hoàn thành |
-| **Phê duyệt (Approval)** | Luồng phê duyệt (Workflow), ký duyệt điện tử | `EbmrApprovalController.php`, `ebmr_approvals` table | Hoàn thành |
-| **Cấp phát (Issuance)** | Phát hành lệnh sản xuất từ template đã duyệt | `EbmrIssuanceController.php` | Hoàn thành |
-| **Thực thi (Execution)** | Ghi chép số liệu sản xuất thực tế, xác thực mật khẩu | `EbmrExecutionController.php`, `execute.blade.php` | Hoàn thành |
+| **Thiết kế Biểu mẫu (Designer)** | Thiết kế bảng (kiểu Google Docs), Editor kéo thả, Comment, Dịch thuật AI | `Pages/Ebmr/Designer/EbmrDesignerController.php`, `ebmrRoute.php`, `resources/views/pages/ebmr/designer.blade.php` | Hoàn thành |
+| **Quản lý Template** | Lưu metadata, phiên bản (versioning), lịch sử thay đổi | `Pages/Ebmr/Templates/EbmrTemplateController.php`, `EbmrTemplate.php` | Hoàn thành |
+| **Phê duyệt (Approval)** | Luồng phê duyệt (Workflow), ký duyệt điện tử | `Pages/Ebmr/Approvals/EbmrApprovalController.php`, `ebmr_approvals` table | Hoàn thành |
+| **Cấp phát (Issuance)** | Phát hành lệnh sản xuất từ template đã duyệt | `Pages/Ebmr/Issuance/EbmrIssuanceController.php` | Hoàn thành |
+| **Thực thi (Execution)** | Ghi chép số liệu sản xuất thực tế, xác thực mật khẩu | `Pages/Ebmr/Records/EbmrExecutionController.php`, `execute.blade.php` | Hoàn thành |
 
 ---
 

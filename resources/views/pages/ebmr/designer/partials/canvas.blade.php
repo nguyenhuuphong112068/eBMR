@@ -48,7 +48,7 @@
             @endif
 
             <!-- Fluid Workplace -->
-            <div id="designer-workspace" class="d-flex justify-content-start align-items-start"
+            <div id="designer-workspace" class="d-flex justify-content-center align-items-start"
                 style="width: 100%; margin: 0; padding-right: 20px;">
                 <!-- Main A4 Page -->
                 <div class="page-a4 shadow mt-2" style="border-radius: 4px; flex-shrink: 0; position: relative;"
@@ -86,7 +86,8 @@
         </div>
 
         <!-- Nút In nổi góc trên bên phải -->
-        @if (isset($template) && $template->status === 'active')
+        {{-- Chỉ hiện với hồ sơ GF đang hiệu lực (không dùng cho BMR/BPR/MF). --}}
+        @if (isset($template) && $template->status === 'active' && ($template->type ?? null) === 'GF')
             <button class="btn shadow-lg print-blank-btn" onclick="printBlankForm()" title="In Biểu mẫu trắng"
                 style="position: fixed; top: 90px; right: 30px; z-index: 1050; border-radius: 50px; padding: 10px 20px; background-color: #28a745; color: white; font-weight: bold; cursor: pointer; pointer-events: auto;">
                 <i class="fas fa-print me-2"></i> In Biểu mẫu trắng

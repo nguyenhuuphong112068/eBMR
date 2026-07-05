@@ -534,6 +534,7 @@
 
     {{-- Script Modules --}}
     @include('pages.ebmr.designer.scripts.state')
+    @include('pages.ebmr.designer.scripts.selection')
     @include('pages.ebmr.designer.scripts.ui_handlers')
     @include('pages.ebmr.designer.scripts.render')
     @include('pages.ebmr.designer.scripts.table_ops')

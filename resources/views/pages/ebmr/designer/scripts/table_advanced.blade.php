@@ -1,35 +1,14 @@
 <script>
-    let isSelecting = false;
-    let startCell = null;
-    let activeRowIdx = 0; // 0 for header, 1+ for body
-    let activeColIdx = 0;
-
     // --- Selection Logic ---
+    // isSelecting/startCell/activeRowIdx/activeColIdx và các thao tác chọn ô nay
+    // sống trong EbmrSelection (scripts/selection.blade.php). Hai hàm dưới đây được
+    // giữ lại như alias mỏng vì tên của chúng đã được dùng rải rác trong codebase.
     function clearSelection() {
-        document.querySelectorAll('.selected-cell').forEach(c => c.classList.remove('selected-cell'));
+        EbmrSelection.cell.clear();
     }
 
     function highlightRange(start, end) {
-        clearSelection();
-        const table = start.closest('.mini-table');
-        if (!table) return;
-
-        const r1 = parseInt(start.dataset.row);
-        const c1 = parseInt(start.dataset.col);
-        const r2 = parseInt(end.dataset.row);
-        const c2 = parseInt(end.dataset.col);
-
-        const minR = Math.min(r1, r2);
-        const maxR = Math.max(r1, r2);
-        const minC = Math.min(c1, c2);
-        const maxC = Math.max(c1, c2);
-
-        for (let r = minR; r <= maxR; r++) {
-            for (let c = minC; c <= maxC; c++) {
-                const cell = table.querySelector(`[data-row="${r}"][data-col="${c}"]`);
-                if (cell) cell.classList.add('selected-cell');
-            }
-        }
+        EbmrSelection.cell.setRange(start, end);
     }
 
     // --- Merge & Split ---
