@@ -992,11 +992,7 @@
     </div>
     <!-- ./wrapper -->
 
-    <!-- AI Quick Access Button -->
-    <div class="ai-float-btn" onclick="openAiChat()" title="Chat với AI Agent eR">
-        <div class="pulse-ring"></div>
-        <i class="bi bi-robot"></i>
-    </div>
+    <!-- AI Quick Access Button (Đã gỡ bỏ theo yêu cầu) -->
 
     <!-- jQuery -->
     @include('layout.js')

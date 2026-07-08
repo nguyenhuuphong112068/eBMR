@@ -115,6 +115,11 @@
         border-bottom: 1px solid rgba(8, 145, 178, 0.1) !important;
         padding: 24px 0 !important;
         margin-bottom: 10px;
+        height: auto !important;
+    }
+    
+    body.sidebar-collapse .brand-link {
+        padding: 10px 0 !important;
     }
 
     .brand-text {
@@ -148,14 +153,27 @@
         font-weight: 500;
         padding-left: 12px;
     }
+
+    /* Thu nhỏ logo khi sidebar bị gấp lại (collapse) để không bị lẹm */
+    body.sidebar-collapse .brand-image-custom {
+        width: 38px !important;
+        margin: 0 auto !important;
+        display: block !important;
+    }
+    
+    /* Cho text xuống dòng khi không thu nhỏ */
+    body:not(.sidebar-collapse) .brand-text {
+        display: block;
+        margin-top: 5px;
+    }
 </style>
 
 <aside class="main-sidebar elevation-4">
     <!-- Brand Logo -->
     <a href="{{ route('pages.general.home') }}" class="brand-link text-center px-0">
-        <img src="{{ asset('img/iconstella.svg') }}" alt="Logo"
-            style="width: 52px; height: auto; filter: drop-shadow(0 4px 6px rgba(8, 145, 178, 0.1));">
-        <span class="brand-text d-block">e<span>R</span> System</span>
+        <img src="{{ asset('img/iconstella.svg') }}" alt="Logo" class="brand-image-custom"
+            style="width: 52px; height: auto; filter: drop-shadow(0 4px 6px rgba(8, 145, 178, 0.1)); transition: all 0.3s ease;">
+        <span class="brand-text">e<span>R</span> System</span>
     </a>
 
     <!-- Sidebar Menu -->
@@ -427,14 +445,14 @@
                         <li class="nav-item">
                             <a href="{{ route('pages.ebmr.production') }}"
                                 class="nav-link {{ request()->routeIs('pages.ebmr.production') ? 'active' : '' }}">
-                                <i class="fas fa-cogs"></i>
+                                <i class="fas fa-door-open"></i>
                                 <p>Phòng Sản Xuất</p>
                             </a>
                         </li>
                         <li class="nav-item">
                             <a href="{{ route('pages.ebmr.dirty_equipments') }}"
                                 class="nav-link {{ request()->routeIs('pages.ebmr.dirty_equipments') ? 'active' : '' }}">
-                                <i class="fas fa-cogs"></i>
+                                <i class="fas fa-broom"></i>
                                 <p>Thiết Bị Cần Vệ Sinh</p>
                             </a>
                         </li>

@@ -20,8 +20,13 @@ import TextAlign from '@tiptap/extension-text-align';
 import Highlight from '@tiptap/extension-highlight';
 import Subscript from '@tiptap/extension-subscript';
 import Superscript from '@tiptap/extension-superscript';
-import { EbmrField, FIELD_TYPES } from './ebmr-field';
+import { EbmrField, FIELD_TYPES, paintFieldElement, handleFieldBadgeClick } from './ebmr-field';
 import { createSelectionController } from './selection';
+import { initScaleReaderV2 } from './scale-reader';
+import { initMmsBarcodeV2 } from './mms-barcode';
+import { MathEquation, V2Image, V2InlineImage, DocPropField, paintEquationBadge, paintDocPropBadge, refreshAllDocPropBadges } from './media-nodes';
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
 
 /** Bộ extension dùng chung cho mọi editor instance (StarterKit v3 đã gồm Underline + Link) */
 function buildExtensions() {
@@ -30,12 +35,17 @@ function buildExtensions() {
             heading: { levels: [1, 2, 3] },
             link: { openOnClick: false },
         }),
-        TextStyleKit, // TextStyle + Color + FontFamily + FontSize + BackgroundColor + LineHeight
+        // TextStyle + Color + FontSize + BackgroundColor + LineHeight — fontFamily tắt hẳn (luôn dùng font mặc định Arimo)
+        TextStyleKit.configure({ fontFamily: false }),
         TextAlign.configure({ types: ['heading', 'paragraph'] }),
         Highlight.configure({ multicolor: true }),
         Subscript,
         Superscript,
         EbmrField,
+        MathEquation,
+        V2Image,
+        V2InlineImage,
+        DocPropField,
     ];
 }
 
@@ -55,7 +65,112 @@ if (typeof window.__V2_buildVirtualBlocks === 'function') {
 let activeEditor = null;      // instance TipTap duy nhất (editor-on-demand)
 let activeHost = null;        // element đang mount editor
 let activeSync = null;        // hàm ghi HTML về items khi unmount
+// Ghi nhớ Ô/đoạn văn bản SOẠN GẦN NHẤT để có thể mở lại và chèn (Symbol/Công thức/
+// Hình ảnh/Document Property) ngay cả khi editor đã đóng — miễn là host còn trong DOM.
+let lastEditorArgs = null;    // { host, getHTML, setHTML, context }
+let lastEditorSel = null;     // { from, to } vị trí con trỏ lần cuối
 let isDirtyDoc = false;       // có thay đổi chưa lưu
+let activeBlockId = null;     // ID của block đang được chọn để hiển thị toolbar
+
+// ── Lặp nhóm khối (giống V1): chọn 1 dải khối liên tiếp cùng section rồi cài số lần lặp ──
+let pasteAnchorIdV2 = null;   // id item (block/section) vừa click — điểm chèn cho global paste (Ctrl+V khi chưa mở editor)
+let lastClickInPagesV2 = false; // lần click gần nhất có nằm trong vùng thiết kế (#v2-pages) không — điều kiện cho gõ-phím-tạo-khối
+let blockPickMode = false;    // đang ở CHẾ ĐỘ CHỌN KHỐI: click thẳng vào khối để chọn (không mở editor)
+let blockPickAnchor = null;   // id khối neo cho Shift+Click mở rộng dải
+let blockPickIds = [];        // ids khối đang được chọn để cài/sửa Lặp nhóm (dùng chung cho copy/cắt/dán cả cụm)
+let blockClipboardV2 = null;  // { blocks: [...] } bản JSON thô của khối đã Copy/Cắt — field id đổi mới MỖI LẦN Dán
+let internalPasteHandledV2 = false; // true trong khoảnh khắc vừa Ctrl+V dán khối nội bộ — chặn listener 'paste' (dán từ OS) xử lý trùng
+let activeLoopTabIdx = {};    // groupId -> tab "Lần i" đang xem (Chạy thử)
+const loopIterFieldMapCache = {}; // groupId -> { [i]: idMap } bản đồ field riêng cho từng lần lặp (Chạy thử)
+let loopClonedFieldIds = new Set(); // id các field đã nhân bản riêng cho lần lặp — dọn khi thoát Chạy thử
+
+// Lắng nghe sự kiện click toàn cục để set activeBlockId (dùng capture phase để tránh bị stopPropagation chặn)
+document.addEventListener('click', (e) => {
+    if (e.target.closest('.v2-block-toolbar') || e.target.closest('.v2-field-panel')) return;
+
+    lastClickInPagesV2 = !!(e.target.closest && e.target.closest('#v2-pages'));
+
+    const block = e.target.closest('.v2-block');
+    let oldActive = activeBlockId;
+
+    if (block) {
+        activeBlockId = block.getAttribute('data-id');
+    } else {
+        if (!e.target.closest('.modal') && !e.target.closest('.swal2-container')) {
+            activeBlockId = null;
+        }
+    }
+
+    if (oldActive !== activeBlockId) {
+        document.querySelectorAll('.v2-block').forEach(el => {
+            if (el.getAttribute('data-id') === activeBlockId) {
+                el.classList.add('v2-block-active');
+            } else {
+                el.classList.remove('v2-block-active');
+            }
+        });
+    }
+
+    // Ghi nhận "điểm chèn" cho global paste (Ctrl+V khi chưa mở editor nào):
+    // click vào block -> chèn ngay dưới block đó; click vào tiêu đề section -> chèn ngay
+    // đầu section đó; click vào vùng trống của 1 trang -> chèn sau phần tử cuối trang đó.
+    if (block) {
+        pasteAnchorIdV2 = block.getAttribute('data-id');
+    } else {
+        const secEl = e.target.closest('.v2-section');
+        if (secEl) {
+            pasteAnchorIdV2 = secEl.id.replace(/^v2-sec-/, '');
+        } else {
+            const pageEl = e.target.closest('.v2-page');
+            if (pageEl) {
+                const anchors = pageEl.querySelectorAll('.v2-block[data-id], .v2-section[id^="v2-sec-"]');
+                const last = anchors[anchors.length - 1];
+                if (last) {
+                    pasteAnchorIdV2 = last.classList.contains('v2-section')
+                        ? last.id.replace(/^v2-sec-/, '')
+                        : last.getAttribute('data-id');
+                }
+            }
+        }
+    }
+
+    // Vẽ con trỏ nhấp nháy tại điểm chèn — chờ hết lượt click hiện tại vì editor
+    // (nếu có) chỉ được mount ở bubble phase, sau capture listener này.
+    // Click lên toolbar/modal không đụng tới caret (giữ điểm chèn khi chọn lệnh chèn).
+    if (e.target.closest('#v2-toolbar') || e.target.closest('.modal') || e.target.closest('.swal2-container')) return;
+    setTimeout(() => {
+        if (!activeEditor && lastClickInPagesV2 && !selection.hasCells()
+            && !BOOT.isReadOnly && !BOOT.isExecutionMode && !blockPickMode) {
+            showInsertCaretV2();
+        } else {
+            hideInsertCaretV2();
+        }
+    }, 0);
+}, true);
+
+/** Con trỏ nhấp nháy đánh dấu ĐIỂM CHÈN khi click vào trang mà chưa mở editor nào
+ *  (click tiêu đề section / vùng trống) — gõ chữ, Ctrl+V hoặc chèn từ toolbar sẽ vào đây. */
+function showInsertCaretV2() {
+    hideInsertCaretV2();
+    if (pasteAnchorIdV2 == null) return;
+    const anchorEl = document.querySelector(`.v2-block[data-id="${pasteAnchorIdV2}"]`)
+        || document.getElementById('v2-sec-' + pasteAnchorIdV2);
+    if (!anchorEl) return;
+    const caret = document.createElement('div');
+    caret.id = 'v2-insert-caret';
+    caret.title = 'Điểm chèn: gõ chữ / dán (Ctrl+V) / chèn từ toolbar sẽ vào vị trí này';
+    anchorEl.insertAdjacentElement('afterend', caret);
+}
+
+function hideInsertCaretV2() {
+    document.getElementById('v2-insert-caret')?.remove();
+}
+
+let deletedBlockIds = [];     // db_id các khối đã xóa, gửi lên server khi lưu (xem saveTemplate)
+let deletedFieldKeys = [];    // field_key các BIẾN SỐ đã xóa thật (deleteVariablesV2), gửi tường minh
+                               // lên server để xoá — KHÔNG suy luận "biến nào vắng mặt trong lượt lưu
+                               // này thì coi là mồ côi", vì cách suy luận cũ có thể xoá nhầm biến vừa
+                               // được TAB/LƯỢT LƯU KHÁC tạo ra nếu ảnh chụp dữ liệu bị cũ hơn (race).
 
 // Bộ điều khiển CHỌN đối tượng (ô/hàng/cột/bảng/biến số) — xem selection.js
 const selection = createSelectionController({
@@ -63,6 +178,7 @@ const selection = createSelectionController({
     getItems: () => items,
     hasActiveEditor: () => !!activeEditor,
     getActiveHost: () => activeHost,
+    getActiveBlockId: () => activeBlockId,
     unmountEditor: () => unmountEditor(),
     saveDocState: () => saveDocState(),
     markDirty: () => markDirty(),
@@ -70,6 +186,16 @@ const selection = createSelectionController({
     refreshToolbarState: () => refreshToolbarState(),
     openBatchFieldPanel: (ids) => openBatchFieldPanelV2(ids),
     duplicateFieldsInHtml: (html) => duplicateFieldsInHtmlV2(html),
+    buildFieldDuplicateMap: (htmlList) => buildFieldDuplicateMapV2(htmlList),
+    applyFieldDuplicateMap: (idMap, nameMap) => applyFieldDuplicateMapV2(idMap, nameMap),
+    rewriteFieldIdsInHtml: (html, idMap) => rewriteFieldIdsInHtmlV2(html, idMap),
+    copyFields: (ids) => copyFieldsV2(ids),
+    cutFields: (ids) => cutFieldsV2(ids),
+    pasteFieldsIntoCell: (item, r, c) => pasteFieldsIntoCellV2(item, r, c),
+    pasteFieldsAtCursor: () => pasteFieldsV2(),
+    hasFieldClipboard: () => hasFieldClipboardV2(),
+    deleteBlock: (id) => deleteBlock(id),
+    convertStaticSelectionToEditable: (action) => convertStaticSelectionToEditableV2(action),
 });
 
 /* =========================================================
@@ -81,8 +207,12 @@ const docUndoStack = [];
 const docRedoStack = [];
 const DOC_MAX_HISTORY = 50;
 
+// Viền mặc định của ô bảng — render inline cho cạnh chưa tuỳ biến để giữ nguyên
+// giao diện cũ, đồng thời để cạnh 'hidden' (đã xoá) thắng khi border-collapse.
+const TABLE_DEFAULT_BORDER = '1px solid #64748b';
+
 function docSnapshot() {
-    return JSON.stringify({ items, fieldsConfig });
+    return JSON.stringify({ items, fieldsConfig, deletedBlockIds, deletedFieldKeys });
 }
 
 /** Gọi TRƯỚC mỗi thao tác cấp tài liệu để lưu trạng thái hoàn tác */
@@ -97,6 +227,8 @@ function saveDocState() {
 function restoreDocState(snap) {
     const data = JSON.parse(snap);
     items = data.items;
+    deletedBlockIds = data.deletedBlockIds || [];
+    deletedFieldKeys = data.deletedFieldKeys || [];
     // fieldsConfig phải mutate tại chỗ (NodeView giữ tham chiếu qua BOOT.fieldsConfig)
     Object.keys(fieldsConfig).forEach((k) => delete fieldsConfig[k]);
     Object.assign(fieldsConfig, data.fieldsConfig);
@@ -138,10 +270,67 @@ function decorateBadges(html) {
         const fid = el.getAttribute('data-field-id');
         const cfg = fieldsConfig[fid] || {};
         const t = FIELD_TYPES[cfg.type] || FIELD_TYPES.text;
+        // HTML lưu từ V1 mang theo onclick="selectField(...)" — hàm không tồn tại
+        // trong V2, phải gỡ bỏ kẻo click là ReferenceError.
+        el.removeAttribute('onclick');
         el.className = 'v2-field-badge v2-field-badge--static';
         el.innerHTML = `<i class="fas ${t.icon} me-1" style="font-size:0.7em;"></i><span>${esc(cfg.label || cfg.name || fid)}</span>`;
     });
+    tmp.querySelectorAll('span.v2-equation-badge').forEach((el) => paintEquationBadge(el));
+    tmp.querySelectorAll('span.v2-docprop-badge').forEach((el) => paintDocPropBadge(el));
+    replaceSttMarkersV2(tmp);
     return tmp.innerHTML;
+}
+
+/** Thay CHỮ "#STT#" (đánh dấu cột số thứ tự tự động — xem context menu "Đánh số thứ tự
+ *  tự động cho cột này") bằng 1 span đếm bằng CSS counter (giống V1: .v2-table đặt
+ *  counter-reset, mỗi span .v2-css-stt tự +1 theo ĐÚNG thứ tự xuất hiện trong DOM) —
+ *  nhờ vậy thêm/xoá hàng (kể cả "Thêm dòng (Cấp 2)") không cần JS tính lại số, trình
+ *  duyệt tự đếm lại theo số span đang có. Chỉ thay ở bản HIỂN THỊ tĩnh — nội dung lưu
+ *  vẫn giữ nguyên chữ "#STT#" (round-trip an toàn, sửa lại được bất cứ lúc nào). */
+function replaceSttMarkersV2(root) {
+    if (!root.innerHTML.includes('#STT#')) return;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const textNodes = [];
+    let n;
+    while ((n = walker.nextNode())) { if (n.nodeValue.includes('#STT#')) textNodes.push(n); }
+    textNodes.forEach((node) => {
+        const parts = node.nodeValue.split('#STT#');
+        const frag = document.createDocumentFragment();
+        parts.forEach((part, i) => {
+            if (part) frag.appendChild(document.createTextNode(part));
+            if (i < parts.length - 1) {
+                const span = document.createElement('span');
+                span.className = 'v2-css-stt';
+                span.setAttribute('contenteditable', 'false');
+                frag.appendChild(span);
+            }
+        });
+        node.parentNode.replaceChild(frag, node);
+    });
+}
+
+/* ----------------------------------------------------------
+ * Kích hoạt badge TĨNH cho Chạy thử: khi ở execution mode, KHÔNG
+ * block nào mount TipTap nên NodeView không chạy — phải tự vẽ UI
+ * chạy thử (checkbox/select/chữ ký/công thức...) lên các badge tĩnh
+ * và gắn click dispatch, dùng chung painter với NodeView.
+ * ---------------------------------------------------------- */
+let staticPaintRegs = []; // [{fieldId, fn}] — gỡ đăng ký trước mỗi lần render lại
+function activateStaticBadges() {
+    staticPaintRegs.forEach(({ fieldId, fn }) => window.__V2__.unregisterFieldPaint(fieldId, fn));
+    staticPaintRegs = [];
+    if (!BOOT.isExecutionMode) return;
+
+    document.querySelectorAll('#v2-pages .v2-field-badge--static').forEach((el) => {
+        const fid = el.getAttribute('data-field-id');
+        if (!fid || !fieldsConfig[fid]) return;
+        const paint = () => paintFieldElement(el, fid);
+        paint();
+        window.__V2__.registerFieldPaint(fid, paint);
+        staticPaintRegs.push({ fieldId: fid, fn: paint });
+        el.addEventListener('click', (e) => handleFieldBadgeClick(e, fid, paint));
+    });
 }
 
 /** Thanh chèn khối mới (hiện khi rê chuột) — đặt sau mỗi block */
@@ -184,6 +373,207 @@ function makeInserter(afterIndex) {
     return ins;
 }
 
+/** Chỉ dựng phần NỘI DUNG của 1 block (không toolbar). Dùng chung cho luồng phẳng,
+ *  wrapper Lặp nhóm (thiết kế) và từng tab "Lần i" (Chạy thử — khi đó contentOverride/
+ *  dataOverride đã được thay data-field-id sang bản sao riêng của lần lặp đó). */
+function renderBlockContentV2(item, contentOverride, dataOverride) {
+    const isLocked = item.locked || item.isVirtual;
+    if (item.type === 'static-text') {
+        const el = document.createElement('div');
+        el.className = 'v2-block v2-static-text' + (isLocked ? ' v2-locked' : '');
+        el.setAttribute('data-id', item.id);
+        const inner = document.createElement('div');
+        inner.className = 'v2-editable';
+        const content = contentOverride !== undefined ? contentOverride : (item.content || '<p></p>');
+        inner.innerHTML = decorateBadges(content);
+        el.appendChild(inner);
+        if (!BOOT.isReadOnly && !BOOT.isExecutionMode && !isLocked && contentOverride === undefined) {
+            inner.addEventListener('click', (e) => {
+                if (activeHost === inner) return;
+                if (hasNativeTextSelectionV2()) return; // vừa quét chọn chữ để copy — giữ selection, không mở editor
+                e.stopPropagation();
+                mountEditor(inner,
+                    () => item.content || '',
+                    (html) => { item.content = html; item.dirty = true; markDirty(); },
+                    { kind: 'text', item }, { x: e.clientX, y: e.clientY });
+            });
+        }
+        return el;
+    }
+    if (item.type === 'table') {
+        const el = renderTable(dataOverride ? { ...item, data: dataOverride } : item);
+        if (isLocked) el.classList.add('v2-locked');
+        if (item.isAbbreviationTable) {
+            const title = document.createElement('div');
+            title.className = 'ebmr-section-header d-flex align-items-center mb-3 mt-2';
+            title.innerHTML = `<div class="section-icon bg-info text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width:40px;height:40px;min-width:40px;"><i class="fas fa-list-ul"></i></div>
+                <div class="flex-grow-1">
+                    <div class="section-title fw-bold text-uppercase" style="font-size:1.1rem;color:#164e63;letter-spacing:1px;">Danh Sách Viết Tắt</div>
+                    <div class="section-line mt-1" style="height:3px;background:linear-gradient(to right,#0ea5e9,transparent);border-radius:2px;"></div>
+                </div>`;
+            el.prepend(title);
+        }
+        return el;
+    }
+    if (item.type === 'chart' && item.chartConfig) {
+        const el = document.createElement('div');
+        el.className = 'v2-block v2-chart' + (isLocked ? ' v2-locked' : '');
+        el.setAttribute('data-id', item.id);
+        const canvasId = 'v2_chart_canvas_' + item.id;
+        el.innerHTML = `<div class="v2-chart-container"><canvas id="${canvasId}"></canvas></div>`;
+        // Canvas phải nằm trong DOM rồi mới vẽ được — đợi hết lượt render hiện tại
+        setTimeout(() => renderChartV2(canvasId, item), 50);
+        return el;
+    }
+    // Loại block chưa hỗ trợ trong pilot (linked-template...) — hiển thị placeholder
+    const el = document.createElement('div');
+    el.className = 'v2-block v2-unsupported';
+    el.innerHTML = `<i class="fas fa-cube me-2"></i>[${esc(item.type)}] ${esc(item.label || '')} — <em>chưa hỗ trợ trong bản thử nghiệm, giữ nguyên khi lưu</em>`;
+    return el;
+}
+
+/** Dựng 1 block hoàn chỉnh (nội dung + toolbar dọc: chọn khối lặp / di chuyển / xóa / bình luận). */
+function buildBlockElV2(item, idx) {
+    const isLocked = item.locked || item.isVirtual;
+    const el = renderBlockContentV2(item);
+    if (!el) return null;
+    if (item.id && item.id === activeBlockId) el.classList.add('v2-block-active');
+    if (blockPickIds.includes(item.id)) el.classList.add('v2-block-picked');
+
+    if (item.id) {
+        const toolbar = document.createElement('div');
+        toolbar.className = 'v2-block-toolbar';
+
+        if (!isLocked && !BOOT.isReadOnly && !BOOT.isExecutionMode) {
+            const prev = items[idx - 1];
+            const next = items[idx + 1];
+            const canMoveUp = !!prev && prev.type !== 'section' && !prev.locked && !prev.isVirtual && prev.section_id === item.section_id;
+            const canMoveDown = !!next && next.type !== 'section' && !next.locked && !next.isVirtual && next.section_id === item.section_id;
+            const isPicked = blockPickIds.includes(item.id);
+
+            toolbar.innerHTML = `
+                <button type="button" class="v2-block-action-btn${isPicked ? ' active' : ''}" data-act="pick" title="Chọn khối (giữ Shift để chọn dải nhiều khối liên tiếp) — Ctrl+C/X/V để copy/cắt/dán cả cụm, hoặc dùng để cài Lặp nhóm"><i class="fas fa-clone"></i></button>
+                <button type="button" class="v2-block-action-btn" data-act="up" title="Di chuyển lên"${canMoveUp ? '' : ' disabled'}><i class="fas fa-arrow-up"></i></button>
+                <button type="button" class="v2-block-action-btn" data-act="down" title="Di chuyển xuống"${canMoveDown ? '' : ' disabled'}><i class="fas fa-arrow-down"></i></button>
+                <button type="button" class="v2-block-action-btn v2-block-action-danger" data-act="del" title="Xóa khối"><i class="fas fa-trash-alt"></i></button>`;
+            toolbar.querySelectorAll('button').forEach((b) => b.addEventListener('mousedown', (e) => e.preventDefault()));
+            toolbar.querySelector('[data-act="pick"]').addEventListener('click', (e) => { e.stopPropagation(); pickBlockV2(item, e.shiftKey); });
+            toolbar.querySelector('[data-act="up"]').addEventListener('click', (e) => { e.stopPropagation(); moveBlock(item.id, -1); });
+            toolbar.querySelector('[data-act="down"]').addEventListener('click', (e) => { e.stopPropagation(); moveBlock(item.id, 1); });
+            toolbar.querySelector('[data-act="del"]').addEventListener('click', (e) => { e.stopPropagation(); deleteBlock(item.id); });
+        }
+
+        const cmtCount = getBlockComments(item.id).length;
+        const cmtBtn = document.createElement('button');
+        cmtBtn.type = 'button';
+        cmtBtn.className = 'v2-comment-btn' + (cmtCount > 0 ? ' has-comments' : '');
+        cmtBtn.title = cmtCount > 0 ? `${cmtCount} bình luận` : 'Thêm bình luận';
+        cmtBtn.innerHTML = '<i class="fas fa-comment"></i>' +
+            (cmtCount > 0 ? `<span class="v2-cmt-count">${cmtCount}</span>` : '');
+        cmtBtn.addEventListener('mousedown', (e) => e.preventDefault());
+        cmtBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openCommentsPanel(item.id);
+        });
+        toolbar.appendChild(cmtBtn);
+
+        el.appendChild(toolbar);
+    }
+    return el;
+}
+
+/** Bản sao field riêng cho lần lặp thứ i (i=1 dùng field GỐC, không nhân bản).
+ *  Cache theo groupId để giữ ổn định ID qua các lần renderDocument() (không mất giá trị đã nhập). */
+function getLoopIterFieldMapV2(groupId, i, entries) {
+    if (!loopIterFieldMapCache[groupId]) loopIterFieldMapCache[groupId] = {};
+    if (loopIterFieldMapCache[groupId][i]) return loopIterFieldMapCache[groupId][i];
+    const htmlList = [];
+    entries.forEach(({ item }) => {
+        if (item.type === 'static-text') htmlList.push(item.content || '');
+        else if (item.type === 'table') {
+            (item.data || []).forEach((row) => (row || []).forEach((cell) => {
+                if (cell && typeof cell === 'object' && cell.content) htmlList.push(cell.content);
+            }));
+        }
+    });
+    const { idMap, nameMap } = buildFieldDuplicateMapV2(htmlList);
+    if (Object.keys(idMap).length) {
+        applyFieldDuplicateMapV2(idMap, nameMap);
+        Object.values(idMap).forEach((newId) => loopClonedFieldIds.add(newId));
+    }
+    loopIterFieldMapCache[groupId][i] = idMap;
+    return idMap;
+}
+
+/** Thiết kế: bọc các khối cùng 1 nhóm lặp trong khung nét đứt + badge "Lặp nhóm: N lần". */
+function renderLoopGroupDesignV2(run, page) {
+    const wrap = document.createElement('div');
+    wrap.className = 'v2-loop-group-wrap';
+
+    const badge = document.createElement('div');
+    badge.className = 'v2-loop-group-badge';
+    const lbl = run.loopLabel && run.loopLabel !== 'Lần' ? ` (${esc(run.loopLabel)} 1..${run.loopCount})` : '';
+    badge.innerHTML = `<i class="fas fa-redo me-1"></i> Lặp nhóm: ${run.loopCount} lần${lbl}`;
+    if (!BOOT.isReadOnly) {
+        badge.title = 'Nhấp để chỉnh sửa cài đặt lặp nhóm';
+        badge.addEventListener('click', (e) => { e.stopPropagation(); editLoopGroupV2(run.groupId); });
+    }
+    wrap.appendChild(badge);
+
+    run.entries.forEach(({ item, idx }) => {
+        const el = buildBlockElV2(item, idx);
+        if (el) { el.classList.add('v2-loop-group-member'); wrap.appendChild(el); }
+        const isLastVirtual = item.isVirtual && (!items[idx + 1] || !items[idx + 1].isVirtual);
+        if (!BOOT.isReadOnly && !BOOT.isExecutionMode && (!item.isVirtual || isLastVirtual)) {
+            wrap.appendChild(makeInserter(idx));
+        }
+    });
+
+    page.appendChild(wrap);
+}
+
+/** Chạy thử: hiển thị nhóm lặp dưới dạng tab "Lần 1..N", mỗi tab có giá trị biến ĐỘC LẬP
+ *  (field của lần i>1 được nhân bản riêng qua getLoopIterFieldMapV2). */
+function renderLoopGroupExecutionV2(run, page) {
+    const { groupId, loopCount, entries } = run;
+    const loopLabel = run.loopLabel || 'Lần';
+    let activeIdx = activeLoopTabIdx[groupId] || 1;
+    if (activeIdx > loopCount) activeIdx = 1;
+    activeLoopTabIdx[groupId] = activeIdx;
+
+    const header = document.createElement('div');
+    header.className = 'v2-loop-tabs-header';
+    for (let i = 1; i <= loopCount; i++) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-sm ' + (i === activeIdx ? 'btn-primary' : 'btn-outline-primary');
+        btn.textContent = loopLabel + ' ' + i;
+        btn.addEventListener('click', () => { activeLoopTabIdx[groupId] = i; renderDocument(); });
+        header.appendChild(btn);
+    }
+    page.appendChild(header);
+
+    for (let i = 1; i <= loopCount; i++) {
+        const tab = document.createElement('div');
+        tab.className = 'v2-loop-tab-content';
+        tab.style.display = i === activeIdx ? '' : 'none';
+        const idMap = i === 1 ? null : getLoopIterFieldMapV2(groupId, i, entries);
+
+        entries.forEach(({ item }) => {
+            const content = (idMap && item.type === 'static-text')
+                ? rewriteFieldIdsInHtmlV2(item.content || '<p></p>', idMap) : undefined;
+            const dataOverride = (idMap && item.type === 'table')
+                ? (item.data || []).map((row) => (row || []).map((cell) => (cell && typeof cell === 'object'
+                    ? { ...cell, content: rewriteFieldIdsInHtmlV2(cell.content || '', idMap) }
+                    : cell)))
+                : undefined;
+            const el = renderBlockContentV2(item, content, dataOverride);
+            if (el) tab.appendChild(el);
+        });
+        page.appendChild(tab);
+    }
+}
+
 function renderDocument() {
     const container = document.getElementById('v2-pages');
     if (!container) return;
@@ -202,80 +592,93 @@ function renderDocument() {
 
     let renderedAny = false;
 
+    // Gom các block liên tiếp (không phải section) có cùng loop_group_id thành 1 "run"
+    // (giống V1 groupedBlocks) — cho phép bọc khung Lặp nhóm / vẽ tab "Lần i" khi Chạy thử.
+    const runs = [];
+    let curRun = null;
     items.forEach((item, idx) => {
-        if (item.type === 'document-settings') return; // block cấu hình ẩn, giữ nguyên khi lưu
-        const isLocked = item.locked || item.isVirtual;
-        let el = null;
-
-        if (item.type === 'section') {
-            newPage(); // ngắt trang tại mỗi section
-            el = document.createElement('div');
-            el.className = 'v2-section';
-            el.id = 'v2-sec-' + item.id;
-            // Markup đồng bộ style section của V1: icon tròn + tiêu đề + gạch gradient
-            el.innerHTML = `
-                <div class="v2-section-icon"><i class="fas fa-layer-group"></i></div>
-                <div class="v2-section-body">
-                    <div class="v2-section-title">${esc(item.label || 'Tên phân đoạn')}${isLocked ? ' <i class="fas fa-lock ms-1" style="font-size:0.65em;opacity:0.55;" title="Section hệ thống (khóa)"></i>' : ''}</div>
-                    <div class="v2-section-line"></div>
-                </div>`;
-        } else if (item.type === 'static-text') {
-            el = document.createElement('div');
-            el.className = 'v2-block v2-static-text' + (isLocked ? ' v2-locked' : '');
-            el.setAttribute('data-id', item.id);
-            const inner = document.createElement('div');
-            inner.className = 'v2-editable';
-            inner.innerHTML = decorateBadges(item.content || '<p></p>');
-            el.appendChild(inner);
-            if (!BOOT.isReadOnly && !BOOT.isExecutionMode && !isLocked) {
-                inner.addEventListener('click', (e) => {
-                    if (activeHost === inner) return;
-                    e.stopPropagation();
-                    mountEditor(inner,
-                        () => item.content || '',
-                        (html) => { item.content = html; item.dirty = true; markDirty(); },
-                        { kind: 'text', item });
-                });
-            }
-        } else if (item.type === 'table') {
-            el = renderTable(item);
-            if (isLocked) el.classList.add('v2-locked');
+        if (item.type === 'document-settings') return;
+        if (item.type === 'section') { curRun = null; runs.push({ kind: 'section', item, idx }); return; }
+        const gid = item.loop_group_id || null;
+        if (gid && curRun && curRun.kind === 'loop' && curRun.groupId === gid) {
+            curRun.entries.push({ item, idx });
         } else {
-            // Loại block chưa hỗ trợ trong pilot (chart, linked-template...) — hiển thị placeholder
-            el = document.createElement('div');
-            el.className = 'v2-block v2-unsupported';
-            el.innerHTML = `<i class="fas fa-cube me-2"></i>[${esc(item.type)}] ${esc(item.label || '')} — <em>chưa hỗ trợ trong bản thử nghiệm, giữ nguyên khi lưu</em>`;
+            curRun = gid
+                ? {
+                    kind: 'loop', groupId: gid,
+                    loopCount: Math.max(1, parseInt(item.loop_count, 10) || 1),
+                    loopLabel: (item.loop_label || '').trim() || 'Lần', // tên gọi mỗi lần lặp (VD: Mẻ, Lô)
+                    entries: [{ item, idx }],
+                }
+                : { kind: 'plain', entries: [{ item, idx }] };
+            runs.push(curRun);
         }
+    });
 
-        if (el) {
-            if (!page) newPage(); // block đứng trước section đầu tiên vẫn có trang
+    runs.forEach((run) => {
+        if (run.kind === 'section') {
+            const { item } = run;
+            const isLocked = item.locked || item.isVirtual;
+            // Ngắt trang tại mỗi section, TRỪ KHI đánh dấu noPageBreak (VD: PHÊ DUYỆT nối
+            // liền ngay sau HEADER trên cùng 1 trang thay vì luôn nhảy sang trang mới).
+            if (!page || !item.noPageBreak) newPage();
+            const el = document.createElement('div');
+            el.className = 'v2-section' + (item.hideTitle ? ' v2-section-notitle' : '');
+            el.id = 'v2-sec-' + item.id;
+            // hideTitle: chỉ giữ lại làm MỐC ĐIỀU HƯỚNG (TOC/click), không hiện tiêu đề trên tài liệu.
+            if (!item.hideTitle) {
+                // Markup đồng bộ style section của V1: icon tròn + tiêu đề + gạch gradient
+                el.innerHTML = `
+                    <div class="v2-section-icon"><i class="fas fa-layer-group"></i></div>
+                    <div class="v2-section-body">
+                        <div class="v2-section-title">${esc(item.label || 'Tên phân đoạn')}${isLocked ? ' <i class="fas fa-lock ms-1" style="font-size:0.65em;opacity:0.55;" title="Section hệ thống (khóa)"></i>' : ''}</div>
+                        <div class="v2-section-line"></div>
+                    </div>`;
 
-            // Nút bình luận trên từng block (trừ section) — kiểu Google Docs
-            if (item.type !== 'section' && item.id) {
-                const cmtCount = getBlockComments(item.id).length;
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = 'v2-comment-btn' + (cmtCount > 0 ? ' has-comments' : '');
-                btn.title = cmtCount > 0 ? `${cmtCount} bình luận` : 'Thêm bình luận';
-                btn.innerHTML = '<i class="fas fa-comment"></i>' +
-                    (cmtCount > 0 ? `<span class="v2-cmt-count">${cmtCount}</span>` : '');
-                btn.addEventListener('mousedown', (e) => e.preventDefault());
-                btn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    openCommentsPanel(item.id);
-                });
-                el.appendChild(btn);
+                if (!isLocked && !BOOT.isReadOnly && !BOOT.isExecutionMode) {
+                    const toolbar = document.createElement('div');
+                    toolbar.className = 'v2-section-toolbar';
+                    const { track } = sectionTrackInfoV2(item);
+                    toolbar.innerHTML = `
+                        <button type="button" class="v2-block-action-btn" data-act="rename" title="Đổi tên phân đoạn"><i class="fas fa-pen"></i></button>
+                        ${isRoomTrackEligibleV2(item) ? '<button type="button" class="v2-block-action-btn" data-act="split" title="Tách nhánh phòng (công đoạn này chạy song song ở phòng khác)"><i class="fas fa-code-branch"></i></button>' : ''}
+                        <button type="button" class="v2-block-action-btn" data-act="toggle-pagebreak" title="${item.noPageBreak ? 'Đang nối liền trang trước — bấm để tách sang trang riêng' : 'Đang tự sang trang riêng — bấm để nối liền ngay sau trang trước (section không có nội dung)'}"><i class="fas fa-${item.noPageBreak ? 'link' : 'file'}"></i></button>
+                        ${track >= 2 ? '<button type="button" class="v2-block-action-btn v2-block-action-danger" data-act="del-track" title="Xóa nhánh này"><i class="fas fa-trash-alt"></i></button>' : ''}`;
+                    toolbar.querySelectorAll('button').forEach((b) => b.addEventListener('mousedown', (e) => e.preventDefault()));
+                    toolbar.querySelector('[data-act="rename"]').addEventListener('click', (e) => { e.stopPropagation(); renameSectionV2(item); });
+                    toolbar.querySelector('[data-act="split"]')?.addEventListener('click', (e) => { e.stopPropagation(); splitSectionIntoRoomTrackV2(item); });
+                    toolbar.querySelector('[data-act="toggle-pagebreak"]').addEventListener('click', (e) => { e.stopPropagation(); toggleSectionPageBreakV2(item); });
+                    toolbar.querySelector('[data-act="del-track"]')?.addEventListener('click', (e) => { e.stopPropagation(); deleteBlock(item.id); });
+                    el.appendChild(toolbar);
+                }
             }
-
             page.appendChild(el);
             renderedAny = true;
-            // Cho chèn khối mới dưới block thường, hoặc dưới block ảo CUỐI CÙNG
-            // (để thêm nội dung ngay sau vùng hệ thống)
-            const isLastVirtual = item.isVirtual && (!items[idx + 1] || !items[idx + 1].isVirtual);
-            if (!BOOT.isReadOnly && !BOOT.isExecutionMode && (!item.isVirtual || isLastVirtual)) {
-                page.appendChild(makeInserter(idx));
-            }
+            return;
         }
+
+        if (!page) newPage(); // block đứng trước section đầu tiên vẫn có trang
+
+        if (run.kind === 'plain') {
+            run.entries.forEach(({ item, idx }) => {
+                const el = buildBlockElV2(item, idx);
+                if (!el) return;
+                page.appendChild(el);
+                renderedAny = true;
+                // Cho chèn khối mới dưới block thường, hoặc dưới block ảo CUỐI CÙNG
+                // (để thêm nội dung ngay sau vùng hệ thống)
+                const isLastVirtual = item.isVirtual && (!items[idx + 1] || !items[idx + 1].isVirtual);
+                if (!BOOT.isReadOnly && !BOOT.isExecutionMode && (!item.isVirtual || isLastVirtual)) {
+                    page.appendChild(makeInserter(idx));
+                }
+            });
+            return;
+        }
+
+        // run.kind === 'loop'
+        if (BOOT.isExecutionMode) renderLoopGroupExecutionV2(run, page);
+        else renderLoopGroupDesignV2(run, page);
+        renderedAny = true;
     });
 
     if (!renderedAny) {
@@ -288,6 +691,388 @@ function renderDocument() {
     }
 
     selection.onAfterRender(); // gắn lại class chọn ô/biến sau khi wipe DOM
+    activateStaticBadges(); // Chạy thử: vẽ UI nhập liệu lên badge tĩnh (block không mount TipTap)
+    updateHeadingNumbersV2(); // đánh số tiêu đề tự động (nếu đang bật)
+    syncSplitPreviewV2(); // Split View: đồng bộ pane xem-thử nếu đang mở
+}
+
+/* ----------------------------------------------------------
+ * 1a-ter. ĐÁNH SỐ TIÊU ĐỀ TỰ ĐỘNG nhiều cấp (giống Word: 1. / 1.1. / 1.1.1.)
+ *   Số được TÍNH BẰNG JS theo thứ tự đọc toàn tài liệu (xuyên qua ranh giới block —
+ *   CSS counter thuần không reset đúng cấp con giữa các block) rồi gắn vào data-hnum,
+ *   CSS ::before hiển thị. Số KHÔNG nằm trong nội dung lưu => bật/tắt không đổi dữ liệu.
+ * ---------------------------------------------------------- */
+function headingNumberingOnV2() {
+    // Mặc định BẬT — chỉ tắt khi người dùng chủ động tắt (lưu false trong docProperties)
+    const v = BOOT.docProperties ? BOOT.docProperties.__headingNumbering : undefined;
+    return v !== false && v !== 'false' && v !== 0;
+}
+
+function updateHeadingNumbersV2() {
+    const on = headingNumberingOnV2();
+    document.body.classList.toggle('v2-heading-num', on);
+    document.getElementById('v2-btn-heading-num')?.classList.toggle('active', on);
+    if (!on) {
+        // Dọn số cũ để nơi khác đọc data-hnum (VD: mục lục) không thấy số stale
+        document.querySelectorAll('#v2-pages [data-hnum]').forEach((h) => h.removeAttribute('data-hnum'));
+        return;
+    }
+    // Sơ đồ đánh số: TITLE SECTION = cấp 1 (1., 2., ...); tiêu đề bên trong section
+    // là cấp con của section đó (h1 -> N.k, h2 -> N.k.m, h3 -> N.k.m.j).
+    // Section/block ẢO hoặc KHÓA (hệ thống: HEADER, PHÊ DUYỆT...) KHÔNG đánh số.
+    // NHÁNH PHÒNG (xem sectionTrackInfoV2): nhánh GỐC (track=1) luôn giữ số "N." KHÔNG đổi —
+    // đây là tiêu đề CHUNG của công đoạn dù đã tách nhánh hay chưa. Nhánh MỚI (track>=2) được
+    // đánh số con "N.1.", "N.2.", ... theo đúng số track (không phụ thuộc thứ tự DOM), để
+    // xoá 1 nhánh không làm đổi số của các nhánh còn lại.
+    let secN = 0;           // số thứ tự section thường
+    let inSystemSec = false; // đang duyệt bên trong section hệ thống -> bỏ qua tiêu đề
+    let curPrefix = '';     // tiền tố số của section hiện tại (VD "3." hoặc "3.2.") cho tiêu đề con
+    const groupSecN = new Map(); // key nhóm (category::stageCode) -> số cấp 1 đã gán (gán khi gặp lần đầu)
+    let n1 = 0, n2 = 0, n3 = 0;
+    document.querySelectorAll('#v2-pages .v2-section[id^="v2-sec-"], #v2-pages h1, #v2-pages h2, #v2-pages h3')
+        .forEach((el) => {
+            if (el.classList.contains('v2-section')) {
+                const item = items.find((it) => it.id === el.id.replace(/^v2-sec-/, ''));
+                const titleEl = el.querySelector('.v2-section-title');
+                if (!item || item.isVirtual || item.locked) {
+                    inSystemSec = true;
+                    titleEl?.removeAttribute('data-hnum');
+                } else {
+                    inSystemSec = false; n1 = 0; n2 = 0; n3 = 0;
+                    const { category, stageCode, track } = sectionTrackInfoV2(item);
+                    const key = category + '::' + stageCode;
+                    if (!groupSecN.has(key)) { secN++; groupSecN.set(key, secN); }
+                    const gSecN = groupSecN.get(key);
+                    const numStr = track >= 2 ? `${gSecN}.${track - 1}` : String(gSecN);
+                    curPrefix = numStr + '.';
+                    titleEl?.setAttribute('data-hnum', `${numStr}. `);
+                }
+                return;
+            }
+            // Tiêu đề trong section hệ thống hoặc trong block ảo/khóa: không đánh số
+            if (inSystemSec || el.closest('.v2-locked')) { el.removeAttribute('data-hnum'); return; }
+            const pre = secN ? curPrefix : '';
+            if (el.tagName === 'H1') { n1++; n2 = 0; n3 = 0; el.setAttribute('data-hnum', `${pre}${n1}. `); }
+            else if (el.tagName === 'H2') { n2++; n3 = 0; el.setAttribute('data-hnum', `${pre}${n1}.${n2}. `); }
+            else { n3++; el.setAttribute('data-hnum', `${pre}${n1}.${n2}.${n3}. `); }
+        });
+}
+
+function toggleHeadingNumberingV2() {
+    BOOT.docProperties = BOOT.docProperties || {};
+    BOOT.docProperties.__headingNumbering = !headingNumberingOnV2(); // true/false tường minh
+    markDirty(); // setting lưu trong docProperties (cột doc_properties) — gửi kèm lượt lưu sau
+    unmountEditor(); // chốt nội dung + render lại để số áp lên DOM tĩnh mới, chắc chắn thấy ngay
+    renderDocument();
+    showToast('success', headingNumberingOnV2() ? 'Đã bật đánh số tiêu đề tự động' : 'Đã tắt đánh số tiêu đề');
+}
+
+/* ----------------------------------------------------------
+ * 1a-bis. CHỌN DẢI KHỐI cho Lặp nhóm (nút "Lặp nhóm" trên toolbar mỗi block)
+ * ---------------------------------------------------------- */
+function paintBlockPickV2() {
+    document.querySelectorAll('.v2-block.v2-block-picked').forEach((el) => el.classList.remove('v2-block-picked'));
+    document.querySelectorAll('.v2-block-toolbar [data-act="pick"].active').forEach((b) => b.classList.remove('active'));
+    blockPickIds.forEach((id) => {
+        const el = document.querySelector(`.v2-block[data-id="${id}"]`);
+        el?.classList.add('v2-block-picked');
+        el?.querySelector('[data-act="pick"]')?.classList.add('active');
+    });
+    updateLoopPickBarV2();
+}
+
+function clearBlockPickV2() {
+    blockPickAnchor = null;
+    blockPickIds = [];
+    paintBlockPickV2();
+}
+
+function pickBlockV2(item, extend) {
+    if (!extend) {
+        if (blockPickIds.length === 1 && blockPickIds[0] === item.id) { clearBlockPickV2(); return; } // click lại -> bỏ chọn
+        blockPickAnchor = item.id;
+        blockPickIds = [item.id];
+        paintBlockPickV2();
+        return;
+    }
+    if (!blockPickAnchor) { blockPickAnchor = item.id; blockPickIds = [item.id]; paintBlockPickV2(); return; }
+    const anchorIdx = items.findIndex((i) => i.id === blockPickAnchor);
+    const targetIdx = items.findIndex((i) => i.id === item.id);
+    if (anchorIdx === -1 || targetIdx === -1) return;
+    const lo = Math.min(anchorIdx, targetIdx), hi = Math.max(anchorIdx, targetIdx);
+    const range = [];
+    for (let i = lo; i <= hi; i++) {
+        const it = items[i];
+        if (it.type === 'section' || it.type === 'document-settings') {
+            showToast('warning', 'Các khối được chọn phải nằm trong cùng 1 phân đoạn');
+            return;
+        }
+        range.push(it.id);
+    }
+    blockPickIds = range;
+    paintBlockPickV2();
+}
+
+/* ── CHẾ ĐỘ CHỌN KHỐI: bấm nút toolbar để bật, rồi click thẳng vào khối đầu →
+ *    khối cuối là chọn cả dải (không cần Shift, không mở editor). Esc/Hủy để thoát. ── */
+function setBlockPickModeV2(on) {
+    if (blockPickMode === on) return;
+    blockPickMode = on;
+    document.body.classList.toggle('v2-loop-pick-mode', on);
+    document.getElementById('v2-btn-loop-group')?.classList.toggle('active', on);
+    if (on) {
+        unmountEditor();
+        selection.clearAll();
+    } else {
+        clearBlockPickV2();
+    }
+    updateLoopPickBarV2();
+}
+
+/** Click khối trong chế độ chọn: lần 1 = neo, lần 2 (khối khác) = chọn cả dải giữa 2 khối. */
+function pickBlockRangeV2(item) {
+    if (!blockPickIds.length) {
+        blockPickAnchor = item.id;
+        blockPickIds = [item.id];
+        paintBlockPickV2();
+        return;
+    }
+    if (blockPickIds.length === 1 && blockPickIds[0] === item.id) { // click lại khối duy nhất -> bỏ chọn
+        blockPickAnchor = null;
+        blockPickIds = [];
+        paintBlockPickV2();
+        return;
+    }
+    if (blockPickIds.includes(item.id)) { // click 1 khối trong dải đã chọn -> đặt lại neo mới từ khối đó
+        blockPickAnchor = item.id;
+        blockPickIds = [item.id];
+        paintBlockPickV2();
+        return;
+    }
+    pickBlockV2(item, true); // mở rộng dải từ neo tới khối này (kèm kiểm tra cùng phân đoạn)
+}
+
+/** Thanh nổi dưới màn hình khi có khối đang "chọn" (blockPickIds — dù bật chế độ Lặp
+ *  nhóm hay chỉ bấm nút "Chọn khối" đơn lẻ trên toolbar): đếm số khối + nút Sao
+ *  chép/Cắt (dùng chung, đi kèm phím tắt Ctrl+C/X/V) + Cài đặt lặp (chỉ khi đang ở
+ *  chế độ chọn khối cho Lặp nhóm) + Hủy. */
+function updateLoopPickBarV2() {
+    let bar = document.getElementById('v2-loop-pickbar');
+    const show = blockPickMode || blockPickIds.length > 0;
+    if (!show) { bar?.remove(); return; }
+    if (!bar) {
+        bar = document.createElement('div');
+        bar.id = 'v2-loop-pickbar';
+        bar.innerHTML = `
+            <span id="v2-loop-pickbar-count"></span>
+            <button type="button" class="btn btn-sm btn-outline-primary" id="v2-loop-pickbar-copy"><i class="fas fa-copy me-1"></i>Sao chép</button>
+            <button type="button" class="btn btn-sm btn-outline-primary" id="v2-loop-pickbar-cut"><i class="fas fa-cut me-1"></i>Cắt</button>
+            <button type="button" class="btn btn-sm btn-primary" id="v2-loop-pickbar-apply">
+                <i class="fas fa-redo me-1"></i>Cài đặt lặp</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="v2-loop-pickbar-cancel">Hủy (Esc)</button>`;
+        document.body.appendChild(bar);
+        bar.querySelector('#v2-loop-pickbar-apply').addEventListener('click', () => openBlockLoopModalV2());
+        bar.querySelector('#v2-loop-pickbar-cancel').addEventListener('click', () => { clearBlockPickV2(); if (blockPickMode) setBlockPickModeV2(false); });
+        bar.querySelector('#v2-loop-pickbar-copy').addEventListener('click', () => copyPickedBlocksV2(false));
+        bar.querySelector('#v2-loop-pickbar-cut').addEventListener('click', () => copyPickedBlocksV2(true));
+    }
+    const hasPick = blockPickIds.length > 0;
+    const count = bar.querySelector('#v2-loop-pickbar-count');
+    count.textContent = hasPick
+        ? `Đã chọn ${blockPickIds.length} khối`
+        : 'Click khối ĐẦU, rồi click khối CUỐI để chọn dải';
+    bar.querySelector('#v2-loop-pickbar-apply').style.display = blockPickMode ? '' : 'none';
+    bar.querySelector('#v2-loop-pickbar-apply').disabled = !hasPick;
+    bar.querySelector('#v2-loop-pickbar-copy').disabled = !hasPick;
+    bar.querySelector('#v2-loop-pickbar-cut').disabled = !hasPick;
+}
+
+/** Mở lại đúng dải khối của 1 nhóm lặp đã có (click vào badge) rồi mở modal sửa. */
+function editLoopGroupV2(groupId) {
+    const ids = items.filter((i) => i.loop_group_id === groupId).map((i) => i.id);
+    if (!ids.length) return;
+    blockPickAnchor = ids[0];
+    blockPickIds = ids;
+    paintBlockPickV2();
+    openBlockLoopModalV2();
+}
+
+/** Cài đặt / sửa / gỡ Lặp nhóm khối cho dải khối đang được chọn (blockPickIds). */
+function openBlockLoopModalV2() {
+    if (BOOT.isReadOnly || BOOT.isExecutionMode) return;
+    if (!blockPickIds.length) {
+        window.Swal.fire({
+            icon: 'info',
+            title: 'Hướng dẫn chọn nhóm khối',
+            text: 'Nhấn nút "Lặp nhóm khối" trên thanh công cụ để vào chế độ chọn, sau đó click vào khối ĐẦU rồi click khối CUỐI để chọn dải khối cần lặp.',
+            confirmButtonText: 'Đã hiểu',
+        });
+        return;
+    }
+
+    let existingCount = 3;
+    let existingGroupId = null;
+    let existingLabel = '';
+    for (const id of blockPickIds) {
+        const b = items.find((i) => i.id === id);
+        if (b && b.loop_group_id) {
+            existingCount = b.loop_count || 3;
+            existingGroupId = b.loop_group_id;
+            existingLabel = b.loop_label || '';
+            break;
+        }
+    }
+
+    window.Swal.fire({
+        title: existingGroupId ? 'Chỉnh sửa Lặp nhóm khối' : 'Cài đặt Lặp nhóm khối',
+        html: `<div class="text-start">
+                <label class="form-label small fw-bold mb-1">Số lần lặp</label>
+                <input type="number" id="v2-loop-count-input" class="form-control" min="1" max="50" value="${existingCount}">
+                <label class="form-label small fw-bold mb-1 mt-3">Tên gọi mỗi lần lặp</label>
+                <input type="text" id="v2-loop-label-input" class="form-control" maxlength="30"
+                    placeholder="Mặc định: Lần" value="${esc(existingLabel)}">
+                <div class="form-text" style="font-size:0.72rem">Tab khi Chạy thử sẽ hiện "&lt;tên gọi&gt; 1", "&lt;tên gọi&gt; 2"... — VD: Mẻ, Lô, Thùng. Bỏ trống = "Lần".</div>
+                <div class="form-text" style="font-size:0.72rem">${blockPickIds.length} khối đang được chọn.</div>
+            </div>`,
+        showCancelButton: true,
+        showDenyButton: !!existingGroupId,
+        confirmButtonText: existingGroupId ? 'Cập nhật' : 'Áp dụng',
+        denyButtonText: 'Gỡ bỏ lặp',
+        denyButtonColor: '#dc3545',
+        cancelButtonText: 'Hủy',
+        preConfirm: () => {
+            const v = parseInt(document.getElementById('v2-loop-count-input').value, 10);
+            if (!v || v < 1) { window.Swal.showValidationMessage('Số lần lặp phải >= 1'); return false; }
+            return { count: v, label: (document.getElementById('v2-loop-label-input').value || '').trim() };
+        },
+    }).then((result) => {
+        if (result.isConfirmed) {
+            const { count: loopCount, label: loopLabel } = result.value;
+            const groupId = existingGroupId || ('loopgrp_v2_' + Date.now().toString(36));
+            saveDocState();
+            blockPickIds.forEach((id) => {
+                const b = items.find((i) => i.id === id);
+                if (b) {
+                    b.loop_group_id = groupId;
+                    b.loop_count = loopCount;
+                    if (loopLabel) b.loop_label = loopLabel; else delete b.loop_label;
+                    b.dirty = true;
+                }
+            });
+            setBlockPickModeV2(false);
+            clearBlockPickV2();
+            markDirty();
+            renderDocument();
+            showToast('success', 'Đã áp dụng lặp cho nhóm khối');
+        } else if (result.isDenied) {
+            saveDocState();
+            blockPickIds.forEach((id) => {
+                const b = items.find((i) => i.id === id);
+                if (b) { delete b.loop_group_id; delete b.loop_count; delete b.loop_label; b.dirty = true; }
+            });
+            setBlockPickModeV2(false);
+            clearBlockPickV2();
+            markDirty();
+            renderDocument();
+            showToast('info', 'Đã gỡ bỏ lặp nhóm khối');
+        }
+    });
+}
+
+/* ── Copy / Cắt / Dán CẢ CỤM khối đang "chọn" (blockPickIds) — Ctrl+C/X/V ──
+ *   Dán được vào bất kỳ vị trí nào (kể cả section/sub_section khác): section_id của
+ *   bản sao luôn ghi lại theo ĐIỂM CHÈN đang nhắm tới (getInsertPointV2), không giữ
+ *   section_id gốc. Biến số trong vùng copy được NHÂN BẢN sang id mới (tái dùng đúng
+ *   cơ chế buildFieldDuplicateMapV2 đã dùng cho copy/paste Ô bảng) để bản dán không
+ *   dùng chung biến với bản gốc — mỗi lần Dán lại tạo bản sao biến MỚI, dán nhiều lần
+ *   không bị trùng id. */
+/** Điểm chèn block mới = item (block/section) được click gần nhất; không có thì cuối
+ *  tài liệu. Click vào tiêu đề section -> chèn ngay đầu section đó. Dùng chung cho
+ *  global paste (Ctrl+V), gõ-phím-tạo-khối, và Dán cụm khối (pasteBlockClipboardV2). */
+function getInsertPointV2() {
+    let insertIdx = items.length;
+    let anchor = items.length ? items[items.length - 1] : null;
+    if (pasteAnchorIdV2 != null) {
+        const aIdx = items.findIndex((i) => String(i.id) === String(pasteAnchorIdV2));
+        if (aIdx !== -1) { insertIdx = aIdx + 1; anchor = items[aIdx]; }
+    }
+    // Anchor là block ảo hệ thống: không chèn xen giữa vùng hệ thống, dời xuống dưới block ảo cuối
+    if (anchor && anchor.isVirtual) {
+        while (insertIdx < items.length && items[insertIdx].isVirtual) insertIdx++;
+    }
+    const sectionId = anchor ? (anchor.type === 'section' ? (anchor.section_id || anchor.id) : anchor.section_id) : null;
+    return { insertIdx, sectionId };
+}
+function collectBlockHtmlListV2(blocks) {
+    const htmlList = [];
+    blocks.forEach((b) => {
+        if (typeof b.content === 'string') htmlList.push(b.content);
+        if (b.type === 'table' && Array.isArray(b.data)) {
+            b.data.forEach((row) => row.forEach((cell) => {
+                if (cell && typeof cell === 'object' && typeof cell.content === 'string') htmlList.push(cell.content);
+            }));
+        }
+    });
+    return htmlList;
+}
+
+function copyPickedBlocksV2(isCut) {
+    if (!blockPickIds.length) return;
+    const picked = blockPickIds
+        .map((id) => items.find((i) => i.id === id))
+        .filter(Boolean);
+    if (!picked.length) return;
+    blockClipboardV2 = { blocks: JSON.parse(JSON.stringify(picked)) };
+    showToast('info', isCut ? `Đã cắt ${picked.length} khối` : `Đã sao chép ${picked.length} khối`);
+    if (isCut) {
+        saveDocState();
+        picked.forEach((it) => { if (it.db_id) deletedBlockIds.push(it.db_id); });
+        items = items.filter((i) => !blockPickIds.includes(i.id));
+        clearBlockPickV2();
+        markDirty();
+        renderDocument();
+    }
+}
+
+function pasteBlockClipboardV2() {
+    if (BOOT.isReadOnly || BOOT.isExecutionMode) return;
+    if (!blockClipboardV2 || !blockClipboardV2.blocks.length) return;
+    const { insertIdx, sectionId } = getInsertPointV2();
+    const srcBlocks = blockClipboardV2.blocks;
+
+    const htmlList = collectBlockHtmlListV2(srcBlocks);
+    const { idMap, nameMap } = buildFieldDuplicateMapV2(htmlList);
+    if (Object.keys(idMap).length) applyFieldDuplicateMapV2(idMap, nameMap);
+
+    const newBlocks = srcBlocks.map((b) => {
+        const nb = JSON.parse(JSON.stringify(b));
+        nb.id = newBlockId();
+        nb.section_id = sectionId;
+        nb.dirty = true;
+        delete nb.db_id;
+        delete nb.content_db_id;
+        delete nb.loop_group_id; // không mang theo nhóm Lặp của bản gốc
+        delete nb.loop_count;
+        delete nb.loop_label;
+        if (typeof nb.content === 'string') nb.content = rewriteFieldIdsInHtmlV2(nb.content, idMap);
+        if (nb.type === 'table' && Array.isArray(nb.data)) {
+            nb.data.forEach((row) => row.forEach((cell) => {
+                if (cell && typeof cell === 'object') {
+                    if (typeof cell.content === 'string') cell.content = rewriteFieldIdsInHtmlV2(cell.content, idMap);
+                    delete cell.db_id;
+                    delete cell.content_db_id;
+                }
+            }));
+        }
+        return nb;
+    });
+
+    saveDocState();
+    items.splice(insertIdx, 0, ...newBlocks);
+    pasteAnchorIdV2 = newBlocks[newBlocks.length - 1].id;
+    markDirty();
+    renderDocument();
+    showToast('success', `Đã dán ${newBlocks.length} khối`);
 }
 
 /* =========================================================
@@ -297,6 +1082,43 @@ function newBlockId() {
     return 'blk_v2_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 
+/** Dựng object 1 khối mới (văn bản hoặc bảng rows x cols) — dùng chung cho nút hover
+ *  giữa 2 khối (addBlock) và 2 nút "Chèn văn bản"/"Chèn bảng" trên toolbar (chèn tại
+ *  đúng vị trí con trỏ / điểm click gần nhất, xem getInsertPointV2()). */
+function buildNewBlockV2(type, sectionId, rows = 2, cols = 3) {
+    if (type === 'table') {
+        return {
+            id: newBlockId(), type: 'table', label: 'Bảng mới',
+            rows, cols,
+            columns: Array.from({ length: cols }, (_, i) => ({ label: `Cột ${i + 1}`, width: '' })),
+            data: Array.from({ length: rows }, () =>
+                Array.from({ length: cols }, () => ({ content: '', rs: 1, cs: 1, hidden: false }))),
+            rowHeights: [], borderMode: 'all', hideHeader: true, // không hiện hàng tiêu đề "Cột 1/2/3..."
+            section_id: sectionId, dirty: true,
+        };
+    }
+    return {
+        id: newBlockId(), type: 'static-text', label: 'Văn bản',
+        content: '<p></p>', section_id: sectionId, dirty: true,
+    };
+}
+
+/** Chèn 1 khối đã dựng sẵn vào items tại insertAt, render lại rồi focus/scroll tới đó. */
+function insertBlockAndFocusV2(block, insertAt) {
+    items.splice(insertAt, 0, block);
+    pasteAnchorIdV2 = block.id; // chèn/gõ/dán tiếp theo sẽ nối ngay sau khối này
+    markDirty();
+    renderDocument();
+
+    const el = document.querySelector(`.v2-block[data-id="${block.id}"] .v2-editable`);
+    if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (block.type === 'static-text') el.click();
+    } else {
+        document.querySelector(`.v2-block[data-id="${block.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+}
+
 function addBlock(type, afterIndex) {
     if (BOOT.isReadOnly || BOOT.isExecutionMode) return; // Chạy thử: không cho thêm khối mới
     saveDocState();
@@ -304,36 +1126,164 @@ function addBlock(type, afterIndex) {
     const anchor = items[afterIndex] || null;
     const sectionId = anchor ? (anchor.type === 'section' ? (anchor.section_id || anchor.id) : anchor.section_id) : null;
 
-    let block;
-    if (type === 'table') {
-        const cols = 3, rows = 2;
-        block = {
-            id: newBlockId(), type: 'table', label: 'Bảng mới',
-            rows, cols,
-            columns: Array.from({ length: cols }, (_, i) => ({ label: `Cột ${i + 1}`, width: '' })),
-            data: Array.from({ length: rows }, () =>
-                Array.from({ length: cols }, () => ({ content: '', rs: 1, cs: 1, hidden: false }))),
-            rowHeights: [], borderMode: 'all', hideHeader: false,
-            section_id: sectionId, dirty: true,
-        };
-    } else {
-        block = {
-            id: newBlockId(), type: 'static-text', label: 'Văn bản',
-            content: '<p></p>', section_id: sectionId, dirty: true,
-        };
+    const block = buildNewBlockV2(type, sectionId);
+    const insertAt = Math.min(afterIndex + 1, items.length);
+    insertBlockAndFocusV2(block, insertAt);
+}
+
+/** Xóa 1 khối khỏi tài liệu (không cho xóa khối hệ thống/khóa) */
+async function deleteBlock(id) {
+    if (BOOT.isReadOnly || BOOT.isExecutionMode) return;
+    const item = items.find((i) => i.id === id);
+    if (!item || item.locked || item.isVirtual) return;
+
+    const res = await window.Swal.fire({
+        title: 'Xóa khối này?',
+        text: 'Nội dung khối sẽ bị xóa vĩnh viễn sau khi lưu hồ sơ.',
+        icon: 'warning', showCancelButton: true,
+        confirmButtonColor: '#d33', confirmButtonText: 'Xóa', cancelButtonText: 'Hủy',
+    });
+    if (!res.isConfirmed) return;
+
+    unmountEditor();
+    saveDocState();
+    if (item.db_id) deletedBlockIds.push(item.db_id);
+    items = items.filter((i) => i.id !== id);
+    markDirty();
+    renderDocument();
+}
+
+/* =========================================================
+ * 1b. TÁCH SECTION THÀNH NHIỀU "NHÁNH PHÒNG"
+ *   1 công đoạn sản xuất (section, stage_code số 1-7) trong thực tế có thể chạy song song
+ *   ở nhiều phòng khác nhau — nhưng hệ thống phân phối/thực thi chỉ cho phép 1 section đi
+ *   xuống ĐÚNG 1 phòng. Giải pháp: cho phép tách 1 section thành nhiều section_id riêng
+ *   (mỗi cái là 1 "nhánh"), cùng stage_code, được soạn và phân phối ĐỘC LẬP với nhau.
+ *   Sơ đồ section_id: nhánh gốc giữ nguyên "{category}_{stageCode}" (không đổi, để không vỡ
+ *   các bản ghi phân phối đã tham chiếu ID cũ); nhánh tách thêm mang dạng
+ *   "{category}_{track}_{stageCode}" — hậu tố chèn Ở GIỮA (không phải cuối) vì MỌI nơi khác
+ *   trong hệ thống (getRoomsConfig, TOC, nhãn "Công đoạn N"...) đều lấy segment CUỐI làm
+ *   stage_code; chèn giữa giữ nguyên hành vi đó ở mọi nơi khác.
+ * ========================================================= */
+
+/** Suy ra {category, stageCode, track} từ section_id hiện tại của 1 section item. */
+function sectionTrackInfoV2(item) {
+    const parts = String(item.section_id || '').split('_');
+    if (parts.length >= 3) {
+        const track = parseInt(parts[1], 10);
+        if (!isNaN(track)) return { category: parts[0], stageCode: parts.slice(2).join('_'), track };
+    }
+    return { category: parts.slice(0, -1).join('_'), stageCode: parts[parts.length - 1] || '', track: 1 };
+}
+
+/** Chỉ công đoạn sản xuất THẬT (stage_code số 1-7, không hệ thống/khóa) mới được tách nhánh —
+ *  đúng dải mà getRoomsConfig() phía server đã công nhận là công đoạn sản xuất. */
+function isRoomTrackEligibleV2(item) {
+    if (!item || item.type !== 'section' || item.isVirtual || item.locked) return false;
+    const code = Number(item.stage_code);
+    return Number.isInteger(code) && code >= 1 && code <= 7;
+}
+
+/** Tách 1 section thành nhánh phòng mới — nhánh mới RỖNG, người soạn tự viết/copy nội dung. */
+function splitSectionIntoRoomTrackV2(item) {
+    if (BOOT.isReadOnly || BOOT.isExecutionMode) return;
+    if (!isRoomTrackEligibleV2(item)) return;
+    const { category, stageCode } = sectionTrackInfoV2(item);
+
+    // Đếm số nhánh hiện có (kể cả gốc) cùng stage_code để suy ra số thứ tự nhánh mới.
+    const siblingCount = items.filter((it) => it.type === 'section' && !it.isVirtual
+        && String(it.stage_code) === String(stageCode)).length;
+    const nextTrack = siblingCount + 1;
+    const newSectionId = `${category}_${nextTrack}_${stageCode}`;
+
+    // Hỏi tên riêng cho nhánh mới ngay lúc tách — số thứ tự (VD "3.2.") được gắn TỰ ĐỘNG
+    // bởi updateHeadingNumbersV2() nên label chỉ cần phần tên, không cần ghép "Nhánh N".
+    const name = window.prompt('Tên tiêu đề cho nhánh phòng mới:', '');
+    if (name === null) return; // hủy tách nhánh nếu bấm Cancel
+
+    const newItem = {
+        id: newBlockId(),
+        type: 'section',
+        section_id: newSectionId,
+        stage_code: item.stage_code,
+        label: name.trim() || `Nhánh ${nextTrack}`,
+        locked: false,
+        isVirtual: false,
+        dirty: true,
+    };
+
+    // Chèn ngay sau phần tử CUỐI CÙNG hiện thuộc nhóm nhánh cùng stage_code này (quét từ vị trí
+    // section vừa bấm trở đi), để các nhánh luôn nằm liền nhau trong tài liệu.
+    const startIdx = items.indexOf(item);
+    let insertIdx = startIdx + 1;
+    for (let i = startIdx + 1; i < items.length; i++) {
+        const it = items[i];
+        if (it.type === 'section' && !it.isVirtual && String(it.stage_code) !== String(stageCode)) break;
+        insertIdx = i + 1;
     }
 
-    const insertAt = Math.min(afterIndex + 1, items.length);
-    items.splice(insertAt, 0, block);
+    saveDocState();
+    items.splice(insertIdx, 0, newItem);
+    markDirty();
+    renderDocument();
+}
+
+/** Đổi tên (label hiển thị) của 1 section — dùng cho cả section gốc lẫn nhánh vừa tách. */
+function renameSectionV2(item) {
+    if (BOOT.isReadOnly || BOOT.isExecutionMode) return;
+    if (!item || item.locked || item.isVirtual) return;
+    const name = window.prompt('Đổi tên phân đoạn:', item.label || '');
+    if (name === null) return; // hủy
+    const trimmed = name.trim();
+    if (!trimmed || trimmed === item.label) return;
+    saveDocState();
+    item.label = trimmed;
+    item.dirty = true;
+    markDirty();
+    renderDocument();
+}
+
+/** Bật/tắt ngắt trang riêng cho section — dùng khi section (thường là section cha không có
+ *  nội dung, chỉ giữ tiêu đề chung cho các nhánh con) không cần chiếm 1 trang riêng: section
+ *  tiếp theo sẽ nối liền ngay bên dưới thay vì luôn tự sang trang mới. */
+function toggleSectionPageBreakV2(item) {
+    if (BOOT.isReadOnly || BOOT.isExecutionMode) return;
+    if (!item || item.locked || item.isVirtual) return;
+    saveDocState();
+    item.noPageBreak = !item.noPageBreak;
+    item.dirty = true;
+    markDirty();
+    renderDocument();
+}
+
+/**
+ * Đổi vị trí 1 khối lên/xuống TRONG CÙNG SECTION (không cho vượt ranh giới section).
+ * @param {string} id
+ * @param {number} dir -1 = lên, 1 = xuống
+ */
+function moveBlock(id, dir) {
+    if (BOOT.isReadOnly || BOOT.isExecutionMode) return;
+    const idx = items.findIndex((i) => i.id === id);
+    if (idx === -1) return;
+    const item = items[idx];
+    if (item.locked || item.isVirtual) return;
+
+    const targetIdx = idx + dir;
+    const target = items[targetIdx];
+    if (!target || target.type === 'section' || target.locked || target.isVirtual) return;
+    if (target.section_id !== item.section_id) return;
+
+    unmountEditor();
+    saveDocState();
+    item.dirty = true;
+    target.dirty = true;
+    items[idx] = target;
+    items[targetIdx] = item;
     markDirty();
     renderDocument();
 
-    // Tự mở editor vào khối văn bản vừa thêm để gõ được ngay
-    const el = document.querySelector(`.v2-block[data-id="${block.id}"] .v2-editable`);
-    if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        if (type === 'static-text') el.click();
-    }
+    const el = document.querySelector(`.v2-block[data-id="${id}"]`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function renderTable(item) {
@@ -356,6 +1306,12 @@ function renderTable(item) {
         table.appendChild(colgroup);
     }
 
+    // "Thêm dòng (Cấp 2)" CHỈ hoạt động ở Chạy thử/thực thi — bấm ở Thiết kế sẽ đổi
+    // luôn cấu trúc bảng GỐC của template (không phải bản nháp), nên ẩn hẳn nút này khi
+    // đang thiết kế để không ai lỡ tay sửa cấu trúc gốc qua đường này. Khi hiện, chèn
+    // thêm 1 cột RIÊNG (không thuộc item.cols/columns, chỉ để hiện nút xoá hàng động).
+    const showAddRowUI = !!item.canAddRows && BOOT.isExecutionMode && !BOOT.isReadOnly;
+
     if (!item.hideHeader && Array.isArray(item.columns)) {
         const thead = document.createElement('thead');
         const tr = document.createElement('tr');
@@ -368,6 +1324,11 @@ function renderTable(item) {
             if (s.textAlign) th.style.textAlign = s.textAlign;
             tr.appendChild(th);
         });
+        if (showAddRowUI) {
+            const th = document.createElement('th');
+            th.className = 'v2-table-extra-col';
+            tr.appendChild(th);
+        }
         thead.appendChild(tr);
         table.appendChild(thead);
     }
@@ -392,10 +1353,19 @@ function renderTable(item) {
             if ((cell.rs || 1) > 1) td.rowSpan = cell.rs;
             if ((cell.cs || 1) > 1) td.colSpan = cell.cs;
             if (cell.backgroundColor) td.style.backgroundColor = cell.backgroundColor;
+            if (cell.color) td.style.color = cell.color;
             if (cell.textAlign) td.style.textAlign = cell.textAlign;
             if (cell.fontWeight) td.style.fontWeight = cell.fontWeight;
             if (cell.fontStyle) td.style.fontStyle = cell.fontStyle;
+            if (cell.verticalAlign) td.style.verticalAlign = cell.verticalAlign;
             if (item.columns && item.columns[c] && item.columns[c].width) td.style.width = item.columns[c].width;
+            // Viền bảng — luôn set cả 4 cạnh (inline) để đè viền mặc định của CSS.
+            // Cạnh chưa tuỳ biến -> dùng viền mặc định; cạnh đã xoá lưu dạng 'hidden'
+            // nên thắng khi border-collapse (none sẽ thua viền của ô kề bên).
+            td.style.borderTop = cell.borderTop || TABLE_DEFAULT_BORDER;
+            td.style.borderBottom = cell.borderBottom || TABLE_DEFAULT_BORDER;
+            td.style.borderLeft = cell.borderLeft || TABLE_DEFAULT_BORDER;
+            td.style.borderRight = cell.borderRight || TABLE_DEFAULT_BORDER;
 
             const inner = document.createElement('div');
             inner.className = 'v2-editable v2-cell';
@@ -405,23 +1375,54 @@ function renderTable(item) {
             if (!BOOT.isReadOnly && !BOOT.isExecutionMode && !item.locked) {
                 inner.addEventListener('click', (e) => {
                     if (activeHost === inner) return;
+                    if (hasNativeTextSelectionV2()) return; // vừa quét chọn chữ để copy — giữ selection, không mở editor
                     e.stopPropagation();
                     const cellRef = cell;
                     const rowIdx = r, colIdx = c;
                     mountEditor(inner,
                         () => cellRef.content || '',
                         (html) => { cellRef.content = html; item.dirty = true; markDirty(); },
-                        { kind: 'cell', item, r: rowIdx, c: colIdx });
+                        { kind: 'cell', item, r: rowIdx, c: colIdx }, { x: e.clientX, y: e.clientY });
                 });
             }
             tr.appendChild(td);
+        }
+        if (showAddRowUI) {
+            const extraTd = document.createElement('td');
+            extraTd.className = 'v2-table-extra-col';
+            const isDynamicRow = item.data[r][0] && item.data[r][0].is_dynamic;
+            if (BOOT.isExecutionMode && isDynamicRow) {
+                const delBtn = document.createElement('button');
+                delBtn.type = 'button';
+                delBtn.className = 'v2-table-row-del-btn';
+                delBtn.title = 'Xóa dòng';
+                delBtn.innerHTML = '<i class="fas fa-times-circle"></i>';
+                delBtn.addEventListener('mousedown', (e) => e.preventDefault());
+                delBtn.addEventListener('click', (e) => { e.stopPropagation(); deleteRuntimeTableRowV2(item, r); });
+                extraTd.appendChild(delBtn);
+            }
+            tr.appendChild(extraTd);
         }
         tbody.appendChild(tr);
     }
     table.appendChild(tbody);
     attachTableResizers(item, table);
     wrap.appendChild(table);
+    attachTableSizerV2(item, wrap, table); // núm kéo góc dưới-phải: resize cả bảng (như Word)
     selection.decorateTable(item, wrap, table); // nút ⊕ + gutter chọn hàng/cột
+
+    if (showAddRowUI) {
+        const addWrap = document.createElement('div');
+        addWrap.className = 'v2-table-addrow-wrap';
+        const addBtn = document.createElement('button');
+        addBtn.type = 'button';
+        addBtn.className = 'v2-table-addrow-btn';
+        addBtn.innerHTML = '<i class="fas fa-plus me-1"></i> Thêm dòng';
+        addBtn.addEventListener('mousedown', (e) => e.preventDefault());
+        addBtn.addEventListener('click', (e) => { e.stopPropagation(); addRuntimeTableRowV2(item); });
+        addWrap.appendChild(addBtn);
+        wrap.appendChild(addWrap);
+    }
     return wrap;
 }
 
@@ -445,43 +1446,84 @@ function attachTableResizers(item, table) {
         document.addEventListener('mouseup', up);
     };
 
-    // --- Bề rộng CỘT: resizer ở cạnh phải các ô hàng đầu tiên (ô colspan chỉnh cột cuối nó phủ) ---
-    const firstRow = table.querySelector('thead tr') || table.querySelector('tbody tr');
-    if (firstRow) {
-        let colCursor = 0;
-        Array.from(firstRow.children).forEach((cell) => {
-            const span = cell.colSpan || 1;
-            const targetCol = colCursor + span - 1;
-            colCursor += span;
-            if (!item.columns || !item.columns[targetCol]) return;
-            const rz = document.createElement('div');
-            rz.className = 'v2-col-resizer';
-            rz.addEventListener('mousedown', (e) => {
-                const colEl = cols[targetCol];
-                const startX = e.clientX;
-                const startW = (colEl && colEl.getBoundingClientRect().width) || cell.getBoundingClientRect().width;
-                saveDocState();
-                startDrag(e, rz,
-                    (ev) => {
-                        const w = Math.max(30, startW + ev.clientX - startX);
-                        if (colEl) colEl.style.width = w + 'px';
-                    },
-                    (ev) => {
-                        const w = Math.max(30, Math.round(startW + ev.clientX - startX));
-                        item.columns[targetCol].width = w + 'px';
-                        item.dirty = true;
-                        markDirty();
-                    });
+    // --- Bề rộng CỘT: resizer ở cạnh phải MỌI Ô (như Word) — ô colspan chỉnh cột cuối nó phủ ---
+    const addColResizer = (cell, targetCol) => {
+        if (!item.columns || !item.columns[targetCol]) return;
+        const rz = document.createElement('div');
+        rz.className = 'v2-col-resizer';
+        rz.addEventListener('mousedown', (e) => {
+            // "ĐÓNG BĂNG" bề rộng HIỆN TẠI của MỌI cột trước khi kéo: bảng dùng
+            // table-layout:fixed, cột nào CHƯA từng được set width cố định sẽ được
+            // trình duyệt tự chia đều phần còn lại — set width cho 1 mình cột đang
+            // kéo sẽ khiến TỔNG width lệch khỏi 100% và trình duyệt tự co giãn LẠI
+            // TOÀN BỘ cột theo tỉ lệ để khớp 100%, làm mọi cạnh khác cũng trôi theo.
+            cols.forEach((c, i) => {
+                if (!c) return;
+                const w = c.getBoundingClientRect().width;
+                c.style.width = w + 'px';
+                if (item.columns[i] && (!item.columns[i].width || item.columns[i].width === 'auto')) {
+                    item.columns[i].width = Math.round(w) + 'px';
+                }
             });
-            cell.appendChild(rz);
+
+            const colEl = cols[targetCol];
+            // Cột LIỀN KỀ bên phải: cùng "cặp đôi" hấp thụ đúng phần bù trừ (giống Word/
+            // Excel — kéo 1 đường phân cách cột chỉ đổi 2 cột 2 bên nó, KHÔNG đụng tới
+            // các cột khác lẫn tổng bề rộng bảng). Nếu đây là cột cuối (không có cột kế
+            // tiếp, tức đang kéo mép ngoài phải của bảng) thì không có cặp để bù trừ —
+            // giữ hành vi cũ (chỉ đổi 1 cột, mép ngoài bảng vẫn cố định do width:100%).
+            const nextColEl = cols[targetCol + 1] || null;
+            const startX = e.clientX;
+            const startW = (colEl && colEl.getBoundingClientRect().width) || cell.getBoundingClientRect().width;
+            const startWNext = nextColEl ? nextColEl.getBoundingClientRect().width : null;
+            saveDocState();
+
+            const clampDelta = (rawDelta) => {
+                let delta = Math.max(30 - startW, rawDelta); // cột đang kéo tối thiểu 30px
+                if (startWNext !== null) delta = Math.min(delta, startWNext - 30); // cột kế tối thiểu 30px
+                return delta;
+            };
+
+            startDrag(e, rz,
+                (ev) => {
+                    const delta = clampDelta(ev.clientX - startX);
+                    if (colEl) colEl.style.width = (startW + delta) + 'px';
+                    if (nextColEl) nextColEl.style.width = (startWNext - delta) + 'px';
+                },
+                (ev) => {
+                    const delta = clampDelta(ev.clientX - startX);
+                    item.columns[targetCol].width = Math.round(startW + delta) + 'px';
+                    if (nextColEl && item.columns[targetCol + 1]) {
+                        item.columns[targetCol + 1].width = Math.round(startWNext - delta) + 'px';
+                    }
+                    item.dirty = true;
+                    markDirty();
+                });
+        });
+        cell.appendChild(rz);
+    };
+    const headRow = table.querySelector('thead tr');
+    if (headRow) {
+        let colCursor = 0;
+        Array.from(headRow.children).forEach((cell) => {
+            const span = cell.colSpan || 1;
+            addColResizer(cell, colCursor + span - 1);
+            colCursor += span;
         });
     }
+    table.querySelectorAll('tbody td[data-col]').forEach((td) => {
+        const c = parseInt(td.dataset.col, 10);
+        addColResizer(td, c + (td.colSpan || 1) - 1);
+    });
 
-    // --- Chiều cao HÀNG: resizer ở cạnh dưới ô đầu mỗi hàng ---
-    table.querySelectorAll('tbody tr').forEach((tr) => {
-        const firstCell = tr.querySelector('td');
-        if (!firstCell) return;
-        const rIdx = parseInt(tr.dataset.rowIdx, 10);
+    // --- Chiều cao HÀNG: resizer ở cạnh dưới MỌI Ô (như Word) — ô rowspan chỉnh hàng cuối nó phủ ---
+    const trByIdx = {};
+    table.querySelectorAll('tbody tr').forEach((tr) => { trByIdx[tr.dataset.rowIdx] = tr; });
+    table.querySelectorAll('tbody td[data-row]').forEach((td) => {
+        const r = parseInt(td.dataset.row, 10);
+        const targetRow = r + (td.rowSpan || 1) - 1;
+        const tr = trByIdx[targetRow];
+        if (!tr) return;
         const rz = document.createElement('div');
         rz.className = 'v2-row-resizer';
         rz.addEventListener('mousedown', (e) => {
@@ -493,12 +1535,12 @@ function attachTableResizers(item, table) {
                 (ev) => {
                     const h = Math.max(18, Math.round(startH + ev.clientY - startY));
                     if (!Array.isArray(item.rowHeights)) item.rowHeights = [];
-                    item.rowHeights[rIdx] = h + 'px';
+                    item.rowHeights[targetRow] = h + 'px';
                     item.dirty = true;
                     markDirty();
                 });
         });
-        firstCell.appendChild(rz);
+        td.appendChild(rz);
     });
 }
 
@@ -511,6 +1553,9 @@ function attachTableResizers(item, table) {
  */
 function cleanWordHtml(html) {
     if (!html) return html;
+    // Đổi ký hiệu Wingdings/Symbol -> Unicode TRƯỚC khi gỡ style
+    // (cần đọc font-family trong style để biết ký tự thuộc font biểu tượng nào).
+    html = convertSymbolFontsHtmlV2(html);
     return html
         .replace(/<!--\[if[\s\S]*?<!\[endif\]-->/gi, '')   // conditional comments
         .replace(/<!--[\s\S]*?-->/g, '')                    // comment thường
@@ -519,8 +1564,86 @@ function cleanWordHtml(html) {
         .replace(/<xml[^>]*>[\s\S]*?<\/xml>/gi, '')         // block <xml> của Office
         .replace(/<\/?(meta|link)[^>]*>/gi, '')             // thẻ meta/link đơn lẻ
         .replace(/\sclass="?Mso[a-zA-Z]+"?/g, '')           // class MsoNormal...
-        .replace(/\sstyle="[^"]*mso-[^"]*"/gi, '')          // style chứa mso-*
+        // Chỉ gỡ TỪNG khai báo mso-* trong style, GIỮ NGUYÊN màu chữ/nền/cỡ chữ... của dữ liệu gốc
+        // (trước đây xoá cả thuộc tính style nếu chứa mso-* -> mất luôn color đi kèm).
+        .replace(/\sstyle="([^"]*)"/gi, (m, css) => {
+            const kept = css.split(';').map((s) => s.trim()).filter((d) => d && !/^mso-/i.test(d));
+            return kept.length ? ` style="${kept.join('; ')}"` : '';
+        })
         .replace(/<span[^>]*>\s*<\/span>/g, '');            // span rỗng còn sót
+}
+
+/* ---------- Chuyển ký tự font biểu tượng (Wingdings/Symbol) -> Unicode ---------- */
+// Word chèn checkbox/ký hiệu bằng CHỮ CÁI THƯỜNG + font Wingdings/Symbol
+// (vd: 'o' font Wingdings = ô vuông ☐). V2 luôn dùng font mặc định (fontFamily tắt)
+// nên nếu không chuyển sang Unicode thật thì ký hiệu biến thành chữ 'o', '¨'...
+const V2_SYMBOL_FONT_MAPS = {
+    wingdings: {
+        'J': '☺', 'L': '☹',
+        'l': '●', 'm': '○', 'n': '■', 'o': '☐', 'p': '❒', 'q': '❑',
+        'u': '◆', 'v': '❖', '§': '▪', '¨': '☐',
+        'ß': '←', 'à': '→', 'á': '↑', 'â': '↓',
+        'û': '✗', 'ü': '✓', 'ý': '☒', 'þ': '☑',
+    },
+    'wingdings 2': {
+        'O': '✗', 'P': '✓', 'Q': '✓', 'R': '☑', 'S': '☒',
+    },
+    symbol: {
+        'a': 'α', 'b': 'β', 'g': 'γ', 'd': 'δ', 'e': 'ε', 'z': 'ζ', 'h': 'η', 'q': 'θ',
+        'i': 'ι', 'k': 'κ', 'l': 'λ', 'm': 'μ', 'n': 'ν', 'x': 'ξ', 'o': 'ο', 'p': 'π',
+        'r': 'ρ', 's': 'σ', 'V': 'ς', 't': 'τ', 'u': 'υ', 'f': 'φ', 'c': 'χ', 'y': 'ψ', 'w': 'ω',
+        'G': 'Γ', 'D': 'Δ', 'Q': 'Θ', 'L': 'Λ', 'X': 'Ξ', 'P': 'Π', 'S': 'Σ',
+        'F': 'Φ', 'Y': 'Ψ', 'W': 'Ω',
+        '£': '≤', '³': '≥', '¹': '≠', '»': '≈', '´': '×', '¸': '÷', 'Ö': '√', '°': '°', '±': '±',
+    },
+};
+
+/** Duyệt DOM đã parse, đổi text bên trong phần tử mang font biểu tượng, rồi gỡ font đó */
+function convertSymbolFontsV2(root) {
+    root.querySelectorAll('[style*="font-family" i], font[face]').forEach((el) => {
+        const fam = ((el.style && el.style.fontFamily) || el.getAttribute('face') || '')
+            .toLowerCase().replace(/["']/g, '').split(',')[0].trim();
+        const key = ['wingdings 2', 'wingdings 3', 'wingdings', 'webdings', 'symbol']
+            .find((k) => fam === k);
+        if (!key) return;
+        const map = V2_SYMBOL_FONT_MAPS[key === 'wingdings 3' ? 'wingdings' : key] || {};
+        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+        let node;
+        while ((node = walker.nextNode())) {
+            node.nodeValue = Array.from(node.nodeValue).map((ch) => map[ch] || ch).join('');
+        }
+        if (el.style) el.style.fontFamily = '';
+        el.removeAttribute('face');
+    });
+}
+
+/** Bọc cleanWordHtml: chỉ tốn thêm 1 lần parse DOM khi HTML có nhắc tới font biểu tượng */
+function convertSymbolFontsHtmlV2(html) {
+    if (!html || !/wingdings|webdings|symbol/i.test(html)) return html;
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    convertSymbolFontsV2(doc.body);
+    return doc.body.innerHTML;
+}
+
+/**
+ * Gỡ màu chữ / màu nền INLINE bên trong HTML của ô.
+ * Chữ dán từ Word thường mang sẵn <span style="color:...">, mà style inline
+ * luôn thắng màu đặt ở cấp ô (td) — nên khi người dùng đổi màu cả ô phải gỡ
+ * màu inline cũ đi thì màu mới mới nhìn thấy được.
+ */
+function stripInlineColorV2(html, prop) {
+    if (!html) return html;
+    const re = prop === 'color' ? /^color\s*:/i : /^background(-color)?\s*:/i;
+    let out = String(html).replace(/\sstyle="([^"]*)"/gi, (m, css) => {
+        const kept = css.split(';').map((s) => s.trim()).filter((d) => d && !re.test(d));
+        return kept.length ? ` style="${kept.join('; ')}"` : '';
+    });
+    if (prop === 'color') {
+        out = out.replace(/(<font\b[^>]*?)\s+color="[^"]*"/gi, '$1'); // <font color="..">
+    } else {
+        out = out.replace(/<\/?mark\b[^>]*>/gi, ''); // bỏ highlight cũ để nền ô thắng
+    }
+    return out;
 }
 
 /* ---------- Các helper dán bảng/lưới (tái tạo hành vi V1) ---------- */
@@ -543,6 +1666,7 @@ function parseHtmlTableToGrid(tableEl) {
                 content: cleanWordHtml(cell.innerHTML),
                 rs, cs, hidden: false,
                 backgroundColor: cell.getAttribute('bgcolor') || style.backgroundColor || '',
+                color: style.color || '',
                 textAlign: cell.getAttribute('align') || style.textAlign || '',
                 fontWeight: style.fontWeight || '',
                 fontStyle: style.fontStyle || '',
@@ -561,6 +1685,21 @@ function parseHtmlTableToGrid(tableEl) {
     for (let r = 0; r < rows.length; r++) {
         if (!grid[r]) grid[r] = [];
         while (grid[r].length < colCount) grid[r].push({ content: '', rs: 1, cs: 1, hidden: false });
+    }
+
+    // Word thường kèm 1 "cột ma" trống ở cuối bảng (artifact định dạng) — cắt các cột cuối
+    // mà MỌI ô đều trống (không chữ, không badge/ảnh) và không bị ô nào span phủ sang.
+    const isBlankCol = (cIdx) => grid.every((row) => {
+        const c = row[cIdx];
+        if (!c) return true;
+        if (c.hidden) return false; // bị rowspan/colspan từ ô khác phủ sang -> cột đang được dùng
+        const html = c.content || '';
+        const text = html.replace(/<[^>]*>/g, '').replace(/&nbsp;/gi, ' ').trim();
+        return !text && !/data-field-id|<img/i.test(html);
+    });
+    while (colCount > 1 && isBlankCol(colCount - 1)) {
+        grid.forEach((row) => { if (row.length >= colCount) row.length = colCount - 1; });
+        colCount--;
     }
     return grid;
 }
@@ -593,6 +1732,7 @@ function spreadGridIntoTable(item, startR, startC, grid) {
                 content: cellObj.content || '',
                 rs: cellObj.rs || 1, cs: cellObj.cs || 1, hidden: cellObj.hidden || false,
                 backgroundColor: cellObj.backgroundColor || '',
+                color: cellObj.color || '',
                 textAlign: cellObj.textAlign || '',
                 fontWeight: cellObj.fontWeight || '',
                 fontStyle: cellObj.fontStyle || '',
@@ -616,9 +1756,163 @@ function gridToTableBlock(grid, sectionId) {
     };
 }
 
-function mountEditor(host, getHTML, setHTML, context = null) {
+/** Tạo block bảng mới là bản sao đầy đủ của 1 bảng đã copy (Ctrl+C khi chọn cả bảng qua nút ⊕) */
+function fullTableClipboardToBlock(fullTable, sectionId) {
+    return {
+        id: newBlockId(), type: 'table', label: 'Bảng (Copy)',
+        rows: fullTable.rows, cols: fullTable.cols,
+        columns: JSON.parse(JSON.stringify(fullTable.columns || [])),
+        data: JSON.parse(JSON.stringify(fullTable.data || [])),
+        rowHeights: JSON.parse(JSON.stringify(fullTable.rowHeights || [])),
+        borderMode: fullTable.borderMode, hideHeader: fullTable.hideHeader,
+        section_id: sectionId, dirty: true,
+    };
+}
+
+/** Đổi kiểu chữ CẢ KHỐI văn bản: 'p' | 'h1' | 'h2' | 'h3' — gọi từ menu chuột phải,
+ *  không cần đặt con trỏ vào khối như dropdown "Kiểu văn bản" trên toolbar. */
+function setBlockTextTagV2(item, tag) {
+    if (BOOT.isReadOnly || BOOT.isExecutionMode || item.locked || item.isVirtual) return;
+    unmountEditor(); // chốt nội dung đang gõ dở (nếu chính khối này đang mở editor)
+    saveDocState();
+    const tmp = document.createElement('div');
+    tmp.innerHTML = item.content || '<p></p>';
+    let changed = false;
+    Array.from(tmp.children).forEach((child) => {
+        if (/^(P|H[1-6])$/.test(child.tagName)) {
+            const rep = document.createElement(tag);
+            rep.innerHTML = child.innerHTML;
+            if (child.style && child.style.textAlign) rep.style.textAlign = child.style.textAlign;
+            child.replaceWith(rep);
+            changed = true;
+        }
+    });
+    if (!changed) tmp.innerHTML = `<${tag}>${tmp.innerHTML}</${tag}>`;
+    item.content = tmp.innerHTML;
+    item.dirty = true;
+    markDirty();
+    renderDocument();
+}
+
+/** Cắt các đoạn <p> RỖNG ở cuối nội dung (hàng thừa dưới tiêu đề/đoạn văn khi đóng editor). */
+function trimTrailingEmptyParagraphsV2(html) {
+    const out = String(html || '').replace(/(?:<p[^>]*>(?:\s|&nbsp;|<br[^>]*\/?>)*<\/p>\s*)+$/gi, '');
+    return out || '<p></p>'; // khối trống hoàn toàn vẫn giữ 1 đoạn để còn click vào gõ
+}
+
+/** Đang có vùng chữ bôi đen (native)? — dùng để KHÔNG mở editor ngay sau thao tác
+ *  quét chọn chữ, kẻo mountEditor thay DOM làm mất vùng chọn trước khi kịp Ctrl+C. */
+function hasNativeTextSelectionV2() {
+    const s = window.getSelection && window.getSelection();
+    return !!(s && !s.isCollapsed && String(s).trim());
+}
+
+/** Suy ra (getHTML/setHTML/context) cho 1 phần tử .v2-editable — dùng để tự mount
+ *  editor đúng ô bảng hoặc khối văn bản tĩnh đang chứa vùng chọn của người dùng. */
+function resolveEditableContextV2(editableEl) {
+    const td = editableEl.closest('td[data-row][data-col]');
+    const wrap = editableEl.closest('.v2-table-wrap[data-id]');
+    if (td && wrap) {
+        const item = items.find((i) => i.id === wrap.getAttribute('data-id'));
+        const r = parseInt(td.dataset.row, 10), c = parseInt(td.dataset.col, 10);
+        const cellRef = item && item.data && item.data[r] && item.data[r][c];
+        if (!item || !cellRef) return null;
+        return {
+            getHTML: () => cellRef.content || '',
+            setHTML: (html) => { cellRef.content = html; item.dirty = true; markDirty(); },
+            context: { kind: 'cell', item, r, c },
+        };
+    }
+    const blockEl = editableEl.closest('.v2-block[data-id]');
+    if (blockEl) {
+        const item = items.find((i) => i.id === blockEl.getAttribute('data-id'));
+        if (!item || item.type !== 'static-text') return null;
+        return {
+            getHTML: () => item.content || '',
+            setHTML: (html) => { item.content = html; item.dirty = true; markDirty(); },
+            context: { kind: 'text', item },
+        };
+    }
+    return null;
+}
+
+/** Đếm số ký tự VĂN BẢN THUẦN (bỏ qua thẻ) từ đầu container tới (node, offset) của Range. */
+function textOffsetInContainerV2(container, node, offset) {
+    let count = 0;
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+    let n;
+    while ((n = walker.nextNode())) {
+        if (n === node) return count + offset;
+        count += n.nodeValue.length;
+    }
+    return count; // không khớp node nào (offset trỏ vào phần tử, không phải text) -> coi như cuối
+}
+
+/** Tìm vị trí ProseMirror ứng với 1 mốc ký tự (tính theo văn bản thuần, cùng cách đếm
+ *  với textOffsetInContainerV2) trong tài liệu doc vừa parse lại từ CÙNG HTML gốc. */
+function pmPosFromTextOffsetV2(doc, targetOffset) {
+    let count = 0;
+    let found = null;
+    doc.descendants((node, nodePos) => {
+        if (found !== null) return false;
+        if (node.isText) {
+            const len = node.text.length;
+            if (count + len >= targetOffset) {
+                found = nodePos + (targetOffset - count);
+                return false;
+            }
+            count += len;
+        }
+        return true;
+    });
+    return found !== null ? found : doc.content.size;
+}
+
+/**
+ * Bôi đen (native selection) trên 1 ô/đoạn văn bản CHƯA MỞ EDITOR (đang hiển thị tĩnh)
+ * rồi bấm Delete/Backspace hoặc Ctrl+X: DOM tĩnh KHÔNG PHẢI contenteditable, nên trình
+ * duyệt không có cách nào tự xoá/cắt được nội dung — phím tắt coi như vô tác dụng, dù
+ * vùng bôi đen vẫn hiện trên màn hình. Xử lý: tự MỞ editor đúng ô/khối đó, TÁI TẠO lại
+ * đúng vùng chọn (quy về mốc ký tự thuần rồi tìm vị trí ProseMirror tương ứng — vì DOM
+ * cũ bị thay hoàn toàn khi mount nên không thể tái sử dụng Range cũ), rồi mới xoá (và
+ * copy vào clipboard hệ điều hành trước nếu là Cắt).
+ * Trả về true nếu đã xử lý xong, false nếu không áp dụng được (nhường lại cho nơi gọi).
+ */
+function convertStaticSelectionToEditableV2(action) {
+    const sel = window.getSelection && window.getSelection();
+    if (!sel || sel.isCollapsed || sel.rangeCount === 0 || !String(sel).trim()) return false;
+    const range = sel.getRangeAt(0);
+    const anchorEl = range.commonAncestorContainer.nodeType === 1
+        ? range.commonAncestorContainer
+        : range.commonAncestorContainer.parentElement;
+    const editableEl = anchorEl && anchorEl.closest ? anchorEl.closest('.v2-editable') : null;
+    if (!editableEl || editableEl.closest('.v2-editing')) return false; // đã là editor sống -> không phải trường hợp này
+
+    const resolved = resolveEditableContextV2(editableEl);
+    if (!resolved) return false;
+
+    const selectedText = String(sel);
+    const startOffset = textOffsetInContainerV2(editableEl, range.startContainer, range.startOffset);
+    const endOffset = textOffsetInContainerV2(editableEl, range.endContainer, range.endOffset);
+    const from = Math.min(startOffset, endOffset), to = Math.max(startOffset, endOffset);
+    if (from === to) return false;
+
+    if (action === 'cut' && navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(selectedText).catch(() => { /* trình duyệt/quyền hạn chặn -> vẫn xoá bình thường */ });
+    }
+
+    mountEditor(editableEl, resolved.getHTML, resolved.setHTML, resolved.context);
+    if (!activeEditor) return false;
+    const pmFrom = pmPosFromTextOffsetV2(activeEditor.state.doc, from);
+    const pmTo = pmPosFromTextOffsetV2(activeEditor.state.doc, to);
+    activeEditor.chain().focus().setTextSelection({ from: pmFrom, to: pmTo }).deleteSelection().run();
+    return true;
+}
+
+function mountEditor(host, getHTML, setHTML, context = null, clickPos = null) {
     if (BOOT.isReadOnly || BOOT.isExecutionMode) return; // Chạy thử: không cho sửa cấu trúc
     selection.clearCells(); // mở editor = thoát chế độ chọn ô
+    hideInsertCaretV2();    // đã có con trỏ thật trong editor, bỏ con trỏ điểm chèn
     unmountEditor(); // đóng editor đang mở (ghi dữ liệu về trước)
 
     host.classList.add('v2-editing');
@@ -628,8 +1922,8 @@ function mountEditor(host, getHTML, setHTML, context = null) {
         element: host,
         extensions: buildExtensions(),
         content: getHTML() || '<p></p>',
-        autofocus: 'end',
-        onUpdate: () => markDirty(),
+        autofocus: false,
+        onUpdate: () => { markDirty(); if (headingNumberingOnV2()) updateHeadingNumbersV2(); },
         editorProps: {
             // Dọn rác Word trước khi ProseMirror parse nội dung dán vào
             transformPastedHTML: (html) => cleanWordHtml(html),
@@ -639,16 +1933,31 @@ function mountEditor(host, getHTML, setHTML, context = null) {
         },
     });
     activeHost = host;
+    lastEditorArgs = { host, getHTML, setHTML, context }; // nhớ để mở lại khi cần chèn
     const editorInstance = activeEditor;
+
+    // Đặt con trỏ đúng vị trí người dùng vừa click (thay vì luôn nhảy về cuối nội dung):
+    // nội dung tĩnh bị thay bằng DOM của TipTap ở trên nên phải tự tính lại vị trí theo tọa độ click.
+    let focusPos = 'end';
+    if (clickPos) {
+        const coordsPos = editorInstance.view.posAtCoords({ left: clickPos.x, top: clickPos.y });
+        if (coordsPos) focusPos = coordsPos.pos;
+    }
+    editorInstance.commands.focus(focusPos);
     activeSync = () => {
         let html = editorInstance.getHTML() || '';
         html = html.replace(/ ProseMirror-selectednode/g, '').replace(/ProseMirror-selectednode/g, '').replace(/ class=""/g, '');
-        setHTML(html);
+        setHTML(trimTrailingEmptyParagraphsV2(html));
     };
     refreshToolbarState();
 
     activeEditor.on('selectionUpdate', refreshToolbarState);
-    activeEditor.on('transaction', refreshToolbarState);
+    // Mỗi transaction ProseMirror có thể vẽ lại node (mất data-hnum) -> đánh số lại luôn
+    activeEditor.on('transaction', () => {
+        refreshToolbarState();
+        if (headingNumberingOnV2()) updateHeadingNumbersV2();
+    });
+    if (headingNumberingOnV2()) updateHeadingNumbersV2(); // mount xong: áp số lên DOM editor mới
 }
 
 /**
@@ -658,6 +1967,48 @@ function mountEditor(host, getHTML, setHTML, context = null) {
 function handleEditorPaste(event, context) {
     const cb = event.clipboardData || window.clipboardData;
     if (!cb) return false;
+
+    // 0) Dán ẢNH trực tiếp từ clipboard (screenshot Windows/Snipping Tool, copy 1 icon/ký
+    //    hiệu nhỏ nằm giữa câu chữ như Word...) — trình duyệt đưa ảnh vào clipboard dưới
+    //    dạng FILE (image/png...), không phải text/html nên các nhánh bên dưới không thấy
+    //    được. Đọc file -> dataURL (FileReader bất đồng bộ) rồi chèn NGAY tại con trỏ dạng
+    //    node INLINE v2InlineImage (khác v2Image của nút toolbar "Chèn hình ảnh": node đó
+    //    LUÔN là block riêng 1 dòng, canh giữa, % theo bề rộng cột — không hợp cho 1 icon
+    //    nhỏ nằm lẫn trong câu). Kích thước mặc định lấy theo ẢNH GỐC (giữ nguyên tỉ lệ,
+    //    giới hạn tối đa ~32px cao bằng khoảng 1 dòng chữ) để giống hệt cách Word chèn icon
+    //    inline — người dùng kéo tay cầm để phóng to/thu nhỏ thêm nếu cần. Chặn hành vi dán
+    //    mặc định ngay lập tức (return true) vì việc đọc file xảy ra sau đó, không đồng bộ.
+    const imageItem = context && (context.kind === 'text' || context.kind === 'cell')
+        ? Array.from(cb.items || []).find((it) => it.kind === 'file' && it.type && it.type.startsWith('image/'))
+        : null;
+    if (imageItem) {
+        const file = imageItem.getAsFile();
+        if (file) {
+            const editor = activeEditor;
+            const reader = new FileReader();
+            reader.onload = () => {
+                if (!editor || editor.isDestroyed) return;
+                const dataUrl = reader.result;
+                const probe = new Image();
+                probe.onload = () => {
+                    if (!editor || editor.isDestroyed) return;
+                    const naturalW = probe.naturalWidth || 32;
+                    const naturalH = probe.naturalHeight || 32;
+                    const maxH = 32; // ~ cao 1 dòng chữ, giống icon inline trong Word
+                    const width = naturalH > maxH ? Math.round(naturalW * (maxH / naturalH)) : naturalW;
+                    editor.chain().focus().insertContent({ type: 'v2InlineImage', attrs: { src: dataUrl, width } }).run();
+                };
+                probe.onerror = () => {
+                    if (!editor || editor.isDestroyed) return;
+                    editor.chain().focus().insertContent({ type: 'v2InlineImage', attrs: { src: dataUrl, width: 24 } }).run();
+                };
+                probe.src = dataUrl;
+            };
+            reader.readAsDataURL(file);
+            return true;
+        }
+    }
+
     const htmlData = cb.getData('text/html');
     const plainText = cb.getData('text/plain');
 
@@ -731,6 +2082,26 @@ function handleEditorPaste(event, context) {
         return true;
     }
 
+    // 4) Đang ở BLOCK VĂN BẢN, clipboard hệ thống không có bảng/nội dung, nhưng lần
+    //    Ctrl+C gần nhất là "chọn cả bảng" (nút ⊕, xem selection.js) -> dán bản sao
+    //    bảng đó thành BLOCK BẢNG MỚI ngay dưới block hiện tại (khắc phục: chọn bảng
+    //    -> click ra chỗ khác -> Ctrl+V không có tác dụng gì).
+    if (context && context.kind === 'text' && tables.length === 0 && !htmlData && !plainText) {
+        const fullTable = selection.getFullTableClipboard();
+        if (fullTable) {
+            const { item } = context;
+            setTimeout(() => {
+                const baseIdx = items.indexOf(item);
+                unmountEditor();
+                saveDocState();
+                items.splice(baseIdx + 1, 0, fullTableClipboardToBlock(fullTable, item.section_id));
+                markDirty();
+                renderDocument();
+            }, 0);
+            return true;
+        }
+    }
+
     return false; // mặc định: TipTap dán inline (đã qua cleanWordHtml)
 }
 
@@ -739,22 +2110,42 @@ function unmountEditor() {
     const host = activeHost;
     const sync = activeSync;
     const editor = activeEditor;
+    try { const s = editor.state.selection; lastEditorSel = { from: s.from, to: s.to }; } catch (e) { /* giữ vị trí cũ */ }
     activeEditor = null; activeHost = null; activeSync = null;
 
-    sync();                              // ghi HTML về items (TipTap xuất badge chuẩn cũ)
-    let html = editor.getHTML() || '';
+    // BỌC TRY/CATCH: trước đây nếu sync() (ghi HTML về items) ném lỗi vì bất kỳ lý do gì,
+    // toàn bộ hàm dừng NGAY — editor.destroy() và host.innerHTML KHÔNG BAO GIỜ chạy tới,
+    // để lại 1 editor "ma": activeEditor đã null (coi như đã đóng) nhưng NodeView cũ vẫn
+    // còn sống nguyên trong DOM, badge vẫn hiển thị trên màn hình dù dữ liệu chưa được ghi
+    // — đúng triệu chứng "biến hiện trên màn hình nhưng Lưu báo thiếu dữ liệu". Giờ dù bước
+    // nào lỗi, vẫn ĐẢM BẢO destroy() + reset DOM chạy, và lỗi được log rõ để truy vết.
+    try {
+        sync();
+    } catch (err) {
+        console.error('[V2] unmountEditor: sync() (ghi dữ liệu về ô/khối) thất bại — nội dung vừa sửa có thể bị mất:', err);
+    }
+    let html = '';
+    try {
+        html = editor.getHTML() || '';
+    } catch (err) {
+        console.error('[V2] unmountEditor: editor.getHTML() thất bại:', err);
+    }
     html = html.replace(/ ProseMirror-selectednode/g, '').replace(/ProseMirror-selectednode/g, '').replace(/ class=""/g, '');
-    editor.destroy();
+    html = trimTrailingEmptyParagraphsV2(html); // bỏ hàng rỗng thừa cuối khối
+    try { editor.destroy(); } catch (err) { console.error('[V2] unmountEditor: editor.destroy() thất bại:', err); }
     host.classList.remove('v2-editing');
-    host.innerHTML = decorateBadges(html); // trở lại chế độ xem tĩnh
+    host.innerHTML = decorateBadges(html); // trở lại chế độ xem tĩnh — LUÔN chạy dù các bước trên lỗi
     refreshToolbarState();
 }
 
-// Click ra ngoài vùng đang edit -> unmount (giữ nguyên khi click vào toolbar/panel)
+// Click ra ngoài vùng đang edit -> unmount (giữ nguyên khi click vào toolbar/panel/modal —
+// các modal chèn Symbol/Công thức/Hình ảnh/Document Property cần activeEditor còn sống
+// để insertContent() vào đúng vị trí con trỏ đã chọn trước khi mở modal).
 document.addEventListener('mousedown', (e) => {
     if (!activeHost) return;
     if (activeHost.contains(e.target)) return;
-    if (e.target.closest('#v2-toolbar') || e.target.closest('#v2-field-panel')) return;
+    if (e.target.closest('#v2-toolbar') || e.target.closest('#v2-field-panel') || e.target.closest('.modal')
+        || e.target.closest('#v2-context-menu')) return; // menu chuột phải: giữ editor + con trỏ để "Dán biến" đúng vị trí
     unmountEditor();
 });
 
@@ -891,12 +2282,47 @@ function refreshToolbarState() {
         styleSel.value = v;
     }
     const ts = activeEditor.getAttributes('textStyle') || {};
-    const fontSel = document.getElementById('v2-sel-font');
-    if (fontSel) fontSel.value = ts.fontFamily || '';
     const sizeSel = document.getElementById('v2-sel-size');
     if (sizeSel) sizeSel.value = ts.fontSize || '';
     const lhSel = document.getElementById('v2-sel-lineheight');
     if (lhSel) lhSel.value = ts.lineHeight || '';
+}
+
+/**
+ * Gắn 1 ô chọn màu (<input type="color">) hoạt động bền vững với hộp màu của HĐH.
+ * editorFn(chain, value): áp lên vùng chữ đang chọn trong editor.
+ * cellFn(value): áp khi đang chọn ô (không có editor).
+ */
+function bindColorControlV2(inputId, editorFn, cellFn) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    let snap = null; // ngữ cảnh chụp lúc bấm swatch
+
+    const grab = () => {
+        if (activeEditor) {
+            const s = activeEditor.state.selection;
+            snap = { editor: activeEditor, from: s.from, to: s.to };
+        } else if (selection.hasCells()) {
+            snap = { cells: true };
+        } else {
+            snap = null;
+        }
+    };
+    // mousedown/focus xảy ra TRƯỚC khi editor mất focus -> vùng chọn còn nguyên.
+    input.addEventListener('mousedown', grab);
+    input.addEventListener('focus', grab);
+
+    const apply = () => {
+        const val = input.value;
+        if (snap && snap.editor) {
+            // Khôi phục đúng vùng chữ đã chọn (chống thu gọn khi mở hộp màu) rồi tô.
+            editorFn(snap.editor.chain().focus().setTextSelection({ from: snap.from, to: snap.to }), val).run();
+        } else if (snap && snap.cells) {
+            cellFn(val);
+        }
+    };
+    input.addEventListener('input', apply);   // xem trước khi kéo trong hộp màu
+    input.addEventListener('change', apply);  // chốt khi đóng hộp màu
 }
 
 /** Gắn sự kiện cho các dropdown/màu của toolbar định dạng */
@@ -912,10 +2338,6 @@ function initFormatControls() {
         if (v === 'p') ch.setParagraph().run();
         else ch.toggleHeading({ level: parseInt(v.slice(1), 10) }).run();
     });
-    on('v2-sel-font', (v) => {
-        const ch = activeEditor.chain().focus();
-        v ? ch.setFontFamily(v).run() : ch.unsetFontFamily().run();
-    });
     on('v2-sel-size', (v) => {
         const ch = activeEditor.chain().focus();
         v ? ch.setFontSize(v).run() : ch.unsetFontSize().run();
@@ -925,22 +2347,34 @@ function initFormatControls() {
         v ? ch.setLineHeight(v).run() : ch.unsetLineHeight().run();
     });
 
-    const color = document.getElementById('v2-color-text');
-    if (color) color.addEventListener('input', () => {
-        if (activeEditor) activeEditor.chain().focus().setColor(color.value).run();
-    });
-    const hl = document.getElementById('v2-color-highlight');
-    if (hl) hl.addEventListener('input', () => {
-        if (activeEditor) { activeEditor.chain().focus().setHighlight({ color: hl.value }).run(); return; }
-        // Chọn nhiều ô: tô màu NỀN cả ô (prop cấp ô, tương thích V1)
-        if (selection.hasCells()) selection.applyToCells((cell) => { cell.backgroundColor = hl.value; });
-    });
+    // Màu chữ / Màu nền — hoạt động ở CẢ 2 chế độ:
+    //  • Đang mở editor: tô cho VÙNG CHỮ đang chọn.
+    //  • Đang chọn Ô (không editor): tô cho cả ô (prop cấp ô, tương thích V1).
+    // Mở hộp màu của hệ điều hành làm editor mất focus và có thể thu gọn vùng chọn,
+    // nên phải CHỤP ngữ cảnh (editor + from/to, hoặc cờ chọn ô) ngay lúc bấm swatch,
+    // rồi khôi phục đúng vùng đó khi áp màu.
+    bindColorControlV2('v2-color-text',
+        (chain, val) => chain.setColor(val),
+        (val) => selection.applyToCells((cell) => {
+            cell.color = val;
+            // Gỡ màu inline (chữ dán từ Word) để màu cấp ô thắng
+            cell.content = stripInlineColorV2(cell.content, 'color');
+        }));
+    bindColorControlV2('v2-color-highlight',
+        (chain, val) => chain.setHighlight({ color: val }),
+        (val) => selection.applyToCells((cell) => {
+            cell.backgroundColor = val;
+            cell.content = stripInlineColorV2(cell.content, 'background');
+        }));
     const hlOff = document.getElementById('v2-btn-unhighlight');
     if (hlOff) {
         hlOff.addEventListener('mousedown', (e) => e.preventDefault());
         hlOff.addEventListener('click', () => {
             if (activeEditor) { activeEditor.chain().focus().unsetHighlight().run(); return; }
-            if (selection.hasCells()) selection.applyToCells((cell) => { cell.backgroundColor = ''; });
+            if (selection.hasCells()) selection.applyToCells((cell) => {
+                cell.backgroundColor = '';
+                cell.content = stripInlineColorV2(cell.content, 'background');
+            });
         });
     }
     const linkBtn = document.getElementById('v2-btn-link');
@@ -948,6 +2382,170 @@ function initFormatControls() {
         linkBtn.addEventListener('mousedown', (e) => e.preventDefault());
         linkBtn.addEventListener('click', promptLink);
     }
+
+    // Căn nội dung ô bảng theo chiều dọc (trên/giữa/dưới)
+    [['v2-btn-valign-top', 'top'], ['v2-btn-valign-middle', 'middle'], ['v2-btn-valign-bottom', 'bottom']]
+        .forEach(([bid, v]) => {
+            const b = document.getElementById(bid);
+            if (!b) return;
+            b.addEventListener('mousedown', (e) => e.preventDefault()); // giữ selection/focus hiện tại
+            b.addEventListener('click', () => applyVAlignToolbarV2(v));
+        });
+
+    // Đánh số tiêu đề tự động nhiều cấp (toggle, lưu trong docProperties)
+    const hnumBtn = document.getElementById('v2-btn-heading-num');
+    if (hnumBtn) {
+        hnumBtn.addEventListener('mousedown', (e) => e.preventDefault());
+        hnumBtn.addEventListener('click', toggleHeadingNumberingV2);
+    }
+}
+
+/* =========================================================
+ * 3a-bis. SAO CHÉP ĐỊNH DẠNG (Format Painter — kiểu Word/Google Docs)
+ *   Click 1 lần: dùng 1 lần rồi tự tắt. Double-click (trong 400ms): khoá,
+ *   dán liên tục tới khi bấm lại nút hoặc nhấn Esc.
+ *   - Có editor đang mở + đang bôi đen text -> lấy/dán định dạng KÝ TỰ
+ *     (bold/italic/underline/strike/sub/sup/màu chữ/cỡ chữ/giãn dòng/
+ *     highlight/căn lề) qua TipTap mark commands.
+ *   - Không có editor, đang chọn 1 ô bảng -> lấy/dán định dạng Ô
+ *     (nền/căn lề/đậm/nghiêng/căn dọc) qua selection.applyToCells.
+ * ========================================================= */
+let painterActive = false;
+let painterLocked = false;
+let painterFmt = null;
+let painterClickTimer = null;
+
+function captureFormatPainterV2() {
+    if (activeEditor && !activeEditor.state.selection.empty) {
+        const attrs = activeEditor.getAttributes('textStyle') || {};
+        const align = ['left', 'center', 'right', 'justify'].find((a) => activeEditor.isActive({ textAlign: a })) || null;
+        const hlActive = activeEditor.isActive('highlight');
+        return {
+            type: 'text',
+            bold: activeEditor.isActive('bold'),
+            italic: activeEditor.isActive('italic'),
+            underline: activeEditor.isActive('underline'),
+            strike: activeEditor.isActive('strike'),
+            subscript: activeEditor.isActive('subscript'),
+            superscript: activeEditor.isActive('superscript'),
+            color: attrs.color || null,
+            fontSize: attrs.fontSize || null,
+            lineHeight: attrs.lineHeight || null,
+            highlight: hlActive ? (activeEditor.getAttributes('highlight').color || null) : null,
+            textAlign: align,
+        };
+    }
+    if (!activeEditor && selection.hasCells() && selection.cellCount() === 1) {
+        const a = selection.getAnchorCell();
+        if (a) {
+            return {
+                type: 'cell',
+                backgroundColor: a.cell.backgroundColor || '',
+                textAlign: a.cell.textAlign || '',
+                fontWeight: a.cell.fontWeight || '',
+                fontStyle: a.cell.fontStyle || '',
+                verticalAlign: a.cell.verticalAlign || '',
+            };
+        }
+    }
+    return null;
+}
+
+function applyFormatPainterV2(fmt) {
+    if (!fmt) return false;
+    if (fmt.type === 'text') {
+        if (!activeEditor || activeEditor.state.selection.empty) return false;
+        const ch = activeEditor.chain().focus().unsetAllMarks();
+        if (fmt.bold) ch.setBold();
+        if (fmt.italic) ch.setItalic();
+        if (fmt.underline) ch.setUnderline();
+        if (fmt.strike) ch.setStrike();
+        if (fmt.subscript) ch.setSubscript();
+        if (fmt.superscript) ch.setSuperscript();
+        if (fmt.color) ch.setColor(fmt.color);
+        if (fmt.fontSize) ch.setFontSize(fmt.fontSize);
+        if (fmt.lineHeight) ch.setLineHeight(fmt.lineHeight);
+        if (fmt.highlight) ch.setHighlight({ color: fmt.highlight });
+        fmt.textAlign ? ch.setTextAlign(fmt.textAlign) : ch.unsetTextAlign();
+        ch.run();
+        return true;
+    }
+    if (fmt.type === 'cell' && selection.hasCells()) {
+        selection.applyToCells((cell) => {
+            cell.backgroundColor = fmt.backgroundColor || '';
+            cell.textAlign = fmt.textAlign || '';
+            cell.fontWeight = fmt.fontWeight || '';
+            cell.fontStyle = fmt.fontStyle || '';
+            cell.verticalAlign = fmt.verticalAlign || '';
+        });
+        return true;
+    }
+    return false;
+}
+
+function enableFormatPainterV2() {
+    painterActive = true;
+    document.getElementById('v2-btn-format-painter')?.classList.add('active');
+    document.body.classList.add('v2-format-painter-active');
+    document.addEventListener('keydown', painterKeydownV2);
+    document.addEventListener('mouseup', painterMouseUpV2);
+}
+
+function disableFormatPainterV2() {
+    painterActive = false;
+    painterLocked = false;
+    painterFmt = null;
+    document.getElementById('v2-btn-format-painter')?.classList.remove('active');
+    document.body.classList.remove('v2-format-painter-active');
+    document.removeEventListener('keydown', painterKeydownV2);
+    document.removeEventListener('mouseup', painterMouseUpV2);
+}
+
+function painterKeydownV2(e) {
+    if (e.key === 'Escape') disableFormatPainterV2();
+}
+
+function painterMouseUpV2(e) {
+    if (e.target.closest('#v2-btn-format-painter')) return; // bấm nút -> để click handler xử lý bật/tắt
+    // Đợi 1 tick để TipTap/selection cập nhật xong sau khi thả chuột
+    setTimeout(() => {
+        let applied = false;
+        if (painterFmt?.type === 'text' && activeEditor && !activeEditor.state.selection.empty) {
+            applied = applyFormatPainterV2(painterFmt);
+            if (applied) markDirty();
+        } else if (painterFmt?.type === 'cell' && selection.hasCells()) {
+            applied = applyFormatPainterV2(painterFmt);
+        }
+        if (applied && !painterLocked) disableFormatPainterV2();
+    }, 0);
+}
+
+function toggleFormatPainterV2() {
+    if (painterActive) { disableFormatPainterV2(); return; }
+
+    if (painterClickTimer) {
+        clearTimeout(painterClickTimer);
+        painterClickTimer = null;
+        painterLocked = true;
+    } else {
+        painterLocked = false;
+        painterClickTimer = setTimeout(() => { painterClickTimer = null; }, 400);
+    }
+
+    painterFmt = captureFormatPainterV2();
+    if (!painterFmt) {
+        showToast('info', 'Hãy bôi đen văn bản hoặc chọn 1 ô để sao chép định dạng');
+        return;
+    }
+    enableFormatPainterV2();
+    showToast('info', painterLocked ? '🖌️ Đã khoá — nhấn Esc để dừng' : '🖌️ Đã lấy định dạng — chọn đích để dán');
+}
+
+function initFormatPainterV2() {
+    const btn = document.getElementById('v2-btn-format-painter');
+    if (!btn) return;
+    btn.addEventListener('mousedown', (e) => e.preventDefault());
+    btn.addEventListener('click', toggleFormatPainterV2);
 }
 
 /* =========================================================
@@ -1072,6 +2670,402 @@ function splitCellV2() {
 }
 
 /* =========================================================
+ * 3-ter. THAO TÁC BẢNG KIỂU WORD — chèn/xóa hàng-cột, phân bố
+ *        đều, AutoFit, căn dọc ô (gọi từ menu chuột phải)
+ * ========================================================= */
+function canEditTableV2(item) {
+    return item && !BOOT.isReadOnly && !BOOT.isExecutionMode && !item.locked && !item.isVirtual;
+}
+
+/** Sao chép các thuộc tính ĐỊNH DẠNG (không copy nội dung/span) từ ô mẫu sang ô mới */
+function cloneCellStyleV2(src) {
+    const cell = { content: '', rs: 1, cs: 1, hidden: false };
+    if (src && typeof src === 'object') {
+        ['backgroundColor', 'textAlign', 'fontWeight', 'fontStyle', 'verticalAlign'].forEach((k) => {
+            if (src[k]) cell[k] = src[k];
+        });
+    }
+    return cell;
+}
+
+/** Chèn 1 hàng mới tại vị trí idx (hàng mới chiếm index idx). Span dọc vắt qua đường chèn được nới thêm 1. */
+function insertTableRowV2(item, idx) {
+    if (!canEditTableV2(item)) return;
+    unmountEditor();
+    saveDocState();
+
+    const cols = item.cols || 0;
+    const srcRow = item.data[idx - 1] || item.data[idx] || [];
+    const newRow = Array.from({ length: cols }, (_, c) => cloneCellStyleV2(srcRow[c]));
+
+    // Anchor phía trên có rowspan phủ QUA đường chèn -> rs+1, ô mới trong vùng phủ bị ẩn
+    for (let r = 0; r < idx; r++) {
+        if (!item.data[r]) continue;
+        for (let c = 0; c < cols; c++) {
+            const cell = item.data[r][c];
+            if (!cell || typeof cell !== 'object' || cell.hidden) continue;
+            const rs = cell.rs || 1, cs = cell.cs || 1;
+            if (r + rs - 1 >= idx) {
+                cell.rs = rs + 1;
+                for (let cc = c; cc < c + cs && cc < cols; cc++) {
+                    newRow[cc] = { content: '', rs: 1, cs: 1, hidden: true };
+                }
+            }
+        }
+    }
+
+    item.data.splice(idx, 0, newRow);
+    item.rows = (item.rows || 0) + 1;
+    if (Array.isArray(item.rowHeights) && item.rowHeights.length) {
+        item.rowHeights.splice(idx, 0, item.rowHeights[Math.max(0, idx - 1)] || '');
+    }
+    item.dirty = true;
+    selection.clearCells();
+    markDirty();
+    renderDocument();
+}
+
+/** Chèn 1 cột mới tại vị trí idx. Span ngang vắt qua đường chèn được nới thêm 1. */
+function insertTableColV2(item, idx) {
+    if (!canEditTableV2(item)) return;
+    unmountEditor();
+    saveDocState();
+
+    const rows = item.rows || 0;
+    if (!Array.isArray(item.columns)) item.columns = [];
+
+    // Anchor bên trái có colspan phủ QUA đường chèn -> cs+1; mọi hàng nó phủ dọc đều phải ẩn ô mới
+    const hiddenRows = new Set();
+    for (let r = 0; r < rows; r++) {
+        if (!item.data[r]) continue;
+        for (let c = 0; c < idx; c++) {
+            const cell = item.data[r][c];
+            if (!cell || typeof cell !== 'object' || cell.hidden) continue;
+            const rs = cell.rs || 1, cs = cell.cs || 1;
+            if (c + cs - 1 >= idx) {
+                cell.cs = cs + 1;
+                for (let rr = r; rr < r + rs && rr < rows; rr++) hiddenRows.add(rr);
+            }
+        }
+    }
+
+    for (let r = 0; r < rows; r++) {
+        if (!item.data[r]) continue;
+        const src = item.data[r][idx - 1] || item.data[r][idx];
+        const cell = hiddenRows.has(r) ? { content: '', rs: 1, cs: 1, hidden: true } : cloneCellStyleV2(src);
+        item.data[r].splice(idx, 0, cell);
+    }
+    const srcCol = item.columns[idx - 1] || item.columns[idx] || {};
+    item.columns.splice(idx, 0, { label: 'Cột mới', type: 'text', width: srcCol.width || 'auto' });
+    item.cols = (item.cols || 0) + 1;
+    item.dirty = true;
+    selection.clearCells();
+    markDirty();
+    renderDocument();
+}
+
+/** Xóa hàng idx. Anchor rowspan trên hàng bị xóa được dời xuống hàng kế tiếp, span vắt qua bị co lại 1. */
+function deleteTableRowV2(item, idx) {
+    if (!canEditTableV2(item)) return;
+    if ((item.rows || 0) <= 1) { showToast('info', 'Bảng chỉ còn 1 hàng — hãy dùng "Xóa bảng".'); return; }
+    unmountEditor();
+    saveDocState();
+
+    const cols = item.cols || 0;
+    // Anchor phía trên có span phủ qua hàng bị xóa: rs-1
+    for (let r = 0; r < idx; r++) {
+        if (!item.data[r]) continue;
+        for (let c = 0; c < cols; c++) {
+            const cell = item.data[r][c];
+            if (!cell || typeof cell !== 'object' || cell.hidden) continue;
+            const rs = cell.rs || 1;
+            if (r + rs - 1 >= idx) cell.rs = rs - 1;
+        }
+    }
+    // Anchor NẰM TRÊN hàng bị xóa có rs>1: dời anchor xuống hàng kế (giữ nội dung + span còn lại)
+    for (let c = 0; c < cols; c++) {
+        const cell = item.data[idx] && item.data[idx][c];
+        if (!cell || typeof cell !== 'object' || cell.hidden) continue;
+        if ((cell.rs || 1) > 1 && item.data[idx + 1]) {
+            item.data[idx + 1][c] = { ...cell, rs: (cell.rs || 1) - 1, hidden: false };
+        }
+    }
+
+    item.data.splice(idx, 1);
+    item.rows--;
+    if (Array.isArray(item.rowHeights)) item.rowHeights.splice(idx, 1);
+    item.dirty = true;
+    selection.clearCells();
+    markDirty();
+    renderDocument();
+}
+
+/** Xóa cột idx. Anchor colspan trên cột bị xóa được dời sang cột kế, span vắt qua bị co lại 1. */
+function deleteTableColV2(item, idx) {
+    if (!canEditTableV2(item)) return;
+    if ((item.cols || 0) <= 1) { showToast('info', 'Bảng chỉ còn 1 cột — hãy dùng "Xóa bảng".'); return; }
+    unmountEditor();
+    saveDocState();
+
+    const rows = item.rows || 0;
+    for (let r = 0; r < rows; r++) {
+        if (!item.data[r]) continue;
+        for (let c = 0; c < idx; c++) {
+            const cell = item.data[r][c];
+            if (!cell || typeof cell !== 'object' || cell.hidden) continue;
+            const cs = cell.cs || 1;
+            if (c + cs - 1 >= idx) cell.cs = cs - 1;
+        }
+        const cell = item.data[r][idx];
+        if (cell && typeof cell === 'object' && !cell.hidden && (cell.cs || 1) > 1 && item.data[r][idx + 1] !== undefined) {
+            item.data[r][idx + 1] = { ...cell, cs: (cell.cs || 1) - 1, hidden: false };
+        }
+        item.data[r].splice(idx, 1);
+    }
+    if (Array.isArray(item.columns)) item.columns.splice(idx, 1);
+    item.cols--;
+    item.dirty = true;
+    selection.clearCells();
+    markDirty();
+    renderDocument();
+}
+
+/** Phân bố đều chiều cao các hàng (giữ nguyên tổng chiều cao hiện tại — như Word Distribute Rows) */
+function distributeRowsV2(item) {
+    if (!canEditTableV2(item)) return;
+    const trs = document.querySelectorAll(`.v2-table-wrap[data-id="${item.id}"] tbody tr`);
+    if (!trs.length) return;
+    saveDocState();
+    let total = 0;
+    trs.forEach((tr) => { total += tr.getBoundingClientRect().height; });
+    const h = Math.max(18, Math.round(total / trs.length));
+    item.rowHeights = Array.from({ length: item.rows || trs.length }, () => h + 'px');
+    item.dirty = true;
+    markDirty();
+    renderDocument();
+}
+
+/** Phân bố đều bề rộng các cột (giữ nguyên tổng bề rộng bảng — như Word Distribute Columns) */
+function distributeColsV2(item) {
+    if (!canEditTableV2(item)) return;
+    const tableEl = document.querySelector(`.v2-table-wrap[data-id="${item.id}"] table`);
+    if (!tableEl || !Array.isArray(item.columns) || !item.columns.length) return;
+    saveDocState();
+    const w = Math.max(30, Math.round(tableEl.getBoundingClientRect().width / item.columns.length));
+    item.columns.forEach((col) => { col.width = w + 'px'; });
+    item.dirty = true;
+    markDirty();
+    renderDocument();
+}
+
+/** AutoFit: bỏ mọi bề rộng cột / chiều cao hàng cố định — bảng tự co giãn theo nội dung */
+function autoFitTableV2(item) {
+    if (!canEditTableV2(item)) return;
+    saveDocState();
+    (item.columns || []).forEach((col) => { col.width = 'auto'; });
+    item.rowHeights = [];
+    item.dirty = true;
+    markDirty();
+    renderDocument();
+}
+
+/** Căn nội dung ô theo chiều dọc (top/middle/bottom) — áp dụng cho vùng ô đang chọn, hoặc ô vừa chuột phải */
+function setCellVAlignV2(item, td, v) {
+    if (!canEditTableV2(item)) return;
+    saveDocState();
+    const targets = selection.hasCells() ? selection.getCells().filter((t) => t.item === item) : [];
+    if (targets.length) {
+        targets.forEach(({ cell }) => { cell.verticalAlign = v; });
+    } else {
+        const r = parseInt(td.dataset.row, 10), c = parseInt(td.dataset.col, 10);
+        if (item.data[r] && item.data[r][c] && typeof item.data[r][c] === 'object') {
+            item.data[r][c].verticalAlign = v;
+        }
+    }
+    item.dirty = true;
+    markDirty();
+    renderDocument();
+}
+
+/**
+ * Căn dọc từ TOOLBAR: áp cho vùng ô đang chọn; nếu không có vùng chọn nhưng con trỏ
+ * đang gõ TRONG 1 ô bảng thì áp cho chính ô đó (chốt nội dung đang gõ trước khi render lại).
+ */
+function applyVAlignToolbarV2(v) {
+    if (selection.hasCells()) {
+        selection.applyToCells((cell) => { cell.verticalAlign = v; });
+        return;
+    }
+    const ctxArgs = (activeEditor && lastEditorArgs) ? lastEditorArgs.context : null;
+    if (ctxArgs && ctxArgs.kind === 'cell' && canEditTableV2(ctxArgs.item)) {
+        unmountEditor(); // ghi nội dung đang gõ về items trước khi render lại
+        saveDocState();
+        const cell = ctxArgs.item.data?.[ctxArgs.r]?.[ctxArgs.c];
+        if (cell && typeof cell === 'object') cell.verticalAlign = v;
+        ctxArgs.item.dirty = true;
+        markDirty();
+        renderDocument();
+        return;
+    }
+    showToast('info', 'Hãy chọn ô bảng (hoặc đặt con trỏ trong ô) trước khi căn dọc.');
+}
+
+/** Ô kề ô (r,c) theo hướng cạnh — nhảy qua phần bị gộp (rowspan/colspan) của chính ô đó. */
+function neighborCellV2(item, r, c, cell, side) {
+    let nr = r, nc = c;
+    if (side === 'top') nr = r - 1;
+    else if (side === 'bottom') nr = r + (cell.rs || 1);
+    else if (side === 'left') nc = c - 1;
+    else if (side === 'right') nc = c + (cell.cs || 1);
+    if (nr < 0 || nc < 0 || nr >= (item.rows || 0) || nc >= (item.cols || 0)) return null;
+    return (item.data[nr] && item.data[nr][nc]) ? item.data[nr][nc] : null;
+}
+
+/** Áp dụng border cho các ô được chọn hoặc tất cả ô bảng (như Word Border tools) */
+function applyBorderToSelectedCellsV2(item, borderType) {
+    if (!canEditTableV2(item)) return;
+    saveDocState();
+    const borderStyle = '1px solid #000';
+    // 'hidden' thắng trong border-collapse (đè cả viền của ô kề bên) => xoá viền thật sự.
+    const noBorder = '1px hidden #000';
+    const cells = selection.hasCells() ? selection.getCells().filter((t) => t.item === item) : [];
+    const allCells = [];
+
+    if (cells.length) {
+        allCells.push(...cells.map((c) => ({ r: c.r, c: c.c, cell: c.cell })));
+    } else {
+        for (let r = 0; r < (item.rows || 0); r++) {
+            for (let c = 0; c < (item.cols || 0); c++) {
+                if (item.data[r] && item.data[r][c] && !item.data[r][c].hidden) {
+                    allCells.push({ r, c, cell: item.data[r][c] });
+                }
+            }
+        }
+    }
+
+    const rows = item.rows || 0, cols = item.cols || 0;
+    const minR = Math.min(...allCells.map((x) => x.r)), maxR = Math.max(...allCells.map((x) => x.r));
+    const minC = Math.min(...allCells.map((x) => x.c)), maxC = Math.max(...allCells.map((x) => x.c));
+
+    // ── Viền 1 cạnh (trên/dưới/trái/phải) — như Word: TOGGLE cạnh NGOÀI của vùng chọn.
+    //    Để đè được viền của ô kề (border-collapse), phải set cả 2 ô chung cạnh đó.
+    const SIDE = { top: 'borderTop', bottom: 'borderBottom', left: 'borderLeft', right: 'borderRight' };
+    if (SIDE[borderType]) {
+        const prop = SIDE[borderType];
+        const oppProp = { borderTop: 'borderBottom', borderBottom: 'borderTop', borderLeft: 'borderRight', borderRight: 'borderLeft' }[prop];
+        // Chỉ lấy các ô nằm ở cạnh ngoài tương ứng của vùng chọn.
+        const edgeCells = allCells.filter(({ r, c }) =>
+            (borderType === 'top' && r === minR) ||
+            (borderType === 'bottom' && r === maxR) ||
+            (borderType === 'left' && c === minC) ||
+            (borderType === 'right' && c === maxC));
+        // Toggle: nếu tất cả cạnh đó đang CÓ viền -> tắt; ngược lại -> bật.
+        const hasBorder = (v) => v == null || (typeof v === 'string' && v.indexOf('hidden') === -1);
+        const target = edgeCells.every(({ cell }) => hasBorder(cell[prop])) ? noBorder : borderStyle;
+        edgeCells.forEach(({ r, c, cell }) => {
+            cell[prop] = target;
+            const nb = neighborCellV2(item, r, c, cell, borderType);
+            if (nb) nb[oppProp] = target;
+        });
+        item.dirty = true;
+        markDirty();
+        renderDocument();
+        return;
+    }
+
+    allCells.forEach(({ r, c, cell }) => {
+        if (borderType === 'no-border') {
+            cell.borderTop = cell.borderBottom = cell.borderLeft = cell.borderRight = noBorder;
+        } else if (borderType === 'all-borders') {
+            cell.borderTop = cell.borderBottom = cell.borderLeft = cell.borderRight = borderStyle;
+        } else if (borderType === 'outside-borders') {
+            cell.borderTop = (r === minR) ? borderStyle : noBorder;
+            cell.borderBottom = (r === maxR) ? borderStyle : noBorder;
+            cell.borderLeft = (c === minC) ? borderStyle : noBorder;
+            cell.borderRight = (c === maxC) ? borderStyle : noBorder;
+        } else if (borderType === 'inside-borders') {
+            cell.borderTop = (r > minR) ? borderStyle : noBorder;
+            cell.borderBottom = (r < maxR) ? borderStyle : noBorder;
+            cell.borderLeft = (c > minC) ? borderStyle : noBorder;
+            cell.borderRight = (c < maxC) ? borderStyle : noBorder;
+        } else if (borderType === 'inside-horizontal') {
+            cell.borderTop = (r > minR) ? borderStyle : noBorder;
+            cell.borderBottom = (r < maxR) ? borderStyle : noBorder;
+        } else if (borderType === 'inside-vertical') {
+            cell.borderLeft = (c > minC) ? borderStyle : noBorder;
+            cell.borderRight = (c < maxC) ? borderStyle : noBorder;
+        }
+    });
+
+    item.dirty = true;
+    markDirty();
+    renderDocument();
+}
+
+/** Núm kéo góc dưới-phải phóng to/thu nhỏ CẢ BẢNG theo tỉ lệ (như Word) */
+function attachTableSizerV2(item, wrap, table) {
+    if (BOOT.isReadOnly || BOOT.isExecutionMode || item.locked || item.isVirtual) return;
+
+    const sizer = document.createElement('div');
+    sizer.className = 'v2-table-sizer';
+    sizer.title = 'Kéo để thay đổi kích thước cả bảng';
+
+    // Đo bề rộng pixel thực của từng cột (dùng ô KHÔNG gộp; cột nào không đo được thì chia đều)
+    const measureColWidths = () => {
+        const widths = new Array(item.cols || 0).fill(0);
+        table.querySelectorAll('tbody td').forEach((tdEl) => {
+            const c = parseInt(tdEl.dataset.col, 10);
+            if ((tdEl.colSpan || 1) === 1 && widths[c] === 0) widths[c] = tdEl.getBoundingClientRect().width;
+        });
+        const fallback = table.getBoundingClientRect().width / Math.max(1, item.cols || 1);
+        return widths.map((w) => w || fallback);
+    };
+
+    sizer.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const startX = e.clientX, startY = e.clientY;
+        const rect = table.getBoundingClientRect();
+        const startW = rect.width, startH = rect.height;
+        const startColW = measureColWidths();
+        const trEls = Array.from(table.querySelectorAll('tbody tr'));
+        const startRowH = trEls.map((tr) => tr.getBoundingClientRect().height);
+        const colEls = Array.from(table.querySelectorAll('colgroup col'));
+        saveDocState();
+        sizer.classList.add('resizing');
+
+        const scaleOf = (ev) => ({
+            sx: Math.max(0.1, (startW + ev.clientX - startX) / startW),
+            sy: Math.max(0.1, (startH + ev.clientY - startY) / startH),
+        });
+        const move = (ev) => {
+            const { sx, sy } = scaleOf(ev);
+            colEls.forEach((el, i) => { el.style.width = Math.max(30, Math.round(startColW[i] * sx)) + 'px'; });
+            trEls.forEach((tr, i) => { tr.style.height = Math.max(18, Math.round(startRowH[i] * sy)) + 'px'; });
+        };
+        const up = (ev) => {
+            document.removeEventListener('mousemove', move);
+            document.removeEventListener('mouseup', up);
+            sizer.classList.remove('resizing');
+            const { sx, sy } = scaleOf(ev);
+            (item.columns || []).forEach((col, i) => { col.width = Math.max(30, Math.round(startColW[i] * sx)) + 'px'; });
+            if (!Array.isArray(item.rowHeights)) item.rowHeights = [];
+            trEls.forEach((tr, i) => {
+                const rIdx = parseInt(tr.dataset.rowIdx, 10);
+                if (!isNaN(rIdx)) item.rowHeights[rIdx] = Math.max(18, Math.round(startRowH[i] * sy)) + 'px';
+            });
+            item.dirty = true;
+            markDirty();
+            renderDocument();
+        };
+        document.addEventListener('mousemove', move);
+        document.addEventListener('mouseup', up);
+    });
+
+    wrap.appendChild(sizer);
+}
+
+/* =========================================================
  * 4. BIẾN SỐ — chèn node + panel cấu hình (đầy đủ V1-parity)
  * ========================================================= */
 function insertVariable(type) {
@@ -1095,6 +3089,9 @@ function insertVariable(type) {
     };
 
     activeEditor.chain().focus().insertContent({ type: 'ebmrField', attrs: { fieldId } }).run();
+    // Chốt ngay nội dung (kèm badge vừa chèn) về item/ô — không đợi tới lúc unmount,
+    // để tránh mất biến nếu sau đó người dùng chuyển chế độ / lưu mà chưa rời khỏi ô.
+    if (activeSync) activeSync();
     markDirty();
     openFieldPanel(fieldId);
 }
@@ -1104,25 +3101,78 @@ function insertVariable(type) {
  *   Mỗi badge data-field-id được clone config sang id MỚI để 2 ô
  *   không trỏ chung 1 biến. Trả về HTML đã thay id.
  * ---------------------------------------------------------- */
-function duplicateFieldsInHtmlV2(html) {
-    if (!html || typeof html !== 'string' || html.indexOf('data-field-id') === -1) return html;
+/**
+ * Xây map oldId->newId (+ oldName->newName) cho MỌI data-field-id xuất hiện
+ * trong 1 danh sách đoạn HTML — dùng chung cho cả vùng đang dán, để công
+ * thức tham chiếu 1 biến khác CŨNG nằm trong vùng copy được trỏ sang đúng
+ * bản sao mới thay vì trỏ ngược về biến gốc (bug: copy cả formula + biến
+ * phụ thuộc của nó thì formula bản sao vẫn tính theo biến GỐC).
+ */
+function buildFieldDuplicateMapV2(htmlList) {
+    const idMap = {};   // oldId -> newId
+    const nameMap = {}; // oldName -> newName (name cũ của field bị nhân bản)
     const tmp = document.createElement('div');
-    tmp.innerHTML = html;
-    let out = html;
-    const seen = new Set();
-    tmp.querySelectorAll('[data-field-id]').forEach((el) => {
-        const oldId = el.getAttribute('data-field-id');
-        if (!oldId || seen.has(oldId) || !fieldsConfig[oldId]) return;
-        seen.add(oldId);
-        const newId = 'field_v2_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    (htmlList || []).forEach((html, i) => {
+        if (!html || typeof html !== 'string' || html.indexOf('data-field-id') === -1) return;
+        tmp.innerHTML = html;
+        tmp.querySelectorAll('[data-field-id]').forEach((el) => {
+            const oldId = el.getAttribute('data-field-id');
+            if (!oldId || idMap[oldId] || !fieldsConfig[oldId]) return;
+            const newId = 'field_v2_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8) + i;
+            idMap[oldId] = newId;
+            nameMap[fieldsConfig[oldId].name || oldId] = newId;
+        });
+    });
+    return { idMap, nameMap };
+}
+
+/** Thay (tenBien) trong chuỗi công thức theo nameMap — giữ nguyên phần không khớp */
+function remapFormulaStringV2(formula, nameMap) {
+    if (!formula || !nameMap) return formula;
+    return formula.replace(/\(([^()]+)\)/g, (match, varName) => {
+        const key = varName.trim();
+        return nameMap[key] ? `(${nameMap[key]})` : match;
+    });
+}
+
+/**
+ * Tạo bản sao config cho mọi field trong idMap. Nếu bản sao là formula
+ * (hoặc có na_condition) tham chiếu 1 field khác CŨNG có trong nameMap,
+ * viết lại tham chiếu đó sang tên MỚI — giữ vùng vừa dán tự trỏ vào nhau.
+ */
+function applyFieldDuplicateMapV2(idMap, nameMap) {
+    Object.keys(idMap).forEach((oldId) => {
+        const newId = idMap[oldId];
         const clone = JSON.parse(JSON.stringify(fieldsConfig[oldId]));
         clone.id = newId;
         clone.name = newId;
+        // formula (type=formula) VÀ công thức tự-động-tick (type=checkbox) đều lưu chung ở cfg.formula
+        if (clone.formula) {
+            clone.formula = remapFormulaStringV2(clone.formula, nameMap);
+        }
+        if (clone.na_condition && clone.na_condition.target_id && nameMap[clone.na_condition.target_id]) {
+            clone.na_condition.target_id = nameMap[clone.na_condition.target_id];
+        }
         fieldsConfig[newId] = clone;
-        out = out.split(oldId).join(newId);
     });
     markDirty();
+}
+
+/** Thay data-field-id trong 1 đoạn HTML theo idMap đã build sẵn (không tạo config mới) */
+function rewriteFieldIdsInHtmlV2(html, idMap) {
+    if (!html || typeof html !== 'string' || !idMap) return html;
+    let out = html;
+    Object.keys(idMap).forEach((oldId) => { out = out.split(oldId).join(idMap[oldId]); });
     return out;
+}
+
+/** Tiện ích cho 1 đoạn HTML đơn lẻ (map chỉ xây trong phạm vi đoạn này) */
+function duplicateFieldsInHtmlV2(html) {
+    if (!html || typeof html !== 'string' || html.indexOf('data-field-id') === -1) return html;
+    const { idMap, nameMap } = buildFieldDuplicateMapV2([html]);
+    if (!Object.keys(idMap).length) return html;
+    applyFieldDuplicateMapV2(idMap, nameMap);
+    return rewriteFieldIdsInHtmlV2(html, idMap);
 }
 
 /* ----------------------------------------------------------
@@ -1143,8 +3193,9 @@ function syncFieldConfigV2(fieldId, path, value) {
     else if (['min', 'max', 'decimal_places'].some(k => path.includes(k))) {
         value = value !== null ? Number(value) : null;
     } else if (typeof value === 'string' && path.endsWith('required') || path.endsWith('is_checker') ||
-               path.endsWith('autoSystemTime') || path.endsWith('scaleEnabled') ||
-               path.endsWith('barcodeScanEnabled') || path.endsWith('allow_out_of_bounds')) {
+        path.endsWith('autoSystemTime') || path.endsWith('scaleEnabled') ||
+        path.endsWith('barcodeScanEnabled') || path.endsWith('allow_out_of_bounds') ||
+        path.endsWith('showLabel')) {
         // boolean giữ nguyên (đã là boolean từ checkbox.checked)
     }
     if (path === 'options' && typeof value === 'string' && value !== null) {
@@ -1161,44 +3212,131 @@ function syncFieldConfigV2(fieldId, path, value) {
  * Chèn 1 token vào vùng nhập công thức (contenteditable).
  * isVarRef=true → bọc token bằng span.formula-var-token để hiển thị màu đẹp.
  */
+let selectFormulaVarMode = null; // fieldId nếu đang bắt biến, null nếu không
+
+// Bảng màu viền cho các biến tham chiếu trong công thức — mỗi biến 1 màu theo thứ tự xuất hiện
+const FORMULA_VAR_COLORS = ['#e11d48', '#2563eb', '#d97706', '#16a34a', '#9333ea', '#0891b2', '#db2777', '#65a30d'];
+
+function toggleSelectFormulaVarModeV2(fieldId) {
+    if (selectFormulaVarMode === fieldId) {
+        // Tắt chế độ bắt biến
+        selectFormulaVarMode = null;
+        const btn = document.getElementById(`v2fp-pick-var-${fieldId}`);
+        if (btn) {
+            btn.innerHTML = '<i class="fas fa-hand-pointer me-1"></i>Bắt biến từ màn hình';
+            btn.classList.remove('btn-warning', 'text-dark');
+            btn.classList.add('btn-outline-warning');
+        }
+        document.body.classList.remove('v2-select-formula-var-active');
+        // Xóa highlight của các biến
+        document.querySelectorAll('.v2-field-badge, .ebmr-field-badge').forEach(badge => {
+            badge.classList.remove('v2-formula-var-highlighted', 'v2-formula-var-referenced');
+        });
+    } else {
+        // Bật chế độ bắt biến
+        selectFormulaVarMode = fieldId;
+        const btn = document.getElementById(`v2fp-pick-var-${fieldId}`);
+        if (btn) {
+            btn.innerHTML = '<i class="fas fa-times me-1"></i>Đang bắt biến... (Hủy)';
+            btn.classList.remove('btn-outline-warning');
+            btn.classList.add('btn-warning', 'text-dark');
+        }
+        document.body.classList.add('v2-select-formula-var-active');
+        // Highlight biến đang được cài đặt
+        document.querySelectorAll(`.v2-field-badge[data-field-id="${fieldId}"], .ebmr-field-badge[data-field-id="${fieldId}"]`).forEach(badge => {
+            badge.classList.add('v2-formula-var-highlighted');
+        });
+        // Highlight biến được tham chiếu trong công thức
+        const el = document.getElementById(`v2-formula-input-${fieldId}`);
+        if (el) highlightFormulaReferencesV2(el);
+    }
+}
+
+/** Highlight các biến được tham chiếu trong công thức */
+function highlightFormulaReferencesV2(formulaInputEl) {
+    // Biến đích (đang cài đặt công thức) suy ra từ id của ô nhập: v2-formula-input-<fieldId>
+    const targetFieldId = (formulaInputEl.id || '').replace('v2-formula-input-', '');
+    const formula = serializeFormulaElementV2(formulaInputEl) || '';
+    // Tách (varName) từ công thức — giữ thứ tự xuất hiện, bỏ trùng
+    const refVarNames = [];
+    let match;
+    const regex = /\(([^()]+)\)/g;
+    while ((match = regex.exec(formula)) !== null) {
+        const vn = match[1].trim();
+        if (!refVarNames.includes(vn)) refVarNames.push(vn);
+    }
+    // Mỗi biến một màu riêng theo thứ tự xuất hiện trong công thức
+    const colorOf = (vn) => FORMULA_VAR_COLORS[refVarNames.indexOf(vn) % FORMULA_VAR_COLORS.length];
+
+    // Badge sống trong editor là .v2-field-badge (NodeView), badge tĩnh là .ebmr-field-badge
+    document.querySelectorAll('.v2-field-badge, .ebmr-field-badge').forEach(badge => {
+        const fid = badge.getAttribute('data-field-id');
+        const cfg = fieldsConfig[fid] || {};
+        const isTarget = fid === targetFieldId;
+        badge.classList.toggle('v2-formula-var-highlighted', isTarget);
+        const refName = !isTarget && refVarNames.find(vn => vn === fid || vn === cfg.name || vn === cfg.label);
+        if (refName) {
+            badge.classList.add('v2-formula-var-referenced');
+            badge.style.setProperty('--v2-ref-color', colorOf(refName));
+        } else {
+            badge.classList.remove('v2-formula-var-referenced');
+            badge.style.removeProperty('--v2-ref-color');
+        }
+    });
+
+    // Token trong ô công thức tô cùng màu với badge ngoài tài liệu để dễ đối chiếu
+    formulaInputEl.querySelectorAll('.v2-formula-var').forEach(span => {
+        const vn = (span.dataset.var || span.textContent).trim();
+        if (refVarNames.includes(vn)) {
+            const c = colorOf(vn);
+            span.style.borderColor = c;
+            span.style.color = c;
+            span.style.background = c + '1a'; // ~10% alpha
+        }
+    });
+}
+
+/** Xóa highlight của các biến tham chiếu (trừ khi đang ở "Bắt" mode) */
+function clearFormulaHighlightsV2() {
+    if (selectFormulaVarMode) return; // Giữ highlight khi đang ở "Bắt" mode
+    document.querySelectorAll('.v2-field-badge, .ebmr-field-badge').forEach(badge => {
+        badge.classList.remove('v2-formula-var-referenced', 'v2-formula-var-highlighted');
+        badge.style.removeProperty('--v2-ref-color');
+    });
+}
+
 function insertFormulaTokenV2(fieldId, token, isVarRef = false) {
     const el = document.getElementById(`v2-formula-input-${fieldId}`);
     if (!el) return;
     el.focus();
+    // Token hiển thị NHÃN cho người dùng đọc; data-var vẫn giữ name để serialize đúng
+    const makeVarSpan = (varName) => {
+        const cfg = Object.values(fieldsConfig).find(f => f.name === varName) || {};
+        const span = document.createElement('span');
+        span.className = 'v2-formula-var';
+        span.contentEditable = 'false';
+        span.textContent = cfg.label || varName;
+        span.title = varName;
+        span.dataset.var = varName;
+        return span;
+    };
     const sel = window.getSelection();
     if (sel && sel.rangeCount > 0 && el.contains(sel.anchorNode)) {
         const range = sel.getRangeAt(0);
         range.deleteContents();
-        let node;
-        if (isVarRef) {
-            node = document.createElement('span');
-            node.className = 'v2-formula-var';
-            node.contentEditable = 'false';
-            node.textContent = token;
-            node.dataset.var = token;
-        } else {
-            node = document.createTextNode(token);
-        }
+        const node = isVarRef ? makeVarSpan(token) : document.createTextNode(token);
         range.insertNode(node);
         range.setStartAfter(node);
         range.collapse(true);
         sel.removeAllRanges();
         sel.addRange(range);
     } else {
-        if (isVarRef) {
-            const span = document.createElement('span');
-            span.className = 'v2-formula-var';
-            span.contentEditable = 'false';
-            span.textContent = token;
-            span.dataset.var = token;
-            el.appendChild(span);
-        } else {
-            el.appendChild(document.createTextNode(token));
-        }
+        el.appendChild(isVarRef ? makeVarSpan(token) : document.createTextNode(token));
     }
     // Serialize và sync về fieldsConfig
     const formulaStr = serializeFormulaElementV2(el);
     syncFieldConfigV2(fieldId, 'formula', formulaStr);
+    highlightFormulaReferencesV2(el);
 }
 
 /**
@@ -1224,11 +3362,12 @@ function serializeFormulaElementV2(el) {
  */
 function deserializeFormulaToHtmlV2(formula, fieldId) {
     if (!formula) return '';
-    // Tách (varName) thành span màu, phần còn lại là text thuần
+    // Tách (varName) thành span màu — hiển thị NHÃN, data-var giữ name để serialize đúng
     return formula.replace(/\(([^()]+)\)/g, (match, varName) => {
-        const cfg = Object.values(fieldsConfig).find(f => f.name === varName.trim());
-        const label = cfg ? (cfg.label || varName.trim()) : varName.trim();
-        return `<span class="v2-formula-var" contenteditable="false" data-var="${esc(varName.trim())}" title="${esc(label)}">${esc(varName.trim())}</span>`;
+        const vn = varName.trim();
+        const cfg = Object.values(fieldsConfig).find(f => f.name === vn);
+        const label = cfg ? (cfg.label || vn) : vn;
+        return `<span class="v2-formula-var" contenteditable="false" data-var="${esc(vn)}" title="${esc(vn)}">${esc(label)}</span>`;
     });
 }
 
@@ -1256,6 +3395,7 @@ function deleteVariablesV2(fieldIds) {
     const ids = (fieldIds || []).filter((id) => fieldsConfig[id]);
     if (ids.length === 0) return;
     ids.forEach((id) => delete fieldsConfig[id]);
+    deletedFieldKeys.push(...ids);
     items.forEach(item => {
         const scanAndRemove = (html) => {
             if (!html || !ids.some((id) => html.includes(id))) return html;
@@ -1282,6 +3422,112 @@ function deleteVariableV2(fieldId) {
     deleteVariablesV2([fieldId]);
     showToast('success', 'Đã xóa biến số');
 }
+
+/* ----------------------------------------------------------
+ * 4c-bis. Copy / Cut / Paste BIẾN SỐ (bổ sung cho copy/paste Ô ở selection.js)
+ *   - Copy: lưu bản sao sâu config các biến đang chọn vào clipboard.
+ *   - Cut : copy rồi xóa badge + config khỏi tài liệu.
+ *   - Paste: chèn badge của các biến trong clipboard vào Ô ĐÍCH đang chọn.
+ *       • Nếu config gốc VẪN còn (Copy) -> cấp id/name MỚI để không dùng chung
+ *         cấu hình (giống duplicateFieldsInHtmlV2).
+ *       • Nếu config gốc đã mất (Cut) -> khôi phục ĐÚNG id/name cũ = di chuyển
+ *         thật, giữ được tham chiếu công thức theo tên.
+ * ---------------------------------------------------------- */
+let fieldClipboardV2 = null; // [configClone] — bản sao sâu, cấp id khi dán
+
+function copyFieldsV2(ids) {
+    const valid = (ids || []).filter((id) => fieldsConfig[id]);
+    if (!valid.length) return 0;
+    fieldClipboardV2 = valid.map((id) => JSON.parse(JSON.stringify(fieldsConfig[id])));
+    return valid.length;
+}
+
+function cutFieldsV2(ids) {
+    const n = copyFieldsV2(ids);
+    if (!n) return 0;
+    saveDocState();
+    deleteVariablesV2(ids); // gỡ badge + config, clearFields, renderDocument
+    return n;
+}
+
+/**
+ * Chuẩn bị 1 lượt DÁN từ fieldClipboardV2: quyết định id/name mới cho từng biến
+ * (Copy = luôn cấp id mới, Cut/Move = khôi phục lại đúng id/name cũ), gom
+ * oldName->newName để formula tham chiếu 1 biến khác CŨNG được dán cùng lượt này
+ * trỏ đúng sang bản sao mới thay vì trỏ ngược về biến gốc — rồi ĐĂNG KÝ luôn config
+ * mới vào fieldsConfig. Trả về plan [{id}] để nơi gọi tự chèn badge vào đúng chỗ
+ * (ô bảng hoặc editor tại vị trí con trỏ). Dùng chung cho cả 2 đích dán.
+ */
+function registerPasteFieldsPlanV2() {
+    const nameMap = {};
+    const plan = fieldClipboardV2.map((cfg, i) => {
+        const isMove = !fieldsConfig[cfg.id]; // config gốc đã mất => là thao tác Cut => khôi phục id cũ
+        let id = cfg.id;
+        if (!isMove) {
+            id = 'field_v2_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6) + i;
+            nameMap[cfg.name || cfg.id] = id; // tên tự sinh để tránh trùng tên với biến gốc (ảnh hưởng công thức)
+        }
+        return { cfg, id, isMove };
+    });
+    plan.forEach(({ cfg, id, isMove }) => {
+        const clone = JSON.parse(JSON.stringify(cfg));
+        clone.id = id;
+        if (!isMove) clone.name = id;
+        // formula (type=formula) VÀ công thức tự-động-tick (type=checkbox) đều lưu chung ở cfg.formula
+        if (clone.formula) {
+            clone.formula = remapFormulaStringV2(clone.formula, nameMap);
+        }
+        if (clone.na_condition && clone.na_condition.target_id && nameMap[clone.na_condition.target_id]) {
+            clone.na_condition.target_id = nameMap[clone.na_condition.target_id];
+        }
+        fieldsConfig[id] = clone;
+    });
+    return plan;
+}
+
+function pasteFieldsIntoCellV2(item, r, c) {
+    if (!fieldClipboardV2 || !fieldClipboardV2.length) return false;
+    const cell = item?.data?.[r]?.[c];
+    if (!cell || cell.hidden) return false;
+    saveDocState();
+    const plan = registerPasteFieldsPlanV2();
+    let html = '';
+    plan.forEach(({ id }) => { html += `<span contenteditable="false" class="ebmr-field-badge" data-field-id="${id}"></span>​`; });
+    cell.content = (cell.content || '') + html;
+    item.dirty = true;
+    markDirty();
+    renderDocument();
+    return true;
+}
+
+/**
+ * Dán biến từ clipboard NGAY TẠI VỊ TRÍ CON TRỎ trong editor — dùng khi đích không
+ * phải Ô bảng (đoạn văn bản thường), gọi từ context menu "Dán biến" và Ctrl+V khi
+ * đang gõ trong editor. Tự mở lại vị trí soạn gần nhất nếu editor đã đóng (runEditorInsertV2).
+ */
+function pasteFieldsV2() {
+    if (!fieldClipboardV2 || !fieldClipboardV2.length) {
+        showToast('warning', 'Chưa sao chép biến số nào.');
+        return false;
+    }
+    saveDocState();
+    const plan = registerPasteFieldsPlanV2();
+    const ok = runEditorInsertV2((ed) => {
+        plan.forEach(({ id }) => {
+            ed.chain().focus().insertContent({ type: 'ebmrField', attrs: { fieldId: id } }).run();
+        });
+    });
+    if (!ok) {
+        showToast('warning', 'Hãy bấm vào một đoạn văn bản/ô có thể sửa rồi dán.');
+        return false;
+    }
+    if (activeSync) activeSync();
+    markDirty();
+    showToast('success', `Đã dán ${plan.length} biến số`);
+    return true;
+}
+
+const hasFieldClipboardV2 = () => !!(fieldClipboardV2 && fieldClipboardV2.length);
 
 function showToast(type, msg) {
     if (window.toastr) { window.toastr[type](msg); return; }
@@ -1318,13 +3564,13 @@ function openFieldPanel(fieldId, onSaved) {
             <label class="v2-prop-label">Loại dữ liệu</label>
             <select class="form-select form-select-sm border-primary" id="v2fp-type-${fieldId}"
                 onchange="syncFieldConfigV2('${fieldId}','type',this.value); openFieldPanel('${fieldId}')">
-                <option value="text"      ${cfg.type==='text'      ?'selected':''}>Văn bản tự do</option>
-                <option value="number"    ${cfg.type==='number'    ?'selected':''}>Số liệu (Tính toán)</option>
-                <option value="checkbox"  ${cfg.type==='checkbox'  ?'selected':''}>Hộp kiểm (Tick)</option>
-                <option value="formula"   ${cfg.type==='formula'   ?'selected':''}>Công thức tự động (=)</option>
-                <option value="date"      ${cfg.type==='date'      ?'selected':''}>Thời Gian</option>
-                <option value="signature" ${cfg.type==='signature' ?'selected':''}>Chữ ký điện tử</option>
-                <option value="select"    ${cfg.type==='select'    ?'selected':''}>Chọn từ danh sách</option>
+                <option value="text"      ${cfg.type === 'text' ? 'selected' : ''}>Văn bản tự do</option>
+                <option value="number"    ${cfg.type === 'number' ? 'selected' : ''}>Số liệu (Tính toán)</option>
+                <option value="checkbox"  ${cfg.type === 'checkbox' ? 'selected' : ''}>Hộp kiểm (Tick)</option>
+                <option value="formula"   ${cfg.type === 'formula' ? 'selected' : ''}>Công thức tự động (=)</option>
+                <option value="date"      ${cfg.type === 'date' ? 'selected' : ''}>Thời Gian</option>
+                <option value="signature" ${cfg.type === 'signature' ? 'selected' : ''}>Chữ ký điện tử</option>
+                <option value="select"    ${cfg.type === 'select' ? 'selected' : ''}>Chọn từ danh sách</option>
             </select>
         </div>
         <hr class="opacity-25 my-2">
@@ -1333,7 +3579,15 @@ function openFieldPanel(fieldId, onSaved) {
             <input type="text" class="form-control form-control-sm" id="v2fp-label-${fieldId}"
                 value="${esc(cfg.label || '')}"
                 oninput="syncFieldConfigV2('${fieldId}','label',this.value); _v2RepaintBadge('${fieldId}')">
-            <div class="form-text" style="font-size:0.68rem">VD: Số lượng, Kết quả</div>
+            
+            <div class="form-check form-switch mt-1">
+                <input class="form-check-input" type="checkbox" id="v2fp-showlabel-${fieldId}"
+                    ${cfg.showLabel !== false ? 'checked' : ''}
+                    onchange="syncFieldConfigV2('${fieldId}','showLabel',this.checked)">
+                <label class="form-check-label" style="font-size:0.72rem" for="v2fp-showlabel-${fieldId}">
+                    Hiển thị nhãn khi chạy thử
+                </label>
+            </div>
         </div>
         <div class="mb-3">
             <label class="v2-prop-label"><i class="fas fa-fingerprint me-1"></i>Mã biến số (ID)</label>
@@ -1371,8 +3625,8 @@ function openFieldPanel(fieldId, onSaved) {
                         <label class="v2-prop-sublabel">Toán tử</label>
                         <select class="form-select form-select-sm border-success"
                             onchange="syncFieldConfigV2('${fieldId}','na_condition.operator',this.value)">
-                            <option value="=" ${(cfg.na_condition && cfg.na_condition.operator==='=') ?'selected':''}>Bằng (=)</option>
-                            <option value="!=" ${(cfg.na_condition && cfg.na_condition.operator==='!=') ?'selected':''}>Khác (!=)</option>
+                            <option value="=" ${(cfg.na_condition && cfg.na_condition.operator === '=') ? 'selected' : ''}>Bằng (=)</option>
+                            <option value="!=" ${(cfg.na_condition && cfg.na_condition.operator === '!=') ? 'selected' : ''}>Khác (!=)</option>
                         </select>
                     </div>
                     <div class="col-7">
@@ -1417,12 +3671,16 @@ function openFieldPanel(fieldId, onSaved) {
                         onclick="insertFormulaTokenV2('${fieldId}',', ')">,</button>
                     <button class="btn btn-outline-secondary" type="button"
                         onclick="insertFormulaTokenV2('${fieldId}',')')">)</button>
+                    <button class="btn btn-outline-warning" id="v2fp-pick-var-${fieldId}" type="button"
+                        onclick="toggleSelectFormulaVarModeV2('${fieldId}')"><i class="fas fa-hand-pointer me-1"></i>Bắt</button>
                 </div>
                 <div id="v2-formula-input-${fieldId}"
                     class="form-control form-control-sm border-success font-monospace v2-formula-editor"
                     contenteditable="true"
                     placeholder="Gõ công thức hoặc chọn biến từ dropdown..."
-                    oninput="syncFieldConfigV2('${fieldId}','formula',serializeFormulaElementV2(this))"
+                    oninput="syncFieldConfigV2('${fieldId}','formula',serializeFormulaElementV2(this)); highlightFormulaReferencesV2(this);"
+                    onfocus="highlightFormulaReferencesV2(this);"
+                    onblur="clearFormulaHighlightsV2();"
                     >${deserializeFormulaToHtmlV2(cfg.formula || '', fieldId)}</div>
                 <div class="mt-2">
                     <label class="v2-prop-sublabel">Làm tròn số thập phân</label>
@@ -1452,12 +3710,16 @@ function openFieldPanel(fieldId, onSaved) {
                         onclick="insertFormulaTokenV2('${fieldId}',' / ')">÷</button>
                     <button class="btn btn-outline-success" type="button"
                         onclick="insertFormulaTokenV2('${fieldId}',' == ')">==</button>
+                    <button class="btn btn-outline-warning" id="v2fp-pick-var-${fieldId}" type="button"
+                        onclick="toggleSelectFormulaVarModeV2('${fieldId}')"><i class="fas fa-hand-pointer me-1"></i>Bắt</button>
                 </div>
                 <div id="v2-formula-input-${fieldId}"
                     class="form-control form-control-sm border-success font-monospace v2-formula-editor"
                     contenteditable="true"
                     placeholder="Công thức > 0 hoặc TRUE → tự Tick..."
-                    oninput="syncFieldConfigV2('${fieldId}','formula',serializeFormulaElementV2(this))"
+                    oninput="syncFieldConfigV2('${fieldId}','formula',serializeFormulaElementV2(this)); highlightFormulaReferencesV2(this);"
+                    onfocus="highlightFormulaReferencesV2(this);"
+                    onblur="clearFormulaHighlightsV2();"
                     >${deserializeFormulaToHtmlV2(cfg.formula || '', fieldId)}</div>
                 <div class="form-text mt-1" style="font-size:0.65rem">Nếu công thức > 0 hoặc TRUE → ô tự động Tick.</div>
             </div>`;
@@ -1468,8 +3730,8 @@ function openFieldPanel(fieldId, onSaved) {
                 <label class="v2-prop-label text-success"><i class="fas fa-clock me-1"></i>Định dạng thời gian</label>
                 <select class="form-select form-select-sm border-success"
                     onchange="syncFieldConfigV2('${fieldId}','date_format',this.value)">
-                    <option value="dd/mm/yyyy" ${(!cfg.date_format||cfg.date_format==='dd/mm/yyyy')?'selected':''}>Ngày (dd/mm/yyyy)</option>
-                    <option value="hh:mm dd/mm/yyyy" ${cfg.date_format==='hh:mm dd/mm/yyyy'?'selected':''}>Giờ và Ngày (hh:mm dd/mm/yyyy)</option>
+                    <option value="dd/mm/yyyy" ${(!cfg.date_format || cfg.date_format === 'dd/mm/yyyy') ? 'selected' : ''}>Ngày (dd/mm/yyyy)</option>
+                    <option value="hh:mm dd/mm/yyyy" ${cfg.date_format === 'hh:mm dd/mm/yyyy' ? 'selected' : ''}>Giờ và Ngày (hh:mm dd/mm/yyyy)</option>
                 </select>
             </div>
             <div class="mb-3 p-2 bg-light rounded border border-success border-opacity-25">
@@ -1548,8 +3810,8 @@ function openFieldPanel(fieldId, onSaved) {
                 <label class="v2-prop-label text-success"><i class="fas fa-database me-1"></i>Nguồn dữ liệu Dropdown</label>
                 <select class="form-select form-select-sm mb-2 border-success"
                     onchange="syncFieldConfigV2('${fieldId}','dataSource.type',this.value); openFieldPanel('${fieldId}')">
-                    <option value="manual"   ${dsType==='manual'   ?'selected':''}>Nhập thủ công (Tự định nghĩa)</option>
-                    <option value="database" ${dsType==='database' ?'selected':''}>Lấy tự động từ CSDL (Database)</option>
+                    <option value="manual"   ${dsType === 'manual' ? 'selected' : ''}>Nhập thủ công (Tự định nghĩa)</option>
+                    <option value="database" ${dsType === 'database' ? 'selected' : ''}>Lấy tự động từ CSDL (Database)</option>
                 </select>
                 ${dsType === 'manual' ? `
                 <textarea class="form-control form-control-sm" rows="3"
@@ -1599,8 +3861,8 @@ function openFieldPanel(fieldId, onSaved) {
                 onchange="syncFieldConfigV2('${fieldId}','important_var_id',this.value)">
                 <option value="">-- Không --</option>
                 ${importantVars.map(v =>
-                    `<option value="${v.id}" ${cfg.important_var_id == v.id ? 'selected' : ''}>${esc(v.name)}${v.description ? ' (' + esc(v.description) + ')' : ''}</option>`
-                ).join('')}
+        `<option value="${v.id}" ${cfg.important_var_id == v.id ? 'selected' : ''}>${esc(v.name)}${v.description ? ' (' + esc(v.description) + ')' : ''}</option>`
+    ).join('')}
             </select>
             <div class="form-text" style="font-size:0.65rem">Gắn cờ CPP/CMA để lọc báo cáo PVR/PQR.</div>
         </div>
@@ -1642,22 +3904,22 @@ function openFieldPanel(fieldId, onSaved) {
                 </div>
                 <div class="d-flex gap-2 mb-2">
                     <button type="button" id="v2fp-maxw-${fieldId}"
-                        class="btn btn-sm ${styleObj.width==='100%'?'btn-primary active':'btn-outline-secondary'} flex-fill"
+                        class="btn btn-sm ${styleObj.width === '100%' ? 'btn-primary active' : 'btn-outline-secondary'} flex-fill"
                         onclick="_v2ToggleBadgeMaxDim('${fieldId}','width','100%',this)">
                         <i class="fas fa-arrows-alt-h"></i> Max Rộng
                     </button>
                     <button type="button" id="v2fp-maxh-${fieldId}"
-                        class="btn btn-sm ${styleObj.height==='100%'?'btn-primary active':'btn-outline-secondary'} flex-fill"
+                        class="btn btn-sm ${styleObj.height === '100%' ? 'btn-primary active' : 'btn-outline-secondary'} flex-fill"
                         onclick="_v2ToggleBadgeMaxDim('${fieldId}','height','100%',this)">
                         <i class="fas fa-arrows-alt-v"></i> Max Cao
                     </button>
                 </div>
                 <div class="btn-group w-100" role="group">
-                    ${['left','center','right'].map(a => `
+                    ${['left', 'center', 'right'].map(a => `
                     <button type="button"
-                        class="btn btn-sm ${styleObj.badgeAlign===a?'btn-primary active':'btn-outline-secondary'}"
+                        class="btn btn-sm ${styleObj.badgeAlign === a ? 'btn-primary active' : 'btn-outline-secondary'}"
                         onclick="_v2SetBadgeAlign('${fieldId}','${a}',this)">
-                        <i class="fas fa-align-${a}"></i> ${a==='left'?'Trái':a==='center'?'Giữa':'Phải'}
+                        <i class="fas fa-align-${a}"></i> ${a === 'left' ? 'Trái' : a === 'center' ? 'Giữa' : 'Phải'}
                     </button>`).join('')}
                 </div>
             </div>
@@ -1678,13 +3940,13 @@ function openFieldPanel(fieldId, onSaved) {
                         onchange="syncFieldConfigV2('${fieldId}','scaleEnabled',this.checked); document.getElementById('v2fp-scalebrand-${fieldId}').classList.toggle('d-none',!this.checked)">
                     <label class="form-check-label small fw-bold" for="v2fp-scale-${fieldId}">Bật RS-232 / Web Serial</label>
                 </div>
-                <div id="v2fp-scalebrand-${fieldId}" class="${cfg.scaleEnabled?'':'d-none'} p-2 bg-white rounded border border-danger border-opacity-25">
+                <div id="v2fp-scalebrand-${fieldId}" class="${cfg.scaleEnabled ? '' : 'd-none'} p-2 bg-white rounded border border-danger border-opacity-25">
                     <label class="v2-prop-sublabel">Hãng cân mặc định</label>
                     <select class="form-select form-select-sm" onchange="syncFieldConfigV2('${fieldId}','scalePreset',this.value)">
-                        <option value="and"      ${(cfg.scalePreset||'and')==='and'      ?'selected':''}>⚖️ A&D (AND)</option>
-                        <option value="mettler"  ${cfg.scalePreset==='mettler'           ?'selected':''}>🏋️ Mettler Toledo</option>
-                        <option value="sartorius" ${cfg.scalePreset==='sartorius'        ?'selected':''}>🔬 Sartorius</option>
-                        <option value="custom"   ${cfg.scalePreset==='custom'            ?'selected':''}>⚙️ Tùy chỉnh</option>
+                        <option value="and"      ${(cfg.scalePreset || 'and') === 'and' ? 'selected' : ''}>⚖️ A&D (AND)</option>
+                        <option value="mettler"  ${cfg.scalePreset === 'mettler' ? 'selected' : ''}>🏋️ Mettler Toledo</option>
+                        <option value="sartorius" ${cfg.scalePreset === 'sartorius' ? 'selected' : ''}>🔬 Sartorius</option>
+                        <option value="custom"   ${cfg.scalePreset === 'custom' ? 'selected' : ''}>⚙️ Tùy chỉnh</option>
                     </select>
                 </div>
             </div>
@@ -1751,12 +4013,6 @@ function openFieldPanel(fieldId, onSaved) {
             <div id="v2fp-pane-adv-${fieldId}"   class="v2fp-pane p-3 d-none">${advancedHtml}</div>
 
             <div class="p-3 border-top bg-light">
-                <div class="d-flex gap-2 mb-2">
-                    <button class="btn btn-sm btn-outline-primary flex-fill"
-                        onclick="copyVariableV2('${fieldId}')"><i class="fas fa-copy me-1"></i>Sao chép</button>
-                    <button class="btn btn-sm btn-outline-warning flex-fill"
-                        onclick="cutVariableV2('${fieldId}')"><i class="fas fa-cut me-1"></i>Cắt</button>
-                </div>
                 <button class="btn btn-sm btn-outline-danger w-100"
                     onclick="if(confirm('Xóa biến số này?')) deleteVariableV2('${fieldId}')">
                     <i class="fas fa-trash-alt me-1"></i>Xóa bỏ hoàn toàn
@@ -1926,6 +4182,9 @@ window.syncFieldConfigV2 = syncFieldConfigV2;
 window.insertFormulaTokenV2 = insertFormulaTokenV2;
 window.serializeFormulaElementV2 = serializeFormulaElementV2;
 window.deserializeFormulaToHtmlV2 = deserializeFormulaToHtmlV2;
+window.toggleSelectFormulaVarModeV2 = toggleSelectFormulaVarModeV2;
+window.highlightFormulaReferencesV2 = highlightFormulaReferencesV2;
+window.clearFormulaHighlightsV2 = clearFormulaHighlightsV2;
 window.copyVariableV2 = copyVariableV2;
 window.cutVariableV2 = cutVariableV2;
 window.deleteVariableV2 = deleteVariableV2;
@@ -1954,7 +4213,7 @@ function markSaved() {
     }
 }
 
-window._v2RepaintBadge = function(fieldId) {
+window._v2RepaintBadge = function (fieldId) {
     document.querySelectorAll(`.v2-field-badge[data-field-id="${fieldId}"]`).forEach(el => {
         const cfg = fieldsConfig[fieldId] || {};
         const t = FIELD_TYPES[cfg.type] || FIELD_TYPES.text;
@@ -1962,14 +4221,14 @@ window._v2RepaintBadge = function(fieldId) {
     });
 };
 
-window._v2ApplyBadgeStyle = function(fieldId, prop, value) {
+window._v2ApplyBadgeStyle = function (fieldId, prop, value) {
     document.querySelectorAll(`.v2-field-badge[data-field-id="${fieldId}"]`).forEach(el => {
         if (value) el.style.setProperty(prop, value, 'important');
         else el.style.removeProperty(prop);
     });
 };
 
-window._v2ToggleBadgeMaxDim = function(fieldId, dim, val, btn) {
+window._v2ToggleBadgeMaxDim = function (fieldId, dim, val, btn) {
     const isActive = btn.classList.contains('active');
     const realVal = isActive ? null : val;
     syncFieldConfigV2(fieldId, `style.${dim}`, realVal);
@@ -1982,7 +4241,7 @@ window._v2ToggleBadgeMaxDim = function(fieldId, dim, val, btn) {
     if (!isActive) { btn.classList.add('active', 'btn-primary'); btn.classList.remove('btn-outline-secondary'); }
 };
 
-window._v2SetBadgeAlign = function(fieldId, align, btn) {
+window._v2SetBadgeAlign = function (fieldId, align, btn) {
     syncFieldConfigV2(fieldId, 'style.badgeAlign', align);
     const badge = document.querySelector(`.v2-field-badge[data-field-id="${fieldId}"]`);
     if (badge) {
@@ -2032,8 +4291,86 @@ function collectUsedFieldIds() {
     return used;
 }
 
+let savingDocV2 = false; // đang có request lưu chạy — chặn double-submit (nguồn gây INSERT trùng block)
+
+/**
+ * KIỂM TRA TOÀN VẸN trước khi lưu: so sánh biến số ĐANG HIỂN THỊ trên màn hình (DOM)
+ * với biến số THỰC SỰ có trong dữ liệu sắp gửi lên server (items[].content/cell.content).
+ * Có trường hợp badge vẫn hiện trên màn hình (vd. do NodeView chưa kịp/không đồng bộ
+ * ngược về item.data — race giữa thao tác dán + đổi tên biến ngay sau đó) nhưng chuỗi
+ * content thực tế lại KHÔNG có data-field-id đó — lúc lưu, biến âm thầm biến mất dù
+ * server báo "thành công" vì đơn giản là nó chưa từng được gửi lên. Hàm này chặn lại
+ * TRƯỚC khi gửi, thay vì để mất dữ liệu trong im lặng.
+ */
+function verifyFieldBadgesConsistencyV2() {
+    const pagesEl = document.getElementById('v2-pages');
+    if (!pagesEl) return [];
+    // Block hệ thống (isVirtual, vd HEADER/PHÊ DUYỆT) cố tình KHÔNG được collectUsedFieldIds()
+    // quét tới — badge trong đó (nếu có) không phải orphan, phải loại khỏi danh sách so sánh.
+    const virtualIds = new Set(items.filter((i) => i.isVirtual).map((i) => i.id));
+    const domIds = new Set();
+    pagesEl.querySelectorAll('[data-field-id]').forEach((el) => {
+        const id = el.getAttribute('data-field-id');
+        if (!id) return;
+        const blockId = el.closest('.v2-block')?.getAttribute('data-id');
+        if (blockId && virtualIds.has(blockId)) return;
+        domIds.add(id);
+    });
+    if (!domIds.size) return [];
+    const dataIds = collectUsedFieldIds();
+    const missing = [];
+    domIds.forEach((id) => { if (!dataIds.has(id)) missing.push(id); });
+
+    // CHẨN ĐOÁN: log chi tiết từng biến bị thiếu để lần sau tái hiện có thể xác định
+    // CHÍNH XÁC data thực tế đang là gì (thay vì phải đoán) — xem trong DevTools Console.
+    if (missing.length) {
+        missing.forEach((id) => {
+            const els = Array.from(pagesEl.querySelectorAll(`[data-field-id="${id}"]`));
+            const info = els.map((el) => {
+                const td = el.closest('td[data-row][data-col]');
+                const wrap = el.closest('.v2-table-wrap[data-id]');
+                const blockEl = el.closest('.v2-block[data-id]');
+                let cellContent = null, itemContent = null, itemId = null;
+                if (td && wrap) {
+                    const it = items.find((i) => i.id === wrap.getAttribute('data-id'));
+                    const r = parseInt(td.dataset.row, 10), c = parseInt(td.dataset.col, 10);
+                    itemId = it && it.id;
+                    cellContent = it && it.data && it.data[r] && it.data[r][c] ? it.data[r][c].content : '(không tìm thấy cell trong item.data)';
+                } else if (blockEl) {
+                    const it = items.find((i) => i.id === blockEl.getAttribute('data-id'));
+                    itemId = it && it.id;
+                    itemContent = it ? it.content : '(không tìm thấy item)';
+                }
+                return {
+                    domEditing: !!el.closest('.v2-editing'),
+                    domOuterHTML: el.outerHTML,
+                    itemId, cellContent, itemContent,
+                };
+            });
+            console.error(`[V2] Biến "${id}" hiển thị trên DOM nhưng KHÔNG có trong dữ liệu sẽ lưu. Chi tiết:`, info);
+        });
+    }
+    return missing;
+}
+
 function saveTemplate() {
+    if (savingDocV2) return; // request trước chưa xong: block mới chưa nhận db_id, gửi tiếp sẽ bị nhân đôi
+    savingDocV2 = true;
     unmountEditor(); // chốt nội dung đang gõ dở
+
+    const missingBadges = verifyFieldBadgesConsistencyV2();
+    if (missingBadges.length) {
+        savingDocV2 = false;
+        const labels = missingBadges.map((id) => (fieldsConfig[id] && (fieldsConfig[id].label || fieldsConfig[id].name)) || id);
+        window.Swal?.fire({
+            icon: 'error',
+            title: 'Lưu KHÔNG thành công',
+            html: 'Phát hiện ' + missingBadges.length + ' biến số đang hiển thị trên màn hình nhưng CHƯA được ghi nhận vào dữ liệu để lưu:<br><b>' + labels.map(esc).join(', ') + '</b>'
+                + '<br><br>Hãy bấm ra ngoài ô/đoạn văn bản đang chứa biến đó (để chốt nội dung vừa dán), rồi bấm Lưu lại.',
+            confirmButtonText: 'Đã hiểu',
+        });
+        return;
+    }
 
     const dirtyFields = items.filter((i) => !i.isVirtual && (i.dirty || !i.db_id)).map((i) => ({
         db_id: i.db_id || null,
@@ -2048,6 +4385,7 @@ function saveTemplate() {
         borderStyle: i.borderStyle || null, cellBorders: i.cellBorders || null,
         hideHeader: i.hideHeader || false,
         canAddRows: i.canAddRows || false, addRowsCount: i.addRowsCount || 1,
+        freq_minutes: i.freq_minutes || null,
         locked: i.locked || false, template_id: i.template_id || null,
         showPreview: i.showPreview || false, stage_code: i.stage_code || null,
         chartConfig: i.chartConfig || null, backgroundColor: i.backgroundColor || null,
@@ -2055,10 +4393,12 @@ function saveTemplate() {
         isBmrHeader: i.isBmrHeader || false, isGfHeader: i.isGfHeader || false,
         isAbbreviationTable: i.isAbbreviationTable || false,
         loop_group_id: i.loop_group_id || null, loop_count: i.loop_count || null,
+        loop_label: i.loop_label || null,
         typography: i.typography || null,
         cell_notes: i.cell_notes || null, conditional_logic: i.conditional_logic || null,
         textAlign: i.textAlign || null, verticalAlign: i.verticalAlign || null,
         pageBreakBefore: i.pageBreakBefore || false,
+        noPageBreak: i.noPageBreak || false,
     }));
 
     const used = collectUsedFieldIds();
@@ -2079,7 +4419,9 @@ function saveTemplate() {
                 fieldsConfig: pruned,
                 fields: dirtyFields,
                 block_order: items.filter((i) => !i.isVirtual).map((i) => i.id),
-                deleted_ids: [],
+                deleted_ids: deletedBlockIds,
+                deleted_field_keys: deletedFieldKeys,
+                docProperties: BOOT.docProperties || {},
                 incremental: true,
             },
             log_history: false,
@@ -2088,7 +4430,21 @@ function saveTemplate() {
             _token: BOOT.csrf,
         }),
     })
-        .then((r) => r.json())
+        .then(async (r) => {
+            // Đọc text trước rồi mới parse JSON — khi server lỗi (500) hoặc hết phiên (419)
+            // thường trả về HTML, gọi thẳng r.json() sẽ văng "Unexpected token <" khó hiểu.
+            const text = await r.text();
+            let res = null;
+            try { res = JSON.parse(text); } catch (e) { /* không phải JSON */ }
+            if (r.status === 401 || r.status === 419) {
+                throw new Error('Phiên đăng nhập đã HẾT HẠN. Hãy mở tab mới đăng nhập lại rồi quay lại đây bấm Lưu — nội dung đang soạn vẫn còn nguyên trên trang.');
+            }
+            if (!r.ok) {
+                throw new Error((res && res.message) || `Máy chủ trả lỗi HTTP ${r.status}. Vui lòng thử lưu lại.`);
+            }
+            if (!res) throw new Error('Phản hồi của máy chủ không hợp lệ (không phải JSON).');
+            return res;
+        })
         .then((res) => {
             if (res.success) {
                 if (res.block_ids) {
@@ -2103,13 +4459,28 @@ function saveTemplate() {
                     });
                 }
                 items.forEach((i) => (i.dirty = false));
+                deletedBlockIds = [];
+                deletedFieldKeys = [];
                 markSaved();
+                window.Swal?.fire({
+                    toast: true, position: 'top-end', icon: 'success',
+                    title: 'Đã lưu hồ sơ thành công', showConfirmButton: false, timer: 2200,
+                });
             } else {
-                window.Swal?.fire('Thất bại', res.message || 'Không thể lưu hồ sơ', 'error');
+                window.Swal?.fire({
+                    icon: 'error', title: 'Lưu KHÔNG thành công',
+                    text: res.message || 'Không thể lưu hồ sơ. Vui lòng thử lại.',
+                    confirmButtonText: 'Đóng',
+                });
             }
         })
-        .catch((err) => window.Swal?.fire('Lỗi kết nối', err.message, 'error'))
+        .catch((err) => window.Swal?.fire({
+            icon: 'error', title: 'Lưu KHÔNG thành công',
+            text: err.message || 'Không thể kết nối máy chủ. Kiểm tra mạng rồi thử lại.',
+            confirmButtonText: 'Đóng',
+        }))
         .finally(() => {
+            savingDocV2 = false;
             if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save me-1"></i> Lưu'; }
         });
 }
@@ -2117,24 +4488,43 @@ function saveTemplate() {
 /* =========================================================
  * 5b. MỤC LỤC (TOC) — danh sách section, click cuộn tới nơi
  * ========================================================= */
+// Mục lục dựng từ DOM đang hiển thị: section + TIÊU ĐỀ CÁC CẤP (h1/h2/h3, kèm số
+// data-hnum nếu đánh số đang bật) — số trang lấy từ .v2-page chứa phần tử.
+const TOC_NODE_SEL = '#v2-pages .v2-section[id^="v2-sec-"], #v2-pages h1, #v2-pages h2, #v2-pages h3';
+
 function buildToc() {
     const body = document.getElementById('v2-toc-body');
     if (!body) return;
+    updateHeadingNumbersV2(); // chốt data-hnum mới nhất trước khi đọc
+    const pages = Array.from(document.querySelectorAll('#v2-pages .v2-page'));
     let html = '';
-    let pageNo = 0;
-    items.forEach((item) => {
-        if (item.type !== 'section') return;
-        pageNo++;
-        html += `<div class="v2-toc-item" data-target="v2-sec-${item.id}">
-            <span><i class="fas fa-layer-group me-2" style="opacity:0.5;"></i>${esc(item.label || 'Section')}</span>
-            <span class="v2-toc-page">Tr.${pageNo}</span>
-        </div>`;
+    document.querySelectorAll(TOC_NODE_SEL).forEach((el, i) => {
+        const pageNo = pages.indexOf(el.closest('.v2-page')) + 1;
+        if (el.classList.contains('v2-section')) {
+            const secId = el.id.replace(/^v2-sec-/, '');
+            const item = items.find((it) => it.id === secId);
+            const secNum = el.querySelector('.v2-section-title')?.getAttribute('data-hnum') || '';
+            html += `<div class="v2-toc-item" data-toc-idx="${i}">
+                <span><i class="fas fa-layer-group me-2" style="opacity:0.5;"></i>${esc(secNum + ((item && item.label) || 'Section'))}</span>
+                <span class="v2-toc-page">Tr.${pageNo}</span>
+            </div>`;
+        } else {
+            const text = (el.textContent || '').trim();
+            if (!text) return; // tiêu đề rỗng (đang gõ dở) không đưa vào mục lục
+            const lv = parseInt(el.tagName.slice(1), 10); // 1..3
+            const num = el.getAttribute('data-hnum') || '';
+            html += `<div class="v2-toc-item v2-toc-h" style="padding-left:${12 + lv * 14}px;" data-toc-idx="${i}">
+                <span class="text-truncate">${esc(num + text)}</span>
+                <span class="v2-toc-page">Tr.${pageNo}</span>
+            </div>`;
+        }
     });
     body.innerHTML = html || '<div class="text-muted small text-center py-3">Chưa có công đoạn nào.</div>';
     body.querySelectorAll('.v2-toc-item').forEach((el) => {
         el.addEventListener('click', () => {
-            const target = document.getElementById(el.getAttribute('data-target'));
-            if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            // Truy vấn lại tại thời điểm click — DOM có thể đã render lại sau khi mở mục lục
+            const target = document.querySelectorAll(TOC_NODE_SEL)[parseInt(el.getAttribute('data-toc-idx'), 10)];
+            if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
         });
     });
 }
@@ -2414,6 +4804,736 @@ function insertEquipmentTableV2(afterIndex, equipments) {
 }
 
 /* =========================================================
+ * 5c2b. BIỂU ĐỒ + BẢNG KT KHỐI LƯỢNG TRUNG BÌNH (port từ V1 chart_ops)
+ *   - renderChartV2: vẽ block type 'chart' bằng Chart.js (2.x, nạp sẵn từ layout)
+ *   - generateWeightChartTableV2: chèn cặp Biểu đồ + Bảng nhập KL trung bình
+ *   - Chạy thử: dữ liệu biểu đồ đọc trực tiếp từ giá trị biến số của bảng nguồn
+ * ========================================================= */
+const chartInstancesV2 = {};
+
+function stripHtmlV2(html) {
+    if (!html) return '';
+    const tmp = document.createElement('div');
+    tmp.innerHTML = String(html);
+    return tmp.textContent || tmp.innerText || '';
+}
+
+function showModalV2(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (window.jQuery) {
+        window.jQuery(el).modal('show');
+    }
+}
+
+function hideModalV2(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (window.jQuery) {
+        window.jQuery(el).modal('hide');
+    }
+}
+
+/** Trích dữ liệu vẽ biểu đồ từ bảng nguồn. Ở Chạy thử: ô chứa biến số đọc theo
+ *  giá trị đã nhập (executionValues); ở Thiết kế: đọc text tĩnh của ô. */
+function extractChartDataV2(tableItem, cfg) {
+    const labels = [];
+    const data = [];
+    const xIdx = cfg.xIdx ?? 0;
+    const yIdx = cfg.yIdx ?? 1;
+    (tableItem.data || []).forEach((row) => {
+        if (!Array.isArray(row)) return;
+        const cellText = (idx) => {
+            const cell = row[idx];
+            const html = cell && typeof cell === 'object' ? cell.content : cell;
+            if (!html) return '';
+            const m = String(html).match(/data-field-id=["']([^"']+)["']/);
+            if (m && BOOT.isExecutionMode) {
+                const v = getExecDefaultV2(m[1]);
+                return v === undefined || v === null ? '' : String(v);
+            }
+            return stripHtmlV2(html).trim();
+        };
+        const labelText = cellText(xIdx);
+        const valText = cellText(yIdx);
+        if (!labelText && !valText) return;
+        labels.push(String(labels.length + 1));
+        const num = parseFloat(String(valText).replace(/,/g, ''));
+        data.push(!valText || valText.toUpperCase() === 'NA' || isNaN(num) ? null : num);
+    });
+    return { labels, data };
+}
+
+/** Vẽ biểu đồ lên canvas (Chart.js 2.x — cùng cấu hình với renderChart V1:
+ *  đường Min/Max tiêu chuẩn, tô đỏ khi vượt chuẩn, customGrid chia 10 nấc). */
+function renderChartV2(canvasId, item) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas || typeof window.Chart === 'undefined') return;
+    const config = item.chartConfig || {};
+
+    let labels = config.labels || [];
+    let data = config.data || [];
+    if (BOOT.isExecutionMode && config.tableSourceId) {
+        const src = items.find((i) => i.id === config.tableSourceId);
+        if (src && src.type === 'table') ({ labels, data } = extractChartDataV2(src, config));
+    }
+
+    if (chartInstancesV2[canvasId]) chartInstancesV2[canvasId].destroy();
+
+    const minY = config.minY ?? null;
+    const maxY = config.maxY ?? null;
+    let calculatedMinY = minY;
+    let calculatedMaxY = maxY;
+    let isOutOfSpec = false;
+    const numVals = (data || []).map((v) => parseFloat(v)).filter((v) => !isNaN(v) && isFinite(v));
+    if (numVals.length > 0) {
+        const dataMin = Math.min(...numVals);
+        const dataMax = Math.max(...numVals);
+        // Nới trục Y để điểm vượt chuẩn vẫn hiện trên biểu đồ
+        if (calculatedMinY !== null && dataMin < calculatedMinY) calculatedMinY = Math.floor(dataMin * 100) / 100 - 0.02;
+        if (calculatedMaxY !== null && dataMax > calculatedMaxY) calculatedMaxY = Math.ceil(dataMax * 100) / 100 + 0.02;
+        if (minY !== null && dataMin < minY) isOutOfSpec = true;
+        if (maxY !== null && dataMax > maxY) isOutOfSpec = true;
+    }
+
+    const yAxesTicks = { beginAtZero: calculatedMinY === null };
+    if (calculatedMinY !== null) yAxesTicks.min = calculatedMinY;
+    if (calculatedMaxY !== null) yAxesTicks.max = calculatedMaxY;
+    if (config.customGrid && calculatedMinY !== null && calculatedMaxY !== null) {
+        yAxesTicks.stepSize = (calculatedMaxY - calculatedMinY) / 10;
+    }
+
+    const datasets = [{
+        label: Array.isArray(config.title) ? config.title[0] : (config.title || 'Dữ liệu'),
+        data,
+        backgroundColor: config.type === 'bar' ? 'rgba(26, 115, 232, 0.5)' : 'rgba(26, 115, 232, 0.1)',
+        borderColor: 'rgba(26, 115, 232, 1)',
+        borderWidth: 2,
+        pointRadius: 4,
+        pointBackgroundColor: '#ff0000',
+        fill: config.type === 'line',
+        spanGaps: false,
+    }];
+    const specLine = (label, value) => ({
+        label,
+        data: Array(labels.length).fill(value),
+        borderColor: isOutOfSpec ? 'rgba(239, 68, 68, 1)' : 'rgba(148, 163, 184, 0.8)',
+        borderWidth: isOutOfSpec ? 2.5 : 1.5,
+        borderDash: isOutOfSpec ? [] : [5, 5],
+        pointRadius: 0,
+        fill: false,
+        tension: 0,
+    });
+    if (minY !== null && labels.length > 0) datasets.push(specLine('Tiêu chuẩn Dưới (Min)', minY));
+    if (maxY !== null && labels.length > 0) datasets.push(specLine('Tiêu chuẩn Trên (Max)', maxY));
+
+    chartInstancesV2[canvasId] = new window.Chart(canvas.getContext('2d'), {
+        type: config.type || 'line',
+        data: { labels, datasets },
+        options: {
+            animation: { duration: 0 },
+            responsive: true,
+            maintainAspectRatio: false,
+            title: {
+                display: !!config.title,
+                text: typeof config.title === 'string' ? config.title.split('\n') : config.title,
+                fontSize: 14,
+                fontColor: '#000',
+            },
+            scales: {
+                yAxes: [{
+                    ticks: yAxesTicks,
+                    gridLines: { color: config.customGrid ? 'rgba(0,0,0,0.3)' : 'rgba(0, 0, 0, 0.1)', lineWidth: 1 },
+                }],
+                xAxes: [{
+                    gridLines: { color: config.customGrid ? 'rgba(0,0,0,0.3)' : 'rgba(0, 0, 0, 0.1)', lineWidth: 1 },
+                }],
+            },
+            tooltips: {
+                callbacks: {
+                    label: (tooltipItem, d) => d.datasets[tooltipItem.datasetIndex].label + ': ' + tooltipItem.yLabel,
+                },
+            },
+        },
+    });
+}
+
+/** Vẽ lại mọi biểu đồ đang hiển thị — gọi khi giá trị biến số đổi lúc Chạy thử */
+function refreshChartsV2() {
+    items.forEach((it) => {
+        if (it.type !== 'chart' || !it.chartConfig) return;
+        const canvasId = 'v2_chart_canvas_' + it.id;
+        if (document.getElementById(canvasId)) renderChartV2(canvasId, it);
+    });
+}
+
+/** Chèn cặp "Biểu đồ + Bảng nhập Khối lượng Trung bình" — cấu trúc y hệt V1
+ *  (generateWeightChartTable): 3 dòng mặc định, mỗi dòng 1 biến số kiểu số. */
+function generateWeightChartTableV2() {
+    if (BOOT.isReadOnly || BOOT.isExecutionMode) return;
+    const weight = parseFloat(document.getElementById('v2-wc-weight')?.value) || 7.10;
+    const devPercent = parseFloat(document.getElementById('v2-wc-dev')?.value) || 3;
+    const freq = parseInt(document.getElementById('v2-wc-freq')?.value, 10) || 15;
+
+    const maxDev = (weight * devPercent) / 100;
+    const minY = (weight - maxDev).toFixed(2);
+    const maxY = (weight + maxDev).toFixed(2);
+
+    // Chèn ngay tại điểm click gần nhất trong vùng thiết kế (giống mọi thao tác chèn khác
+    // — xem getInsertPointV2()), KHÔNG dùng activeBlockId: bấm nút mở modal này đã tự làm
+    // activeBlockId về null (click ra ngoài .v2-block), nên trước đây luôn rơi xuống cuối
+    // tài liệu bất kể con trỏ đang đặt ở đâu.
+    const { insertIdx, sectionId } = getInsertPointV2();
+
+    saveDocState();
+
+    const tableId = newBlockId();
+    const chartId = newBlockId();
+
+    // Đặt tên biến không trùng với các bảng KL đã chèn trước đó (áp dụng chung 1 số thứ tự
+    // cho cả 4 biến/dòng để dễ đối chiếu: "Khối lượng TB 1", "Thời gian lấy mẫu 1"...).
+    const nameOffset = Object.values(fieldsConfig).filter((f) => /^Khối lượng TB \d+$/.test(f.name || '')).length;
+    const rowsData = [1, 2, 3].map((n) => {
+        const seq = nameOffset + n;
+        const uid = (suffix) => 'field_v2_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6) + suffix;
+
+        const numFid = uid('n' + n);
+        fieldsConfig[numFid] = {
+            id: numFid, name: 'Khối lượng TB ' + seq, label: 'Nhập Số', type: 'number',
+            validation: { required: false, min: parseFloat(minY), max: parseFloat(maxY), decimal_places: 2 },
+            options: [], instruction: '', block_id: tableId, section_id: sectionId,
+            scaleEnabled: true, scalePreset: 'and',
+        };
+
+        // "Thời gian lấy mẫu": biến kiểu Thời Gian THẬT (type: date), click Chạy thử tự
+        // điền giờ hệ thống (autoSystemTime) — thay cho badge tĩnh cũ không cấu hình được.
+        const timeFid = uid('t' + n);
+        fieldsConfig[timeFid] = {
+            id: timeFid, name: 'Thời gian lấy mẫu ' + seq, label: 'Thời gian lấy mẫu', type: 'date',
+            autoSystemTime: true, validation: { required: false }, options: [], instruction: '',
+            block_id: tableId, section_id: sectionId,
+        };
+
+        // "Người thực hiện": biến Chữ ký thường.
+        const execFid = uid('e' + n);
+        fieldsConfig[execFid] = {
+            id: execFid, name: 'Người thực hiện ' + seq, label: 'Người thực hiện', type: 'signature',
+            is_checker: false, validation: { required: false }, options: [], instruction: '',
+            block_id: tableId, section_id: sectionId,
+        };
+
+        // "Người kiểm tra": biến Chữ ký với thuộc tính is_checker — mở màn xác thực người
+        // kiểm tra riêng (openCheckerAuthModal) thay vì ký thường.
+        const checkFid = uid('c' + n);
+        fieldsConfig[checkFid] = {
+            id: checkFid, name: 'Người kiểm tra ' + seq, label: 'Người kiểm tra', type: 'signature',
+            is_checker: true, validation: { required: false }, options: [], instruction: '',
+            block_id: tableId, section_id: sectionId,
+        };
+
+        const badge = (fid) => `<span contenteditable="false" class="ebmr-field-badge" data-field-id="${fid}"></span>​`;
+        return [
+            { content: '<p style="text-align: center;">#STT#</p>', rs: 1, cs: 1, hidden: false }, // STT tự đánh số bằng CSS counter — xem decorateBadges()
+            { content: badge(timeFid), rs: 1, cs: 1, hidden: false },
+            { content: badge(numFid), rs: 1, cs: 1, hidden: false },
+            { content: badge(execFid), rs: 1, cs: 1, hidden: false },
+            { content: badge(checkFid), rs: 1, cs: 1, hidden: false },
+        ];
+    });
+
+    const chartItem = {
+        id: chartId, type: 'chart', section_id: sectionId, dirty: true,
+        label: `Biểu đồ Khối lượng (W10: ${weight}g ± ${devPercent}%)`,
+        chartConfig: {
+            type: 'line',
+            title: `VẼ BIỂU ĐỒ THEO KHỐI LƯỢNG MỖI 10 VIÊN\nTiêu chuẩn: Khối lượng 10 viên ± ${devPercent}% = ${weight} g ± ${devPercent}% (${minY} - ${maxY} g)\nTần suất kiểm tra: Mỗi ${freq} phút`,
+            labels: ['1', '2', '3'],
+            data: [null, null, null],
+            minY: parseFloat(minY),
+            maxY: parseFloat(maxY),
+            tableSourceId: tableId,
+            isMatrix: false,
+            xIdx: 1, // cột "Thời gian lấy mẫu" (đã lùi 1 bậc vì thêm cột STT đầu bảng)
+            yIdx: 2, // cột "W10"
+            customGrid: true,
+        },
+    };
+    const tableItem = {
+        id: tableId, type: 'table', section_id: sectionId, dirty: true,
+        label: 'Bảng nhập Khối lượng Trung bình',
+        borderMode: 'all', borderWeight: '1px', hideHeader: false,
+        canAddRows: true, addRowsCount: 1,
+        freq_minutes: freq,
+        rows: 3, cols: 5,
+        columns: [
+            { label: 'STT', width: '8%' },
+            { label: 'Thời gian lấy mẫu', width: '23%' },
+            { label: 'W10', width: '23%' },
+            { label: 'Người thực hiện', width: '23%' },
+            { label: 'Người kiểm tra', width: '23%' },
+        ],
+        rowHeights: ['auto', 'auto', 'auto'],
+        data: rowsData,
+    };
+
+    // Giống V1: biểu đồ đứng TRÊN, bảng nhập liệu ngay DƯỚI
+    items.splice(insertIdx, 0, chartItem, tableItem);
+
+    hideModalV2('v2WeightChartModal');
+    markDirty();
+    renderDocument();
+    setTimeout(() => {
+        document.querySelector(`.v2-block[data-id="${tableId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 120);
+}
+
+/* =========================================================
+ * 5c2b. "THÊM DÒNG (CẤP 2)" — bảng có canAddRows bật, CHỈ hoạt động lúc Chạy thử/thực
+ *   thi (không đổi cấu trúc bảng gốc lúc Thiết kế): tự nhân bản (các) hàng CUỐI thành
+ *   hàng mới, mỗi biến số trong hàng nguồn được đổi sang field id/tên MỚI (không dùng
+ *   chung dữ liệu với hàng gốc). Hàng mới đánh dấu is_dynamic — chỉ hàng này mới xoá
+ *   lại được. Cột "STT" (nếu có, xem #STT# ở decorateBadges) tự đánh số lại bằng CSS
+ *   counter — KHÔNG cần tính lại bằng JS mỗi lần thêm/xoá hàng.
+ * ========================================================= */
+
+function addRuntimeTableRowV2(item) {
+    if (BOOT.isReadOnly || !item || !item.canAddRows || !item.rows) return;
+    const addRowsCount = Math.max(1, parseInt(item.addRowsCount, 10) || 1);
+    const actualRowsToAdd = Math.min(addRowsCount, item.rows);
+    const baseRows = item.rows; // chốt TRƯỚC khi thêm để tính đúng hàng nguồn (giống V1)
+
+    saveDocState();
+    for (let offset = actualRowsToAdd; offset >= 1; offset--) {
+        const sourceRowIdx = baseRows - offset;
+        const sourceRow = item.data[sourceRowIdx];
+        if (!sourceRow) continue;
+
+        // Nhân bản MỌI biến số trong hàng nguồn sang id mới (tái dùng đúng cơ chế
+        // copy/paste khối), rồi đặt lại TÊN theo quy tắc "tên cũ + số thứ tự kế tiếp"
+        // (khớp cách đặt tên biến của bảng này: "Thời gian lấy mẫu 1" -> "... 2"...).
+        const htmlList = sourceRow.map((cell) => (cell && cell.content) || '');
+        const { idMap, nameMap } = buildFieldDuplicateMapV2(htmlList);
+        if (Object.keys(idMap).length) {
+            applyFieldDuplicateMapV2(idMap, nameMap);
+            Object.entries(idMap).forEach(([oldId, newId]) => {
+                const oldCfg = fieldsConfig[oldId];
+                const newCfg = fieldsConfig[newId];
+                if (!oldCfg || !newCfg) return;
+                const m = String(oldCfg.name || '').match(/^(.*?)(\d+)$/);
+                const base = m ? m[1] : ((oldCfg.name || 'Var') + ' ');
+                let n = m ? parseInt(m[2], 10) + 1 : 2;
+                while (Object.values(fieldsConfig).some((f) => f !== newCfg && f.name === base + n)) n++;
+                newCfg.name = base + n;
+            });
+        }
+
+        const newRow = sourceRow.map((cell) => {
+            const nc = { ...(cell || {}) };
+            if (nc.content) nc.content = rewriteFieldIdsInHtmlV2(nc.content, idMap);
+            nc.db_id = null;
+            nc.content_db_id = null;
+            nc.is_dynamic = true;
+            return nc;
+        });
+        item.data.push(newRow);
+        if (item.rowHeights) item.rowHeights.push(item.rowHeights[sourceRowIdx] || 'auto');
+    }
+    item.rows += actualRowsToAdd;
+    item.dirty = true;
+    markDirty();
+    renderDocument();
+    showToast('success', `Đã thêm ${actualRowsToAdd} dòng mới`);
+}
+
+async function deleteRuntimeTableRowV2(item, rowIdx) {
+    if (BOOT.isReadOnly) return;
+    const row = item.data && item.data[rowIdx];
+    if (!row || !row[0] || !row[0].is_dynamic) return; // chỉ xoá được hàng do "cấp 2" tự thêm
+    if (item.data.length <= 1) return;
+
+    const res = await window.Swal.fire({
+        title: 'Xóa dòng này?', icon: 'warning', showCancelButton: true,
+        confirmButtonColor: '#d33', confirmButtonText: 'Xóa', cancelButtonText: 'Hủy',
+    });
+    if (!res.isConfirmed) return;
+
+    saveDocState();
+    item.data.splice(rowIdx, 1);
+    if (item.rowHeights) item.rowHeights.splice(rowIdx, 1);
+    item.rows = Math.max(0, item.rows - 1);
+    item.dirty = true;
+    markDirty();
+    renderDocument();
+    showToast('info', 'Đã xóa dòng');
+}
+
+/* =========================================================
+ * 5c2c. DANH MỤC CHỮ VIẾT TẮT (port từ V1 ui_handlers.addAbbreviation/saveAbbreviation)
+ *   Lưu riêng ở cột ebmr_templates.abbreviations_List (đã có sẵn xử lý ở backend save()),
+ *   không nằm trong danh sách block bình thường.
+ * ========================================================= */
+function addAbbreviationV2() {
+    const selectedText = window.getSelection().toString().trim();
+    if (!selectedText) {
+        window.Swal?.fire('Lỗi', 'Vui lòng bôi đen (chọn) một từ viết tắt trong tài liệu trước khi bấm nút này.', 'warning');
+        return;
+    }
+    document.getElementById('v2-abbr-word').value = selectedText;
+    document.getElementById('v2-abbr-meaning').value = '';
+    showModalV2('v2AbbreviationModal');
+}
+
+function saveAbbreviationV2() {
+    const word = document.getElementById('v2-abbr-word').value.trim();
+    const meaning = document.getElementById('v2-abbr-meaning').value.trim();
+    if (!word || !meaning) {
+        window.Swal?.fire('Lỗi', 'Vui lòng nhập đầy đủ ý nghĩa của từ viết tắt.', 'warning');
+        return;
+    }
+
+    let abbrevTable = items.find((item) => item.isAbbreviationTable === true);
+    if (!abbrevTable) {
+        abbrevTable = {
+            id: newBlockId(), type: 'table', label: 'DANH MỤC CHỮ VIẾT TẮT', isAbbreviationTable: true,
+            rows: 1, cols: 3, borderMode: 'visible', hideHeader: false, section_id: null,
+            columns: [
+                { label: 'STT', type: 'text', width: '10%' },
+                { label: 'Chữ viết tắt', type: 'text', width: '30%' },
+                { label: 'Ý nghĩa', type: 'text', width: '60%' },
+            ],
+            data: [[
+                { content: '1', rs: 1, cs: 1, textAlign: 'center' },
+                { content: word, rs: 1, cs: 1, textAlign: 'center', fontWeight: 'bold' },
+                { content: meaning, rs: 1, cs: 1, textAlign: 'left' },
+            ]],
+            dirty: true,
+        };
+        let insertIdx = 0;
+        for (let i = 0; i < items.length; i++) { if (items[i].isVirtual) insertIdx = i + 1; }
+        items.splice(insertIdx, 0, abbrevTable);
+    } else {
+        const exists = abbrevTable.data.some((row) => row[1] && stripHtmlV2(row[1].content || '').trim().toLowerCase() === word.toLowerCase());
+        if (exists) {
+            window.Swal?.fire('Lỗi', 'Từ viết tắt này đã tồn tại trong danh mục!', 'warning');
+            return;
+        }
+        const stt = abbrevTable.data.length + 1;
+        abbrevTable.data.push([
+            { content: stt.toString(), rs: 1, cs: 1, textAlign: 'center' },
+            { content: word, rs: 1, cs: 1, textAlign: 'center', fontWeight: 'bold' },
+            { content: meaning, rs: 1, cs: 1, textAlign: 'left' },
+        ]);
+        abbrevTable.rows = abbrevTable.data.length;
+        abbrevTable.dirty = true;
+    }
+
+    hideModalV2('v2AbbreviationModal');
+    markDirty();
+    renderDocument();
+    window.Swal?.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Đã thêm vào Danh mục chữ viết tắt', showConfirmButton: false, timer: 2000 });
+}
+
+/* =========================================================
+ * 5c2d. CHÈN SYMBOL (port từ V1 symbol_ops.blade.php)
+ * ========================================================= */
+const SYMBOLS_V2 = {
+    math: ['±', '≥', '≤', '×', '÷', '≈', '≠', '∞', '∑', 'π', '√', '²', '³', '°', '‰', 'µ', 'λ', 'Ω'],
+    greek: ['α', 'β', 'γ', 'δ', 'Δ', 'ε', 'θ', 'λ', 'μ', 'Ω', 'ρ', 'σ', 'φ', 'ψ', 'ω'],
+    misc: ['™', '®', '©', '✓', '✗', '→', '←', '↑', '↓', '↔', '▲', '▼', '◄', '►', '■', '•', '★'],
+};
+let currentSymbolTabV2 = 'math';
+
+function renderSymbolGridV2() {
+    const grid = document.getElementById('v2-symbol-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    (SYMBOLS_V2[currentSymbolTabV2] || []).forEach((sym) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-outline-secondary p-0 d-flex align-items-center justify-content-center';
+        btn.style.width = '38px'; btn.style.height = '38px'; btn.style.fontSize = '1.2rem';
+        btn.textContent = sym;
+        btn.addEventListener('click', () => insertSymbolV2(sym));
+        grid.appendChild(btn);
+    });
+}
+
+function insertSymbolV2(sym) {
+    if (!activeEditor) {
+        window.Swal?.fire({ toast: true, position: 'top-end', icon: 'info', title: 'Hãy click vào một ô/đoạn văn bản trước khi chèn ký hiệu.', showConfirmButton: false, timer: 2500 });
+        return;
+    }
+    activeEditor.chain().focus().insertContent(sym).run();
+    if (activeSync) activeSync();
+    markDirty();
+    hideModalV2('v2SymbolModal');
+}
+
+/* =========================================================
+ * 5c2e. CHÈN CÔNG THỨC TOÁN HỌC (KaTeX) — node atom mathEquation (xem media-nodes.js)
+ * ========================================================= */
+let equationEditCallbackV2 = null;
+
+function updateEquationPreviewV2() {
+    const input = document.getElementById('v2-eq-input');
+    const preview = document.getElementById('v2-eq-preview');
+    if (!input || !preview) return;
+    try { preview.innerHTML = katex.renderToString(input.value || '', { throwOnError: false }); }
+    catch (e) { preview.textContent = input.value; }
+}
+
+function openEquationEditorV2(latex, onSave) {
+    const input = document.getElementById('v2-eq-input');
+    input.value = latex || '';
+    updateEquationPreviewV2();
+    equationEditCallbackV2 = onSave || null;
+    showModalV2('v2EquationModal');
+}
+window.__V2__.openEquationEditor = openEquationEditorV2;
+
+function insertEquationV2() {
+    const latex = document.getElementById('v2-eq-input').value.trim();
+    if (!latex) { hideModalV2('v2EquationModal'); return; }
+
+    if (equationEditCallbackV2) {
+        equationEditCallbackV2(latex);
+        equationEditCallbackV2 = null;
+        if (activeSync) activeSync();
+        markDirty();
+        hideModalV2('v2EquationModal');
+        return;
+    }
+    if (!activeEditor) {
+        window.Swal?.fire({ toast: true, position: 'top-end', icon: 'info', title: 'Hãy click vào một ô/đoạn văn bản trước khi chèn công thức.', showConfirmButton: false, timer: 2500 });
+        return;
+    }
+    activeEditor.chain().focus().insertContent({ type: 'mathEquation', attrs: { latex } }).run();
+    if (activeSync) activeSync();
+    markDirty();
+    hideModalV2('v2EquationModal');
+}
+
+/* =========================================================
+ * 5c2f. CHÈN HÌNH ẢNH (base64, node atom v2Image — xem media-nodes.js)
+ * ========================================================= */
+let pendingImageDataUrlV2 = null;
+
+function resetImageModalV2() {
+    pendingImageDataUrlV2 = null;
+    const file = document.getElementById('v2-img-file');
+    const preview = document.getElementById('v2-img-preview');
+    if (file) file.value = '';
+    if (preview) { preview.src = ''; preview.style.display = 'none'; }
+}
+
+function insertImageV2() {
+    if (!pendingImageDataUrlV2) {
+        window.Swal?.fire('Lỗi', 'Vui lòng chọn 1 tệp hình ảnh.', 'warning');
+        return;
+    }
+    if (!activeEditor) {
+        window.Swal?.fire({ toast: true, position: 'top-end', icon: 'info', title: 'Hãy click vào một đoạn văn bản trước khi chèn hình ảnh.', showConfirmButton: false, timer: 2500 });
+        return;
+    }
+    const width = document.getElementById('v2-img-width').value + '%';
+    activeEditor.chain().focus().insertContent({ type: 'v2Image', attrs: { src: pendingImageDataUrlV2, width } }).run();
+    if (activeSync) activeSync();
+    markDirty();
+    resetImageModalV2();
+    hideModalV2('v2ImageModal');
+}
+
+/* =========================================================
+ * 5c2g. DOCUMENT PROPERTY — danh mục key/value tự định nghĩa theo template (giống Word),
+ *   lưu trong BOOT.docProperties, gửi kèm payload lưu (saveTemplate) ở khoá riêng.
+ *   Bấm vào dòng (tên/giá trị) để chèn; nút bút chì để sửa giá trị; nút thùng rác để xóa.
+ * ========================================================= */
+let editingDocPropKeyV2 = null;
+
+function renderDocPropListV2() {
+    const tbody = document.getElementById('v2-dp-list');
+    if (!tbody) return;
+    const props = BOOT.docProperties || {};
+    const keys = Object.keys(props).filter((k) => !k.startsWith('__')); // khóa __ là setting nội bộ (VD: đánh số tiêu đề)
+    if (keys.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted small py-3">Chưa có thuộc tính nào.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = keys.map((k) => `
+        <tr>
+            <td class="fw-bold v2-dp-row" data-dp-row="${esc(k)}" style="cursor:pointer;" title="Bấm để chèn vào tài liệu">${esc(k)}</td>
+            <td class="v2-dp-row" data-dp-row="${esc(k)}" style="cursor:pointer;" title="Bấm để chèn vào tài liệu">${esc(props[k])}</td>
+            <td class="text-center text-nowrap">
+                <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2 me-1" data-dp-insert="${esc(k)}" title="Chèn vào tài liệu"><i class="fas fa-file-import"></i></button>
+                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 me-1" data-dp-edit="${esc(k)}" title="Sửa giá trị"><i class="fas fa-pen"></i></button>
+                <button type="button" class="btn btn-xs btn-outline-danger py-0 px-2" data-dp-del="${esc(k)}" title="Xóa"><i class="fas fa-trash"></i></button>
+            </td>
+        </tr>`).join('');
+    tbody.querySelectorAll('[data-dp-row]').forEach((el) =>
+        el.addEventListener('click', () => insertDocPropV2(el.getAttribute('data-dp-row'))));
+    tbody.querySelectorAll('[data-dp-insert]').forEach((btn) =>
+        btn.addEventListener('click', (e) => { e.stopPropagation(); insertDocPropV2(btn.getAttribute('data-dp-insert')); }));
+    tbody.querySelectorAll('[data-dp-edit]').forEach((btn) =>
+        btn.addEventListener('click', (e) => { e.stopPropagation(); startEditDocPropV2(btn.getAttribute('data-dp-edit')); }));
+    tbody.querySelectorAll('[data-dp-del]').forEach((btn) =>
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const key = btn.getAttribute('data-dp-del');
+            delete BOOT.docProperties[key];
+            if (editingDocPropKeyV2 === key) resetDocPropFormV2();
+            markDirty();
+            renderDocPropListV2();
+            refreshAllDocPropBadges();
+        }));
+}
+
+function startEditDocPropV2(key) {
+    const keyInput = document.getElementById('v2-dp-key');
+    const valInput = document.getElementById('v2-dp-value');
+    keyInput.value = key;
+    keyInput.readOnly = true;
+    valInput.value = (BOOT.docProperties || {})[key] ?? '';
+    editingDocPropKeyV2 = key;
+    const addBtn = document.getElementById('v2-dp-add');
+    if (addBtn) addBtn.innerHTML = '<i class="fas fa-save me-1"></i>Lưu';
+    valInput.focus();
+}
+
+function resetDocPropFormV2() {
+    editingDocPropKeyV2 = null;
+    const keyInput = document.getElementById('v2-dp-key');
+    const valInput = document.getElementById('v2-dp-value');
+    if (keyInput) { keyInput.value = ''; keyInput.readOnly = false; }
+    if (valInput) valInput.value = '';
+    const addBtn = document.getElementById('v2-dp-add');
+    if (addBtn) addBtn.innerHTML = '<i class="fas fa-plus me-1"></i>Thêm';
+}
+
+/**
+ * Chèn nội dung vào editor. Nếu chưa mở editor nào thì TỰ MỞ LẠI ô/đoạn văn bản
+ * soạn gần nhất (host còn trong DOM) và khôi phục con trỏ rồi chèn — nhờ vậy các nút
+ * Chèn (Symbol/Công thức/Hình ảnh/Document Property) hoạt động ngay cả khi editor đã đóng.
+ * Trả về true nếu chèn được. insertFn(editor) tự thực hiện thao tác chèn.
+ */
+function runEditorInsertV2(insertFn) {
+    if (activeEditor) { insertFn(activeEditor); return true; }
+    const a = lastEditorArgs;
+    if (a && a.host && document.body.contains(a.host)) {
+        mountEditor(a.host, a.getHTML, a.setHTML, a.context);
+        if (activeEditor) {
+            if (lastEditorSel) { try { activeEditor.commands.setTextSelection(lastEditorSel); } catch (e) { /* ignore */ } }
+            insertFn(activeEditor);
+            return true;
+        }
+    }
+    return false;
+}
+
+function insertDocPropV2(key) {
+    const ok = runEditorInsertV2((ed) => ed.chain().focus().insertContent({ type: 'docProp', attrs: { key } }).run());
+    if (!ok) {
+        window.Swal?.fire({ toast: true, position: 'top-end', icon: 'info', title: 'Hãy bấm vào một ô/đoạn văn bản CÓ THỂ SỬA (không bị khóa) rồi chèn.', showConfirmButton: false, timer: 3000 });
+        return;
+    }
+    if (activeSync) activeSync();
+    markDirty();
+    refreshAllDocPropBadges();
+    hideModalV2('v2DocPropModal');
+}
+
+/* =========================================================
+ * 5c2h. CHIA MÀN HÌNH (Split View) — trái/phải, kéo thanh giữa để đổi bề rộng.
+ *   Pane trái = vùng đang soạn thảo thật (#v2-pages di chuyển vào), pane phải = bản
+ *   sao chỉ-xem đồng bộ mỗi lần renderDocument() chạy. Nút toolbar hoạt động dạng
+ *   toggle: bấm lần 1 mở, bấm lần 2 tắt.
+ * ========================================================= */
+let workspaceSplitActiveV2 = false;
+
+function syncSplitPreviewV2() {
+    if (!workspaceSplitActiveV2) return;
+    const preview = document.getElementById('v2-split-preview');
+    const live = document.getElementById('v2-pages');
+    if (!preview || !live) return;
+    let html = live.innerHTML;
+    html = html.replace(/id="([^"]+)"/g, 'id="v2sp-$1"');
+    html = html.replace(/contenteditable="true"/g, 'contenteditable="false"');
+    preview.innerHTML = html;
+}
+
+/** Kéo thanh chia để đổi bề rộng 2 pane (giới hạn tối thiểu mỗi bên) */
+function attachSplitResizerV2() {
+    const resizer = document.getElementById('v2-split-resizer');
+    const paneLeft = document.getElementById('v2-split-pane-left');
+    const wrapper = document.getElementById('v2-split-wrapper');
+    if (!resizer || !paneLeft || !wrapper) return;
+
+    resizer.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        resizer.classList.add('dragging');
+        const startX = e.clientX;
+        const startWidth = paneLeft.getBoundingClientRect().width;
+        const totalWidth = wrapper.getBoundingClientRect().width;
+        const minWidth = 200;
+
+        const onMove = (ev) => {
+            let newWidth = startWidth + (ev.clientX - startX);
+            newWidth = Math.max(minWidth, Math.min(totalWidth - minWidth - 10, newWidth));
+            paneLeft.style.flex = `0 0 ${newWidth}px`;
+        };
+        const onUp = () => {
+            resizer.classList.remove('dragging');
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    });
+}
+
+function toggleWorkspaceSplitV2() {
+    workspaceSplitActiveV2 = !workspaceSplitActiveV2;
+    const btn = document.getElementById('v2-btn-split');
+    const pagesEl = document.getElementById('v2-pages');
+    if (!pagesEl) return;
+
+    if (workspaceSplitActiveV2) {
+        const canvasParent = pagesEl.parentElement; // cha GỐC — chỉ hợp lệ lúc MỞ (lúc đóng pagesEl đã chuyển cha)
+        if (!canvasParent) return;
+        btn?.classList.add('text-success', 'border-success');
+        if (btn) btn.title = 'Tắt chia màn hình';
+
+        const wrapper = document.createElement('div');
+        wrapper.id = 'v2-split-wrapper';
+        wrapper.className = 'v2-split-wrapper';
+        wrapper.innerHTML = `
+            <div id="v2-split-pane-left" class="v2-split-pane">
+                <div class="v2-split-pane-header">
+                    <span class="badge bg-primary text-white py-2 px-3 fw-bold"><i class="fas fa-edit me-1"></i>Vùng soạn thảo</span>
+                </div>
+            </div>
+            <div id="v2-split-resizer" class="v2-split-resizer" title="Kéo để đổi bề rộng"></div>
+            <div id="v2-split-pane-right" class="v2-split-pane">
+                <div class="v2-split-pane-header">
+                    <span class="badge bg-secondary text-white py-2 px-3 fw-bold"><i class="fas fa-eye me-1"></i>Vùng xem (chỉ đọc)</span>
+                </div>
+                <div id="v2-split-preview" class="d-flex flex-column align-items-center py-4 gap-4"></div>
+            </div>`;
+        canvasParent.insertBefore(wrapper, pagesEl);
+        document.getElementById('v2-split-pane-left').appendChild(pagesEl);
+        attachSplitResizerV2();
+        syncSplitPreviewV2();
+    } else {
+        btn?.classList.remove('text-success', 'border-success');
+        if (btn) btn.title = 'Chia đôi màn hình (Split View)';
+        const wrapper = document.getElementById('v2-split-wrapper');
+        // Cha GỐC lúc đóng = cha của wrapper (pagesEl lúc này đang nằm trong pane trái, không phải cha gốc)
+        const originalParent = wrapper?.parentElement;
+        if (originalParent && wrapper) originalParent.insertBefore(pagesEl, wrapper);
+        wrapper?.remove();
+    }
+}
+
+/* =========================================================
  * 5c3. SIDEBAR THÀNH PHẦN (CO) — kéo thả chèn nội dung (như V1)
  * ========================================================= */
 let componentsCache = null;
@@ -2531,8 +5651,10 @@ async function importComponentV2(templateId, templateName, afterIndex) {
     items.splice(Math.min(afterIndex + 1, items.length), 0, ...newBlocks);
     markDirty();
     renderDocument();
-    window.Swal.fire({ toast: true, position: 'top', icon: 'success', showConfirmButton: false, timer: 2200,
-        title: `Đã chèn ${newBlocks.length} khối từ "${templateName}"` });
+    window.Swal.fire({
+        toast: true, position: 'top', icon: 'success', showConfirmButton: false, timer: 2200,
+        title: `Đã chèn ${newBlocks.length} khối từ "${templateName}"`
+    });
 }
 
 /* =========================================================
@@ -2574,7 +5696,7 @@ function initFixedToolbar() {
 function toggleExecutionModeV2() {
     BOOT.isExecutionMode = !BOOT.isExecutionMode;
     const isExec = BOOT.isExecutionMode;
-    
+
     // Đổi giao diện nút Toggle
     const btnToggle = document.getElementById('v2-btn-toggle-mode');
     if (btnToggle) {
@@ -2594,6 +5716,14 @@ function toggleExecutionModeV2() {
     // Unmount editor đang active nếu có + bỏ mọi selection
     unmountEditor();
     selection.clearAll();
+    setBlockPickModeV2(false);
+    clearBlockPickV2();
+
+    // Dọn field nhân bản riêng cho từng lần lặp + reset tab đang xem — mỗi phiên Chạy thử bắt đầu lại từ Lần 1
+    loopClonedFieldIds.forEach((id) => delete fieldsConfig[id]);
+    loopClonedFieldIds.clear();
+    Object.keys(loopIterFieldMapCache).forEach((k) => delete loopIterFieldMapCache[k]);
+    activeLoopTabIdx = {};
 
     // Thêm/Xóa class CSS cho mode
     const contentWrapper = document.querySelector('.content-wrapper');
@@ -2615,29 +5745,277 @@ function toggleExecutionModeV2() {
     });
 }
 
-window.__V2__.openExecutionModal = function(fieldId, paintCallback) {
+/* ---------------------------------------------------------
+ * 6a. Hạ tầng dùng chung cho Chạy thử (mọi loại biến)
+ * --------------------------------------------------------- */
+function escapeHtmlV2(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[c]));
+}
+
+function nowViV2() {
+    const now = new Date();
+    return now.toLocaleDateString('vi-VN') + ' ' + now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+}
+
+function getExecDefaultV2(fieldId) {
+    return (BOOT.executionValues[fieldId] || {}).default;
+}
+
+// NodeView đang mount tự đăng ký paint() vào đây (xem ebmr-field.js). Cần thiết vì
+// thay đổi executionValues không tự kích update() của TipTap NodeView (document
+// không đổi) — nên khi 1 field thay đổi (VD: field số nuôi 1 field công thức khác),
+// phải chủ động "vẽ lại" MỌI field đang hiển thị để công thức phụ thuộc cập nhật theo.
+const fieldPaintRegistryV2 = new Map(); // fieldId -> Set<paintFn>
+window.__V2__.registerFieldPaint = function (fieldId, fn) {
+    if (!fieldPaintRegistryV2.has(fieldId)) fieldPaintRegistryV2.set(fieldId, new Set());
+    fieldPaintRegistryV2.get(fieldId).add(fn);
+};
+window.__V2__.unregisterFieldPaint = function (fieldId, fn) {
+    const set = fieldPaintRegistryV2.get(fieldId);
+    if (!set) return;
+    set.delete(fn);
+    if (!set.size) fieldPaintRegistryV2.delete(fieldId);
+};
+window.__V2__.repaintAllFields = function () {
+    fieldPaintRegistryV2.forEach((fns) => fns.forEach((fn) => { try { fn(); } catch (e) { /* noop */ } }));
+    refreshChartsV2(); // biểu đồ liên kết bảng nguồn cập nhật theo giá trị vừa nhập
+};
+
+// Cân điện tử (RS-232/WebSocket) + Quét Barcode/MMS — xem scale-reader.js, mms-barcode.js
+initScaleReaderV2(BOOT);
+initMmsBarcodeV2(BOOT);
+
+// Ghi giá trị + đóng dấu người/giờ. Nếu GHI ĐÈ 1 giá trị đã có (khác giá trị cũ),
+// bắt buộc nhập "Lý do thay đổi" trước khi áp dụng + lưu vào lịch sử (giống V1).
+window.__V2__.applyExecutionValue = function (fieldId, finalValue, onDone) {
+    const existing = getExecDefaultV2(fieldId);
+    const hasExisting = existing !== undefined && existing !== null && existing !== '';
+
+    const commit = (reason) => {
+        if (typeof BOOT.executionValues[fieldId] !== 'object' || BOOT.executionValues[fieldId] === null) {
+            BOOT.executionValues[fieldId] = {};
+        }
+        const rec = BOOT.executionValues[fieldId];
+        const oldVal = rec.default;
+        rec.default = finalValue;
+        if (!rec._meta) rec._meta = {};
+        if (!rec._meta.default) rec._meta.default = {};
+        rec._meta.default.by = BOOT.currentUserName || 'Người dùng thử';
+        rec._meta.default.at = nowViV2();
+        if (reason) {
+            rec._meta.default.reason = reason;
+            rec._meta.default.history_count = (rec._meta.default.history_count || 0) + 1;
+            if (!rec._meta.default.history_list) rec._meta.default.history_list = [];
+            rec._meta.default.history_list.push({ val: finalValue, old_val: oldVal, reason, by: rec._meta.default.by, at: rec._meta.default.at });
+        }
+        window.__V2__.repaintAllFields();
+        if (onDone) onDone(true);
+    };
+
+    if (hasExisting && existing !== finalValue) {
+        window.Swal.fire({
+            title: 'Lý do thay đổi',
+            text: 'Vui lòng nhập lý do thay đổi dữ liệu:',
+            input: 'textarea',
+            inputPlaceholder: 'Nhập lý do thay đổi (bắt buộc)...',
+            showCancelButton: true,
+            confirmButtonText: 'Xác nhận',
+            cancelButtonText: 'Hủy',
+            inputValidator: (val) => (!val || !val.trim()) ? 'Vui lòng nhập lý do thay đổi dữ liệu!' : undefined,
+        }).then((res) => {
+            if (res.isConfirmed) commit(res.value.trim());
+            else if (onDone) onDone(false);
+        });
+    } else {
+        commit('');
+    }
+};
+
+window.__V2__.showFieldHistory = function (fieldId) {
+    const rec = BOOT.executionValues[fieldId];
+    const list = (rec && rec._meta && rec._meta.default && rec._meta.default.history_list) || [];
+    if (!list.length) return;
+    const rows = list.map((h) => `
+        <tr>
+            <td style="text-align:left; padding:4px 8px; border-bottom:1px solid #e2e8f0;">
+                <div><s style="color:#94a3b8;">${escapeHtmlV2(String(h.old_val ?? ''))}</s> &rarr; <b>${escapeHtmlV2(String(h.val ?? ''))}</b></div>
+                <div class="small text-muted">${escapeHtmlV2(h.reason || '')}</div>
+            </td>
+            <td style="text-align:right; padding:4px 8px; border-bottom:1px solid #e2e8f0; white-space:nowrap; font-size:0.75rem; color:#64748b;">${escapeHtmlV2(h.by || '')}<br>${escapeHtmlV2(h.at || '')}</td>
+        </tr>`).join('');
+    window.Swal.fire({
+        title: 'Lịch sử thay đổi',
+        html: `<table style="width:100%; border-collapse:collapse; font-size:0.85rem;">${rows}</table>`,
+        confirmButtonText: 'Đóng',
+        width: 480,
+    });
+};
+
+/* ---------------------------------------------------------
+ * 6b. Công thức tự động — engine tính toán (rút gọn từ V1: bỏ quét
+ *     table-cellId và sum_group vì V2 không có 2 khái niệm này —
+ *     mọi biến trong V2 đều đi qua fieldsConfig với tên độc lập).
+ * --------------------------------------------------------- */
+const calculatingFieldsV2 = new Set();
+function parseNumberSafeV2(v) {
+    if (v === null || v === undefined || v === '') return 0;
+    const n = parseFloat(String(v).replace(/,/g, ''));
+    return isNaN(n) ? 0 : n;
+}
+
+function calculateFormulaV2(formula, decimalPlaces, targetFieldId) {
+    if (!formula) return '0';
+    if (targetFieldId) {
+        if (calculatingFieldsV2.has(targetFieldId)) return '0'; // tránh lặp vô hạn
+        calculatingFieldsV2.add(targetFieldId);
+    }
+    let processed = formula;
+    try {
+        const valMap = {};
+        const valArrayMap = {};
+        const dPlaces = (decimalPlaces !== null && decimalPlaces !== undefined && decimalPlaces !== '') ? parseInt(decimalPlaces) : 2;
+
+        Object.values(fieldsConfig).forEach((field) => {
+            if (!field.label && !field.name) return;
+            const isUsed = (field.name && formula.includes(field.name)) || (field.label && formula.includes(field.label));
+            if (!isUsed) return;
+
+            let val = 0;
+            if (field.type === 'formula') {
+                val = calculatingFieldsV2.has(field.id) ? 0 :
+                    calculateFormulaV2(field.formula || '', field.validation ? field.validation.decimal_places : 2, field.id);
+            } else if (BOOT.isExecutionMode && BOOT.executionValues && BOOT.executionValues[field.id] !== undefined) {
+                const raw = BOOT.executionValues[field.id];
+                val = (raw && typeof raw === 'object' && raw.hasOwnProperty('default')) ? raw.default : raw;
+            } else {
+                val = (field.defaultValue !== undefined && field.defaultValue !== '') ? field.defaultValue : 0;
+            }
+
+            // Checkbox: tick = 1, không tick = 0 (giá trị lưu là true/'true' — parseFloat sẽ ra NaN)
+            if (field.type === 'checkbox' && field.id !== targetFieldId) {
+                if (field.formula) {
+                    // Checkbox tự tick theo công thức: tính công thức của nó thay vì đọc giá trị lưu
+                    const r = calculatingFieldsV2.has(field.id) ? 0 :
+                        calculateFormulaV2(field.formula, 2, field.id);
+                    val = parseNumberSafeV2(r) > 0 ? 1 : 0;
+                } else {
+                    val = (val === true || val === 'true' || val === '1' || val === 'yes' || val === 'có') ? 1 : 0;
+                }
+            }
+
+            const parsedVal = parseNumberSafeV2(val);
+            [field.label, field.name].forEach((key) => {
+                if (!key) return;
+                valMap[key] = parsedVal;
+                if (!valArrayMap[key]) valArrayMap[key] = [];
+                valArrayMap[key].push(parsedVal);
+            });
+        });
+
+        processed = processed.replace(/(SUM_ALL|AVG_ALL|MAX_ALL|MIN_ALL)\(\s*\(*(.*?)\)*\s*\)/gi, (match, funcRaw, id) => {
+            const func = funcRaw.toUpperCase();
+            const arr = valArrayMap[id.trim()] || [];
+            if (!arr.length) return '0';
+            if (func === 'SUM_ALL') return `(${arr.join(' + ')})`;
+            if (func === 'AVG_ALL') return `(${arr.reduce((a, b) => a + b, 0)} / ${arr.length})`;
+            if (func === 'MAX_ALL') return `Math.max(${arr.join(', ')})`;
+            if (func === 'MIN_ALL') return `Math.min(${arr.join(', ')})`;
+            return '0';
+        });
+
+        processed = processed.replace(/\(([^()]+)\)/g, (match, id) => {
+            const trimmed = id.trim();
+            return valMap[trimmed] !== undefined ? valMap[trimmed] : match;
+        });
+
+        const result = new Function(`
+            const MAX = Math.max; const max = Math.max;
+            const MIN = Math.min; const min = Math.min;
+            const SUM = function(...args) { return args.reduce((a,b)=>a+b,0); }; const sum = SUM;
+            const AVG = function(...args) { return args.length ? args.reduce((a,b)=>a+b,0)/args.length : 0; }; const avg = AVG;
+            const ROUND = function(val, dec) { const p = Math.pow(10, dec||0); return Math.round(val * p) / p; }; const round = ROUND;
+            return ${processed};
+        `)();
+        return (typeof result === 'number') ? result.toLocaleString('en-US', {
+            minimumFractionDigits: dPlaces, maximumFractionDigits: dPlaces,
+        }) : result;
+    } catch (e) {
+        return '#ERR';
+    } finally {
+        if (targetFieldId) calculatingFieldsV2.delete(targetFieldId);
+    }
+}
+window.__V2__.calculateFormula = calculateFormulaV2;
+
+/* ---------------------------------------------------------
+ * 6c. Tương tác theo từng loại biến trong Chạy thử
+ * --------------------------------------------------------- */
+window.__V2__.toggleExecutionCheckbox = function (fieldId) {
+    if (!BOOT.isExecutionMode) return;
+    const field = fieldsConfig[fieldId];
+    if (!field || field.formula) return; // biến khoá theo công thức: không cho tick tay
+
+    let val = getExecDefaultV2(fieldId);
+    if (val === undefined || val === null || val === '') val = field.defaultValue || '';
+    const isChecked = val === true || val === 'true' || val === '1' || val === 'yes' || val === 'có';
+
+    window.__V2__.applyExecutionValue(fieldId, !isChecked);
+};
+
+window.__V2__.handleSelectChange = function (fieldId, value) {
+    if (!BOOT.isExecutionMode) return;
+    window.__V2__.applyExecutionValue(fieldId, value);
+};
+
+window.__V2__.autoFillExecutionDate = function (fieldId) {
     if (!BOOT.isExecutionMode) return;
     const field = fieldsConfig[fieldId];
     if (!field) return;
 
-    let currentVal = BOOT.executionValues[fieldId] || '';
-    if (currentVal && typeof currentVal === 'object' && currentVal.hasOwnProperty('default')) {
-        currentVal = currentVal.default;
-    }
+    const now = new Date();
+    const timeString = field.date_format === 'hh:mm dd/mm/yyyy'
+        ? `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} ${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`
+        : `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+    window.__V2__.applyExecutionValue(fieldId, timeString);
+};
+
+window.__V2__.openExecutionModal = function (fieldId) {
+    if (!BOOT.isExecutionMode) return;
+    const field = fieldsConfig[fieldId];
+    if (!field) return;
+
+    let currentVal = getExecDefaultV2(fieldId);
+    if (currentVal === undefined || currentVal === null || currentVal === '') currentVal = field.defaultValue || '';
 
     let inputType = 'text';
     let inputAttrs = {};
     if (field.type === 'number') {
         inputType = 'number';
-        if (field.validation && !field.validation.allow_out_of_bounds) {
-            if (field.validation.min !== null) inputAttrs.min = field.validation.min;
-            if (field.validation.max !== null) inputAttrs.max = field.validation.max;
+        if (field.validation) {
+            if (!field.validation.allow_out_of_bounds) {
+                if (field.validation.min !== null && field.validation.min !== '') inputAttrs.min = field.validation.min;
+                if (field.validation.max !== null && field.validation.max !== '') inputAttrs.max = field.validation.max;
+            }
+            inputAttrs.step = (field.validation.decimal_places && parseInt(field.validation.decimal_places) > 0)
+                ? '0.' + '0'.repeat(parseInt(field.validation.decimal_places) - 1) + '1'
+                : 'any';
         }
     } else if (field.type === 'date') {
         inputType = 'text';
         inputAttrs.type = field.date_format === 'hh:mm dd/mm/yyyy' ? 'datetime-local' : 'date';
-    } else if (field.type === 'text' && field.barcodeScanEnabled) {
-        inputAttrs.placeholder = 'Nhập mã Barcode thủ công...';
+        const d = new Date();
+        currentVal = field.date_format === 'hh:mm dd/mm/yyyy'
+            ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+            : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    } else if (field.type === 'text') {
+        if (field.barcodeScanEnabled) {
+            inputAttrs.placeholder = 'Nhập mã Barcode thủ công...';
+        } else {
+            inputType = 'textarea';
+            inputAttrs.rows = 4;
+        }
     }
 
     let hints = [];
@@ -2652,6 +6030,14 @@ window.__V2__.openExecutionModal = function(fieldId, paintCallback) {
     }
 
     let instructionHtml = '';
+    if (field.type === 'text' && field.barcodeScanEnabled) {
+        instructionHtml += `<div class="mb-3">
+            <button type="button" class="btn btn-success w-100 fw-bold shadow-sm" style="padding: 10px; font-size: 1.1rem; border-radius: 8px;" onclick="window.__V2__.startMmsBarcodeScan('${fieldId}')">
+                <i class="fas fa-camera me-2"></i> Quét Barcode (MMS)
+            </button>
+            <div class="text-center mt-2 small text-muted fw-bold">Hoặc nhập mã Barcode thủ công vào ô bên dưới và nhấn Xác nhận:</div>
+        </div>`;
+    }
     if (field.instruction) {
         instructionHtml += `<div class="alert alert-info text-start small mb-3" style="font-size: 0.85rem; line-height: 1.4; border-left: 4px solid #0dcaf0;"><i class="fas fa-info-circle me-2"></i><b>Hướng dẫn:</b> ${field.instruction}</div>`;
     }
@@ -2667,36 +6053,501 @@ window.__V2__.openExecutionModal = function(fieldId, paintCallback) {
         inputAttributes: inputAttrs,
         showCancelButton: true,
         confirmButtonText: 'Xác nhận',
-        cancelButtonText: 'Hủy'
+        cancelButtonText: 'Hủy',
+        inputValidator: (value) => {
+            if (field.validation && field.validation.required && !value) {
+                return 'Vui lòng không để trống ô này!';
+            }
+            if (field.type === 'number' && value !== '' && field.validation && !field.validation.allow_out_of_bounds) {
+                const num = Number(value);
+                if (field.validation.min !== null && field.validation.min !== '' && num < parseFloat(field.validation.min)) {
+                    return 'Giá trị phải lớn hơn hoặc bằng ' + field.validation.min;
+                }
+                if (field.validation.max !== null && field.validation.max !== '' && num > parseFloat(field.validation.max)) {
+                    return 'Giá trị phải nhỏ hơn hoặc bằng ' + field.validation.max;
+                }
+            }
+        },
     }).then(result => {
-        if (result.isConfirmed) {
-            BOOT.executionValues[fieldId] = { 'default': result.value };
-            // Simulate saving user metadata
-            if (!BOOT.executionValues[fieldId]._meta) BOOT.executionValues[fieldId]._meta = {};
-            if (!BOOT.executionValues[fieldId]._meta['default']) BOOT.executionValues[fieldId]._meta['default'] = {};
-            BOOT.executionValues[fieldId]._meta['default'].by = BOOT.currentUserName || 'Người dùng thử';
-            const now = new Date();
-            BOOT.executionValues[fieldId]._meta['default'].at = now.toLocaleDateString('vi-VN') + ' ' + now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-            
-            if (paintCallback) paintCallback();
-            
-            // Xử lý barcode update liên kết nếu cần thiết (optional fallback)
-            if (field.type === 'text' && field.barcodeScanEnabled && typeof fetchMmsDataAndShowModal === 'function') {
-                fetchMmsDataAndShowModal(result.value, fieldId);
+        if (!result.isConfirmed) return;
+        let finalValue = result.value;
+
+        // Barcode nhập tay (không quét camera): tra cứu MMS trước, giá trị thật sự
+        // được áp dụng sau khi người dùng chọn thông tin trong modal MMS — không
+        // ghi thẳng chuỗi barcode thô vào biến số.
+        if (field.type === 'text' && field.barcodeScanEnabled && finalValue && finalValue.trim() !== '') {
+            window.__V2__.fetchMmsDataAndShowModal(finalValue.trim(), fieldId);
+            return;
+        }
+
+        if (field.type === 'date' && finalValue) {
+            if (field.date_format === 'hh:mm dd/mm/yyyy') {
+                const [dateStr, timeStr] = finalValue.split('T');
+                const parts = (dateStr || '').split('-');
+                if (parts.length === 3 && timeStr) finalValue = `${timeStr} ${parts[2]}/${parts[1]}/${parts[0]}`;
+            } else {
+                const parts = finalValue.split('-');
+                if (parts.length === 3) finalValue = `${parts[2]}/${parts[1]}/${parts[0]}`;
+            }
+        }
+
+        window.__V2__.applyExecutionValue(fieldId, finalValue);
+    });
+};
+
+/* ---------------------------------------------------------
+ * 6d. Chữ ký điện tử — xác thực mật khẩu / xác thực người kiểm tra
+ * --------------------------------------------------------- */
+window.__V2__.openSignatureModal = function (fieldId) {
+    if (!BOOT.isExecutionMode) return;
+    if (!fieldsConfig[fieldId]) return;
+
+    window.Swal.fire({
+        title: '<i class="fas fa-signature me-2 text-primary"></i>Xác nhận chữ ký điện tử',
+        html: `<div class="text-start mb-3 small text-muted"><i class="fas fa-info-circle me-1 text-info"></i> Nhập mật khẩu tài khoản của bạn để xác nhận chữ ký điện tử.</div>
+               <input type="password" id="v2-sig-password" class="swal2-input" placeholder="Mật khẩu xác nhận" autocomplete="current-password">`,
+        showCancelButton: true,
+        confirmButtonText: '<i class="fas fa-check me-1"></i> Xác nhận',
+        cancelButtonText: 'Hủy',
+        showLoaderOnConfirm: true,
+        didOpen: () => { const inp = document.getElementById('v2-sig-password'); if (inp) inp.focus(); },
+        preConfirm: () => {
+            const password = document.getElementById('v2-sig-password').value;
+            if (!password) { window.Swal.showValidationMessage('Vui lòng nhập mật khẩu xác nhận'); return false; }
+            return fetch(BOOT.urls.verifyPassword, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: JSON.stringify({ password, _token: BOOT.csrf }),
+            }).then((res) => res.json()).then((data) => {
+                if (!data.success) { window.Swal.showValidationMessage(data.message || 'Mật khẩu không chính xác'); return false; }
+                return data;
+            }).catch((err) => { window.Swal.showValidationMessage('Không thể kết nối đến máy chủ: ' + err.message); return false; });
+        },
+        allowOutsideClick: () => !window.Swal.isLoading(),
+    }).then((result) => {
+        if (!result.isConfirmed || !result.value) return;
+        const data = result.value;
+        if (typeof BOOT.executionValues[fieldId] !== 'object' || BOOT.executionValues[fieldId] === null) BOOT.executionValues[fieldId] = {};
+        BOOT.executionValues[fieldId].default = data.signature_image || data.fullName || 'Đã ký';
+        BOOT.executionValues[fieldId]._meta = { default: { by: data.fullName || '', at: nowViV2() } };
+        window.__V2__.repaintAllFields();
+        window.Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: `Đã xác nhận chữ ký: ${data.fullName || ''}`, showConfirmButton: false, timer: 2000 });
+    });
+};
+
+window.__V2__.openCheckerAuthModal = function (fieldId) {
+    if (!BOOT.isExecutionMode) return;
+    if (!fieldsConfig[fieldId]) return;
+
+    window.Swal.fire({
+        title: '<i class="fas fa-check-double me-2 text-warning"></i>Xác thực người kiểm tra',
+        html: `<input type="text" id="v2-checker-user" class="swal2-input" placeholder="Tài khoản người kiểm tra" autocomplete="username">
+               <input type="password" id="v2-checker-pass" class="swal2-input" placeholder="Mật khẩu" autocomplete="current-password">`,
+        showCancelButton: true,
+        confirmButtonText: 'Xác nhận',
+        cancelButtonText: 'Hủy',
+        showLoaderOnConfirm: true,
+        didOpen: () => { const inp = document.getElementById('v2-checker-user'); if (inp) inp.focus(); },
+        preConfirm: () => {
+            const username = document.getElementById('v2-checker-user').value.trim();
+            const password = document.getElementById('v2-checker-pass').value;
+            if (!username || !password) { window.Swal.showValidationMessage('Vui lòng nhập tài khoản và mật khẩu.'); return false; }
+            return fetch(BOOT.urls.verifyChecker, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: JSON.stringify({ username, password, _token: BOOT.csrf }),
+            }).then((res) => res.json()).then((data) => {
+                if (!data.success) { window.Swal.showValidationMessage(data.message || 'Xác thực thất bại.'); return false; }
+                return data;
+            }).catch((err) => { window.Swal.showValidationMessage('Có lỗi xảy ra: ' + err.message); return false; });
+        },
+        allowOutsideClick: () => !window.Swal.isLoading(),
+    }).then((result) => {
+        if (!result.isConfirmed || !result.value) return;
+        const data = result.value;
+        if (typeof BOOT.executionValues[fieldId] !== 'object' || BOOT.executionValues[fieldId] === null) BOOT.executionValues[fieldId] = {};
+        BOOT.executionValues[fieldId].default = data.signature_image || data.fullName;
+        BOOT.executionValues[fieldId]._meta = { default: { by: data.fullName, at: nowViV2() } };
+        window.__V2__.repaintAllFields();
+        window.Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: `Đã xác thực: ${data.fullName}`, showConfirmButton: false, timer: 2000 });
+    });
+};
+
+/* ---------------------------------------------------------
+ * 6e. Select — options thủ công / lấy động từ database (có cache)
+ * --------------------------------------------------------- */
+const dynamicOptionsCacheV2 = {};
+window.__V2__.loadDynamicSelectOptions = function (field, onLoaded) {
+    const ds = field.dataSource || {};
+    if (!ds.table || !ds.labelCol) { onLoaded([]); return; }
+    const cacheKey = [ds.table, ds.labelCol, ds.valueCol || '', ds.where || ''].join('|');
+    if (dynamicOptionsCacheV2[cacheKey]) { onLoaded(dynamicOptionsCacheV2[cacheKey]); return; }
+
+    fetch(BOOT.urls.dynamicOptions, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ table: ds.table, labelCol: ds.labelCol, valueCol: ds.valueCol || '', where: ds.where || '', _token: BOOT.csrf }),
+    }).then((res) => res.json()).then((data) => {
+        const options = (data.success && Array.isArray(data.options)) ? data.options : [];
+        dynamicOptionsCacheV2[cacheKey] = options;
+        onLoaded(options);
+    }).catch(() => onLoaded([]));
+};
+
+/* =========================================================
+ * 6f. TÌM KIẾM & THAY THẾ (Ctrl+F / Ctrl+H) — giống Google Docs
+ *   • Tìm/tô sáng trên NỘI DUNG TĨNH đang hiển thị (#v2-pages).
+ *   • Thay thế thao tác trực tiếp trên DỮ LIỆU (item.content / cell.content)
+ *     bằng cách parse HTML rồi chỉ sửa TEXT NODE (giữ nguyên badge/field/định dạng),
+ *     nên không làm hỏng cấu trúc. Match tính trong TỪNG text node (không bắc cầu
+ *     qua badge / thẻ định dạng) để đảm bảo thay thế an toàn tuyệt đối.
+ * ========================================================= */
+const findState = { open: false, replace: false, term: '', replaceTerm: '', matchCase: false, matches: [], current: -1 };
+
+function escapeRegExpV2(s) {
+    return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Các text node có thể tìm kiếm trong 1 phần tử — BỎ QUA phần bên trong badge/field. */
+function collectSearchNodesV2(root) {
+    const nodes = [];
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+        acceptNode(n) {
+            if (!n.nodeValue) return NodeFilter.FILTER_REJECT;
+            if (n.parentElement && n.parentElement.closest(
+                '.v2-field-badge, .ebmr-field-badge, .v2-equation-badge, .v2-docprop-badge, .v2-find-hit')) {
+                return NodeFilter.FILTER_REJECT;
+            }
+            return NodeFilter.FILTER_ACCEPT;
+        },
+    });
+    let n; while ((n = walker.nextNode())) nodes.push(n);
+    return nodes;
+}
+
+/** Duyệt mọi vị trí chứa văn bản của tài liệu (khối văn bản + từng ô bảng). */
+function forEachSearchLocationV2(cb) {
+    items.forEach((item) => {
+        const locked = !!(item.locked || item.isVirtual);
+        if (item.type === 'static-text') {
+            cb({
+                item, locked,
+                getHtml: () => item.content || '',
+                setHtml: (h) => { item.content = h; },
+                domSel: `.v2-block[data-id="${item.id}"] .v2-editable`,
+            });
+        } else if (item.type === 'table') {
+            for (let r = 0; r < (item.rows || 0); r++) {
+                for (let c = 0; c < (item.cols || 0); c++) {
+                    const cell = item.data && item.data[r] && item.data[r][c];
+                    if (!cell || cell.hidden) continue;
+                    cb({
+                        item, locked, r, c,
+                        getHtml: () => cell.content || '',
+                        setHtml: (h) => { cell.content = h; },
+                        domSel: `.v2-table-wrap[data-id="${item.id}"] td[data-row="${r}"][data-col="${c}"] .v2-cell`,
+                    });
+                }
             }
         }
     });
-};
+}
+
+function findRegexV2() {
+    if (!findState.term) return null;
+    try { return new RegExp(escapeRegExpV2(findState.term), findState.matchCase ? 'g' : 'gi'); }
+    catch (e) { return null; }
+}
+
+// Tính match TRỰC TIẾP trên LIVE DOM (offset luôn hợp lệ với chính node sẽ tô sáng).
+// Với thay thế, ta map lại về dữ liệu gốc bằng CHỈ SỐ LẦN XUẤT HIỆN (occ) trong từng
+// vị trí — vì text tìm-kiếm (bỏ badge) theo thứ tự đọc là như nhau giữa live và dữ liệu,
+// dù ranh giới text-node có thể khác. Gọi khi LIVE DOM đã sạch highlight.
+function computeMatchesV2() {
+    findState.matches = [];
+    const re = findRegexV2();
+    if (!re) return;
+    forEachSearchLocationV2((loc) => {
+        const el = document.querySelector(loc.domSel);
+        if (!el) return;
+        let occ = 0; // thứ tự match trong vị trí này (theo thứ tự đọc)
+        collectSearchNodesV2(el).forEach((node) => {
+            const text = node.nodeValue || '';
+            re.lastIndex = 0;
+            let m;
+            while ((m = re.exec(text)) !== null) {
+                findState.matches.push({ loc, node, start: m.index, length: m[0].length, occ: occ++ });
+                if (m.index === re.lastIndex) re.lastIndex++; // tránh kẹt với match rỗng
+            }
+        });
+    });
+}
+
+function clearHighlightsV2() {
+    document.querySelectorAll('#v2-pages .v2-find-hit').forEach((el) => {
+        const parent = el.parentNode;
+        if (!parent) return;
+        parent.replaceChild(document.createTextNode(el.textContent), el);
+        parent.normalize();
+    });
+}
+
+/** Bọc các match trong 1 text node (xử lý từ CUỐI về ĐẦU để offset không lệch). */
+function wrapMatchesInNodeV2(node, list) {
+    list.slice().sort((a, b) => b.start - a.start).forEach((mm) => {
+        const len = node.nodeValue ? node.nodeValue.length : 0;
+        if (mm.start >= len) return; // an toàn: bỏ qua nếu lệch (không bao giờ nên xảy ra)
+        const matched = node.splitText(mm.start);
+        matched.splitText(Math.min(mm.length, matched.nodeValue.length));
+        const span = document.createElement('span');
+        span.className = 'v2-find-hit';
+        span.dataset.mi = mm.globalIndex;
+        matched.parentNode.replaceChild(span, matched);
+        span.appendChild(matched);
+    });
+}
+
+function renderHighlightsV2() {
+    // Gom theo chính NODE live (offset đã tính trên node đó nên luôn hợp lệ).
+    const groups = new Map();
+    findState.matches.forEach((mt, gi) => {
+        if (!groups.has(mt.node)) groups.set(mt.node, []);
+        groups.get(mt.node).push({ start: mt.start, length: mt.length, globalIndex: gi });
+    });
+    groups.forEach((list, node) => {
+        if (node && node.parentNode) wrapMatchesInNodeV2(node, list);
+    });
+    updateCurrentHighlightV2();
+}
+
+/** Phần tử cuộn gần nhất (nếu tài liệu cuộn trong 1 div overflow thay vì cả cửa sổ). */
+function scrollParentV2(el) {
+    let p = el.parentElement;
+    while (p && p !== document.body) {
+        const oy = getComputedStyle(p).overflowY;
+        if (/(auto|scroll|overlay)/.test(oy) && p.scrollHeight > p.clientHeight + 1) return p;
+        p = p.parentElement;
+    }
+    return null; // cuộn ở cấp cửa sổ
+}
+
+/** Cuộn để đưa 1 match ra GIỮA vùng nhìn — tự nhận diện đúng vùng cuộn (div hoặc window). */
+function scrollMatchIntoViewV2(el) {
+    const container = scrollParentV2(el);
+    const eRect = el.getBoundingClientRect();
+    if (container) {
+        const cRect = container.getBoundingClientRect();
+        const delta = (eRect.top - cRect.top) - (container.clientHeight / 2) + (eRect.height / 2);
+        container.scrollBy({ top: delta, behavior: 'smooth' });
+    } else {
+        const top = window.scrollY + eRect.top - (window.innerHeight / 2) + (eRect.height / 2);
+        window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+    }
+}
+
+function updateCurrentHighlightV2() {
+    let curEl = null;
+    document.querySelectorAll('#v2-pages .v2-find-hit').forEach((el) => {
+        const isCur = parseInt(el.dataset.mi, 10) === findState.current;
+        el.classList.toggle('v2-find-current', isCur);
+        if (isCur) curEl = el;
+    });
+    if (curEl) scrollMatchIntoViewV2(curEl);
+    const counter = document.getElementById('v2-find-counter');
+    if (counter) counter.textContent = findState.matches.length
+        ? `${findState.current + 1}/${findState.matches.length}` : '0/0';
+}
+
+function gotoMatchV2(idx) {
+    if (!findState.matches.length) { findState.current = -1; updateCurrentHighlightV2(); return; }
+    const n = findState.matches.length;
+    findState.current = ((idx % n) + n) % n;
+    updateCurrentHighlightV2();
+}
+
+/** Chạy lại tìm kiếm: dọn highlight cũ -> tính trên LIVE DOM sạch -> tô sáng. */
+function runFindV2(resetCurrent = true) {
+    const input = document.getElementById('v2-find-input');
+    findState.term = input ? input.value : '';
+    clearHighlightsV2();     // LIVE DOM phải sạch trước khi tính (compute đọc live)
+    computeMatchesV2();
+    renderHighlightsV2();
+    if (resetCurrent) findState.current = findState.matches.length ? 0 : -1;
+    else if (findState.current >= findState.matches.length) findState.current = findState.matches.length - 1;
+    updateCurrentHighlightV2();
+}
+
+/** Thay match hiện tại: định vị trong DỮ LIỆU GỐC bằng chỉ số lần xuất hiện (occ) của vị trí. */
+function replaceCurrentV2() {
+    const mt = findState.matches[findState.current];
+    if (!mt) return;
+    if (mt.loc.locked) { gotoMatchV2(findState.current + 1); return; } // khối khóa: chỉ nhảy qua
+    const re = findRegexV2();
+    if (!re) return;
+    saveDocState();
+    const doc = new DOMParser().parseFromString(`<div>${mt.loc.getHtml()}</div>`, 'text/html');
+    const root = doc.body.firstChild;
+    let occ = 0, done = false;
+    if (root) {
+        for (const node of collectSearchNodesV2(root)) {
+            const text = node.nodeValue || '';
+            re.lastIndex = 0;
+            let m;
+            while ((m = re.exec(text)) !== null) {
+                if (occ === mt.occ) {
+                    node.nodeValue = text.slice(0, m.index) + findState.replaceTerm + text.slice(m.index + m[0].length);
+                    done = true;
+                    break;
+                }
+                occ++;
+                if (m.index === re.lastIndex) re.lastIndex++;
+            }
+            if (done) break;
+        }
+    }
+    if (done) {
+        mt.loc.setHtml(root.innerHTML);
+        mt.loc.item.dirty = true;
+        markDirty();
+        renderDocument();
+    }
+    const keep = findState.current;
+    runFindV2(false);
+    gotoMatchV2(keep); // ở lại vị trí cũ (giờ là match kế tiếp)
+}
+
+function replaceAllV2() {
+    const re = findRegexV2();
+    if (!re) return;
+    saveDocState();
+    let count = 0;
+    forEachSearchLocationV2((loc) => {
+        if (loc.locked) return;
+        const html = loc.getHtml();
+        if (!html) return;
+        const doc = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html');
+        const root = doc.body.firstChild;
+        if (!root) return;
+        let changed = false;
+        collectSearchNodesV2(root).forEach((node) => {
+            const t = node.nodeValue || '';
+            re.lastIndex = 0;
+            if (!re.test(t)) return;
+            node.nodeValue = t.replace(re, () => { count++; return findState.replaceTerm; });
+            changed = true;
+        });
+        if (changed) { loc.setHtml(root.innerHTML); loc.item.dirty = true; }
+    });
+    if (count) { markDirty(); renderDocument(); }
+    runFindV2(true);
+    window.Swal && window.Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: `Đã thay thế ${count} vị trí`, showConfirmButton: false, timer: 2000 });
+}
+
+function ensureFindPanelV2() {
+    let panel = document.getElementById('v2-find-panel');
+    if (panel) return panel;
+    panel = document.createElement('div');
+    panel.id = 'v2-find-panel';
+    panel.innerHTML = `
+        <div class="v2-find-row">
+            <input type="text" id="v2-find-input" class="v2-find-field" placeholder="Tìm kiếm" autocomplete="off">
+            <span id="v2-find-counter" class="v2-find-counter">0/0</span>
+            <button type="button" id="v2-find-prev" class="v2-find-btn" title="Kết quả trước (Shift+Enter)"><i class="fas fa-chevron-up"></i></button>
+            <button type="button" id="v2-find-next" class="v2-find-btn" title="Kết quả sau (Enter)"><i class="fas fa-chevron-down"></i></button>
+            <label class="v2-find-case" title="Phân biệt hoa/thường"><input type="checkbox" id="v2-find-case"> Aa</label>
+            <button type="button" id="v2-find-close" class="v2-find-btn" title="Đóng (Esc)"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="v2-find-row" id="v2-find-replace-row">
+            <input type="text" id="v2-replace-input" class="v2-find-field" placeholder="Thay thế bằng" autocomplete="off">
+            <button type="button" id="v2-replace-one" class="v2-find-textbtn">Thay thế</button>
+            <button type="button" id="v2-replace-all" class="v2-find-textbtn">Tất cả</button>
+        </div>`;
+    document.body.appendChild(panel);
+
+    const input = panel.querySelector('#v2-find-input');
+    const replaceInput = panel.querySelector('#v2-replace-input');
+    let deb;
+    input.addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(() => runFindV2(true), 150); });
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); gotoMatchV2(findState.current + (e.shiftKey ? -1 : 1)); }
+        else if (e.key === 'Escape') { e.preventDefault(); closeFindV2(); }
+    });
+    replaceInput.addEventListener('input', () => { findState.replaceTerm = replaceInput.value; });
+    replaceInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); replaceCurrentV2(); }
+        else if (e.key === 'Escape') { e.preventDefault(); closeFindV2(); }
+    });
+    panel.querySelector('#v2-find-prev').addEventListener('click', () => gotoMatchV2(findState.current - 1));
+    panel.querySelector('#v2-find-next').addEventListener('click', () => gotoMatchV2(findState.current + 1));
+    panel.querySelector('#v2-find-close').addEventListener('click', closeFindV2);
+    panel.querySelector('#v2-find-case').addEventListener('change', (e) => { findState.matchCase = e.target.checked; runFindV2(true); });
+    panel.querySelector('#v2-replace-one').addEventListener('click', replaceCurrentV2);
+    panel.querySelector('#v2-replace-all').addEventListener('click', replaceAllV2);
+    return panel;
+}
+
+function openFindV2(withReplace) {
+    unmountEditor(); // chốt nội dung đang gõ để tìm trên dữ liệu mới nhất
+    const panel = ensureFindPanelV2();
+    findState.open = true;
+    findState.replace = !!withReplace;
+    panel.classList.add('open');
+    panel.querySelector('#v2-find-replace-row').style.display = withReplace ? 'flex' : 'none';
+    const input = panel.querySelector('#v2-find-input');
+    findState.replaceTerm = panel.querySelector('#v2-replace-input').value;
+    input.focus();
+    input.select();
+    if (input.value) runFindV2(true);
+}
+
+function closeFindV2() {
+    findState.open = false;
+    clearHighlightsV2();
+    findState.matches = [];
+    findState.current = -1;
+    const panel = document.getElementById('v2-find-panel');
+    if (panel) panel.classList.remove('open');
+}
 
 /* =========================================================
  * 7. KHỞI ĐỘNG + gắn sự kiện toolbar
  * ========================================================= */
 document.addEventListener('DOMContentLoaded', () => {
     selection.init(); // gắn state machine chuột/bàn phím cho chức năng CHỌN
+
+    // Khi đang ở chế độ bắt biến cho công thức: click badge → chèn vào công thức
+    document.addEventListener('click', (e) => {
+        if (!selectFormulaVarMode) return; // chỉ hoạt động khi đang bắt biến
+        const badge = e.target.closest('[data-field-id]');
+        if (!badge) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const fieldId = badge.getAttribute('data-field-id');
+        const cfg = fieldsConfig[fieldId];
+        if (cfg && cfg.name) {
+            insertFormulaTokenV2(selectFormulaVarMode, cfg.name, true);
+        }
+    }, true); // capture phase để đón click trước handler khác
+
     renderDocument();
     initFormatControls();
+    initFormatPainterV2();
     initFixedToolbar();
     refreshToolbarState();
+
+    // Số tiêu đề phải LUÔN hiện: bất kỳ thay đổi DOM nào trong #v2-pages (mount/unmount
+    // editor, repaint badge, đổi tab lặp...) đều có thể thay node tiêu đề làm mất data-hnum
+    // -> quan sát childList và đánh số lại (debounce theo frame). Chỉ quan sát childList
+    // (không quan sát attributes) nên chính việc gắn data-hnum không tạo vòng lặp.
+    const pagesElForHnum = document.getElementById('v2-pages');
+    if (pagesElForHnum) {
+        let hnumRaf = 0;
+        new MutationObserver(() => {
+            if (!headingNumberingOnV2()) return;
+            cancelAnimationFrame(hnumRaf);
+            hnumRaf = requestAnimationFrame(() => updateHeadingNumbersV2());
+        }).observe(pagesElForHnum, { childList: true, subtree: true });
+    }
 
     // Phím tắt lưu (Ctrl + S)
     document.addEventListener('keydown', (e) => {
@@ -2714,6 +6565,43 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const btnToggleMode = document.getElementById('v2-btn-toggle-mode');
     if (btnToggleMode) btnToggleMode.addEventListener('click', toggleExecutionModeV2);
+
+    const btnLoopGroup = document.getElementById('v2-btn-loop-group');
+    if (btnLoopGroup) {
+        btnLoopGroup.addEventListener('mousedown', (e) => e.preventDefault());
+        btnLoopGroup.addEventListener('click', () => {
+            if (BOOT.isReadOnly || BOOT.isExecutionMode) return;
+            setBlockPickModeV2(!blockPickMode);
+            if (blockPickMode) showToast('info', 'Click khối ĐẦU, rồi click khối CUỐI để chọn dải khối cần lặp');
+        });
+    }
+
+    // CHẾ ĐỘ CHỌN KHỐI (Lặp nhóm): đón click/mousedown ở capture phase để khối
+    // không mở editor / không kích hoạt chọn ô khi đang chọn dải khối.
+    document.addEventListener('mousedown', (e) => {
+        if (!blockPickMode) return;
+        if (e.target.closest('#v2-loop-pickbar') || e.target.closest('#v2-toolbar') || e.target.closest('.swal2-container')) return;
+        if (e.target.closest('.v2-block')) { e.preventDefault(); e.stopPropagation(); }
+    }, true);
+    document.addEventListener('click', (e) => {
+        if (!blockPickMode) return;
+        if (e.target.closest('#v2-loop-pickbar') || e.target.closest('#v2-toolbar') || e.target.closest('.swal2-container')) return;
+        const blockEl = e.target.closest('.v2-block');
+        if (!blockEl) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const item = items.find((i) => i.id === blockEl.getAttribute('data-id'));
+        if (!item) return;
+        if (item.locked || item.isVirtual) { showToast('warning', 'Khối hệ thống/khóa không thể đưa vào nhóm lặp'); return; }
+        pickBlockRangeV2(item);
+        updateLoopPickBarV2();
+    }, true);
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            if (blockPickMode) setBlockPickModeV2(false);
+            else if (blockPickIds.length) clearBlockPickV2();
+        }
+    });
 
     // Mục lục
     document.getElementById('v2-btn-toc')?.addEventListener('click', () => {
@@ -2753,10 +6641,286 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('v2-eq-search')?.addEventListener('keyup', renderEquipmentList);
     document.getElementById('v2-co-search')?.addEventListener('keyup', renderComponentsList);
 
+    // Bảng KT Khối lượng Trung bình (chèn bảng nhập + biểu đồ, như V1)
+    document.getElementById('v2-btn-weight-chart')?.addEventListener('click', () => {
+        if (BOOT.isReadOnly || BOOT.isExecutionMode) {
+            window.Swal?.fire({ toast: true, position: 'top-end', icon: 'info', title: 'Chỉ dùng được ở chế độ Thiết kế', showConfirmButton: false, timer: 2500 });
+            return;
+        }
+        showModalV2('v2WeightChartModal');
+    });
+    document.getElementById('v2-wc-generate')?.addEventListener('click', generateWeightChartTableV2);
+
+    // Danh mục chữ viết tắt
+    document.getElementById('v2-btn-abbreviation')?.addEventListener('click', () => {
+        if (BOOT.isReadOnly || BOOT.isExecutionMode) {
+            window.Swal?.fire({ toast: true, position: 'top-end', icon: 'info', title: 'Chỉ dùng được ở chế độ Thiết kế', showConfirmButton: false, timer: 2500 });
+            return;
+        }
+        addAbbreviationV2();
+    });
+    document.getElementById('v2-abbr-save')?.addEventListener('click', saveAbbreviationV2);
+
+    // Chèn khối VĂN BẢN mới tại đúng vị trí con trỏ / điểm click gần nhất (giống Word)
+    document.getElementById('v2-btn-insert-text')?.addEventListener('click', () => {
+        if (BOOT.isReadOnly || BOOT.isExecutionMode) {
+            window.Swal?.fire({ toast: true, position: 'top-end', icon: 'info', title: 'Chỉ dùng được ở chế độ Thiết kế', showConfirmButton: false, timer: 2500 });
+            return;
+        }
+        unmountEditor(); // chốt nội dung đang gõ dở trước khi chèn khối mới
+        const { insertIdx, sectionId } = getInsertPointV2();
+        saveDocState();
+        insertBlockAndFocusV2(buildNewBlockV2('static-text', sectionId), insertIdx);
+    });
+
+    // ── Chèn BẢNG: dropdown lưới rê-chuột chọn nhanh số hàng x cột (giống Word) ──
+    const closeTableGridMenuV2 = () => {
+        const menu = document.getElementById('v2-table-grid-menu');
+        menu?.classList.remove('show');
+        menu?.closest('.dropdown')?.classList.remove('show');
+    };
+    const tgGrid = document.getElementById('v2-table-grid');
+    if (tgGrid) {
+        const TG_ROWS = 8, TG_COLS = 10;
+        for (let r = 1; r <= TG_ROWS; r++) {
+            for (let c = 1; c <= TG_COLS; c++) {
+                const cell = document.createElement('div');
+                cell.className = 'v2-tg-cell';
+                cell.dataset.r = r;
+                cell.dataset.c = c;
+                tgGrid.appendChild(cell);
+            }
+        }
+        const tgLabel = document.getElementById('v2-table-grid-label');
+        const paintHot = (R, C) => {
+            tgGrid.querySelectorAll('.v2-tg-cell').forEach((el) => {
+                el.classList.toggle('hot', +el.dataset.r <= R && +el.dataset.c <= C);
+            });
+            if (tgLabel) tgLabel.textContent = R && C ? `Bảng ${C} x ${R}` : 'Chèn bảng';
+        };
+        tgGrid.addEventListener('mouseover', (e) => {
+            const cell = e.target.closest('.v2-tg-cell');
+            if (cell) paintHot(+cell.dataset.r, +cell.dataset.c);
+        });
+        tgGrid.addEventListener('mouseleave', () => paintHot(0, 0));
+        tgGrid.addEventListener('click', (e) => {
+            const cell = e.target.closest('.v2-tg-cell');
+            if (!cell) return;
+            closeTableGridMenuV2();
+            if (BOOT.isReadOnly || BOOT.isExecutionMode) return;
+            unmountEditor();
+            const { insertIdx, sectionId } = getInsertPointV2();
+            saveDocState();
+            insertBlockAndFocusV2(buildNewBlockV2('table', sectionId, +cell.dataset.r, +cell.dataset.c), insertIdx);
+        });
+    }
+
+    // "Chèn bảng..." -> modal nhập chính xác số hàng/cột
+    document.getElementById('v2-table-grid-custom')?.addEventListener('click', () => {
+        closeTableGridMenuV2();
+        if (BOOT.isReadOnly || BOOT.isExecutionMode) {
+            window.Swal?.fire({ toast: true, position: 'top-end', icon: 'info', title: 'Chỉ dùng được ở chế độ Thiết kế', showConfirmButton: false, timer: 2500 });
+            return;
+        }
+        showModalV2('v2TableInsertModal');
+    });
+    document.getElementById('v2-table-insert-confirm')?.addEventListener('click', () => {
+        const rows = Math.max(1, Math.min(50, parseInt(document.getElementById('v2-table-rows').value, 10) || 1));
+        const cols = Math.max(1, Math.min(20, parseInt(document.getElementById('v2-table-cols').value, 10) || 1));
+
+        unmountEditor();
+        const { insertIdx, sectionId } = getInsertPointV2();
+        saveDocState();
+        insertBlockAndFocusV2(buildNewBlockV2('table', sectionId, rows, cols), insertIdx);
+        hideModalV2('v2TableInsertModal');
+    });
+
+    // Viền bảng (Borders)
+    document.querySelectorAll('#v2-borders-menu [data-border-type]').forEach((link) => {
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            const borderType = link.getAttribute('data-border-type');
+            const wrap = selection.getActiveTable();
+            if (!wrap) {
+                showToast('warning', 'Vui lòng chọn bảng trước');
+                return;
+            }
+            const item = items.find((i) => i.id === wrap.getAttribute('data-id'));
+            if (item) {
+                applyBorderToSelectedCellsV2(item, borderType);
+                showToast('success', 'Đã cập nhật viền bảng');
+            }
+        });
+    });
+
+    // Chèn Symbol
+    document.getElementById('v2-btn-symbol')?.addEventListener('click', () => {
+        if (BOOT.isReadOnly || BOOT.isExecutionMode) {
+            window.Swal?.fire({ toast: true, position: 'top-end', icon: 'info', title: 'Chỉ dùng được ở chế độ Thiết kế', showConfirmButton: false, timer: 2500 });
+            return;
+        }
+        renderSymbolGridV2();
+        showModalV2('v2SymbolModal');
+    });
+    document.querySelectorAll('#v2-symbol-tabs [data-v2-symtab]').forEach((a) => {
+        a.addEventListener('click', (e) => {
+            e.preventDefault();
+            currentSymbolTabV2 = a.getAttribute('data-v2-symtab');
+            document.querySelectorAll('#v2-symbol-tabs .nav-link').forEach((x) => x.classList.remove('active'));
+            a.classList.add('active');
+            renderSymbolGridV2();
+        });
+    });
+
+    // Chèn Công thức toán học (KaTeX)
+    document.getElementById('v2-btn-equation')?.addEventListener('click', () => {
+        if (BOOT.isReadOnly || BOOT.isExecutionMode) {
+            window.Swal?.fire({ toast: true, position: 'top-end', icon: 'info', title: 'Chỉ dùng được ở chế độ Thiết kế', showConfirmButton: false, timer: 2500 });
+            return;
+        }
+        openEquationEditorV2('', null);
+    });
+    document.getElementById('v2-eq-input')?.addEventListener('input', updateEquationPreviewV2);
+    document.getElementById('v2-eq-insert')?.addEventListener('click', insertEquationV2);
+    document.querySelectorAll('.v2-eq-tpl').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const input = document.getElementById('v2-eq-input');
+            input.value += btn.getAttribute('data-tpl');
+            updateEquationPreviewV2();
+            input.focus();
+        });
+    });
+
+    // Chèn hình ảnh
+    document.getElementById('v2-btn-image')?.addEventListener('click', () => {
+        if (BOOT.isReadOnly || BOOT.isExecutionMode) {
+            window.Swal?.fire({ toast: true, position: 'top-end', icon: 'info', title: 'Chỉ dùng được ở chế độ Thiết kế', showConfirmButton: false, timer: 2500 });
+            return;
+        }
+        resetImageModalV2();
+        showModalV2('v2ImageModal');
+    });
+    document.getElementById('v2-img-file')?.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+            pendingImageDataUrlV2 = reader.result;
+            const prev = document.getElementById('v2-img-preview');
+            prev.src = pendingImageDataUrlV2;
+            prev.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+    });
+    document.getElementById('v2-img-width')?.addEventListener('input', (e) => {
+        document.getElementById('v2-img-width-label').textContent = e.target.value + '%';
+    });
+    document.getElementById('v2-img-insert')?.addEventListener('click', insertImageV2);
+
+    // Document Property
+    document.getElementById('v2-btn-docprop')?.addEventListener('click', () => {
+        resetDocPropFormV2();
+        renderDocPropListV2();
+        showModalV2('v2DocPropModal');
+    });
+    document.getElementById('v2-dp-add')?.addEventListener('click', () => {
+        const keyInput = document.getElementById('v2-dp-key');
+        const valInput = document.getElementById('v2-dp-value');
+        const key = keyInput.value.trim();
+        const val = valInput.value.trim();
+        if (!key) { window.Swal?.fire('Lỗi', 'Vui lòng nhập tên thuộc tính.', 'warning'); return; }
+        BOOT.docProperties = BOOT.docProperties || {};
+        BOOT.docProperties[key] = val;
+        resetDocPropFormV2();
+        markDirty();
+        renderDocPropListV2();
+        refreshAllDocPropBadges();
+    });
+
+    // Chia đôi màn hình (Split View)
+    document.getElementById('v2-btn-split')?.addEventListener('click', toggleWorkspaceSplitV2);
+
     // Dọn trạng thái kéo-thả khi kết thúc drag (kể cả hủy giữa chừng)
     document.addEventListener('dragend', () => {
         document.body.classList.remove('v2-dragging');
         document.querySelectorAll('.v2-inserter.v2-drop-active').forEach((el) => el.classList.remove('v2-drop-active'));
+        const ind = document.getElementById('v2-drop-indicator');
+        if (ind) ind.style.display = 'none';
+    });
+
+    // ── Kéo-thả Thiết bị/Thành phần: thả TRỰC TIẾP lên trang tại vị trí trỏ chuột ──
+    // Không phụ thuộc thanh chèn giữa các khối (đã ẩn) — hoạt động cả với SECTION RỖNG.
+    const dropIndicator = document.createElement('div');
+    dropIndicator.id = 'v2-drop-indicator';
+    document.body.appendChild(dropIndicator);
+
+    /** Điểm chèn theo tọa độ thả: phần tử (block/section) đứng NGAY TRÊN con trỏ.
+     *  Trả về { afterIndex, y } — y là vị trí vẽ vạch chỉ dẫn. */
+    const dropPointV2 = (pageEl, clientY) => {
+        const anchors = Array.from(pageEl.querySelectorAll('.v2-block[data-id], .v2-section[id^="v2-sec-"]'));
+        let chosen = null;
+        anchors.forEach((el) => {
+            const r = el.getBoundingClientRect();
+            if (r.top + r.height / 2 <= clientY) chosen = el;
+        });
+        // Thả phía trên phần tử đầu tiên: coi như thả vào đầu trang (sau anchor đầu — thường là tiêu đề section)
+        if (!chosen && anchors.length) chosen = anchors[0];
+        if (!chosen) return { afterIndex: items.length - 1, y: pageEl.getBoundingClientRect().top + 8 };
+        const cid = chosen.classList.contains('v2-section')
+            ? chosen.id.replace(/^v2-sec-/, '') : chosen.getAttribute('data-id');
+        const idx = items.findIndex((i) => i.id === cid);
+        return { afterIndex: idx !== -1 ? idx : items.length - 1, y: chosen.getBoundingClientRect().bottom + 2 };
+    };
+
+    document.addEventListener('dragover', (e) => {
+        if (!document.body.classList.contains('v2-dragging')) return;
+        const pageEl = e.target.closest && e.target.closest('.v2-page');
+        if (!pageEl) { dropIndicator.style.display = 'none'; return; }
+        e.preventDefault(); // bắt buộc để trình duyệt cho phép drop
+        e.dataTransfer.dropEffect = 'copy';
+        const pr = pageEl.getBoundingClientRect();
+        const { y } = dropPointV2(pageEl, e.clientY);
+        Object.assign(dropIndicator.style, {
+            display: 'block', left: (pr.left + 16) + 'px', width: (pr.width - 32) + 'px', top: y + 'px',
+        });
+    });
+
+    document.addEventListener('drop', (e) => {
+        if (!document.body.classList.contains('v2-dragging')) return;
+        dropIndicator.style.display = 'none';
+        const pageEl = e.target.closest && e.target.closest('.v2-page');
+        if (!pageEl) return;
+        const action = e.dataTransfer.getData('action');
+        // Thiết bị/Thành phần thả trúng thanh chèn: inserter tự xử lý (tránh chèn đôi);
+        // khối mới từ toolbar thì inserter không biết action này nên xử lý luôn ở đây.
+        if (action !== 'insertNewBlock' && e.target.closest && e.target.closest('.v2-inserter')) return;
+        e.preventDefault();
+        document.body.classList.remove('v2-dragging');
+        const { afterIndex } = dropPointV2(pageEl, e.clientY);
+        if (action === 'insertNewBlock') {
+            addBlock(e.dataTransfer.getData('blockType') || 'static-text', afterIndex);
+            return;
+        }
+        if (action === 'insertEquipmentTable') {
+            const d = e.dataTransfer.getData('equipmentData');
+            if (d) insertEquipmentTableV2(afterIndex, JSON.parse(d));
+            return;
+        }
+        const compId = e.dataTransfer.getData('componentId');
+        if (compId) importComponentV2(parseInt(compId, 10), e.dataTransfer.getData('componentName') || '', afterIndex);
+    });
+
+    // Nút "Chèn văn bản"/"Chèn bảng" trên toolbar: KÉO-THẢ vào giữa 2 khối bất kỳ
+    // (dùng chung vạch chỉ vị trí + dropPointV2 với kéo-thả Thiết bị/Thành phần).
+    [['v2-btn-insert-text', 'static-text'], ['v2-btn-insert-table', 'table']].forEach(([bid, type]) => {
+        const b = document.getElementById(bid);
+        if (!b) return;
+        b.addEventListener('dragstart', (e) => {
+            e.dataTransfer.setData('action', 'insertNewBlock');
+            e.dataTransfer.setData('blockType', type);
+            e.dataTransfer.effectAllowed = 'copy';
+            document.body.classList.add('v2-dragging');
+        });
     });
 
     // Ctrl+K chèn liên kết (giống Google Docs)
@@ -2765,6 +6929,29 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             promptLink();
         }
+    });
+
+    // Ctrl+F Tìm kiếm / Ctrl+H Tìm & Thay thế (giống Google Docs) — chặn tìm kiếm mặc định của trình duyệt
+    document.addEventListener('keydown', (e) => {
+        if (!(e.ctrlKey || e.metaKey)) return;
+        const k = e.key.toLowerCase();
+        if (k === 'f') { e.preventDefault(); openFindV2(false); }
+        else if (k === 'h') { e.preventDefault(); openFindV2(true); }
+    });
+
+    // Delete/Backspace trong 1 KHỐI VĂN BẢN RỖNG -> xóa cả khối (giống Word).
+    // (Khi khối còn nội dung, phím xóa do TipTap xử lý như thường; khối đã đóng editor
+    // thì selection.js tự xử lý Delete xóa block qua activeBlockId.)
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+        if (!activeEditor || BOOT.isReadOnly || BOOT.isExecutionMode) return;
+        const ctxArgs = lastEditorArgs && lastEditorArgs.context;
+        if (!ctxArgs || ctxArgs.kind !== 'text') return;   // chỉ khối văn bản (ô bảng không xóa block)
+        if (!activeEditor.isEmpty) return;                  // còn chữ -> để TipTap xóa chữ
+        e.preventDefault();
+        const blockId = ctxArgs.item.id;
+        unmountEditor();
+        deleteBlock(blockId);
     });
 
     document.querySelectorAll('#v2-toolbar [data-cmd]').forEach((btn) => {
@@ -2789,6 +6976,26 @@ document.addEventListener('DOMContentLoaded', () => {
         else if (k === 'y') { e.preventDefault(); redoDoc(); }
     });
 
+    // Ctrl+C / Ctrl+X / Ctrl+V trên CẢ CỤM khối đang "chọn" (blockPickIds — bấm nút
+    // "Chọn khối" trên toolbar mỗi khối, giữ Shift để chọn cả dải). Nhường hẳn cho
+    // selection.js khi đang chọn Ô bảng/biến số (selection.hasCells()) hoặc đang gõ.
+    document.addEventListener('keydown', (e) => {
+        if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+        if (activeEditor || selection.hasCells()) return;
+        if (BOOT.isReadOnly || BOOT.isExecutionMode) return;
+        const k = e.key.toLowerCase();
+        if ((k === 'c' || k === 'x') && blockPickIds.length) {
+            e.preventDefault();
+            copyPickedBlocksV2(k === 'x');
+        } else if (k === 'v' && blockClipboardV2) {
+            const t = e.target;
+            if (t && t.closest && (t.closest('input, textarea, select') || t.isContentEditable)) return;
+            e.preventDefault();
+            internalPasteHandledV2 = true;
+            pasteBlockClipboardV2();
+        }
+    });
+
     document.querySelectorAll('[data-insert-field]').forEach((el) => {
         el.addEventListener('mousedown', (e) => e.preventDefault());
         el.addEventListener('click', () => insertVariable(el.getAttribute('data-insert-field')));
@@ -2808,14 +7015,55 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Ctrl+S
+    // (Ctrl+S đã đăng ký Ở TRÊN với đầy đủ guard — TUYỆT ĐỐI không đăng ký thêm listener
+    // thứ 2 ở đây: trước đây 1 lần nhấn Ctrl+S kích hoạt CẢ 2 listener -> saveTemplate()
+    // chạy 2 lần song song, cả 2 request đều mang db_id=null cho block mới -> server
+    // INSERT trùng mỗi block 2 dòng.)
+
+    // Điểm chèn block mới = item (block/section) được click gần nhất — xem getInsertPointV2()
+    // ở scope module (dùng chung cho global paste Ctrl+V và gõ-phím-tạo-khối bên dưới).
+
+    // Gõ phím khi CHƯA mở editor nào (giống Word): tự tạo KHỐI VĂN BẢN mới tại điểm
+    // chèn (cú click gần nhất trong vùng thiết kế) rồi tiếp tục gõ vào đó luôn,
+    // không cần bấm nút "Văn bản" trước.
     document.addEventListener('keydown', (e) => {
-        if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveTemplate(); }
+        if (BOOT.isReadOnly || BOOT.isExecutionMode) return;
+        if (activeEditor) return;                        // đang gõ trong editor: TipTap tự xử lý
+        if (e.ctrlKey || e.metaKey || e.altKey) return;  // phím tắt, không phải gõ chữ
+        if (e.key.length !== 1) return;                  // bỏ qua Enter/Esc/mũi tên/F1-12...
+        if (!lastClickInPagesV2) return;                 // lần click gần nhất không nằm trong vùng thiết kế
+        if (blockPickMode || selection.hasCells()) return; // đang chọn khối / chọn ô bảng
+        const t = e.target;
+        if (t && t.closest && (t.closest('input, textarea, select') || t.isContentEditable
+            || t.closest('.modal') || t.closest('.swal2-container'))) return;
+
+        e.preventDefault();
+        const ch = e.key;
+        const { insertIdx, sectionId } = getInsertPointV2();
+        saveDocState();
+        const block = {
+            id: newBlockId(), type: 'static-text', label: 'Văn bản',
+            content: '<p></p>', section_id: sectionId, borderMode: 'none', dirty: true,
+        };
+        items.splice(insertIdx, 0, block);
+        pasteAnchorIdV2 = block.id;
+        markDirty();
+        renderDocument();
+
+        const inner = document.querySelector(`.v2-block[data-id="${block.id}"] .v2-editable`);
+        if (!inner) return;
+        mountEditor(inner,
+            () => block.content || '',
+            (html) => { block.content = html; block.dirty = true; markDirty(); },
+            { kind: 'text', item: block });
+        // Đưa ký tự vừa gõ vào editor (dạng text node — không parse HTML)
+        if (activeEditor) activeEditor.chain().focus().insertContent({ type: 'text', text: ch }).run();
     });
 
     // Dán (Ctrl+V) khi CHƯA mở editor nào -> tạo block mới như V1 (handleGlobalPaste):
     // bảng thành block bảng, phần còn lại thành block văn bản, thêm vào cuối tài liệu.
     document.addEventListener('paste', (e) => {
+        if (internalPasteHandledV2) { internalPasteHandledV2 = false; return; } // vừa Ctrl+V dán cụm khối nội bộ — không dán trùng từ clipboard OS
         if (BOOT.isReadOnly || BOOT.isExecutionMode) return;
         if (activeEditor) return; // đang có editor mở: TipTap tự xử lý (handleEditorPaste)
         if (e.target.closest && (e.target.closest('input') || e.target.closest('textarea'))) return;
@@ -2823,11 +7071,25 @@ document.addEventListener('DOMContentLoaded', () => {
         const cb = e.clipboardData || window.clipboardData;
         const htmlData = cb ? cb.getData('text/html') : '';
         const plainText = cb ? cb.getData('text/plain') : '';
-        if (!htmlData && !plainText) return;
+
+        const { insertIdx, sectionId } = getInsertPointV2();
+
+        // Clipboard hệ thống rỗng nhưng lần Ctrl+C gần nhất là "chọn cả bảng" (nút ⊕)
+        // -> dán bản sao bảng đó thành block mới tại điểm chèn.
+        if (!htmlData && !plainText) {
+            const fullTable = selection.getFullTableClipboard();
+            if (!fullTable) return;
+            e.preventDefault();
+            saveDocState();
+            const tb = fullTableClipboardToBlock(fullTable, sectionId);
+            items.splice(insertIdx, 0, tb);
+            pasteAnchorIdV2 = tb.id; // dán tiếp sẽ nằm ngay dưới bảng vừa dán
+            markDirty();
+            renderDocument();
+            return;
+        }
         e.preventDefault();
 
-        const lastItem = items.length ? items[items.length - 1] : null;
-        const sectionId = lastItem ? (lastItem.type === 'section' ? (lastItem.section_id || lastItem.id) : lastItem.section_id) : null;
         const newBlocks = [];
 
         const pushText = (html) => {
@@ -2862,7 +7124,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (newBlocks.length > 0) {
             saveDocState();
-            items.push(...newBlocks);
+            items.splice(insertIdx, 0, ...newBlocks);
+            pasteAnchorIdV2 = newBlocks[newBlocks.length - 1].id; // dán tiếp sẽ nối tiếp phía dưới
             markDirty();
             renderDocument();
             const el = document.querySelector(`.v2-block[data-id="${newBlocks[0].id}"]`);
@@ -2870,3 +7133,291 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
+
+/* =========================================================
+ * RIGHT-CLICK CONTEXT MENU (biến số, ngắt trang)
+ * ========================================================= */
+document.addEventListener('contextmenu', (e) => {
+    const pagesContainer = document.getElementById('v2-pages');
+    if (!pagesContainer || !pagesContainer.contains(e.target)) return;
+
+    const varEl = e.target.closest('.v2-field-badge, .ebmr-field-badge');
+    const blockEl = e.target.closest('.v2-block');
+    const isPageBreak = blockEl && blockEl.getAttribute('data-type') === 'page-break';
+
+    if (!varEl && !blockEl) return;
+
+    e.preventDefault();
+
+    let menu = document.getElementById('v2-context-menu');
+    if (!menu) {
+        menu = document.createElement('div');
+        menu.id = 'v2-context-menu';
+        menu.className = 'dropdown-menu shadow-sm';
+        menu.style.cssText = 'position:fixed; z-index:99999; min-width:220px; border-radius:4px; max-height:80vh; overflow-y:auto;';
+        document.body.appendChild(menu);
+    }
+
+    menu.innerHTML = '';
+
+    // ── BIẾN SỐ ──
+    if (varEl) {
+        const fieldId = varEl.getAttribute('data-field-id');
+
+        // Copy variable
+        const btnCopy = document.createElement('button');
+        btnCopy.className = 'dropdown-item small';
+        btnCopy.innerHTML = '<i class="fas fa-copy me-2 text-primary"></i> Sao chép biến';
+        btnCopy.onclick = () => {
+            hideContextMenuV2();
+            copyFieldsV2([fieldId]);
+            selection.notifyFieldsCopied(); // để Ctrl+V (khi đang gõ) biết clipboard đang giữ BIẾN, không phải Ô
+            showToast('success', 'Đã sao chép biến số');
+        };
+        menu.appendChild(btnCopy);
+
+        // Paste variable
+        if (hasFieldClipboardV2()) {
+            const btnPaste = document.createElement('button');
+            btnPaste.className = 'dropdown-item small';
+            btnPaste.innerHTML = '<i class="fas fa-paste me-2 text-success"></i> Dán biến';
+            btnPaste.onclick = () => {
+                hideContextMenuV2();
+                pasteFieldsV2();
+            };
+            menu.appendChild(btnPaste);
+            menu.appendChild(document.createElement('hr'));
+        }
+
+        // Delete variable
+        const btnDelete = document.createElement('button');
+        btnDelete.className = 'dropdown-item small text-danger';
+        btnDelete.innerHTML = '<i class="fas fa-trash me-2"></i> Xóa biến';
+        btnDelete.onclick = () => {
+            hideContextMenuV2();
+            deleteVariableV2(fieldId);
+        };
+        menu.appendChild(btnDelete);
+    }
+
+    // ── BẢNG (thao tác kiểu Word — chỉ ở chế độ Thiết kế) ──
+    const tableTd = e.target.closest('.v2-table-wrap td');
+    let tableItem = null;
+    if (tableTd && !BOOT.isReadOnly && !BOOT.isExecutionMode) {
+        const twrap = tableTd.closest('.v2-table-wrap');
+        const it = items.find((i) => i.id === twrap?.getAttribute('data-id'));
+        if (it && !it.locked && !it.isVirtual) tableItem = it;
+    }
+    if (tableItem) {
+        const addItem = (html, onClick, danger = false) => {
+            const b = document.createElement('button');
+            b.className = 'dropdown-item small' + (danger ? ' text-danger' : '');
+            b.innerHTML = html;
+            b.onclick = () => { hideContextMenuV2(); onClick(); };
+            menu.appendChild(b);
+        };
+        const addDivider = () => {
+            if (!menu.childElementCount) return;
+            const hr = document.createElement('hr');
+            hr.className = 'dropdown-divider my-1';
+            menu.appendChild(hr);
+        };
+
+        const r = parseInt(tableTd.dataset.row, 10);
+        const c = parseInt(tableTd.dataset.col, 10);
+        const cell = (tableItem.data[r] && tableItem.data[r][c]) || {};
+        const rs = cell.rs || 1, cs = cell.cs || 1;
+        const it = tableItem;
+
+        addDivider();
+        addItem('<i class="fas fa-arrow-up me-2 text-primary"></i> Chèn hàng phía trên', () => insertTableRowV2(it, r));
+        addItem('<i class="fas fa-arrow-down me-2 text-primary"></i> Chèn hàng phía dưới', () => insertTableRowV2(it, r + rs));
+        addItem('<i class="fas fa-arrow-left me-2 text-primary"></i> Chèn cột bên trái', () => insertTableColV2(it, c));
+        addItem('<i class="fas fa-arrow-right me-2 text-primary"></i> Chèn cột bên phải', () => insertTableColV2(it, c + cs));
+
+        addDivider();
+        if (selection.cellCount() >= 2) {
+            addItem('<i class="fas fa-object-group me-2 text-primary"></i> Gộp ô', () => mergeSelectedCellsV2());
+        }
+        if (rs > 1 || cs > 1) {
+            addItem('<i class="fas fa-object-ungroup me-2 text-primary"></i> Tách ô', () => {
+                selection.setRange(tableTd, tableTd);
+                splitCellV2();
+            });
+        }
+        addItem('<i class="fas fa-arrow-up me-2 text-muted"></i> Căn nội dung: Trên', () => setCellVAlignV2(it, tableTd, 'top'));
+        addItem('<i class="fas fa-grip-lines me-2 text-muted"></i> Căn nội dung: Giữa', () => setCellVAlignV2(it, tableTd, 'middle'));
+        addItem('<i class="fas fa-arrow-down me-2 text-muted"></i> Căn nội dung: Dưới', () => setCellVAlignV2(it, tableTd, 'bottom'));
+
+        addDivider();
+        addItem('<i class="fas fa-arrows-alt-v me-2 text-primary"></i> Phân bố đều các hàng', () => distributeRowsV2(it));
+        addItem('<i class="fas fa-arrows-alt-h me-2 text-primary"></i> Phân bố đều các cột', () => distributeColsV2(it));
+        addItem('<i class="fas fa-magic me-2 text-primary"></i> AutoFit theo nội dung', () => autoFitTableV2(it));
+        addItem(`<i class="fas fa-heading me-2 text-muted"></i> ${it.hideHeader ? 'Hiện' : 'Ẩn'} hàng tiêu đề cột`, () => {
+            saveDocState();
+            it.hideHeader = !it.hideHeader;
+            it.dirty = true;
+            markDirty();
+            renderDocument();
+        });
+        // "Cấp 2" = người dùng cuối, CHỈ thao tác được lúc Chạy thử/thực thi (xem
+        // showAddRowUI trong renderTable) — bấm ở Thiết kế không hiện nút thêm dòng nên
+        // không ai lỡ tay đổi cấu trúc bảng gốc. Tự nhân bản hàng cuối thành hàng mới —
+        // xem addRuntimeTableRowV2()/deleteRuntimeTableRowV2(), giống V1.
+        addItem(`<i class="fas fa-plus-circle me-2 text-muted"></i> ${it.canAddRows ? 'Tắt' : 'Bật'} cho phép thêm dòng (Cấp 2)`, () => {
+            const turningOn = !it.canAddRows;
+            let count = it.addRowsCount || 1;
+            if (turningOn) {
+                const val = window.prompt('Mỗi lần bấm "Thêm dòng" lúc Chạy thử/thực thi, thêm bao nhiêu dòng?', String(count));
+                if (val === null) return; // hủy bật
+                count = Math.max(1, parseInt(val, 10) || 1);
+            }
+            saveDocState();
+            it.canAddRows = turningOn;
+            it.addRowsCount = count;
+            it.dirty = true;
+            markDirty();
+            renderDocument();
+        });
+        if (it.canAddRows) {
+            addItem('<i class="fas fa-list-ol me-2 text-muted"></i> Đổi số dòng thêm mỗi lần...', () => {
+                const cur = it.addRowsCount || 1;
+                const val = window.prompt('Mỗi lần bấm "Thêm dòng", thêm bao nhiêu dòng?', String(cur));
+                if (val === null) return;
+                const n = Math.max(1, parseInt(val, 10) || 1);
+                saveDocState();
+                it.addRowsCount = n;
+                it.dirty = true;
+                markDirty();
+                renderDocument();
+            });
+        }
+        // Đánh dấu CẢ CỘT (không chỉ 1 ô) đang chuột phải thành cột tự động đánh số thứ
+        // tự — ghi đè nội dung mọi ô trong cột này thành "#STT#", CSS counter tự đếm lại
+        // đúng theo số hàng hiện có (xem replaceSttMarkersV2), thêm/xoá hàng không cần
+        // tính lại bằng JS. Dùng được cho BẤT KỲ cột nào, không riêng bảng khối lượng.
+        addItem('<i class="fas fa-list-ol me-2 text-muted"></i> Đánh số thứ tự tự động cho cột này (STT)', () => {
+            saveDocState();
+            for (let rr = 0; rr < it.rows; rr++) {
+                if (!it.data[rr]) continue;
+                if (!it.data[rr][c] || typeof it.data[rr][c] !== 'object') it.data[rr][c] = { rs: 1, cs: 1, hidden: false };
+                it.data[rr][c].content = '<p style="text-align: center;">#STT#</p>';
+            }
+            it.dirty = true;
+            markDirty();
+            renderDocument();
+            showToast('success', 'Đã đặt cột này tự động đánh số thứ tự');
+        });
+
+        addDivider();
+        addItem('<i class="fas fa-trash-alt me-2"></i> Xóa hàng', () => deleteTableRowV2(it, r), true);
+        addItem('<i class="fas fa-trash-alt me-2"></i> Xóa cột', () => deleteTableColV2(it, c), true);
+        addItem('<i class="fas fa-trash me-2"></i> Xóa bảng', () => deleteBlock(it.id), true);
+    }
+
+    // ── DÁN BIẾN tại vị trí con trỏ / ô vừa chuột phải — hiện cả khi KHÔNG bấm trúng badge ──
+    if (!varEl && hasFieldClipboardV2() && !BOOT.isReadOnly && !BOOT.isExecutionMode) {
+        const tdTarget = e.target.closest('.v2-table-wrap td');
+        const blkItem = blockEl ? items.find((i) => i.id === blockEl.getAttribute('data-id')) : null;
+        const cellOk = tdTarget && !tdTarget.closest('.v2-locked');
+        const textOk = blkItem && blkItem.type === 'static-text' && !blkItem.locked && !blkItem.isVirtual;
+        if (cellOk || textOk) {
+            if (menu.innerHTML) menu.appendChild(document.createElement('hr'));
+            const btnPasteVar = document.createElement('button');
+            btnPasteVar.className = 'dropdown-item small';
+            btnPasteVar.innerHTML = '<i class="fas fa-paste me-2 text-success"></i> Dán biến';
+            btnPasteVar.onclick = () => {
+                hideContextMenuV2();
+                // Editor đang mở (chuột phải ngay chỗ con trỏ) -> dán tại con trỏ;
+                // không thì dán vào Ô vừa chuột phải; cuối cùng mới rơi về vị trí soạn gần nhất.
+                if (activeEditor) { pasteFieldsV2(); return; }
+                if (cellOk) {
+                    const twrap = tdTarget.closest('.v2-table-wrap');
+                    const it = items.find((i) => i.id === twrap?.getAttribute('data-id'));
+                    const r = parseInt(tdTarget.dataset.row, 10), c = parseInt(tdTarget.dataset.col, 10);
+                    if (it && !isNaN(r) && !isNaN(c) && pasteFieldsIntoCellV2(it, r, c)) {
+                        showToast('success', 'Đã dán biến số vào ô');
+                        return;
+                    }
+                }
+                pasteFieldsV2();
+            };
+            menu.appendChild(btnPasteVar);
+        }
+    }
+
+    // ── KIỂU CHỮ CẢ KHỐI VĂN BẢN (đổi cấp tiêu đề nhanh, không cần đặt con trỏ) ──
+    const txtBlockItem = blockEl ? items.find((i) => i.id === blockEl.getAttribute('data-id')) : null;
+    if (txtBlockItem && txtBlockItem.type === 'static-text' && !txtBlockItem.locked && !txtBlockItem.isVirtual
+        && !BOOT.isReadOnly && !BOOT.isExecutionMode) {
+        if (menu.innerHTML) menu.appendChild(document.createElement('hr'));
+        [['p', 'Văn bản thường'], ['h1', 'Tiêu đề 1'], ['h2', 'Tiêu đề 2'], ['h3', 'Tiêu đề 3']].forEach(([tag, label]) => {
+            const b = document.createElement('button');
+            b.className = 'dropdown-item small';
+            b.innerHTML = `<i class="fas fa-heading me-2 text-muted" style="${tag === 'p' ? 'opacity:0.3;' : ''}"></i> ${label}`;
+            b.onclick = () => { hideContextMenuV2(); setBlockTextTagV2(txtBlockItem, tag); };
+            menu.appendChild(b);
+        });
+    }
+
+    // ── NGẮT TRANG ──
+    if (blockEl) {
+        if (menu.innerHTML) menu.appendChild(document.createElement('hr'));
+
+        if (!isPageBreak) {
+            const btnInsert = document.createElement('button');
+            btnInsert.className = 'dropdown-item small';
+            btnInsert.innerHTML = '<i class="fas fa-scissors me-2"></i> Chèn ngắt trang';
+            btnInsert.onclick = () => {
+                hideContextMenuV2();
+                const idx = items.findIndex(i => i.id === blockEl.getAttribute('data-id'));
+                if (idx !== -1) {
+                    saveDocState();
+                    items.splice(idx + 1, 0, { id: 'pb_' + Date.now(), type: 'page-break' });
+                    markDirty();
+                    renderDocument();
+                }
+            };
+            menu.appendChild(btnInsert);
+        } else {
+            const btnRemove = document.createElement('button');
+            btnRemove.className = 'dropdown-item small text-danger';
+            btnRemove.innerHTML = '<i class="fas fa-trash me-2"></i> Xóa ngắt trang';
+            btnRemove.onclick = () => {
+                hideContextMenuV2();
+                const blockId = blockEl.getAttribute('data-id');
+                const idx = items.findIndex(i => i.id === blockId);
+                if (idx !== -1) {
+                    saveDocState();
+                    items.splice(idx, 1);
+                    markDirty();
+                    renderDocument();
+                }
+            };
+            menu.appendChild(btnRemove);
+        }
+    }
+
+    menu.style.left = e.clientX + 'px';
+    menu.style.top = e.clientY + 'px';
+    menu.classList.add('show');
+    // Không cho menu tràn khỏi màn hình (menu bảng khá dài)
+    const mRect = menu.getBoundingClientRect();
+    if (mRect.bottom > window.innerHeight) menu.style.top = Math.max(8, window.innerHeight - mRect.height - 8) + 'px';
+    if (mRect.right > window.innerWidth) menu.style.left = Math.max(8, window.innerWidth - mRect.width - 8) + 'px';
+
+    const closeOnOutside = (ev) => {
+        if (!menu.contains(ev.target)) {
+            hideContextMenuV2();
+            document.removeEventListener('click', closeOnOutside, true);
+        }
+    };
+    setTimeout(() => document.addEventListener('click', closeOnOutside, true), 50);
+});
+
+function hideContextMenuV2() {
+    const menu = document.getElementById('v2-context-menu');
+    if (menu) menu.classList.remove('show');
+}
+
+window.hideContextMenuV2 = hideContextMenuV2;

@@ -362,6 +362,7 @@ class EbmrDesignerController extends Controller
             $sectionId = $request->section_id;
             $isIncremental = $schemaData['incremental'] ?? false;
             $deletedIds = $schemaData['deleted_ids'] ?? [];
+            $deletedFieldKeys = $schemaData['deleted_field_keys'] ?? [];
             $blockOrder = $schemaData['block_order'] ?? [];
 
             $data = [
@@ -434,6 +435,13 @@ class EbmrDesignerController extends Controller
                 $deletedIds[] = $abbrevDbId;
             }
 
+            // --- 2b. DOCUMENT PROPERTY (danh mục key/value tự định nghĩa, giống Word) ---
+            if (array_key_exists('docProperties', $schemaData)) {
+                DB::table('ebmr_templates')->where('id', $id)->update([
+                    'doc_properties' => json_encode($schemaData['docProperties'] ?? (object) []),
+                ]);
+            }
+
             // --- 3. HANDLE DELETIONS ---
             if ($isIncremental && ! empty($deletedIds)) {
                 DB::table('ebmr_template_blocks')->whereIn('id', $deletedIds)->delete();
@@ -455,7 +463,11 @@ class EbmrDesignerController extends Controller
 
                 if ($type === 'section') {
                     $stageCode = $field['stage_code'] ?? 'USER_DEFINED_'.rand(100, 999);
-                    $currentSectionId = $categoryId.'_'.$stageCode;
+                    // Ưu tiên section_id THẬT client gửi lên (có thể mang hậu tố nhánh phòng,
+                    // vd "{cat}_{track}_{stageCode}") — chỉ reconstruct kiểu cũ khi client không
+                    // gửi kèm, để không làm lệch section_id fallback của các field theo sau section
+                    // này về nhánh GỐC (không track) khi section hiện tại là 1 nhánh đã tách.
+                    $currentSectionId = $field['section_id'] ?: ($categoryId.'_'.$stageCode);
                 }
 
                 $blockDbId = $field['db_id'] ?? null;
@@ -514,6 +526,21 @@ class EbmrDesignerController extends Controller
                 // If not incremental, we handle 'order' here. If incremental, we'll do it later in a batch.
                 if (! $isIncremental) {
                     $blockData['order'] = array_search($frontendId, $blockOrder) ?: 0;
+                }
+
+                // CHỐNG NHÂN ĐÔI BLOCK (idempotent): client có thể gửi lại block CHƯA kịp nhận
+                // db_id (double-submit, mất kết nối sau khi server đã ghi, retry...). label chính là
+                // id phía frontend (blk_v2_..., duy nhất trong template) — nếu đã tồn tại block cùng
+                // label thì UPDATE bản ghi cũ thay vì INSERT thêm một bản sao.
+                if (! $blockDbId && $frontendId) {
+                    $existedByLabel = DB::table('ebmr_template_blocks')
+                        ->where('template_id', $id)
+                        ->where('label', $frontendId)
+                        ->orderBy('id')
+                        ->first();
+                    if ($existedByLabel) {
+                        $blockDbId = $existedByLabel->id;
+                    }
                 }
 
                 if ($blockDbId && DB::table('ebmr_template_blocks')->where('id', $blockDbId)->exists()) {
@@ -616,66 +643,102 @@ class EbmrDesignerController extends Controller
                     }
                 }
 
-                // Chỉ xoá các biến không còn nằm trong fieldsConfig (orphans)
                 $keepFieldKeys = array_keys((array) $fieldsConfig);
-                DB::table('ebmr_variants')
-                    ->where('template_id', $id)
-                    ->whereNotIn('field_key', $keepFieldKeys)
-                    ->delete();
 
-                foreach ($fieldsConfig as $fieldKey => $config) {
-                    $configArr = (array) $config;
-
-                    // Trích xuất các trường cốt lõi, giữ các phần cấu hình còn lại trong JSON 'config'
-                    $name = $configArr['name'] ?? null;
-                    $label = $configArr['label'] ?? null;
-                    $type = $configArr['type'] ?? 'text';
-                    $vSectionId = $configArr['section_id'] ?? null;
-                    $vBlockUuid = $configArr['block_id'] ?? null;
-                    $importantVarId = $configArr['important_var_id'] ?? null;
-
-                    // Ánh xạ Frontend UUID sang DB ID
-                    $vBlockId = null;
-                    if ($vBlockUuid && isset($frontendToDbMap[$vBlockUuid])) {
-                        $vBlockId = is_array($frontendToDbMap[$vBlockUuid])
-                            ? ($frontendToDbMap[$vBlockUuid]['db_id'] ?? null)
-                            : $frontendToDbMap[$vBlockUuid];
+                // HIỆU NĂNG: tài liệu có thể có hàng trăm biến số (template #50 hiện có >250).
+                // Cách cũ chạy 1 SELECT + 1 INSERT/UPDATE RIÊNG cho TỪNG biến (2 lượt round-trip
+                // DB mỗi biến, mỗi lượt lại tự commit) -> hàng trăm/nghìn round-trip tuần tự làm
+                // "Lưu" rất chậm. Gộp lại: fetch 1 lần toàn bộ biến đã có, rồi bọc phần
+                // xoá/thêm/sửa trong 1 transaction DUY NHẤT (1 lần commit thay vì hàng trăm lần).
+                DB::transaction(function () use ($fieldsConfig, $id, $deletedFieldKeys, $frontendToDbMap, $keepFieldKeys) {
+                    // Xoá TƯỜNG MINH các biến người dùng đã thật sự xoá (deleteVariablesV2 ở client,
+                    // gửi qua deleted_field_keys — cùng mô hình với deleted_ids của block).
+                    // TRƯỚC ĐÂY suy luận "biến vắng mặt trong fieldsConfig của lượt lưu NÀY = mồ côi,
+                    // xoá luôn" — cách này xoá NHẦM biến vừa được dán/tạo ở 1 tab/lượt lưu KHÁC nếu
+                    // ảnh chụp dữ liệu (fieldsConfig) phía client gửi lên lượt sau lại cũ hơn (race
+                    // condition khi 2 lượt lưu gần nhau, kể cả cùng tab lẫn nhiều tab).
+                    if (! empty($deletedFieldKeys)) {
+                        DB::table('ebmr_variants')
+                            ->where('template_id', $id)
+                            ->whereIn('field_key', array_map('strval', $deletedFieldKeys))
+                            ->delete();
                     }
 
-                    // Loại bỏ các trường cốt lõi khỏi cấu hình JSON để tránh dư thừa
-                    unset($configArr['id'], $configArr['name'], $configArr['label'], $configArr['type'], $configArr['section_id'], $configArr['block_id'], $configArr['important_var_id']);
-
-                    $existingVariant = DB::table('ebmr_variants')
+                    $existingVariants = DB::table('ebmr_variants')
                         ->where('template_id', $id)
-                        ->where('field_key', (string) $fieldKey)
-                        ->first();
+                        ->whereIn('field_key', $keepFieldKeys)
+                        ->get()
+                        ->keyBy('field_key');
 
-                    $data = [
-                        'template_id' => $id,
-                        'field_key' => (string) $fieldKey,
-                        'name' => (string) $name,
-                        'label' => (string) $label,
-                        'type' => (string) $type,
-                        'important_var_id' => $importantVarId ? (int) $importantVarId : null,
-                        'section_id' => $vSectionId ? (string) $vSectionId : null,
-                        'block_id' => $vBlockId,
-                        'config' => json_encode($configArr),
-                        'updated_at' => now()->toDateTimeString(),
-                    ];
+                    $toInsert = [];
+                    foreach ($fieldsConfig as $fieldKey => $config) {
+                        $configArr = (array) $config;
 
-                    if ($existingVariant) {
-                        DB::table('ebmr_variants')
-                            ->where('id', $existingVariant->id)
-                            ->update($data);
-                    } else {
-                        $data['created_at'] = now()->toDateTimeString();
+                        // Trích xuất các trường cốt lõi, giữ các phần cấu hình còn lại trong JSON 'config'
+                        $name = $configArr['name'] ?? null;
+                        $label = $configArr['label'] ?? null;
+                        $type = $configArr['type'] ?? 'text';
+                        $vSectionId = $configArr['section_id'] ?? null;
+                        $vBlockUuid = $configArr['block_id'] ?? null;
+                        $importantVarId = $configArr['important_var_id'] ?? null;
+
+                        // Ánh xạ Frontend UUID sang DB ID
+                        $vBlockId = null;
+                        if ($vBlockUuid && isset($frontendToDbMap[$vBlockUuid])) {
+                            $vBlockId = is_array($frontendToDbMap[$vBlockUuid])
+                                ? ($frontendToDbMap[$vBlockUuid]['db_id'] ?? null)
+                                : $frontendToDbMap[$vBlockUuid];
+                        }
+
+                        // Loại bỏ các trường cốt lõi khỏi cấu hình JSON để tránh dư thừa
+                        unset($configArr['id'], $configArr['name'], $configArr['label'], $configArr['type'], $configArr['section_id'], $configArr['block_id'], $configArr['important_var_id']);
+
+                        $data = [
+                            'template_id' => $id,
+                            'field_key' => (string) $fieldKey,
+                            'name' => (string) $name,
+                            'label' => (string) $label,
+                            'type' => (string) $type,
+                            'important_var_id' => $importantVarId ? (int) $importantVarId : null,
+                            'section_id' => $vSectionId ? (string) $vSectionId : null,
+                            'block_id' => $vBlockId,
+                            'config' => json_encode($configArr),
+                            'updated_at' => now()->toDateTimeString(),
+                        ];
+
+                        $existingVariant = $existingVariants->get((string) $fieldKey);
+                        if ($existingVariant) {
+                            DB::table('ebmr_variants')
+                                ->where('id', $existingVariant->id)
+                                ->update($data);
+                        } else {
+                            $data['created_at'] = now()->toDateTimeString();
+                            $toInsert[] = $data;
+                        }
+                    }
+
+                    if (! empty($toInsert)) {
                         try {
-                            DB::table('ebmr_variants')->insert($data);
+                            DB::table('ebmr_variants')->insert($toInsert);
                         } catch (\Exception $e) {
-                            \Log::error('Error inserting variant: '.$e->getMessage(), ['data' => $data]);
+                            \Log::error('Error inserting variants: '.$e->getMessage(), ['count' => count($toInsert)]);
                             throw $e;
                         }
                     }
+                });
+
+                // XÁC MINH: mọi biến client gửi lên phải THẬT SỰ tồn tại trong DB sau khi lưu.
+                // Không có bước này thì nếu 1 biến vì lý do gì đó không ghi được, request vẫn
+                // chạy hết tới response "success" phía dưới — người dùng thấy "Lưu thành công"
+                // nhưng biến (vd. biến vừa dán/nhân bản) lại biến mất khi tải lại trang.
+                $savedKeys = DB::table('ebmr_variants')
+                    ->where('template_id', $id)
+                    ->whereIn('field_key', $keepFieldKeys)
+                    ->pluck('field_key')
+                    ->all();
+                $missingKeys = array_diff($keepFieldKeys, $savedKeys);
+                if (! empty($missingKeys)) {
+                    throw new \Exception('Không thể lưu '.count($missingKeys).' biến số (field_key: '.implode(', ', $missingKeys).')');
                 }
             }
 
@@ -1236,6 +1299,9 @@ class EbmrDesignerController extends Controller
                         if (! empty($cellData['fontStyle'])) {
                             $style .= "font-style:{$cellData['fontStyle']};";
                         }
+                        if (! empty($cellData['verticalAlign'])) {
+                            $style .= "vertical-align:{$cellData['verticalAlign']};";
+                        }
                     }
 
                     $html .= '<td'.($rs > 1 ? ' rowspan="'.$rs.'"' : '').($cs > 1 ? ' colspan="'.$cs.'"' : '').($style ? ' style="'.$style.'"' : '').'>';
@@ -1548,7 +1614,7 @@ class EbmrDesignerController extends Controller
             $department = $request->input('department', '');
             
             $query = DB::table('instrument')
-                ->select('id', 'name', 'code', 'department_code')
+                ->select('id', 'name', 'code', 'department_code', 'operation_SOP_code', 'clearing_SOP_code')
                 ->orderBy('code', 'asc');
                 
             if ($department !== '' && $department !== '-') {

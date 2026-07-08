@@ -9,22 +9,15 @@
         </li>
     </ul>
 
-    <!-- Title Center: chữ 3D nổi khối, màu vàng gold theo logo -->
-    <div class="text-center" style="position: absolute; left: 50%; transform: translateX(-50%); perspective: 600px;">
-        <h4 class="brand-text brand-3d mb-0" id="brand3dTitle">
+    <!-- Title Center: Tiêu đề thiết kế hiện đại -->
+    <div class="text-center" style="position: absolute; left: 50%; transform: translateX(-50%);">
+        <h4 class="brand-premium mb-0" id="brandTitle">
             {{ session('title', 'E-BMR SYSTEM') }}
         </h4>
     </div>
 
     <!-- Right User Info + Notification + Logout -->
-    <ul class="navbar-nav ms-auto align-items-center">
-        <li class="nav-item d-flex align-items-center me-3">
-            <div class="chat-trigger" onclick="toggleChat(true)">
-                <i class="bi bi-chat-dots" style="font-size: 18px;"></i>
-                <span class="unread-badge-total" id="chat-badge-total" style="display:none;">0</span>
-            </div>
-        </li>
-
+    <ul class="navbar-nav ml-auto align-items-center">
         <li class="nav-item d-flex align-items-center me-3">
             <div id="notif-bell-btn"
                 style="border: 2px solid var(--accent); border-radius: 50%; width: 40px; height: 40px; display: flex; justify-content: center; align-items: center; cursor: pointer; transition: all var(--transition); background: rgba(34, 211, 238, 0.05);">
@@ -54,59 +47,42 @@
 </nav>
 
 <style>
-    /* Chữ 3D nổi khối: mặt trước vàng gold sáng ấm, thân khối đổ xuống tông be/nâu ấm (không đen) */
-    .brand-3d {
+    /* Thiết kế tiêu đề Gradient Premium hiện đại, phù hợp dự án Y dược/Công nghệ */
+    .brand-premium {
         display: inline-block;
-        font-weight: 800;
-        letter-spacing: 2px;
-        color: #F1AA00 !important; /* Stellapharm Yellow */
-        text-shadow:
-            0 1px 0 #d9b93a,
-            0 2px 0 #c4a336,
-            0 3px 0 #af8f30,
-            0 4px 0 #9a7a2a,
-            0 5px 0 #856624,
-            0 7px 10px rgba(133, 102, 36, 0.28);
-        transform: rotateX(14deg);
-        transform-origin: center bottom;
-        transform-style: preserve-3d;
-        animation: brand3dFloat 5s ease-in-out infinite;
-        will-change: transform;
+        font-weight: 900;
+        font-size: 1.4rem;
+        letter-spacing: 1.5px;
+        
+        /* Hiệu ứng màu gradient chuyển động */
+        background: linear-gradient(90deg, #0052D4, #4364F7, #6FB1FC, #4364F7, #0052D4);
+        background-size: 200% auto;
+        
+        /* Cắt gradient theo chữ (Webkit) */
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        color: transparent; /* Fallback */
+        
+        /* Ánh sáng đổ bóng (Glow) mượt mà */
+        filter: drop-shadow(0px 4px 8px rgba(67, 100, 247, 0.25));
+        
+        /* Animation chạy màu tuần hoàn */
+        animation: gradientShine 5s linear infinite;
         cursor: default;
+        user-select: none;
     }
 
-    @keyframes brand3dFloat {
-        0%, 100% { transform: rotateX(14deg) translateY(0); }
-        50% { transform: rotateX(7deg) translateY(-2px); }
+    @keyframes gradientShine {
+        to {
+            background-position: 200% center;
+        }
     }
 
     @media (prefers-reduced-motion: reduce) {
-        .brand-3d { animation: none; }
+        .brand-premium { 
+            animation: none; 
+            background-position: 0% center;
+        }
     }
 </style>
-
-<script>
-    /* Tiêu đề nghiêng 3D theo vị trí chuột trên thanh TopNAV */
-    (function() {
-        const title = document.getElementById('brand3dTitle');
-        if (!title) return;
-        const nav = title.closest('nav');
-        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-
-        nav.addEventListener('mousemove', function(e) {
-            const r = title.getBoundingClientRect();
-            const cx = r.left + r.width / 2;
-            const cy = r.top + r.height / 2;
-            // Càng xa tâm tiêu đề thì nghiêng càng nhiều, giới hạn ±14°
-            const ry = Math.max(-14, Math.min(14, (e.clientX - cx) / 22));
-            const rx = Math.max(-10, Math.min(18, 14 - (e.clientY - cy) / 4));
-            title.style.animation = 'none';
-            title.style.transform = 'rotateX(' + rx + 'deg) rotateY(' + ry + 'deg)';
-        });
-
-        nav.addEventListener('mouseleave', function() {
-            title.style.transform = '';
-            title.style.animation = '';
-        });
-    })();
-</script>

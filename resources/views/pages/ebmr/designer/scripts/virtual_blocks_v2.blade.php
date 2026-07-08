@@ -1158,14 +1158,15 @@
         let virtualBlocks = [];
 
         if (type === 'GF') {
-            // 1. GF HEADER (Section)
+            // 1. GF HEADER (Section) — không hiện tiêu đề "HEADER" (chỉ giữ làm mốc điều hướng)
             virtualBlocks.push({
                 id: 'sys_gf_sec_header',
                 type: 'section',
                 label: 'HEADER',
                 section_id: catId,
                 locked: true,
-                isVirtual: true
+                isVirtual: true,
+                hideTitle: true
             });
 
             // 2. GF Header (Table)
@@ -1174,14 +1175,15 @@
             gfHeader.isVirtual = true;
             virtualBlocks.push(gfHeader);
 
-            // 3. QUY TRÌNH PHÊ DUYỆT (Section)
+            // 3. QUY TRÌNH PHÊ DUYỆT (Section) — nối liền trang với HEADER, không ngắt trang riêng
             virtualBlocks.push({
                 id: 'sys_gf_sec_approval',
                 type: 'section',
                 label: 'PHÊ DUYỆT',
                 section_id: catId,
                 locked: true,
-                isVirtual: true
+                isVirtual: true,
+                noPageBreak: true
             });
 
             // 4. Trình Ký (Table)
@@ -1191,14 +1193,15 @@
         } else if (type === 'CO') {
             // Không sinh virtual block nào cho Component
         } else {
-            // 1. BMR HEADER (Section)
+            // 1. BMR HEADER (Section) — không hiện tiêu đề "HEADER" (chỉ giữ làm mốc điều hướng)
             virtualBlocks.push({
                 id: 'sys_bmr_sec_header',
                 type: 'section',
                 label: 'HEADER',
                 section_id: catId,
                 locked: true,
-                isVirtual: true
+                isVirtual: true,
+                hideTitle: true
             });
 
             // 2. BMR Header (Table)
@@ -1207,12 +1210,13 @@
             bmrHeader.isVirtual = true;
             virtualBlocks.push(bmrHeader);
 
-            // QUY TRÌNH PHÊ DUYỆT
+            // QUY TRÌNH PHÊ DUYỆT — nối liền trang với HEADER, không ngắt trang riêng
             virtualBlocks.push({
                 id: 'sys_bmr_sec_approval',
                 type: 'section',
                 label: 'PHÊ DUYỆT',
                 section_id: catId,
+                noPageBreak: true,
                 locked: true,
                 isVirtual: true
             });

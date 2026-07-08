@@ -388,10 +388,10 @@ class EbmrTemplateController extends Controller
                             'ebmr_templates_id' => $id,
                             'type' => $bomItem['type'] ?? 0,
                             'role' => $bomItem['role'] ?? null,
-                            'total_amount_per_unit' => $bomItem['total_amount_per_unit'] ?: null,
+                            'total_amount_per_unit' => !empty($bomItem['total_amount_per_unit']) ? $bomItem['total_amount_per_unit'] : null,
                             'total_amount_per_batch' => $batchVal ?: null,
                             'number_of_lots' => $bomItem['number_of_lots'] ?? 1,
-                            'amounts_of_lots' => $bomItem['amounts_of_lots'] ?: null,
+                            'amounts_of_lots' => !empty($bomItem['amounts_of_lots']) ? $bomItem['amounts_of_lots'] : null,
                             'not_calculator' => isset($bomItem['not_calculator']) ? 1 : 0,
                         ];
 

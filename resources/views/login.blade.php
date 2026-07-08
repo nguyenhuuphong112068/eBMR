@@ -9,7 +9,7 @@
 
     <!-- Local Arimo Font -->
     <link rel="stylesheet" href="{{ asset('fonts/Arimo/arimo.css') }}">
-    
+
     <!-- Bootstrap & Icons -->
     <link href="{{ asset('css/bootstrap.min.css') }}" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
@@ -82,8 +82,13 @@
         }
 
         @keyframes scanning {
-            0% { left: -100%; }
-            100% { left: 100%; }
+            0% {
+                left: -100%;
+            }
+
+            100% {
+                left: 100%;
+            }
         }
 
         .brand-section {
@@ -258,13 +263,15 @@
                 @csrf
                 <div class="mb-4">
                     <label for="username" class="form-label">Tài khoản</label>
-                    <input type="text" name="username" class="form-control" placeholder="Nhập tên đăng nhập" required autofocus value="{{ old('username') }}">
+                    <input type="text" name="username" class="form-control" placeholder="Nhập tên đăng nhập" required
+                        autofocus value="{{ old('username') }}">
                 </div>
 
                 <div class="mb-3">
                     <label for="password" class="form-label">Mật khẩu</label>
                     <div class="password-wrapper">
-                        <input type="password" id="loginPassword" name="passWord" class="form-control" placeholder="••••••••" required>
+                        <input type="password" id="loginPassword" name="passWord" class="form-control"
+                            placeholder="••••••••" required>
                         <i class="bi bi-eye-slash toggle-password" onclick="togglePassword('loginPassword', this)"></i>
                     </div>
                 </div>
@@ -296,24 +303,26 @@
                     <h5 class="fw-bold text-dark">Thiết lập mật khẩu mới</h5>
                     <p class="text-muted small">Cập nhật thông tin bảo mật tài khoản</p>
                 </div>
-                
+
                 <div class="mb-3">
                     <label class="form-label">Xác nhận Username</label>
                     <input type="text" name="username" class="form-control" placeholder="Tên đăng nhập" required>
                 </div>
-                
+
                 <div class="mb-3">
                     <label class="form-label">Mật khẩu cũ</label>
-                    <input type="password" id="oldPassword" name="oldPassword" class="form-control" placeholder="Mật khẩu hiện tại" required>
+                    <input type="password" id="oldPassword" name="oldPassword" class="form-control"
+                        placeholder="Mật khẩu hiện tại" required>
                 </div>
-                
+
                 <div class="mb-3">
                     <label class="form-label">Mật khẩu mới</label>
-                    <input type="password" id="newPassword" name="newPassword" class="form-control" placeholder="Tối thiểu 8 ký tự" required>
+                    <input type="password" id="newPassword" name="newPassword" class="form-control"
+                        placeholder="Tối thiểu 8 ký tự" required>
                 </div>
-                
+
                 <button type="submit" class="btn btn-login mb-3">Cập nhật ngay</button>
-                
+
                 <div class="footer-links">
                     <a href="#" class="toggle-link" onclick="toggleForms(false)">
                         <i class="bi bi-arrow-left me-1"></i> Quay lại đăng nhập
@@ -328,14 +337,16 @@
         function toggleForms(showChangePass) {
             const loginForm = document.getElementById('loginForm');
             const changePassForm = document.getElementById('changePassForm');
-            
+
             if (showChangePass) {
                 loginForm.style.opacity = '0';
                 setTimeout(() => {
                     loginForm.style.display = 'none';
                     changePassForm.style.display = 'block';
                     changePassForm.style.opacity = '0';
-                    setTimeout(() => { changePassForm.style.opacity = '1'; }, 50);
+                    setTimeout(() => {
+                        changePassForm.style.opacity = '1';
+                    }, 50);
                 }, 200);
             } else {
                 changePassForm.style.opacity = '0';
@@ -343,7 +354,9 @@
                     changePassForm.style.display = 'none';
                     loginForm.style.display = 'block';
                     loginForm.style.opacity = '0';
-                    setTimeout(() => { loginForm.style.opacity = '1'; }, 50);
+                    setTimeout(() => {
+                        loginForm.style.opacity = '1';
+                    }, 50);
                 }, 200);
             }
         }

@@ -10,7 +10,8 @@
  *  - Coexist với editor-on-demand: click GIỮA ô vẫn mount TipTap như cũ;
  *    click MÉP ô (mũi tên đen) / Ctrl+Click / Shift+Click / kéo ô-sang-ô
  *    là thao tác CHỌN — chặn mount bằng click suppressor ở capture phase.
- *  - Ctrl+Alt+kéo = marquee quét biến số (badge) -> panel sửa hàng loạt.
+ *  - Alt+kéo = marquee quét biến số (badge) -> panel sửa hàng loạt.
+ *  - Copy/Cut/Paste biến: Ctrl+C/Ctrl+X trên biến đang chọn; Ctrl+V dán vào ô đích.
  *
  * Bảng thao tác (theo spec):
  *  1. Click nút ⊕ góc bảng            -> chọn cả bảng
@@ -23,14 +24,14 @@
  *  8. Click vị trí bất kỳ             -> đặt con trỏ (editor, giữ nguyên)
  *  9. Kéo bôi đen chữ trong editor    -> native selection (giữ nguyên)
  * 10. Click 1 biến số                 -> chọn biến (viền) + mở panel
- * 11. Ctrl+Alt+kéo                    -> quét nhiều biến -> panel hàng loạt
+ * 11. Alt+kéo                         -> quét nhiều biến -> panel hàng loạt
  */
 
 const DRAG_THRESHOLD_PX = 4;
 const EDGE_PX = 10; // V1 dùng 15; V2 padding ô sát hơn
 
 // Thuộc tính ô được sao chép khi Copy (giữ nội dung + định dạng, KHÔNG đụng rs/cs/hidden của ô đích)
-const COPY_PROPS = ['content', 'backgroundColor', 'textAlign', 'fontWeight', 'fontStyle'];
+const COPY_PROPS = ['content', 'backgroundColor', 'color', 'textAlign', 'fontWeight', 'fontStyle', 'verticalAlign', 'borderTop', 'borderBottom', 'borderLeft', 'borderRight'];
 
 export function createSelectionController(ctx) {
     // ── State ────────────────────────────────────────────────
@@ -42,6 +43,7 @@ export function createSelectionController(ctx) {
     let _drag = null;          // {kind:'cell-drag'|'badge-marquee', startX, startY, committed, startTd?, marqueeEl?}
     let _suppressClick = false;
     let _clipboard = null;     // { rows, cols, count, grid: [[cellCopy|null]] } — Copy vùng ô
+    let _lastCopyKind = null;  // 'cells' | 'fields' — lần copy gần nhất, để Ctrl+V chọn đúng nguồn dán
 
     const blocked = () => ctx.BOOT.isReadOnly || ctx.BOOT.isExecutionMode;
 
@@ -193,6 +195,10 @@ export function createSelectionController(ctx) {
         paintFields();
     }
 
+    /** Đánh dấu "lần copy gần nhất là BIẾN SỐ" — gọi khi copy biến từ NGOÀI bàn phím
+     *  (VD: menu chuột phải "Sao chép biến") để Ctrl+V sau đó biết dán biến, không phải Ô. */
+    function notifyFieldsCopied() { _lastCopyKind = 'fields'; }
+
     function clearAll() { clearCells(); clearFields(); }
 
     // ── Public queries ───────────────────────────────────────
@@ -261,16 +267,33 @@ export function createSelectionController(ctx) {
             grid.push(row);
         }
         _clipboard = { rows: maxR - minR + 1, cols: maxC - minC + 1, count: mine.length, grid };
+        // Copy cả bảng (nút ⊕) -> giữ thêm bản sao đầy đủ (rs/cs/hidden, cột, chiều cao hàng...)
+        // để có thể dán TẠO BẢNG MỚI khi đích dán nằm ngoài mọi bảng (không có ô đích để tô).
+        _clipboard.fullTable = mode === 'table' ? {
+            rows: item.rows, cols: item.cols,
+            columns: JSON.parse(JSON.stringify(item.columns || [])),
+            data: JSON.parse(JSON.stringify(item.data || [])),
+            rowHeights: JSON.parse(JSON.stringify(item.rowHeights || [])),
+            borderMode: item.borderMode, hideHeader: item.hideHeader,
+        } : null;
         return true;
     }
 
-    /** Ghi nội dung/định dạng của clip vào ô đích (giữ nguyên rs/cs/hidden của đích) */
-    function writeCell(item, r, c, clip) {
+    /** Bản sao đầy đủ của bảng vừa copy (null nếu lần copy gần nhất không phải "cả bảng") */
+    const getFullTableClipboard = () => (_clipboard && _clipboard.fullTable) || null;
+
+    /** Ghi nội dung/định dạng của clip vào ô đích (giữ nguyên rs/cs/hidden của đích)
+     *  idMap: nếu có (dán cả VÙNG) -> chỉ thay id theo map dùng chung, không tự tạo bản sao riêng.
+     *  Nếu không có (tô 1 ô copy vào nhiều ô) -> mỗi ô tự nhân bản field độc lập. */
+    function writeCell(item, r, c, clip, idMap) {
         const target = item.data?.[r]?.[c];
         if (!target || typeof target !== 'object' || target.hidden) return false;
         COPY_PROPS.forEach((p) => {
-            if (p === 'content') target.content = clip && clip.content ? ctx.duplicateFieldsInHtml(clip.content) : '';
-            else target[p] = (clip && clip[p]) || '';
+            if (p === 'content') {
+                target.content = clip && clip.content
+                    ? (idMap ? ctx.rewriteFieldIdsInHtml(clip.content, idMap) : ctx.duplicateFieldsInHtml(clip.content))
+                    : '';
+            } else target[p] = (clip && clip[p]) || '';
         });
         return true;
     }
@@ -286,11 +309,19 @@ export function createSelectionController(ctx) {
         const mine = getCells().filter((x) => x.item === item);
         let changed = false;
         if (single && mine.length > 1) {
+            // Tô 1 ô đã copy vào nhiều ô đích -> mỗi ô là 1 bản sao biến ĐỘC LẬP
             const clip = _clipboard.grid[0][0];
             mine.forEach(({ r, c }) => { if (writeCell(item, r, c, clip)) changed = true; });
         } else {
+            // Dán cả VÙNG chữ nhật -> build 1 map id DÙNG CHUNG cho mọi ô trong vùng,
+            // để formula tham chiếu 1 biến khác cũng nằm trong vùng copy trỏ đúng
+            // sang bản sao mới thay vì trỏ ngược về biến gốc (chưa được dán).
+            const htmlList = [];
+            _clipboard.grid.forEach((row) => row.forEach((clip) => { if (clip && clip.content) htmlList.push(clip.content); }));
+            const { idMap, nameMap } = ctx.buildFieldDuplicateMap(htmlList);
+            if (Object.keys(idMap).length) ctx.applyFieldDuplicateMap(idMap, nameMap);
             _clipboard.grid.forEach((row, rOff) => row.forEach((clip, cOff) => {
-                if (clip && writeCell(item, anchor.r + rOff, anchor.c + cOff, clip)) changed = true;
+                if (clip && writeCell(item, anchor.r + rOff, anchor.c + cOff, clip, idMap)) changed = true;
             }));
         }
         if (!changed) return false;
@@ -416,10 +447,14 @@ export function createSelectionController(ctx) {
         if (e.button !== 0) return;
         if (e.target.closest('#v2-toolbar') || e.target.closest('#v2-field-panel')
             || e.target.closest('.v2-toc') || e.target.closest('.modal')
-            || e.target.closest('.swal2-container')) return;
+            || e.target.closest('.swal2-container')
+            || e.target.closest('#v2-context-menu')) return; // menu chuột phải: GIỮ vùng ô đang chọn để lệnh áp lên cả vùng
 
-        // (11) Ctrl+Alt+kéo: marquee quét biến số
-        if (e.ctrlKey && e.altKey && e.target.closest('#v2-pages')) {
+        // (11) Alt+kéo (hoặc Ctrl+Alt+kéo): marquee quét biến số.
+        // Dùng riêng phím Alt cho tin cậy — Ctrl+Alt trên Windows hay bị hệ điều
+        // hành nuốt thành AltGr nên nhiều máy không nhận đủ 2 phím; Alt đơn không
+        // đụng thao tác chọn ô (vốn dùng Ctrl/Shift/mép ô).
+        if (e.altKey && e.target.closest('#v2-pages')) {
             e.preventDefault();
             _drag = { kind: 'badge-marquee', startX: e.clientX, startY: e.clientY, committed: false };
             return;
@@ -607,33 +642,113 @@ export function createSelectionController(ctx) {
             if (ctx.hasActiveEditor()) return; // TipTap tự xử lý khi đang gõ
             const t = e.target;
             if (t.closest && (t.closest('input') || t.closest('textarea') || t.closest('[contenteditable="true"]'))) return;
-            if (!cells.size) return;
-            e.preventDefault();
-            applyToCells((cell) => { cell.content = ''; });
-            return;
+
+            // Đang bôi đen (native selection) trên đoạn TĨNH (chưa mở editor): DOM tĩnh
+            // KHÔNG phải contenteditable nên trình duyệt không tự xoá được gì — phải tự
+            // mở editor + tái tạo đúng vùng chọn rồi xoá (xem convertStaticSelectionToEditable).
+            const nativeSelForDelete = !!(window.getSelection && !window.getSelection().isCollapsed && String(window.getSelection()).trim());
+            if (nativeSelForDelete) {
+                if (ctx.convertStaticSelectionToEditable('delete')) e.preventDefault();
+                return;
+            }
+
+            // Đang chọn CẢ BẢNG (nút ⊕) -> xóa nguyên block bảng (có hỏi xác nhận, như Word)
+            if (cells.size && mode === 'table') {
+                e.preventDefault();
+                const blockIds = new Set();
+                cells.forEach((info) => blockIds.add(info.item.id));
+                clearCells();
+                blockIds.forEach((id) => ctx.deleteBlock(id));
+                return;
+            }
+
+            // Đang chọn các ô (không phải cả bảng) -> xóa nội dung ô
+            if (cells.size) {
+                e.preventDefault();
+                applyToCells((cell) => { cell.content = ''; });
+                return;
+            }
+
+            // Không chọn ô nào nhưng có 1 block văn bản được focus -> xóa block đó
+            if (!cells.size) {
+                const activeBlockId = ctx.getActiveBlockId?.();
+                if (!activeBlockId) return;
+                const block = ctx.getItems?.().find((i) => i.id === activeBlockId);
+                if (!block || block.type !== 'static-text') return; // chỉ xóa block văn bản
+                e.preventDefault();
+                ctx.deleteBlock(activeBlockId);
+                return;
+            }
         }
 
-        // Ctrl+C / Ctrl+X / Ctrl+V trên vùng ô đã chọn (kiểu Excel)
+        // Ctrl+C / Ctrl+X / Ctrl+V trên vùng ô HOẶC biến số đã chọn (kiểu Excel/Word)
         if ((e.ctrlKey || e.metaKey) && !e.altKey && !blocked()) {
             const k = e.key.toLowerCase();
             if (k !== 'c' && k !== 'x' && k !== 'v') return;
-            // Đang gõ trong editor/ô nhập → để trình duyệt copy/paste chữ như thường
-            if (ctx.hasActiveEditor()) return;
             const t = e.target;
-            if (t.closest && (t.closest('input') || t.closest('textarea') || t.closest('[contenteditable="true"]'))) return;
+
+            // Có đang bôi đen CHỮ thật sự không (kể cả bên trong input/textarea)?
+            const ae = document.activeElement;
+            const nativeTextSel = (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA'))
+                ? ae.selectionStart !== ae.selectionEnd
+                : !!(window.getSelection && String(window.getSelection()).trim());
 
             if (k === 'c' || k === 'x') {
+                if (nativeTextSel) {
+                    // Ctrl+X trên đoạn TĨNH (chưa mở editor): DOM tĩnh không phải
+                    // contenteditable nên trình duyệt không cắt được gì — tự mở editor,
+                    // tái tạo vùng chọn, copy vào clipboard rồi xoá. Nếu ĐANG mở editor
+                    // (contenteditable thật) thì để trình duyệt/TipTap tự cắt như cũ.
+                    if (k === 'x' && !ctx.hasActiveEditor() && ctx.convertStaticSelectionToEditable('cut')) {
+                        e.preventDefault();
+                    }
+                    return; // Ctrl+C, hoặc Ctrl+X trong editor thật -> native tuyệt đối
+                }
+
+                // (a) BIẾN SỐ đang chọn -> COPY hoạt động cả khi panel cấu hình/editor đang mở
+                //     (click badge là panel mở ngay, focus rơi vào input -> trước đây bị nuốt).
+                //     CUT chỉ khi KHÔNG mở editor (tránh Ctrl+X lạc tay xóa badge khi đang gõ).
+                if (fieldIds.size && (k === 'c' || !ctx.hasActiveEditor())) {
+                    const ids = Array.from(fieldIds);
+                    const n = (k === 'x') ? ctx.cutFields(ids) : ctx.copyFields(ids);
+                    if (!n) return;
+                    _lastCopyKind = 'fields';
+                    e.preventDefault();
+                    toast(k === 'x' ? `Đã cắt ${n} biến số` : `Đã sao chép ${n} biến số`, 'info');
+                    return;
+                }
+                if (ctx.hasActiveEditor()) return; // trong editor -> TipTap/trình duyệt tự xử lý
+                if (t.closest && (t.closest('input') || t.closest('textarea') || t.closest('[contenteditable="true"]'))) return;
+
+                // (b) Chọn Ô → copy/cut vùng ô
                 if (!cells.size) return;
-                // Người dùng đang bôi đen chữ → nhường copy văn bản native
-                if (window.getSelection && String(window.getSelection())) return;
                 if (!copyCells()) return;
+                _lastCopyKind = 'cells';
                 e.preventDefault();
                 if (k === 'x') applyToCells((cell) => { cell.content = ''; });
                 toast(k === 'x' ? `Đã cắt ${_clipboard.count} ô` : `Đã sao chép ${_clipboard.count} ô`, 'info');
                 return;
             }
+
             // k === 'v'
-            if (!_clipboard || !cells.size) return; // chưa chọn ô đích → nhường paste native
+            // Đang gõ trong editor: clipboard giữ BIẾN SỐ -> dán NGAY TẠI CON TRỎ (giống Word)
+            if (ctx.hasActiveEditor()) {
+                if (_lastCopyKind === 'fields' && ctx.hasFieldClipboard()) {
+                    e.preventDefault();
+                    ctx.pasteFieldsAtCursor();
+                }
+                return;
+            }
+            if (t.closest && (t.closest('input') || t.closest('textarea') || t.closest('[contenteditable="true"]'))) return;
+            if (!cells.size) return; // chưa chọn ô đích → nhường paste native
+            if (_lastCopyKind === 'fields' && ctx.hasFieldClipboard()) {
+                const anchor = getAnchorCell();
+                if (!anchor) return;
+                e.preventDefault();
+                if (ctx.pasteFieldsIntoCell(anchor.item, anchor.r, anchor.c)) toast('Đã dán biến số vào ô');
+                return;
+            }
+            if (!_clipboard) return;
             e.preventDefault();
             if (pasteCells()) toast('Đã dán nội dung ô');
         }
@@ -647,11 +762,19 @@ export function createSelectionController(ctx) {
         document.addEventListener('keydown', onKeyDown);
     }
 
+    function getActiveTable() {
+        const first = getCells()[0];
+        if (!first) return null;
+        return document.querySelector(`.v2-table-wrap[data-id="${first.item.id}"]`) || null;
+    }
+
     return {
         init, decorateTable, onAfterRender,
         clearCells, clearFields, clearAll,
         hasCells, cellCount, getCells, getAnchorCell, applyToCells,
-        setFields, getFieldIds,
+        setFields, getFieldIds, notifyFieldsCopied,
         setRange, selectTable,
+        getFullTableClipboard,
+        getActiveTable,
     };
 }
