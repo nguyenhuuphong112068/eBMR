@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Pages\Ebmr\Approvals;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Pages\AuditTrail\AuditTrialController;
+use App\Services\ApprovalWorkflowNotifier;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
@@ -74,6 +75,8 @@ class EbmrApprovalController extends Controller
                 $t->my_role = $wfForMe->role;
                 $t->workflow_id = $wfForMe->id;
                 $t->workflow_type = 'ebmr';
+                $t->my_due_date = $wfForMe->due_date;
+                $t->my_reason = $wfForMe->reason;
                 $t->view_url = route('pages.ebmr.designer', $t->id);
                 $actionableTemplates->push($t);
             }
@@ -120,6 +123,8 @@ class EbmrApprovalController extends Controller
                     $t->my_role = $wf->role;
                     $t->workflow_id = $wf->id;
                     $t->workflow_type = 'cleaning';
+                    $t->my_due_date = $wf->due_date;
+                    $t->my_reason = $wf->reason;
                     $t->view_url = route('pages.manu_env.cleaning_process.index', ['type' => $wf->type, 'list_id' => $list->id]);
                     
                     $actionableTemplates->push($t);
@@ -158,6 +163,8 @@ class EbmrApprovalController extends Controller
                     $t->my_role = $wf->role;
                     $t->workflow_id = $wf->id;
                     $t->workflow_type = 'clearance_room';
+                    $t->my_due_date = $wf->due_date;
+                    $t->my_reason = $wf->reason;
                     $t->view_url = route('pages.manu_env.clearance_process.index', ['type' => 'room', 'list_id' => $list->id]);
                     
                     $actionableTemplates->push($t);
@@ -196,6 +203,8 @@ class EbmrApprovalController extends Controller
                     $t->my_role = $wf->role;
                     $t->workflow_id = $wf->id;
                     $t->workflow_type = 'clearance_equip';
+                    $t->my_due_date = $wf->due_date;
+                    $t->my_reason = $wf->reason;
                     $t->view_url = route('pages.manu_env.clearance_process.index', ['type' => 'equipment', 'list_id' => $list->id]);
                     
                     $actionableTemplates->push($t);
@@ -225,7 +234,15 @@ class EbmrApprovalController extends Controller
             'reviewers' => 'nullable|array',
             'reviewers.*' => 'integer',
             'approver' => 'nullable|integer',
-            'authorizer' => 'nullable|integer'
+            'authorizer' => 'nullable|integer',
+            'reviewer_due_dates' => 'nullable|array',
+            'reviewer_due_dates.*' => 'nullable|date',
+            'reviewer_reasons' => 'nullable|array',
+            'reviewer_reasons.*' => 'nullable|string|max:500',
+            'approver_due_date' => 'nullable|date',
+            'approver_reason' => 'nullable|string|max:500',
+            'authorizer_due_date' => 'nullable|date',
+            'authorizer_reason' => 'nullable|string|max:500',
         ]);
 
         DB::transaction(function () use ($id, $validated) {
@@ -233,17 +250,34 @@ class EbmrApprovalController extends Controller
             $insertData = [];
             if (!empty($validated['reviewers'])) {
                 foreach ($validated['reviewers'] as $userId) {
-                    $insertData[] = ['template_id' => $id, 'role' => 'reviewer', 'user_id' => $userId, 'step_order' => 1, 'status' => 'pending', 'created_at' => now(), 'updated_at' => now()];
+                    $insertData[] = [
+                        'template_id' => $id, 'role' => 'reviewer', 'user_id' => $userId, 'step_order' => 1, 'status' => 'pending',
+                        'due_date' => $validated['reviewer_due_dates'][$userId] ?? null,
+                        'reason' => $validated['reviewer_reasons'][$userId] ?? null,
+                        'created_at' => now(), 'updated_at' => now(),
+                    ];
                 }
             }
-            if (!empty($validated['approver'])) $insertData[] = ['template_id' => $id, 'role' => 'approver', 'user_id' => $validated['approver'], 'step_order' => 2, 'status' => 'pending', 'created_at' => now(), 'updated_at' => now()];
-            if (!empty($validated['authorizer'])) $insertData[] = ['template_id' => $id, 'role' => 'authorizer', 'user_id' => $validated['authorizer'], 'step_order' => 3, 'status' => 'pending', 'created_at' => now(), 'updated_at' => now()];
-            
+            if (!empty($validated['approver'])) $insertData[] = [
+                'template_id' => $id, 'role' => 'approver', 'user_id' => $validated['approver'], 'step_order' => 2, 'status' => 'pending',
+                'due_date' => $validated['approver_due_date'] ?? null,
+                'reason' => $validated['approver_reason'] ?? null,
+                'created_at' => now(), 'updated_at' => now(),
+            ];
+            if (!empty($validated['authorizer'])) $insertData[] = [
+                'template_id' => $id, 'role' => 'authorizer', 'user_id' => $validated['authorizer'], 'step_order' => 3, 'status' => 'pending',
+                'due_date' => $validated['authorizer_due_date'] ?? null,
+                'reason' => $validated['authorizer_reason'] ?? null,
+                'created_at' => now(), 'updated_at' => now(),
+            ];
+
             if (count($insertData) > 0) DB::table('ebmr_template_workflows')->insert($insertData);
-            
+
             // Auto update status to submitted
             DB::table('ebmr_templates')->where('id', $id)->where('status', 'draft')->update(['status' => 'submitted']);
         });
+
+        ApprovalWorkflowNotifier::notifyActionableStep('ebmr', (int) $id);
 
         return response()->json(['success' => true, 'message' => 'Lưu luồng trình ký thành công']);
     }
@@ -282,6 +316,12 @@ class EbmrApprovalController extends Controller
                     }
                 }
             });
+
+            if ($newWfStatus === 'approved') {
+                ApprovalWorkflowNotifier::notifyActionableStep('ebmr', (int) $workflow->template_id);
+            } else {
+                ApprovalWorkflowNotifier::notifyOwnerRejected('ebmr', (int) $workflow->template_id, $workflow, $validated['comment'] ?? null);
+            }
         } elseif ($validated['workflow_type'] === 'cleaning') {
             $workflow = DB::table('cleaning_process_workflows')->where('id', $validated['workflow_id'])->first();
             if (!$workflow || $workflow->status !== 'pending') {
@@ -303,6 +343,12 @@ class EbmrApprovalController extends Controller
                     }
                 }
             });
+
+            if ($newWfStatus === 'approved') {
+                ApprovalWorkflowNotifier::notifyActionableStep('cleaning', (int) $workflow->process_list_id, $workflow->type);
+            } else {
+                ApprovalWorkflowNotifier::notifyOwnerRejected('cleaning', (int) $workflow->process_list_id, $workflow, $validated['comment'] ?? null, $workflow->type);
+            }
         } elseif (in_array($validated['workflow_type'], ['clearance_room', 'clearance_equip'])) {
             $tableWf = $validated['workflow_type'] === 'clearance_room' ? 'clearance_room_process_workflows' : 'clearance_equip_process_workflows';
             $tableList = $validated['workflow_type'] === 'clearance_room' ? 'clearance_room_processes_list' : 'clearance_equip_processes_list';
@@ -325,6 +371,12 @@ class EbmrApprovalController extends Controller
                     }
                 }
             });
+
+            if ($newWfStatus === 'approved') {
+                ApprovalWorkflowNotifier::notifyActionableStep($validated['workflow_type'], (int) $workflow->process_list_id);
+            } else {
+                ApprovalWorkflowNotifier::notifyOwnerRejected($validated['workflow_type'], (int) $workflow->process_list_id, $workflow, $validated['comment'] ?? null);
+            }
         }
 
         $msg = $validated['action'] === 'approve' ? 'Đã phê duyệt thành công' : 'Đã từ chối hồ sơ';
@@ -440,6 +492,8 @@ class EbmrApprovalController extends Controller
             $roleLabel . ': ' . ($oldUser->fullName ?? ('#' . $workflow->user_id)),
             $roleLabel . ': ' . ($newUser->fullName ?? ('#' . $validated['new_user_id']))
         );
+
+        ApprovalWorkflowNotifier::notifyUser('ebmr', (int) $workflow->template_id, (int) $validated['new_user_id']);
 
         return response()->json(['success' => true, 'message' => 'Đã đổi người trình ký thành công']);
     }

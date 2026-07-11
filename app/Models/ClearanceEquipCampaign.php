@@ -12,7 +12,7 @@ class ClearanceEquipCampaign extends Model
     protected $table = 'clearance_equip_campaigns';
 
     protected $fillable = [
-        'equipment_id', 'process_list_id', 'status',
+        'equipment_id', 'process_list_id', 'status', 'room_campaign_id',
         'started_by', 'completed_by', 'started_at', 'completed_at', 'employee_ids'
     ];
 

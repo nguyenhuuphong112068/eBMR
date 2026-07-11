@@ -165,8 +165,10 @@ class EbmrTemplateController extends Controller
 
             $sections = [];
             foreach ($presentSectionIds as $sid) {
+                // section_id: "{category}_{stageCode}" hoặc "{category}_{stageCode}_{track}"
+                // (nhánh tách phòng). Mã công đoạn luôn là đoạn thứ 2.
                 $parts = explode('_', $sid);
-                $code = end($parts);
+                $code = $parts[1] ?? end($parts);
 
                 // Try to find the section block for the label
                 $sectionBlock = DB::table('ebmr_template_blocks')
@@ -543,7 +545,8 @@ class EbmrTemplateController extends Controller
             return response()->json(['success' => false, 'message' => 'Hồ sơ không tồn tại']);
         }
 
-        if ($template->owner_id != (session('user')['userId'] ?? null)) {
+        $isAdmin = (session('user')['userGroup'] ?? '') === 'Admin';
+        if ($template->owner_id != (session('user')['userId'] ?? null) && ! $isAdmin) {
             return response()->json(['success' => false, 'message' => 'Bạn không có quyền thực hiện thao tác này']);
         }
 
@@ -566,7 +569,33 @@ class EbmrTemplateController extends Controller
         ]);
     }
 
+    public function saveChangeReason(Request $request, $id)
+    {
+        $validated = $request->validate([
+            'change_reason' => 'nullable|string',
+        ]);
 
+        $template = DB::table('ebmr_templates')->where('id', $id)->first();
+        if (!$template) {
+            return response()->json(['success' => false, 'message' => 'Hồ sơ không tồn tại']);
+        }
+        if ($template->status !== 'draft') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Hồ sơ không còn ở trạng thái nháp, không thể thay đổi lý do ấn bản.'
+            ], 403);
+        }
+
+        DB::table('ebmr_templates')->where('id', $id)->update([
+            'change_reason' => $validated['change_reason'] ?? null,
+            'updated_at' => now(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Đã lưu lý do thay đổi ấn bản',
+        ]);
+    }
 
     public function getNextVersion(Request $request)
     {
@@ -629,7 +658,7 @@ class EbmrTemplateController extends Controller
     public function getTemplates()
     {
         $templates = DB::table('ebmr_templates')
-            ->select('ebmr_templates.id', 'ebmr_templates.updated_at', 'ebmr_templates.log_history', 'ebmr_templates.type', 'ebmr_templates.caterogy_id', 'ebmr_templates.status')
+            ->select('ebmr_templates.id', 'ebmr_templates.updated_at', 'ebmr_templates.log_history', 'ebmr_templates.type', 'ebmr_templates.caterogy_id', 'ebmr_templates.status', 'ebmr_templates.doc_code', 'ebmr_templates.version')
             ->orderBy('ebmr_templates.updated_at', 'desc')
             ->get();
 
@@ -670,6 +699,36 @@ class EbmrTemplateController extends Controller
 
     public function getTemplateBlocks($id)
     {
+        return $this->buildTemplateBlocksResponse($id);
+    }
+
+    /**
+     * Cùng nội dung với getTemplateBlocks, nhưng nhận Số BM gốc (doc_code) của GF thay vì id
+     * cố định — dùng cho xem trước GF liên kết theo doc_code (luôn resolve ra bản active mới nhất).
+     */
+    public function getGfBlocksByDocCode(Request $request)
+    {
+        $docCode = $request->query('doc_code');
+        if (!$docCode) {
+            return response()->json(['message' => 'Thiếu doc_code.'], 400);
+        }
+
+        $id = DB::table('ebmr_templates')
+            ->where('doc_code', $docCode)
+            ->where('type', 'GF')
+            ->where('status', 'active')
+            ->orderByDesc('version')
+            ->value('id');
+
+        if (!$id) {
+            return response()->json(['message' => 'Không tìm thấy biểu mẫu GF active cho doc_code này.'], 404);
+        }
+
+        return $this->buildTemplateBlocksResponse($id);
+    }
+
+    private function buildTemplateBlocksResponse($id)
+    {
         $blocks = DB::table('ebmr_template_blocks')
             ->where('template_id', $id)
             ->orderBy('order')
@@ -686,7 +745,7 @@ class EbmrTemplateController extends Controller
         foreach ($blocks as $block) {
             $f = json_decode($block->properties, true);
             if (isset($f['type']) && $f['type'] === 'linked-template') {
-                $ltId = $f['template_id'] ?? null;
+                $ltId = \App\Services\LinkedGfResolver::resolveTemplateId($f, null, $block->id);
                 if ($ltId) {
                     $templateIds[] = $ltId;
                 }
@@ -1257,7 +1316,19 @@ class EbmrTemplateController extends Controller
                             }
 
                             if ($localPath !== $newLocalPath) {
-                                rename($localPath, $newLocalPath);
+                                // File có thể đang được ấn bản/tiêu chuẩn khác tham chiếu (dữ
+                                // liệu nhân bản trước đây dùng chung đường dẫn) — khi đó chỉ
+                                // copy, không rename, để không làm mất ảnh của ấn bản kia.
+                                // (Các dòng testing_images của tiêu chuẩn NÀY đã bị xoá ở trên
+                                // nên còn dòng nào trỏ vào path này là của nơi khác.)
+                                $sharedElsewhere = DB::table('testing_images')
+                                    ->where('image_path', $originalPath)
+                                    ->exists();
+                                if ($sharedElsewhere) {
+                                    copy($localPath, $newLocalPath);
+                                } else {
+                                    rename($localPath, $newLocalPath);
+                                }
                             }
                             $finalPath = "/upLoadData/img/testing/{$newName}";
                         }
@@ -1580,6 +1651,84 @@ class EbmrTemplateController extends Controller
     /**
      * Duplicate an existing template to create a new draft edition/version.
      */
+    /**
+     * Đổi mọi tham chiếu content block (placeholder trong `content` + con trỏ db_id /
+     * content_db_id trong `properties`) của các block thuộc $templateId sang ID mới.
+     *
+     * @param  array<int,int>  $contentMapping  [id content block cũ => id mới]
+     */
+    private function remapContentReferences(int $templateId, array $contentMapping): void
+    {
+        if (empty($contentMapping)) {
+            return;
+        }
+
+        // strtr() thay 1 lượt, không quét lại phần vừa thay -> tránh việc ID mới
+        // (luôn lớn hơn) lại khớp một mục khác trong bảng ánh xạ.
+        $placeholderMap = [];
+        foreach ($contentMapping as $oldCbId => $newCbId) {
+            $placeholderMap["[[CONTENT_$oldCbId]]"] = "[[CONTENT_$newCbId]]";
+        }
+
+        $blocks = DB::table('ebmr_template_blocks')->where('template_id', $templateId)->get();
+        foreach ($blocks as $block) {
+            $content = $block->content ? strtr($block->content, $placeholderMap) : $block->content;
+
+            $properties = $block->properties;
+            $propsArr = json_decode($properties, true);
+            if (is_array($propsArr)) {
+                $this->remapContentIdsInPlace($propsArr, $contentMapping);
+                $properties = json_encode($propsArr, JSON_UNESCAPED_UNICODE);
+            }
+
+            if ($content !== $block->content || $properties !== $block->properties) {
+                DB::table('ebmr_template_blocks')->where('id', $block->id)->update([
+                    'content' => $content,
+                    'properties' => $properties,
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Duyệt đệ quy properties, đổi các khoá trỏ tới content block sang ID mới.
+     *
+     * Lưu ý: `db_id` ở CẤP GỐC của properties là id của ebmr_template_blocks (do
+     * designer gán), chỉ `db_id` bên trong 1 Ô BẢNG mới trỏ tới content block — nên
+     * chỉ đổi khi node hiện tại đúng là ô bảng (có 'content' hoặc 'rs').
+     */
+    private function remapContentIdsInPlace(array &$node, array $contentMapping): void
+    {
+        $isTableCell = array_key_exists('content', $node) || array_key_exists('rs', $node);
+
+        foreach ($node as $key => &$value) {
+            if (is_array($value)) {
+                $this->remapContentIdsInPlace($value, $contentMapping);
+                continue;
+            }
+
+            $isContentRef = $key === 'content_db_id' || ($key === 'db_id' && $isTableCell);
+            if ($isContentRef && (is_int($value) || is_string($value)) && isset($contentMapping[$value])) {
+                $value = $contentMapping[$value];
+            }
+        }
+    }
+
+    /**
+     * Duyệt đệ quy properties, đổi mọi khoá 'criteria_id' sang ID tiêu chuẩn kiểm
+     * nghiệm mới (chấp nhận giá trị lưu dạng chuỗi lẫn số, giữ nguyên kiểu gốc).
+     */
+    private function remapCriteriaIdsInPlace(array &$node, array $testingMapping): void
+    {
+        foreach ($node as $key => &$value) {
+            if (is_array($value)) {
+                $this->remapCriteriaIdsInPlace($value, $testingMapping);
+            } elseif ($key === 'criteria_id' && (is_int($value) || is_string($value)) && isset($testingMapping[$value])) {
+                $value = is_string($value) ? (string) $testingMapping[$value] : $testingMapping[$value];
+            }
+        }
+    }
+
     public function duplicateTemplate(Request $request)
     {
         $oldId = $request->input('id');
@@ -1632,6 +1781,9 @@ class EbmrTemplateController extends Controller
                 'description' => $oldTemplate->description,
                 'storage_conditions' => $oldTemplate->storage_conditions,
                 'is_recalculation' => $oldTemplate->is_recalculation,
+                'abbreviations_List' => $oldTemplate->abbreviations_List,
+                'doc_properties' => $oldTemplate->doc_properties,
+                'product_type' => $oldTemplate->product_type,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
@@ -1653,12 +1805,32 @@ class EbmrTemplateController extends Controller
                 ]);
                 $testingMapping[$test->id] = $newTestId;
 
-                // Clone testing_images for this criteria
+                // Clone testing_images for this criteria.
+                // PHẢI sao chép cả FILE vật lý: luồng lưu tiêu chuẩn (saveTestings) sẽ
+                // rename() file theo "{templateId}_{testingId}_{idx}" — nếu 2 ấn bản dùng
+                // chung 1 file thì lưu tiêu chuẩn ở ấn bản mới làm mất ảnh của ấn bản cũ.
                 $images = DB::table('testing_images')->where('testing_id', $test->id)->get();
-                foreach ($images as $img) {
+                foreach ($images as $idx => $img) {
+                    $imagePath = $img->image_path;
+                    if ($imagePath) {
+                        $localPath = public_path(ltrim($imagePath, '/'));
+                        if (file_exists($localPath)) {
+                            $extension = pathinfo($localPath, PATHINFO_EXTENSION);
+                            $newName = "{$newTemplateId}_{$newTestId}_{$idx}.{$extension}";
+                            $newLocalPath = public_path("upLoadData/img/testing/{$newName}");
+                            $dir = dirname($newLocalPath);
+                            if (!file_exists($dir)) {
+                                mkdir($dir, 0755, true);
+                            }
+                            if ($localPath !== $newLocalPath && copy($localPath, $newLocalPath)) {
+                                $imagePath = "/upLoadData/img/testing/{$newName}";
+                            }
+                        }
+                    }
+
                     DB::table('testing_images')->insert([
                         'testing_id' => $newTestId,
-                        'image_path' => $img->image_path,
+                        'image_path' => $imagePath,
                         'image_name' => $img->image_name,
                         'image_description' => $img->image_description,
                         'created_at' => now(),
@@ -1679,6 +1851,15 @@ class EbmrTemplateController extends Controller
                 ]);
             }
 
+            // Bảng thay thế attribute data-criteria-id trong các chuỗi HTML (strtr 1 lượt,
+            // không quét lại phần vừa thay). KHÔNG thay thô '"{id}"' trên toàn JSON như
+            // trước: mẫu đó khớp cả giá trị người dùng tình cờ trùng số ID tiêu chuẩn
+            // (giá trị ô, option...) và làm sai dữ liệu bản sao.
+            $criteriaAttrMap = [];
+            foreach ($testingMapping as $oldTestId => $newTestId) {
+                $criteriaAttrMap['data-criteria-id="' . $oldTestId . '"'] = 'data-criteria-id="' . $newTestId . '"';
+            }
+
             // 5. Clone ebmr_template_blocks and map their IDs
             $blockMapping = [];
             $blocks = DB::table('ebmr_template_blocks')->where('template_id', $oldId)->orderBy('order')->get();
@@ -1686,23 +1867,17 @@ class EbmrTemplateController extends Controller
                 // Determine new block properties JSON
                 $propsArr = json_decode($block->properties, true);
                 if (is_array($propsArr)) {
-                    // Update any testing criteria references in properties if they exist
-                    if (isset($propsArr['criteria_id']) && isset($testingMapping[$propsArr['criteria_id']])) {
-                        $propsArr['criteria_id'] = $testingMapping[$propsArr['criteria_id']];
-                    }
+                    $this->remapCriteriaIdsInPlace($propsArr, $testingMapping);
                 }
-                
+
                 $propertiesJson = json_encode($propsArr, JSON_UNESCAPED_UNICODE);
-                foreach ($testingMapping as $oldTestId => $newTestId) {
-                    $propertiesJson = str_replace('data-criteria-id="' . $oldTestId . '"', 'data-criteria-id="' . $newTestId . '"', $propertiesJson);
-                    $propertiesJson = str_replace('"' . $oldTestId . '"', '"' . $newTestId . '"', $propertiesJson);
+                if ($criteriaAttrMap) {
+                    $propertiesJson = strtr($propertiesJson, $criteriaAttrMap);
                 }
 
                 $contentStr = $block->content;
-                if ($contentStr) {
-                    foreach ($testingMapping as $oldTestId => $newTestId) {
-                        $contentStr = str_replace('data-criteria-id="' . $oldTestId . '"', 'data-criteria-id="' . $newTestId . '"', $contentStr);
-                    }
+                if ($contentStr && $criteriaAttrMap) {
+                    $contentStr = strtr($contentStr, $criteriaAttrMap);
                 }
 
                 $newBlockId = DB::table('ebmr_template_blocks')->insertGetId([
@@ -1721,24 +1896,21 @@ class EbmrTemplateController extends Controller
             }
 
             // 6. Clone ebmr_content_blocks for each template block
+            $contentMapping = [];
             $contentBlocks = DB::table('ebmr_content_blocks')->where('template_id', $oldId)->get();
             foreach ($contentBlocks as $cb) {
                 $viContents = $cb->vi_contents;
                 $enContents = $cb->en_contents;
-                if ($viContents) {
-                    foreach ($testingMapping as $oldTestId => $newTestId) {
-                        $viContents = str_replace('data-criteria-id="' . $oldTestId . '"', 'data-criteria-id="' . $newTestId . '"', $viContents);
-                    }
+                if ($viContents && $criteriaAttrMap) {
+                    $viContents = strtr($viContents, $criteriaAttrMap);
                 }
-                if ($enContents) {
-                    foreach ($testingMapping as $oldTestId => $newTestId) {
-                        $enContents = str_replace('data-criteria-id="' . $oldTestId . '"', 'data-criteria-id="' . $newTestId . '"', $enContents);
-                    }
+                if ($enContents && $criteriaAttrMap) {
+                    $enContents = strtr($enContents, $criteriaAttrMap);
                 }
 
                 $newCbBlockId = $blockMapping[$cb->ebmr_template_blocks_id] ?? null;
                 if ($newCbBlockId) {
-                    DB::table('ebmr_content_blocks')->insert([
+                    $contentMapping[$cb->id] = DB::table('ebmr_content_blocks')->insertGetId([
                         'ebmr_template_blocks_id' => $newCbBlockId,
                         'template_id' => $newTemplateId,
                         'section_id' => $cb->section_id,
@@ -1750,6 +1922,13 @@ class EbmrTemplateController extends Controller
                     ]);
                 }
             }
+
+            // 6b. Trỏ lại các tham chiếu content block trong bản sao sang ID MỚI.
+            // Nội dung block lưu dạng placeholder "[[CONTENT_{id}]]", còn properties giữ
+            // con trỏ ngược (content_db_id / db_id ở từng ô bảng). Nếu để nguyên ID cũ:
+            //   - injectContent() không tìm thấy content block -> hiện thô "[[CONTENT_15954]]"
+            //   - lần lưu kế tiếp sẽ ghi đè content block của ẤN BẢN CŨ (đã ban hành).
+            $this->remapContentReferences($newTemplateId, $contentMapping);
 
             // 7. Clone ebmr_variants and map block IDs
             $variants = DB::table('ebmr_variants')->where('template_id', $oldId)->get();
@@ -1837,6 +2016,483 @@ class EbmrTemplateController extends Controller
                 'message' => 'Lỗi nhân bản dữ liệu: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    // ================= LỊCH SỬ THAY ĐỔI GIỮA 2 ẤN BẢN =================
+
+    /**
+     * So sánh ấn bản hiện tại với ấn bản LIỀN KỀ trước đó (cùng danh mục + loại).
+     * Diff được TÍNH TỰ ĐỘNG từ dữ liệu thật của 2 ấn bản — không cần ghi log thủ
+     * công khi soạn thảo, nên luôn khớp nội dung kể cả khi bản nháp còn sửa tiếp.
+     * Block 2 ấn bản khớp nhau qua cột `label` (id phía frontend, duplicateTemplate
+     * giữ nguyên khi nhân bản); biến số khớp qua field_key; tiêu chuẩn qua stage+stt.
+     */
+    public function getVersionDiff($id)
+    {
+        $current = DB::table('ebmr_templates')->where('id', $id)->first();
+        if (!$current) {
+            return response()->json(['success' => false, 'message' => 'Không tìm thấy hồ sơ mẫu.'], 404);
+        }
+
+        $previous = DB::table('ebmr_templates')
+            ->where('caterogy_id', $current->caterogy_id)
+            ->where('type', $current->type)
+            ->where('version', '<', $current->version)
+            ->orderByDesc('version')
+            ->first();
+
+        if (!$previous) {
+            return response()->json([
+                'success' => true,
+                'has_previous' => false,
+                'message' => 'Đây là ấn bản đầu tiên — chưa có ấn bản trước để so sánh.',
+            ]);
+        }
+
+        $curSnap = $this->buildVersionSnapshot($current->id);
+        $prevSnap = $this->buildVersionSnapshot($previous->id);
+
+        [$sections, $counts] = $this->diffVersionBlocks($prevSnap, $curSnap, (string) $current->caterogy_id);
+        $variables = $this->diffVersionVariables($prevSnap['variables'], $curSnap['variables']);
+        $testing = $this->diffVersionTesting($previous->id, $current->id);
+        $metadata = $this->diffVersionMetadata($previous, $current);
+
+        return response()->json([
+            'success' => true,
+            'has_previous' => true,
+            'current' => ['id' => $current->id, 'version' => $current->version, 'status' => $current->status],
+            'previous' => ['id' => $previous->id, 'version' => $previous->version, 'status' => $previous->status],
+            'summary' => $counts + [
+                'variables_added' => count($variables['added']),
+                'variables_removed' => count($variables['removed']),
+                'variables_modified' => count($variables['modified']),
+                'testing_added' => count($testing['added']),
+                'testing_removed' => count($testing['removed']),
+                'testing_modified' => count($testing['modified']),
+                'metadata_changed' => count($metadata),
+            ],
+            'sections' => $sections,
+            'variables' => $variables,
+            'testing' => $testing,
+            'metadata' => $metadata,
+        ]);
+    }
+
+    /**
+     * Ảnh chụp chuẩn hoá 1 ấn bản để so sánh: block theo label, tên mục, biến số.
+     */
+    private function buildVersionSnapshot(int $templateId): array
+    {
+        $contentText = [];
+        foreach (DB::table('ebmr_content_blocks')->where('template_id', $templateId)->get() as $cb) {
+            $contentText[$cb->id] = trim(html_entity_decode(strip_tags($cb->vi_contents ?? ''), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+        }
+
+        $blocks = [];
+        $sectionNames = [];
+        $rows = DB::table('ebmr_template_blocks')->where('template_id', $templateId)->orderBy('order')->get();
+        foreach ($rows as $b) {
+            $props = json_decode($b->properties, true) ?: [];
+            $key = $b->label ?: ($props['id'] ?? ('__row_' . $b->id));
+            $text = $this->blockPlainText($b->content, $contentText);
+            $blocks[$key] = [
+                'type' => $b->type,
+                'section_id' => (string) ($b->section_id ?? ''),
+                'title' => $this->blockDiffTitle($b->type, $props, $text),
+                'text' => $text,
+                'props' => $this->stripVolatilePropKeys($props),
+            ];
+            if ($b->type === 'section') {
+                $sectionNames[(string) ($b->section_id ?? '')] = $this->blockDiffTitle('section', $props, $text);
+            }
+        }
+
+        $variables = [];
+        foreach (DB::table('ebmr_variants')->where('template_id', $templateId)->get() as $v) {
+            $config = json_decode($v->config ?? 'null', true);
+            $variables[$v->field_key] = [
+                'name' => $v->name,
+                'label' => $v->label,
+                'type' => $v->type,
+                'important_var_id' => $v->important_var_id,
+                'config' => is_array($config) ? $this->stripVolatilePropKeys($config) : [],
+            ];
+        }
+
+        return ['blocks' => $blocks, 'sectionNames' => $sectionNames, 'variables' => $variables];
+    }
+
+    /**
+     * Trích văn bản thuần từ HTML của block: thay placeholder [[CONTENT_x]] bằng
+     * nội dung tiếng Việt tương ứng, giữ cấu trúc bảng dễ đọc (ô "|", hàng xuống dòng).
+     */
+    private function blockPlainText(?string $html, array $contentText): string
+    {
+        if (!$html) {
+            return '';
+        }
+        $html = preg_replace_callback('/\[\[CONTENT_(\d+)\]\]/', function ($m) use ($contentText) {
+            return $contentText[(int) $m[1]] ?? '';
+        }, $html);
+        $html = preg_replace('/<\/t[dh]>/i', ' | ', $html);
+        $html = preg_replace('/<\/tr>/i', "\n", $html);
+        $html = preg_replace('/<br\s*\/?>/i', "\n", $html);
+        $html = preg_replace('/<\/(p|div|h[1-6]|li)>/i', "$0\n", $html);
+        $text = html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $text = preg_replace('/[ \t]+/u', ' ', $text);
+        $text = preg_replace('/\s*\n\s*/u', "\n", $text);
+        return trim($text);
+    }
+
+    private function blockDiffTitle(string $type, array $props, string $text): string
+    {
+        $label = trim((string) ($props['label'] ?? ''));
+        if ($label !== '' && strpos($label, 'blk_') !== 0) {
+            return $label;
+        }
+        if ($text !== '') {
+            $line = preg_replace('/\s+/u', ' ', $text);
+            return mb_strlen($line) > 90 ? mb_substr($line, 0, 90) . '…' : $line;
+        }
+        return $this->blockTypeLabel($type);
+    }
+
+    private function blockTypeLabel(string $type): string
+    {
+        return [
+            'static-text' => 'Đoạn văn bản',
+            'table' => 'Bảng',
+            'section' => 'Công đoạn / mục',
+            'signature' => 'Khối chữ ký',
+            'linked-template' => 'Biểu mẫu chung (GF)',
+            'image' => 'Hình ảnh',
+            'chart' => 'Biểu đồ',
+        ][$type] ?? $type;
+    }
+
+    /**
+     * Loại đệ quy các khoá KHÔNG PHẢI dữ liệu người dùng ra khỏi diff properties:
+     * - khoá "kỹ thuật" đổi theo từng ấn bản (id DB, con trỏ content...)
+     * - khoá THUẦN TRÌNH BÀY/BỐ CỤC (chiều cao hàng, chiều rộng cột, màu nền...) — đổi
+     *   khi người dùng kéo-thả/resize nhưng không làm thay đổi Ý NGHĨA nội dung, nên
+     *   không nên tính là "thay đổi ấn bản" (dễ gây nhiễu, ví dụ rowHeights đổi 1 hàng
+     *   là kéo chuột chỉnh độ cao, không phải sửa dữ liệu).
+     * 'data' (nội dung ô bảng) bỏ luôn vì văn bản ô đã được so ở phần text.
+     */
+    private function stripVolatilePropKeys($node)
+    {
+        if (!is_array($node)) {
+            return $node;
+        }
+        static $volatile = [
+            // kỹ thuật / con trỏ DB
+            'db_id', 'content_db_id', 'id', 'criteria_id', 'section_id', 'data', 'content', 'order', 'comments',
+            // trình bày / bố cục thuần tuý — không phải dữ liệu
+            'rowHeights', 'colWidths', 'width', 'height', 'borderMode',
+            'backgroundColor', 'textAlign', 'verticalAlign', 'fontWeight', 'fontStyle', 'fontSize',
+        ];
+        $out = [];
+        foreach ($node as $k => $v) {
+            if (is_string($k) && in_array($k, $volatile, true)) {
+                continue;
+            }
+            $out[$k] = $this->stripVolatilePropKeys($v);
+        }
+        return $out;
+    }
+
+    private function diffVersionBlocks(array $prevSnap, array $curSnap, string $categoryId = ''): array
+    {
+        $prev = $prevSnap['blocks'];
+        $cur = $curSnap['blocks'];
+        $sectionNames = $curSnap['sectionNames'] + $prevSnap['sectionNames'];
+
+        $changesBySection = [];
+        $counts = ['added' => 0, 'removed' => 0, 'modified' => 0];
+
+        foreach ($cur as $key => $c) {
+            if (!isset($prev[$key])) {
+                $counts['added']++;
+                $changesBySection[$c['section_id']][] = [
+                    'kind' => 'added',
+                    'type_label' => $this->blockTypeLabel($c['type']),
+                    'title' => $c['title'],
+                    'old_text' => null,
+                    'new_text' => $c['text'] !== '' ? $c['text'] : null,
+                    'prop_changes' => [],
+                ];
+                continue;
+            }
+            $p = $prev[$key];
+            $propChanges = $this->diffPropArrays($p['props'], $c['props']);
+            $textChanged = $p['text'] !== $c['text'];
+            if ($textChanged || $p['type'] !== $c['type'] || !empty($propChanges)) {
+                $counts['modified']++;
+                $changesBySection[$c['section_id']][] = [
+                    'kind' => 'modified',
+                    'type_label' => $this->blockTypeLabel($c['type']),
+                    'title' => $c['title'],
+                    'old_text' => $textChanged ? $p['text'] : null,
+                    'new_text' => $textChanged ? $c['text'] : null,
+                    'prop_changes' => $propChanges,
+                ];
+            }
+        }
+        foreach ($prev as $key => $p) {
+            if (!isset($cur[$key])) {
+                $counts['removed']++;
+                $changesBySection[$p['section_id']][] = [
+                    'kind' => 'removed',
+                    'type_label' => $this->blockTypeLabel($p['type']),
+                    'title' => $p['title'],
+                    'old_text' => $p['text'] !== '' ? $p['text'] : null,
+                    'new_text' => null,
+                    'prop_changes' => [],
+                ];
+            }
+        }
+
+        // Sắp xếp các mục theo thứ tự xuất hiện trong ấn bản hiện tại
+        $sectionOrder = [];
+        foreach ($cur as $c) {
+            if (!isset($sectionOrder[$c['section_id']])) {
+                $sectionOrder[$c['section_id']] = count($sectionOrder);
+            }
+        }
+        uksort($changesBySection, function ($a, $b) use ($sectionOrder) {
+            return ($sectionOrder[$a] ?? PHP_INT_MAX) <=> ($sectionOrder[$b] ?? PHP_INT_MAX);
+        });
+
+        $sections = [];
+        foreach ($changesBySection as $sid => $changes) {
+            // Tên thân thiện cho 2 section "kỹ thuật" không do người dùng đặt:
+            // "{cat}" = vùng header dùng chung, "{cat}_0" = phần trước công đoạn đầu tiên.
+            if (isset($sectionNames[$sid])) {
+                $name = $sectionNames[$sid];
+            } elseif ($categoryId !== '' && $sid === $categoryId) {
+                $name = 'Đầu tài liệu (phần dùng chung)';
+            } elseif ($categoryId !== '' && $sid === $categoryId . '_0') {
+                $name = 'Phần mở đầu (trước công đoạn đầu tiên)';
+            } else {
+                $name = $sid !== '' ? 'Mục ' . $sid : 'Chung / đầu tài liệu';
+            }
+            $sections[] = [
+                'section_id' => $sid,
+                'name' => $name,
+                'changes' => $changes,
+            ];
+        }
+
+        return [$sections, $counts];
+    }
+
+    /**
+     * So sánh 2 mảng properties đã chuẩn hoá, trả về khác biệt theo khoá cấp 1.
+     */
+    private function diffPropArrays(array $old, array $new): array
+    {
+        $changes = [];
+        foreach (array_unique(array_merge(array_keys($old), array_keys($new))) as $k) {
+            $ov = $old[$k] ?? null;
+            $nv = $new[$k] ?? null;
+            if ($ov === $nv) {
+                continue;
+            }
+            // Bỏ khác biệt thuần kiểu dữ liệu ("1" vs 1) hoặc thứ tự key JSON
+            if (is_scalar($ov) && is_scalar($nv) && (string) $ov === (string) $nv) {
+                continue;
+            }
+            if (json_encode($ov, JSON_UNESCAPED_UNICODE) === json_encode($nv, JSON_UNESCAPED_UNICODE)) {
+                continue;
+            }
+            $changes[] = [
+                'label' => $this->propKeyLabel($k),
+                'old' => $this->stringifyPropValue($ov),
+                'new' => $this->stringifyPropValue($nv),
+            ];
+        }
+        return $changes;
+    }
+
+    private function propKeyLabel(string $key): string
+    {
+        return [
+            'label' => 'Nhãn',
+            'name' => 'Tên',
+            'type' => 'Loại',
+            'options' => 'Danh sách lựa chọn',
+            'validation' => 'Ràng buộc / giới hạn',
+            'instruction' => 'Hướng dẫn',
+            'unit' => 'Đơn vị',
+            'required' => 'Bắt buộc nhập',
+            'placeholder' => 'Gợi ý nhập',
+            'rows' => 'Số hàng',
+            'cols' => 'Số cột',
+            'columns' => 'Cột của bảng',
+            'hideHeader' => 'Ẩn dòng tiêu đề bảng',
+            'ref_doc_code' => 'Mã tài liệu liên kết',
+            'stage_code' => 'Mã công đoạn',
+            'fontSize' => 'Cỡ chữ',
+            'width' => 'Chiều rộng',
+            'default' => 'Giá trị mặc định',
+        ][$key] ?? $key;
+    }
+
+    private function stringifyPropValue($v): string
+    {
+        if ($v === null || $v === '') {
+            return '(trống)';
+        }
+        if (is_bool($v)) {
+            return $v ? 'Có' : 'Không';
+        }
+        if (is_scalar($v)) {
+            return (string) $v;
+        }
+        $s = json_encode($v, JSON_UNESCAPED_UNICODE);
+        return mb_strlen($s) > 160 ? mb_substr($s, 0, 160) . '…' : $s;
+    }
+
+    private function diffVersionVariables(array $old, array $new): array
+    {
+        $added = $removed = $modified = [];
+        foreach ($new as $key => $n) {
+            if (!isset($old[$key])) {
+                $added[] = ['key' => $key, 'name' => $n['name'], 'label' => $n['label'], 'type' => $n['type']];
+                continue;
+            }
+            $o = $old[$key];
+            $changes = [];
+            foreach (['name' => 'Tên biến', 'label' => 'Nhãn', 'type' => 'Kiểu dữ liệu'] as $f => $fl) {
+                if ((string) ($o[$f] ?? '') !== (string) ($n[$f] ?? '')) {
+                    $changes[] = ['label' => $fl, 'old' => $this->stringifyPropValue($o[$f] ?? null), 'new' => $this->stringifyPropValue($n[$f] ?? null)];
+                }
+            }
+            if ((int) ($o['important_var_id'] ?? 0) !== (int) ($n['important_var_id'] ?? 0)) {
+                $changes[] = ['label' => 'Biến trọng yếu', 'old' => $this->stringifyPropValue($o['important_var_id']), 'new' => $this->stringifyPropValue($n['important_var_id'])];
+            }
+            foreach ($this->diffPropArrays($o['config'], $n['config']) as $cd) {
+                $changes[] = $cd;
+            }
+            if ($changes) {
+                $modified[] = ['key' => $key, 'name' => $n['name'], 'label' => $n['label'], 'changes' => $changes];
+            }
+        }
+        foreach ($old as $key => $o) {
+            if (!isset($new[$key])) {
+                $removed[] = ['key' => $key, 'name' => $o['name'], 'label' => $o['label'], 'type' => $o['type']];
+            }
+        }
+        return ['added' => $added, 'removed' => $removed, 'modified' => $modified];
+    }
+
+    private function diffVersionTesting(int $prevId, int $curId): array
+    {
+        $load = function (int $tplId) {
+            $out = [];
+            foreach (DB::table('testing')->where('ebmr_templace_id', $tplId)->get() as $t) {
+                $out[($t->stage ?? '') . '#' . ($t->stt ?? '')] = $t;
+            }
+            return $out;
+        };
+        $old = $load($prevId);
+        $new = $load($curId);
+
+        $added = $removed = $modified = [];
+        foreach ($new as $key => $n) {
+            if (!isset($old[$key])) {
+                $added[] = ['stage' => $n->stage, 'stt' => $n->stt, 'name' => $n->name];
+                continue;
+            }
+            $o = $old[$key];
+            $changes = [];
+            foreach (['name' => 'Tên tiêu chuẩn', 'specifictions' => 'Tiêu chuẩn', 'limits' => 'Giới hạn', 'note' => 'Ghi chú'] as $f => $fl) {
+                if ((string) ($o->$f ?? '') !== (string) ($n->$f ?? '')) {
+                    $changes[] = ['label' => $fl, 'old' => $this->stringifyPropValue($o->$f ?? null), 'new' => $this->stringifyPropValue($n->$f ?? null)];
+                }
+            }
+            if ($changes) {
+                $modified[] = ['stage' => $n->stage, 'stt' => $n->stt, 'name' => $n->name, 'changes' => $changes];
+            }
+        }
+        foreach ($old as $key => $o) {
+            if (!isset($new[$key])) {
+                $removed[] = ['stage' => $o->stage, 'stt' => $o->stt, 'name' => $o->name];
+            }
+        }
+        return ['added' => $added, 'removed' => $removed, 'modified' => $modified];
+    }
+
+    private function diffVersionMetadata($previous, $current): array
+    {
+        $out = [];
+        $fields = [
+            'description' => 'Mô tả',
+            'storage_conditions' => 'Điều kiện bảo quản',
+            'avg_core' => 'Khối lượng TB viên / nhân',
+            'average_unit_weight' => 'Khối lượng TB đơn vị',
+            'product_type' => 'Loại sản phẩm',
+        ];
+        foreach ($fields as $f => $label) {
+            // Một số cột (description...) lưu HTML — so sánh & hiển thị bằng văn bản thuần
+            $ov = trim(html_entity_decode(strip_tags((string) ($previous->$f ?? '')), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+            $nv = trim(html_entity_decode(strip_tags((string) ($current->$f ?? '')), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+            if ($ov !== $nv) {
+                $out[] = ['label' => $label, 'old' => $ov, 'new' => $nv];
+            }
+        }
+
+        $ovAbbrev = $this->abbrevListText($previous->abbreviations_List ?? null);
+        $nvAbbrev = $this->abbrevListText($current->abbreviations_List ?? null);
+        if ($ovAbbrev !== $nvAbbrev) {
+            $out[] = ['label' => 'Bảng chữ viết tắt', 'old' => $ovAbbrev, 'new' => $nvAbbrev];
+        }
+
+        $ovProps = $this->docPropertiesText($previous->doc_properties ?? null);
+        $nvProps = $this->docPropertiesText($current->doc_properties ?? null);
+        if ($ovProps !== $nvProps) {
+            $out[] = ['label' => 'Document Properties', 'old' => $ovProps, 'new' => $nvProps];
+        }
+
+        return $out;
+    }
+
+    /** Văn bản thuần của bảng chữ viết tắt (mỗi hàng 1 dòng, ô cách nhau " | "). */
+    private function abbrevListText(?string $json): string
+    {
+        $arr = json_decode((string) $json, true);
+        if (!is_array($arr)) {
+            return '';
+        }
+        $lines = [];
+        foreach (($arr['data'] ?? []) as $row) {
+            $cells = [];
+            foreach ((array) $row as $cell) {
+                $t = is_array($cell) ? ($cell['content'] ?? '') : (string) $cell;
+                $t = trim(html_entity_decode(strip_tags($t), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+                if ($t !== '') {
+                    $cells[] = $t;
+                }
+            }
+            if ($cells) {
+                $lines[] = implode(' | ', $cells);
+            }
+        }
+        return implode("\n", $lines);
+    }
+
+    private function docPropertiesText(?string $json): string
+    {
+        $arr = json_decode((string) $json, true);
+        if (!is_array($arr) || !$arr) {
+            return '';
+        }
+        $lines = [];
+        foreach ($arr as $k => $v) {
+            $lines[] = $k . ' = ' . (is_scalar($v) ? (string) $v : json_encode($v, JSON_UNESCAPED_UNICODE));
+        }
+        sort($lines);
+        return implode("\n", $lines);
     }
 }
 

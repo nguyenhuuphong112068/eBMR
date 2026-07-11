@@ -96,8 +96,12 @@ Góc phải (ms-auto): N/A Vùng Chọn (ẩn mặc định), Chuyển chế đ�
 - **Chèn Biểu mẫu chung (Linked Template/GF)**: Nhúng các mẫu đã soạn sẵn vào hồ sơ hiện tại.
 - **Bình luận (Commenting)**: Thêm bình luận vào từng vị trí văn bản hoặc block.
 - **Lịch sử thay đổi (Revision History)**: Ghi lại log chi tiết các thay đổi (Thêm/Xóa/Sửa) giữa các phiên bản lưu.
-- **Đánh dấu N/A (Không áp dụng) - Context Menu**: Trong chế độ Execution, right-click vào ô trong bảng để đánh dấu N/A.
-- **Đánh dấu N/A Vùng chọn (Gạch chéo Z)**: Quét vùng nhiều ô (bằng Shift/Ctrl + Click) và sử dụng công cụ "N/A Vùng Chọn" để gạch chéo.
+- **Đánh dấu N/A (Không áp dụng) - Context Menu**: Trong chế độ Execution, right-click vào ô trong bảng để đánh dấu N/A. *(V1)*
+- **Đánh dấu N/A Vùng chọn (Gạch chéo Z)**: Quét vùng nhiều ô (bằng Shift/Ctrl + Click) và sử dụng công cụ "N/A Vùng Chọn" để gạch chéo. *(V1)*
+- **Gạch chéo KHÔNG SỬ DỤNG (N/A) — V2, tối ưu máy tính bảng** (`resources/js/designer-v2/na-marks.js`):
+  - Nút `#v2-btn-na-mode` "Gạch chéo N/A" trên toolbar (chỉ hiện lúc Chạy thử/Thực thi, hồ sơ chưa khóa) bật CHẾ ĐỘ GẠCH CHÉO: chạm để chọn ô bảng / cả khối; thanh hành động `#v2-na-bar` ở đáy màn hình với nút cỡ ngón tay: [Hàng] [Cột] [Bảng] (theo ô chạm gần nhất), [Vùng] (chữ nhật giữa 2 ô chạm gần nhất), [Gạch chéo…], [Hủy gạch…], [Xong]. Không cần chuột/phím tắt.
+  - Gạch chéo = 2 đường chéo đỏ SVG (in ấn được) + chip lý do đè lên mục; nội dung mờ đi và bị chặn nhập liệu. Gạch & hủy gạch đều BẮT BUỘC nhập lý do (chuẩn GMP). Ngoài chế độ gạch: chạm vùng đã gạch để xem lý do/người/thời gian + hủy gạch.
+  - Lưu trữ: `BOOT.executionValues.__na__[targetKey] = {reason, by, at}` (hủy = `''`); targetKey = `blockId` (cả khối/bảng) hoặc `blockId:r_c` (1 ô). Đi chung updateRecordData → mỗi key 1 dòng `ebmr_run_data` (block_uuid=`__na__`, cell_id=targetKey ≤100 ký tự) — có lịch sử hủy trong `ebmr_run_data_history`, không cần sửa backend. Block trong Lặp nhóm dùng chung data-id nên gạch chéo áp dụng cho MỌI tab "Lần i".
 - **Logic Điều kiện N/A (Conditional Logic)**: Cấu hình điều kiện phụ thuộc ở Sidebar để tự động đóng băng và hiển thị N/A.
 
 ## 7. Chế độ Xem

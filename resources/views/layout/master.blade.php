@@ -843,9 +843,36 @@
         }
     </style>
 
+    @if (request()->query('embed'))
+        {{-- Chế độ nhúng (preview trong iframe): ẩn toàn bộ khung điều hướng, chỉ để lại nội dung
+             tài liệu để phục vụ xem trước phân đoạn khi Phân phối. --}}
+        <style>
+            body.embed-mode .main-header,
+            body.embed-mode .main-sidebar,
+            body.embed-mode #notif-bell-btn,
+            body.embed-mode #notification-drawer,
+            body.embed-mode #notification-overlay,
+            body.embed-mode .chat-trigger,
+            body.embed-mode #chat-window-container,
+            body.embed-mode #chat-sidebar,
+            body.embed-mode .ai-float-btn {
+                display: none !important;
+            }
+
+            body.embed-mode .content-wrapper {
+                margin-left: 0 !important;
+                margin-top: 0 !important;
+            }
+
+            body.embed-mode {
+                background: #f1f3f4;
+            }
+        </style>
+    @endif
+
 </head>
 
-<body class="hold-transition sidebar-mini layout-navbar-fixed layout-fixed {{ request()->is('ebmr/designer*') ? 'sidebar-collapse' : '' }}">
+<body class="hold-transition sidebar-mini layout-navbar-fixed layout-fixed {{ request()->is('ebmr/designer*') ? 'sidebar-collapse' : '' }} {{ request()->query('embed') ? 'embed-mode' : '' }}">
 
     <!-- General wrapper -->
     <div class="wrapper ebmr-content-wrapper">
@@ -1046,6 +1073,18 @@
                             let d = new Date(wf.updated_at);
                             let dateStr = isNaN(d.getTime()) ? '' : d.toLocaleString('vi-VN');
 
+                            let dueDateHtml = '';
+                            if (wf.due_date) {
+                                let dd = new Date(wf.due_date);
+                                let isOverdue = wf.status === 'pending' && dd < new Date(new Date()
+                                    .toDateString());
+                                dueDateHtml =
+                                    `<div class="small mt-1 ${isOverdue ? 'text-danger fw-bold' : 'text-muted'}"><i class="far fa-clock me-1"></i>Hạn hoàn thành: ${dd.toLocaleDateString('vi-VN')}</div>`;
+                            }
+                            let reasonHtml = wf.reason ?
+                                `<div class="small text-muted mt-1"><i class="far fa-comment-dots me-1"></i>Lý do: ${$('<div>').text(wf.reason).html()}</div>` :
+                                '';
+
                             // Chỉ chủ sở hữu hồ sơ mới được đổi người ở bước ĐANG CHỜ DUYỆT
                             // (bước đã xử lý rồi thì khóa, không cho đổi nữa).
                             let canReassign = type === 'ebmr' && wf.status === 'pending' &&
@@ -1067,6 +1106,8 @@
                                         <div class="d-flex justify-content-between align-items-start">
                                             <div>
                                                 <div class="mb-2"><span class="badge ${statusColor}">${statusText}</span></div>
+                                                ${dueDateHtml}
+                                                ${reasonHtml}
                                                 ${wf.comment ? `<div class="bg-light p-2 rounded border border-light mt-2 text-dark small"><strong>Ghi chú:</strong> ${wf.comment}</div>` : ''}
                                             </div>
                                             ${wf.status === 'approved' ? `

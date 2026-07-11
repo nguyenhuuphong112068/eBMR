@@ -12,7 +12,7 @@ class ClearanceRoomCampaign extends Model
     protected $table = 'clearance_room_campaigns';
 
     protected $fillable = [
-        'room_id', 'process_list_id', 'status',
+        'room_id', 'process_list_id', 'status', 'distribution_id',
         'started_by', 'completed_by', 'started_at', 'completed_at', 'employee_ids'
     ];
 

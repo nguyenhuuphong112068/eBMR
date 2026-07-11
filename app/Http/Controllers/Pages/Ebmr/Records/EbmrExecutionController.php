@@ -10,6 +10,14 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use App\Services\RunDataEncryptionService;
 use Carbon\Carbon;
+use App\Models\ClearanceRoomProcessList;
+use App\Models\ClearanceRoomProcess;
+use App\Models\ClearanceRoomCampaign;
+use App\Models\ClearanceRoomCampaignStep;
+use App\Models\ClearanceEquipProcessList;
+use App\Models\ClearanceEquipProcess;
+use App\Models\ClearanceEquipCampaign;
+use App\Models\ClearanceEquipCampaignStep;
 
 class EbmrExecutionController extends Controller
 {
@@ -32,7 +40,7 @@ class EbmrExecutionController extends Controller
         $query = DB::table('ebmr_records')
             ->join('ebmr_templates', 'ebmr_records.template_id', '=', 'ebmr_templates.id')
             ->leftJoin('user_management', 'ebmr_records.created_by', '=', 'user_management.id')
-            ->select('ebmr_records.*', 'user_management.fullName as issuer_name', 'ebmr_templates.type', 'ebmr_templates.caterogy_id');
+            ->select('ebmr_records.*', 'user_management.fullName as issuer_name', 'ebmr_templates.type', 'ebmr_templates.caterogy_id', 'ebmr_templates.doc_properties');
 
         if ($mode == 'completed') {
             $query->whereIn('ebmr_records.status', ['completed', 'reviewed']);
@@ -54,33 +62,146 @@ class EbmrExecutionController extends Controller
                 $cat = DB::table('finished_product_category')
                     ->leftJoin('product_name', 'finished_product_category.product_name_id', '=', 'product_name.id')
                     ->where('finished_product_category.id', $r->caterogy_id)
-                    ->select('finished_product_category.finished_product_code', 'product_name.name')
+                    ->select('finished_product_category.finished_product_code', 'finished_product_category.deparment_code', 'product_name.name')
                     ->first();
                 $r->template_name = $cat->name ?? 'N/A';
                 $r->document_code = $cat->finished_product_code ?? 'N/A';
+                $r->workshop = $cat->deparment_code ?? null;
             } else {
                 $cat = DB::table('intermediate_category')
                     ->leftJoin('product_name', 'intermediate_category.product_name_id', '=', 'product_name.id')
                     ->where('intermediate_category.id', $r->caterogy_id)
-                    ->select('intermediate_category.intermediate_code', 'product_name.name')
+                    ->select('intermediate_category.intermediate_code', 'intermediate_category.deparment_code', 'product_name.name')
                     ->first();
                 $r->template_name = $cat->name ?? 'N/A';
                 $r->document_code = $cat->intermediate_code ?? 'N/A';
+                $r->workshop = $cat->deparment_code ?? null;
             }
+            // GF/MF không gắn phân xưởng
+            $r->workshop = $r->workshop ?? null;
 
             // --- Fetch Stages (Sections) ---
-            $r->sections = DB::table('ebmr_template_blocks')
+            // Gộp các công đoạn liên tiếp ĐÃ NỐI TRANG (noPageBreak trong properties — xem
+            // toggleSectionPageBreakV2 trong main.js) thành 1 đơn vị phân phối: về mặt vật lý
+            // chúng nằm chung 1 trang in nên không thể giao cho 2 phòng khác nhau. member_ids
+            // giữ lại toàn bộ section_id gốc để khi lưu vẫn ghi nhận riêng cho từng công đoạn.
+            //
+            // Số tiêu đề (display_label, VD "4.", "4.1.") được tính lại y hệt updateHeadingNumbersV2()
+            // trong main.js (nhóm theo category::stageCode rút từ section_id — xem sectionTrackInfoV2)
+            // để hiển thị trong modal Phân Phối Công Đoạn giống hệt số trên hồ sơ gốc.
+            //
+            // Trường hợp riêng: tiêu đề GỐC (track 1) của 1 nhóm NHÁNH PHÒNG (xem
+            // splitSectionIntoRoomTrackV2) bật noPageBreak nghĩa là "kéo NHÁNH ĐẦU TIÊN lên cùng
+            // trang với tiêu đề" (xem comment tại main.js ~716), không phải tự nối lên trang TRƯỚC
+            // nó. Tiêu đề gốc dạng này thường không có nội dung riêng nên không tạo dòng phân phối
+            // rỗng: label của nó được gộp vào nhánh kế tiếp. Các nhánh SAU nhánh đầu tiên (track 2,
+            // 3, ...) vẫn đứng riêng — đúng mục đích "soạn và phân phối ĐỘC LẬP" của tính năng
+            // tách nhánh phòng.
+            $headingNumberingOn = true;
+            if (!empty($r->doc_properties)) {
+                $docProps = json_decode($r->doc_properties, true);
+                $hn = $docProps['__headingNumbering'] ?? null;
+                if ($hn === false || $hn === 'false' || $hn === 0 || $hn === '0') {
+                    $headingNumberingOn = false;
+                }
+            }
+
+            $sectionBlocks = DB::table('ebmr_template_blocks')
                 ->where('template_id', $r->template_id)
                 ->where('type', 'section')
                 ->orderBy('order')
-                ->get()
-                ->map(function ($b) {
-                    $prop = json_decode($b->properties);
+                ->get();
+
+            $sectionTrackKey = function ($sectionId) {
+                $parts = explode('_', (string) $sectionId);
+                if (count($parts) >= 3 && is_numeric($parts[1])) {
                     return [
-                        'id' => $b->section_id,
-                        'label' => $prop->label ?? 'N/A'
+                        'key' => $parts[0] . '::' . implode('_', array_slice($parts, 2)),
+                        'track' => (int) $parts[1],
                     ];
-                });
+                }
+                return [
+                    'key' => implode('_', array_slice($parts, 0, -1)) . '::' . (end($parts) ?: ''),
+                    'track' => 1,
+                ];
+            };
+
+            $trackCounts = [];
+            foreach ($sectionBlocks as $b) {
+                $ti = $sectionTrackKey($b->section_id);
+                $trackCounts[$ti['key']] = max($trackCounts[$ti['key']] ?? 1, $ti['track']);
+            }
+
+            $sectionGroups = [];
+            $groupSecN = [];
+            $secN = 0;
+            $pendingLabel = null;
+            $pendingId = null;
+            $pendingNumber = null;
+            foreach ($sectionBlocks as $b) {
+                $prop = json_decode($b->properties);
+                $label = $prop->label ?? 'N/A';
+                $ti = $sectionTrackKey($b->section_id);
+                $key = $ti['key'];
+                $track = $ti['track'];
+
+                $numStr = null;
+                if ($headingNumberingOn && empty($prop->locked)) {
+                    if (!isset($groupSecN[$key])) {
+                        $secN++;
+                        $groupSecN[$key] = $secN;
+                    }
+                    $gSecN = $groupSecN[$key];
+                    $numStr = $track >= 2 ? ($gSecN . '.' . ($track - 1)) : (string) $gSecN;
+                }
+                $displayLabel = $numStr ? ($numStr . '. ' . $label) : $label;
+
+                $isRootWithBranches = $track === 1 && ($trackCounts[$key] ?? 1) >= 2;
+                if ($isRootWithBranches && !empty($prop->noPageBreak)) {
+                    $pendingLabel = $label;
+                    $pendingId = $b->section_id;
+                    $pendingNumber = $numStr;
+                    continue;
+                }
+
+                if ($pendingLabel !== null) {
+                    $sectionGroups[] = [
+                        'id' => $pendingId,
+                        'label' => $pendingLabel . ' + ' . $label,
+                        'display_label' => ($pendingNumber ? $pendingNumber . '. ' : '') . $pendingLabel . ' + ' . $displayLabel,
+                        'member_ids' => [$pendingId, $b->section_id],
+                    ];
+                    $pendingLabel = null;
+                    $pendingId = null;
+                    $pendingNumber = null;
+                    continue;
+                }
+
+                if (!empty($prop->noPageBreak) && !empty($sectionGroups)) {
+                    $lastIdx = count($sectionGroups) - 1;
+                    $sectionGroups[$lastIdx]['member_ids'][] = $b->section_id;
+                    $sectionGroups[$lastIdx]['label'] .= ' + ' . $label;
+                    $sectionGroups[$lastIdx]['display_label'] .= ' + ' . $displayLabel;
+                } else {
+                    $sectionGroups[] = [
+                        'id' => $b->section_id,
+                        'label' => $label,
+                        'display_label' => $displayLabel,
+                        'member_ids' => [$b->section_id],
+                    ];
+                }
+            }
+            // Tiêu đề gốc đang chờ gộp mà không có nhánh nào theo sau (dữ liệu bất thường) —
+            // vẫn hiển thị thay vì mất hẳn khỏi danh sách phân phối.
+            if ($pendingLabel !== null) {
+                $sectionGroups[] = [
+                    'id' => $pendingId,
+                    'label' => $pendingLabel,
+                    'display_label' => ($pendingNumber ? $pendingNumber . '. ' : '') . $pendingLabel,
+                    'member_ids' => [$pendingId],
+                ];
+            }
+            $r->sections = collect($sectionGroups);
 
             // --- Trạng thái phân phối hiện tại của từng công đoạn (nếu đã phân phối) ---
             $r->distributions = DB::table('ebmr_record_distributions')
@@ -124,38 +245,50 @@ class EbmrExecutionController extends Controller
                 'ebmr_record_distributions.section_label',
                 'ebmr_record_distributions.room_id',
                 'ebmr_record_distributions.id as distribution_id',
-                'ebmr_record_distributions.user_ids as distribution_user_ids'
+                'ebmr_record_distributions.user_ids as distribution_user_ids',
+                'ebmr_record_distributions.started_at as production_started_at',
+                'ebmr_record_distributions.clearance_completed_at',
+                'ebmr_record_distributions.production_ended_at'
             )
             ->whereNotIn('ebmr_records.status', ['completed', 'reviewed'])
             ->get();
 
         $currentUserId = (int) (session('user')['userId'] ?? 0);
 
+        // Memo kết quả kiểm tra vệ sinh theo phòng (getRoomCleaningReadiness quét logbook
+        // phòng + toàn bộ thiết bị) — nhiều công đoạn cùng phòng chỉ cần check 1 lần.
+        $roomReadinessCache = [];
+
         // Populate product name + phân phối/ghi chép cho từng hồ sơ đang hoạt động
         foreach ($activeRecords as $r) {
-            if ($r->type === 'GF') {
-                $r->product_name = DB::table('gf_category')->where('id', $r->caterogy_id)->value('name') ?? 'N/A';
-            } elseif ($r->type === 'MF') {
-                $r->product_name = DB::table('mf_category')->where('id', $r->caterogy_id)->value('name') ?? 'N/A';
-            } elseif ($r->type === 'BPR') {
-                $r->product_name = DB::table('finished_product_category')
-                    ->leftJoin('product_name', 'finished_product_category.product_name_id', '=', 'product_name.id')
-                    ->where('finished_product_category.id', $r->caterogy_id)
-                    ->value('product_name.name') ?? 'N/A';
-            } else {
-                $r->product_name = DB::table('intermediate_category')
-                    ->leftJoin('product_name', 'intermediate_category.product_name_id', '=', 'product_name.id')
-                    ->where('intermediate_category.id', $r->caterogy_id)
-                    ->value('product_name.name') ?? 'N/A';
-            }
+            $r->product_name = $this->resolveProductName($r->type, $r->caterogy_id);
 
-            // Chỉ được "Ghi chép" khi: đã phân phối công đoạn này cho 1 phòng CỤ THỂ, user hiện tại
-            // nằm trong danh sách được phân phối, VÀ phòng + thiết bị trong phòng đã đạt điều kiện
-            // vệ sinh + dọn quang. Nếu chưa đủ điều kiện, chỉ được "Xem hồ sơ" (read-only).
+            // Luồng 3 trạng thái cho từng công đoạn đã phân phối:
+            // (1) "Bắt đầu sản xuất" (can_start): đã phân phối + user được phân công + phòng và
+            //     toàn bộ thiết bị đã "Đã vệ sinh" (KHÔNG cần dọn quang xong) + CHƯA bắt đầu.
+            // (2) "Tiếp tục dọn quang" (can_resume_clearance): đã bắt đầu (started_at) nhưng
+            //     dọn quang phòng + thiết bị CHƯA hoàn tất (clearance_completed_at rỗng) — dọn
+            //     quang là bước bắt buộc PHÁT SINH SAU khi bấm Bắt đầu sản xuất, không phải điều
+            //     kiện tiên quyết.
+            // (3) "Ghi chép dữ liệu" (can_write): đã bắt đầu VÀ đã hoàn tất dọn quang.
+            // Chưa đủ điều kiện ở bước (1) thì chỉ được "Xem hồ sơ" (read-only), kèm danh sách
+            // lý do cụ thể (cleaning_missing) để hiển thị thẳng lên card, không cần hover.
             $r->is_distributed = !is_null($r->distribution_id);
             $r->distribution_user_id_list = $r->distribution_user_ids ? (json_decode($r->distribution_user_ids, true) ?: []) : [];
             $isAssigned = in_array($currentUserId, array_map('intval', $r->distribution_user_id_list), true);
-            $r->can_write = $r->is_distributed && $isAssigned && $r->room_id && $this->isRoomCleared($r->room_id);
+            $r->is_assigned = $isAssigned;
+            if ($r->room_id && !array_key_exists($r->room_id, $roomReadinessCache)) {
+                $roomReadinessCache[$r->room_id] = $this->getRoomCleaningReadiness($r->room_id);
+            }
+            $readiness = $r->room_id ? $roomReadinessCache[$r->room_id] : ['ready' => false, 'missing' => ['Chưa gán phòng']];
+            $r->room_cleaning_ready = $readiness['ready'];
+            $r->cleaning_missing = $readiness['missing'];
+            $r->production_started = !is_null($r->production_started_at);
+            $r->clearance_completed = !is_null($r->clearance_completed_at);
+            $r->production_ended = !is_null($r->production_ended_at);
+            $r->can_write = $r->is_distributed && $isAssigned && $r->production_started && $r->clearance_completed;
+            $r->can_start = $r->is_distributed && $isAssigned && !$r->production_started && $r->room_cleaning_ready;
+            $r->can_resume_clearance = $r->is_distributed && $isAssigned && $r->production_started && !$r->clearance_completed;
         }
 
         // Resolve tên người nhận (được phân phối) 1 lần cho toàn bộ danh sách, tránh N+1 query
@@ -264,23 +397,12 @@ class EbmrExecutionController extends Controller
         $time = time();
 
         foreach ($rooms as $room) {
-            // Generate stable but fluctuating values based on room ID and current timestamp
-            $baseTemp = 20.0 + ($room->id % 5) * 0.8;
-            $fluctTemp = sin($time / 30.0 + $room->id) * 0.4;
-            $temp = number_format($baseTemp + $fluctTemp, 1);
-
-            $baseHumid = 42 + ($room->id % 6) * 1.5;
-            $fluctHumid = cos($time / 45.0 + $room->id) * 2;
-            $humid = number_format($baseHumid + $fluctHumid, 0);
-
-            $basePressure = 8 + ($room->id % 8);
-            $fluctPressure = sin($time / 60.0 + $room->id) * 1;
-            $pressure = '+' . number_format($basePressure + $fluctPressure, 0);
+            $reading = \App\Services\ProductionEnvironmentService::simulateReading($room->id, $time);
 
             $telemetries[$room->id] = [
-                'temperature' => $temp,
-                'humidity' => $humid,
-                'pressure' => $pressure,
+                'temperature' => number_format($reading['temperature'], 1),
+                'humidity' => number_format($reading['humidity'], 0),
+                'pressure' => '+' . number_format($reading['pressure'], 0),
             ];
         }
 
@@ -301,6 +423,14 @@ class EbmrExecutionController extends Controller
         $record = DB::table('ebmr_records')->where('id', $id)->first();
         if (!$record) return redirect()->back()->with('error', 'Hồ sơ không tồn tại.');
 
+        // Các con dấu đã chọn khi ban hành lô (nếu có) — đóng cạnh nhau lên góc trên
+        // bên phải mỗi phân đoạn, giữ đúng thứ tự người dùng chọn lúc ban hành
+        $sealIds = json_decode($record->seal_ids ?? '[]', true) ?: [];
+        $recordSeals = $sealIds
+            ? DB::table('seals')->whereIn('id', $sealIds)->get()
+                ->sortBy(fn($s) => array_search($s->id, $sealIds))->values()
+            : collect();
+
         $template = DB::table('ebmr_templates')
             ->leftJoin('user_management', 'ebmr_templates.owner_id', '=', 'user_management.id')
             ->leftJoin('designations', 'user_management.designation_id', '=', 'designations.id')
@@ -309,12 +439,26 @@ class EbmrExecutionController extends Controller
             ->first();
         if (!$template) return redirect()->back()->with('error', 'Mẫu hồ sơ không tồn tại.');
 
+        // Chỉ lấy vòng trình ký mới nhất (các dòng cùng created_at với dòng mới nhất —
+        // cùng cách nhóm với getTemplateWorkflow), bỏ các vòng cũ đã bị từ chối.
+        $latestWfBatch = DB::table('ebmr_template_workflows')->where('template_id', $template->id)->orderBy('id', 'desc')->value('created_at');
         $template->workflows = DB::table('ebmr_template_workflows')
             ->leftJoin('user_management', 'ebmr_template_workflows.user_id', '=', 'user_management.id')
             ->leftJoin('designations', 'user_management.designation_id', '=', 'designations.id')
             ->where('template_id', $template->id)
+            ->when($latestWfBatch, fn($q) => $q->where('ebmr_template_workflows.created_at', $latestWfBatch))
             ->orderBy('step_order')
             ->select('ebmr_template_workflows.*', 'user_management.fullName', 'user_management.groupName as title', 'user_management.deparment as department_name', 'user_management.signature_image as signature_image', 'designations.name as designation_name')
+            ->get();
+
+        // Lịch sử thay đổi ấn bản (dùng cho khối ảo "LỊCH SỬ THAY ĐỔI ẤN BẢN")
+        // Chỉ hiện các ấn bản <= ấn bản đang xem (vd: xem ấn bản 02 thì hiện lý do của 00, 01, 02)
+        $template->version_history = DB::table('ebmr_templates')
+            ->where('caterogy_id', $template->caterogy_id)
+            ->where('type', $template->type)
+            ->where('version', '<=', $template->version)
+            ->orderBy('version', 'asc')
+            ->select('version', 'change_reason', 'effective_date')
             ->get();
 
         if ($template->type === 'GF') {
@@ -328,6 +472,7 @@ class EbmrExecutionController extends Controller
             $cat = DB::table('mf_category')->where('id', $template->caterogy_id)->first();
             $template->category_code = $cat->code ?? '';
             $template->category_name = $cat->name ?? '';
+            $template->stage_name = $cat->stage_name ?? '';
             $template->name = $template->category_name;
             $template->document_code = $template->category_code;
         } elseif ($template->type === 'BPR') {
@@ -354,6 +499,28 @@ class EbmrExecutionController extends Controller
             $template->batch_size = ($cat->batch_size ?? '') . ' ' . ($cat->unit_batch_size ?? '');
             $template->name = $template->category_name;
             $template->document_code = $template->category_code;
+
+            // Các trường phục vụ khối ảo CÔNG THỨC PHA CHẾ / MÔ TẢ SẢN PHẨM của giao diện V2
+            // (port từ EbmrDesignerController::show — thiếu thì các khối ảo này render rỗng)
+            $template->batch_qty = ($cat->batch_qty ?? '') . ' ' . ($cat->unit_batch_qty ?? '');
+            $template->raw_batch_size = (float)($cat->batch_size ?? 0);
+            $template->unit_batch_size = $cat->unit_batch_size ?? '';
+
+            $formulas = DB::table('formula_preparation')
+                ->where('ebmr_templates_id', $template->id)
+                ->orderBy('id')
+                ->get();
+            foreach ($formulas as $formula) {
+                $formula->materials = DB::table('formula_materials')
+                    ->where('preparation_formula_id', $formula->id)
+                    ->orderBy('id')
+                    ->get();
+                $formula->sub_amounts = DB::table('formula_ingredient_amount')
+                    ->where('preparation_formula_id', $formula->id)
+                    ->orderBy('id')
+                    ->get();
+            }
+            $template->formulas = $formulas;
         }
 
         $fields = [];
@@ -366,7 +533,7 @@ class EbmrExecutionController extends Controller
         foreach ($blocks as $block) {
             $f = json_decode($block->properties, true);
             if (isset($f['type']) && $f['type'] === 'linked-template') {
-                $ltId = $f['template_id'] ?? null;
+                $ltId = \App\Services\LinkedGfResolver::resolveTemplateId($f, (int) $id, $block->id);
                 if ($ltId) {
                     $templateIds[] = $ltId;
                 }
@@ -407,7 +574,8 @@ class EbmrExecutionController extends Controller
             $this->injectContent($f, $block, $contentBlocks->get($block->id), $testingCriteria, $properties);
             $f['db_id'] = $block->id; // Track DB ID for section matching
             if (isset($f['type']) && $f['type'] === 'linked-template') {
-                $linkedTemplateId = $f['template_id'] ?? null;
+                $hostBlockId = $block->id;
+                $linkedTemplateId = \App\Services\LinkedGfResolver::resolveTemplateId($f, (int) $id, $hostBlockId);
                 if ($linkedTemplateId) {
                     $linkedBlocks = DB::table('ebmr_template_blocks')->where('template_id', $linkedTemplateId)->orderBy('order')->get();
 
@@ -434,11 +602,15 @@ class EbmrExecutionController extends Controller
                     } else {
                         $linkedConfig = [];
                     }
+                    // Namespace theo host-block để cùng 1 GF chèn lặp lại nhiều vị trí
+                    // trong 1 BMR không đụng id field (block_uuid) lẫn nhau.
+                    $linkedConfig = \App\Services\LinkedGfResolver::namespaceLinkedFieldsConfig((array) $linkedConfig, $hostBlockId);
                     $fieldsConfig = array_merge((array)$fieldsConfig, (array)$linkedConfig);
                     foreach ($linkedBlocks as $lb) {
                         $linkedF = json_decode($lb->properties, true);
                         $this->injectContent($linkedF, $lb, $lContentBlocks->get($lb->id), $testingCriteria, $properties);
                         $linkedF['is_linked'] = true; // Mark as linked if needed by frontend
+                        $linkedF = \App\Services\LinkedGfResolver::namespaceLinkedField($linkedF, $hostBlockId);
                         $allFields[] = $linkedF;
                     }
                 }
@@ -451,12 +623,44 @@ class EbmrExecutionController extends Controller
         $fieldsConfig = $this->overrideFieldsConfigWithTesting($fieldsConfig, $testingCriteria);
 
         // --- Section Filtering Logic ---
+        // $sectionId có thể là 1 id đơn hoặc danh sách "id1,id2" (nhiều công đoạn ĐÃ NỐI TRANG
+        // với nhau — xem modal Phân Phối Công Đoạn: các công đoạn này được gộp thành 1 đơn vị
+        // phân phối nên khi xem trước cũng cần hiển thị gộp nội dung của tất cả).
         $activeSectionLabel = null;
+        $activeSectionNumber = null;
+        $sectionIds = $sectionId ? array_values(array_filter(array_map('trim', explode(',', (string) $sectionId)))) : [];
         if ($sectionId) {
+            // Khi lọc chỉ còn 1 (hoặc vài) công đoạn, JS đánh số tiêu đề (updateHeadingNumbersV2
+            // trong main.js) sẽ đếm lại từ đầu trên tập DOM đang hiển thị -> luôn ra "1." dù công
+            // đoạn này thực sự là số mấy trong toàn hồ sơ gốc. Tính trước số thứ tự THẬT ở
+            // đây (lặp qua $allFields đầy đủ, gom nhóm y hệt sectionTrackInfoV2() phía JS:
+            // key = category::stageCode rút từ section_id) rồi truyền xuống để JS bù trừ.
+            $groupSecN = [];
+            $secN = 0;
+            foreach ($allFields as $f) {
+                if (($f['type'] ?? null) !== 'section' || !empty($f['isVirtual']) || !empty($f['locked'])) continue;
+                $parts = explode('_', (string) ($f['section_id'] ?? ''));
+                if (count($parts) >= 3 && is_numeric($parts[1])) {
+                    $category = $parts[0];
+                    $stageCode = implode('_', array_slice($parts, 2));
+                } else {
+                    $category = implode('_', array_slice($parts, 0, -1));
+                    $stageCode = end($parts) ?: '';
+                }
+                $key = $category . '::' . $stageCode;
+                if (!isset($groupSecN[$key])) {
+                    $secN++;
+                    $groupSecN[$key] = $secN;
+                }
+                if ($activeSectionNumber === null && in_array((string) ($f['section_id'] ?? ''), $sectionIds, true)) {
+                    $activeSectionNumber = $groupSecN[$key];
+                }
+            }
+
             $blocksQuery = DB::table('ebmr_template_blocks')
                 ->where('template_id', $template->id)
-                ->where(function ($q) use ($sectionId, $template) {
-                    $q->where('section_id', (string)$sectionId)
+                ->where(function ($q) use ($sectionIds, $template) {
+                    $q->whereIn('section_id', $sectionIds)
                         ->orWhere('section_id', (string)$template->caterogy_id);
                 })
                 ->orderBy('order')
@@ -465,16 +669,17 @@ class EbmrExecutionController extends Controller
             $bqIds = $blocksQuery->pluck('id')->toArray();
             $bqContentBlocks = DB::table('ebmr_content_blocks')->whereIn('ebmr_template_blocks_id', $bqIds)->get()->groupBy('ebmr_template_blocks_id');
 
-            $activeSectionLabel = null;
+            $activeSectionLabelParts = [];
             foreach ($blocksQuery as $block) {
                 $f = json_decode($block->properties, true);
                 $this->injectContent($f, $block, $bqContentBlocks->get($block->id));
-                if (isset($f['type']) && $f['type'] === 'section' && $block->section_id == $sectionId) {
-                    $activeSectionLabel = $f['label'] ?? 'Phân đoạn';
+                if (isset($f['type']) && $f['type'] === 'section' && in_array((string) $block->section_id, $sectionIds, true)) {
+                    $activeSectionLabelParts[] = $f['label'] ?? 'Phân đoạn';
                 }
 
                 if (isset($f['type']) && $f['type'] === 'linked-template') {
-                    $linkedTemplateId = $f['template_id'] ?? null;
+                    $hostBlockId = $block->id;
+                    $linkedTemplateId = \App\Services\LinkedGfResolver::resolveTemplateId($f, (int) $id, $hostBlockId);
                     if ($linkedTemplateId) {
                         $linkedBlocks = DB::table('ebmr_template_blocks')->where('template_id', $linkedTemplateId)->orderBy('order')->get();
 
@@ -499,12 +704,14 @@ class EbmrExecutionController extends Controller
                             } else {
                                 $linkedConfig = json_decode($linkedBlocks->first()->fields_config, true) ?? [];
                             }
+                            $linkedConfig = \App\Services\LinkedGfResolver::namespaceLinkedFieldsConfig((array) $linkedConfig, $hostBlockId);
                             $fieldsConfig = array_merge((array)$fieldsConfig, (array)$linkedConfig);
                         }
                         foreach ($linkedBlocks as $lb) {
                             $linkedF = json_decode($lb->properties, true);
                             $this->injectContent($linkedF, $lb, $lContentBlocks->get($lb->id));
                             $linkedF['is_linked'] = true;
+                            $linkedF = \App\Services\LinkedGfResolver::namespaceLinkedField($linkedF, $hostBlockId);
                             $fields[] = $linkedF;
                         }
                     }
@@ -512,6 +719,7 @@ class EbmrExecutionController extends Controller
                     $fields[] = $f;
                 }
             }
+            $activeSectionLabel = $activeSectionLabelParts ? implode(' + ', $activeSectionLabelParts) : null;
         } else {
             // Use the already fetched allFields if no section filtering
             $fields = $allFields;
@@ -561,16 +769,44 @@ class EbmrExecutionController extends Controller
 
         $template->schema = (object)['fields' => $fields, 'fieldsConfig' => $fieldsConfig];
 
-        $isReadOnly = $this->computeIsReadOnly($request, $record);
+        // Mở từ tab "Nhận Ban Hành" (?from=issuance): luôn chỉ xem, ẩn toàn bộ
+        // giao diện bình luận + nút Lưu nháp / Hoàn Thành Nhập Liệu.
+        $isIssuanceView = $request->query('from') === 'issuance';
+        $isReadOnly = $isIssuanceView ? true : $this->computeIsReadOnly($request, $record);
 
-        return view('pages.ebmr.execute', [
+        // Dữ liệu bổ sung cho view designer_v2 (dùng chung blade với Designer V2)
+        $comments = DB::table('ebmr_template_comments')
+            ->leftJoin('user_management', 'ebmr_template_comments.user_id', '=', 'user_management.id')
+            ->where('template_id', $template->id)
+            ->select('ebmr_template_comments.*', 'user_management.fullName as user_name')
+            ->orderBy('created_at', 'asc')
+            ->get();
+        $importantVars = DB::table('important_var')->get();
+
+        // Cấu trúc phát sinh (dòng thêm Cấp 2...) đã lưu riêng cho LÔ này
+        $recordStructures = [];
+        foreach (DB::table('ebmr_record_structures')->where('record_id', $id)->get() as $rs) {
+            $recordStructures[$rs->block_uuid] = [
+                'kind' => $rs->kind,
+                'payload' => json_decode($rs->payload, true) ?: [],
+            ];
+        }
+
+        return view('pages.ebmr.designer_v2', [
             'record' => $record,
+            'recordSeals' => $recordSeals,
             'template' => $template,
             'executionValues' => $executionValues,
+            'recordStructures' => (object)$recordStructures,
             'isExecutionMode' => true,
             'isReadOnly' => $isReadOnly,
+            'isIssuanceView' => $isIssuanceView,
+            'comments' => $isIssuanceView ? collect() : $comments,
+            'importantVars' => $importantVars,
             'activeSectionId' => $sectionId,
-            'activeSectionLabel' => $activeSectionLabel
+            'activeSectionLabel' => $activeSectionLabel,
+            'activeSectionNumber' => $activeSectionNumber,
+            'isAdmin' => (session('user')['userGroup'] ?? '') === 'Admin',
         ]);
     }
 
@@ -608,7 +844,10 @@ class EbmrExecutionController extends Controller
         $currentUserId = (int) (session('user')['userId'] ?? 0);
         $isAssigned = in_array($currentUserId, $userIds, true);
 
-        return !($isAssigned && $this->isRoomCleared($dist->room_id));
+        // Chỉ được ghi khi phiên sản xuất ĐÃ bắt đầu (started_at) VÀ dọn quang phòng +
+        // toàn bộ thiết bị đã hoàn tất (clearance_completed_at) — dọn quang là bước bắt
+        // buộc phát sinh sau "Bắt đầu sản xuất", chưa xong thì vẫn chỉ được xem.
+        return !($isAssigned && !is_null($dist->started_at) && !is_null($dist->clearance_completed_at));
     }
 
     /**
@@ -617,41 +856,331 @@ class EbmrExecutionController extends Controller
      * 'cleaned', chưa quá clean_expiry_date), (b) đã có 1 chiến dịch dọn quang
      * (clearance) hoàn tất cho phòng/thiết bị đó.
      */
-    private function isRoomCleared($roomId)
+    /**
+     * Điều kiện SẢN XUẤT của 1 phòng chỉ xét vệ sinh (phòng + từng thiết bị đã "Đã vệ
+     * sinh", nhãn chưa hết hạn) — dọn quang KHÔNG phải điều kiện tiên quyết, mà là bước
+     * bắt buộc thực hiện SAU KHI đã bấm "Bắt đầu sản xuất" (xem startProduction()).
+     * Trả về danh sách lý do còn thiếu bằng tiếng Việt để hiển thị trực tiếp lên card
+     * phòng, không chỉ 1 boolean — người dùng cần biết chính xác đang thiếu gì.
+     */
+    private function getRoomCleaningReadiness($roomId): array
     {
-        if (!$roomId) return false;
+        $missing = [];
+        if (!$roomId) return ['ready' => false, 'missing' => ['Phòng không xác định']];
 
         $roomLog = DB::table('room_logbooks')
             ->where('room_id', $roomId)
             ->whereNull('equipment_id')
             ->orderByDesc('id')
             ->first();
-        if (!$roomLog || $roomLog->current_status !== 'cleaned') return false;
-        if ($roomLog->clean_expiry_date && Carbon::parse($roomLog->clean_expiry_date)->isPast()) return false;
-
-        $roomClearanceDone = DB::table('clearance_room_campaigns')
-            ->where('room_id', $roomId)
-            ->where('status', 'completed')
-            ->exists();
-        if (!$roomClearanceDone) return false;
-
-        $equipIds = DB::table('equipment_in_room')->where('room_id', $roomId)->pluck('equipment_id');
-        foreach ($equipIds as $equipId) {
-            $eqLog = DB::table('room_logbooks')
-                ->where('equipment_id', $equipId)
-                ->orderByDesc('id')
-                ->first();
-            if (!$eqLog || $eqLog->current_status !== 'cleaned') return false;
-            if ($eqLog->clean_expiry_date && Carbon::parse($eqLog->clean_expiry_date)->isPast()) return false;
-
-            $eqClearanceDone = DB::table('clearance_equip_campaigns')
-                ->where('equipment_id', $equipId)
-                ->where('status', 'completed')
-                ->exists();
-            if (!$eqClearanceDone) return false;
+        if (!$roomLog || $roomLog->current_status !== 'cleaned') {
+            $missing[] = 'Phòng chưa vệ sinh';
+        } elseif ($roomLog->clean_expiry_date && Carbon::parse($roomLog->clean_expiry_date)->isPast()) {
+            $missing[] = 'Nhãn vệ sinh phòng đã hết hạn';
         }
 
-        return true;
+        $equipRows = DB::table('equipment_in_room')
+            ->join('instrument', 'equipment_in_room.equipment_id', '=', 'instrument.id')
+            ->where('equipment_in_room.room_id', $roomId)
+            ->select('instrument.id', 'instrument.code')
+            ->get();
+        foreach ($equipRows as $eq) {
+            $eqLog = DB::table('room_logbooks')
+                ->where('equipment_id', $eq->id)
+                ->orderByDesc('id')
+                ->first();
+            if (!$eqLog || $eqLog->current_status !== 'cleaned') {
+                $missing[] = "Thiết bị {$eq->code} chưa vệ sinh";
+            } elseif ($eqLog->clean_expiry_date && Carbon::parse($eqLog->clean_expiry_date)->isPast()) {
+                $missing[] = "Nhãn vệ sinh thiết bị {$eq->code} đã hết hạn";
+            }
+        }
+
+        return ['ready' => empty($missing), 'missing' => $missing];
+    }
+
+    /**
+     * Tên sản phẩm hiển thị theo loại tài liệu (GF/MF/BPR/BMR) — dùng chung cho
+     * dashboard Sản Xuất và nhật ký phòng khi bắt đầu sản xuất.
+     */
+    private function resolveProductName($type, $caterogyId)
+    {
+        if ($type === 'GF') {
+            return DB::table('gf_category')->where('id', $caterogyId)->value('name') ?? 'N/A';
+        }
+        if ($type === 'MF') {
+            return DB::table('mf_category')->where('id', $caterogyId)->value('name') ?? 'N/A';
+        }
+        if ($type === 'BPR') {
+            return DB::table('finished_product_category')
+                ->leftJoin('product_name', 'finished_product_category.product_name_id', '=', 'product_name.id')
+                ->where('finished_product_category.id', $caterogyId)
+                ->value('product_name.name') ?? 'N/A';
+        }
+        return DB::table('intermediate_category')
+            ->leftJoin('product_name', 'intermediate_category.product_name_id', '=', 'product_name.id')
+            ->where('intermediate_category.id', $caterogyId)
+            ->value('product_name.name') ?? 'N/A';
+    }
+
+    /**
+     * Tìm quy trình dọn quang đang áp dụng (ưu tiên active → approved → submitted →
+     * draft) cho 1 phòng hoặc 1 thiết bị — dùng chung logic ưu tiên với
+     * ClearanceProcessController::openCampaignPage để 2 nơi luôn chọn ra cùng 1 bản.
+     */
+    private function findActiveClearanceProcessList(string $model, string $column, $id)
+    {
+        return $model::where($column, $id)
+            ->where('clearance_type', 1)
+            ->whereIn('status', ['active', 'approved', 'submitted', 'draft'])
+            ->orderByRaw("FIELD(status, 'active', 'approved', 'submitted', 'draft')")
+            ->orderBy('version', 'desc')
+            ->first();
+    }
+
+    /**
+     * Bắt đầu sản xuất 1 công đoạn đã phân phối. 2 nhánh:
+     * (a) Đã từng bắt đầu nhưng dọn quang chưa xong → điều hướng thẳng tới campaign dọn
+     *     quang phòng đang dở (idempotent, không tạo lại).
+     * (b) Chưa từng bắt đầu → kiểm tra lại toàn bộ điều kiện phía server (user được
+     *     phân công, hồ sơ chưa hoàn thành, phòng + thiết bị đã vệ sinh — KHÔNG cần dọn
+     *     quang xong, đó là bước kế tiếp), chốt started_at/started_by, ghi nhật ký phòng
+     *     'producing', rồi TỰ TẠO campaign dọn quang cho phòng + từng thiết bị trong
+     *     phòng (gắn distribution_id) và điều hướng người dùng vào đó. Trang ghi chép hồ
+     *     sơ chỉ mở khi dọn quang hoàn tất (xem ClearanceProcessController::completeCampaign).
+     */
+    public function startProduction(Request $request)
+    {
+        $validated = $request->validate([
+            'distribution_id' => 'required|integer',
+        ]);
+
+        $dist = DB::table('ebmr_record_distributions')->where('id', $validated['distribution_id'])->first();
+        if (!$dist) {
+            return response()->json(['success' => false, 'message' => 'Phân phối không tồn tại hoặc đã bị thu hồi.']);
+        }
+
+        $record = DB::table('ebmr_records')->where('id', $dist->record_id)->first();
+        if (!$record) {
+            return response()->json(['success' => false, 'message' => 'Hồ sơ không tồn tại.']);
+        }
+        if (in_array($record->status, ['completed', 'reviewed'])) {
+            return response()->json(['success' => false, 'message' => 'Hồ sơ đã hoàn thành, không thể bắt đầu sản xuất.']);
+        }
+
+        $currentUserId = (int) (session('user')['userId'] ?? 0);
+        $userIds = array_map('intval', json_decode($dist->user_ids ?? '[]', true) ?: []);
+        if (!in_array($currentUserId, $userIds, true)) {
+            return response()->json(['success' => false, 'message' => 'Bạn không nằm trong danh sách được phân phối công đoạn này.']);
+        }
+
+        $executeUrl = route('pages.ebmr.execute', $dist->record_id)
+            . '?section=' . urlencode($dist->section_id) . '&dist=' . $dist->id;
+
+        if (!is_null($dist->started_at)) {
+            if (!is_null($dist->clearance_completed_at)) {
+                return response()->json(['success' => true, 'already_started' => true, 'redirect_url' => $executeUrl]);
+            }
+
+            // Đã bắt đầu nhưng dọn quang dở dang — quay lại đúng campaign phòng đã tạo.
+            $roomCampaign = ClearanceRoomCampaign::where('distribution_id', $dist->id)->first();
+            if ($roomCampaign) {
+                $clearanceUrl = route('pages.manu_env.clearance_process.campaign.open', ['room_id' => $dist->room_id])
+                    . '?campaign_id=' . $roomCampaign->id;
+                return response()->json(['success' => true, 'needs_clearance' => true, 'redirect_url' => $clearanceUrl]);
+            }
+            // Trường hợp hiếm: đã start nhưng chưa có campaign (vd lỗi giữa chừng lần
+            // trước) — rơi xuống bên dưới để tạo lại campaign, giữ nguyên started_at gốc.
+        }
+
+        $readiness = $this->getRoomCleaningReadiness($dist->room_id);
+        if (!$readiness['ready']) {
+            return response()->json(['success' => false, 'message' => 'Phòng chưa đủ điều kiện sản xuất: ' . implode('; ', $readiness['missing'])]);
+        }
+
+        // Xác nhận có quy trình dọn quang cho phòng + MỌI thiết bị trong phòng trước khi
+        // cho bắt đầu — tránh tình huống đã "bắt đầu sản xuất" nhưng kẹt lại vì thiếu quy
+        // trình, không có đường lùi để ghi chép.
+        $roomProcessList = $this->findActiveClearanceProcessList(ClearanceRoomProcessList::class, 'room_id', $dist->room_id);
+        if (!$roomProcessList) {
+            return response()->json(['success' => false, 'message' => 'Phòng chưa có quy trình dọn quang. Vui lòng thiết kế quy trình tại Môi Trường > Dọn Quang Phòng trước khi sản xuất.']);
+        }
+
+        $equipRows = DB::table('equipment_in_room')
+            ->join('instrument', 'equipment_in_room.equipment_id', '=', 'instrument.id')
+            ->where('equipment_in_room.room_id', $dist->room_id)
+            ->select('instrument.id', 'instrument.code')
+            ->get();
+
+        $equipProcessLists = [];
+        $missingEquipProcess = [];
+        foreach ($equipRows as $eq) {
+            $epl = $this->findActiveClearanceProcessList(ClearanceEquipProcessList::class, 'equipment_id', $eq->id);
+            if (!$epl) {
+                $missingEquipProcess[] = $eq->code;
+                continue;
+            }
+            $equipProcessLists[$eq->id] = $epl;
+        }
+        if (!empty($missingEquipProcess)) {
+            return response()->json(['success' => false, 'message' => 'Thiết bị sau chưa có quy trình dọn quang: ' . implode(', ', $missingEquipProcess) . '. Vui lòng thiết kế quy trình tại Môi Trường > Dọn Quang Thiết Bị trước khi sản xuất.']);
+        }
+
+        $now = now();
+        DB::beginTransaction();
+        try {
+            if (is_null($dist->started_at)) {
+                DB::table('ebmr_record_distributions')->where('id', $dist->id)->update([
+                    'started_at' => $now,
+                    'started_by' => $currentUserId,
+                    'updated_at' => $now,
+                ]);
+
+                // Nhật ký phòng chuyển 'producing' — trang Sản Xuất hiển thị nhãn "Đang sản xuất"
+                $prevStatus = DB::table('room_logbooks')
+                    ->where('room_id', $dist->room_id)
+                    ->whereNull('equipment_id')
+                    ->orderByDesc('id')
+                    ->value('current_status') ?? 'cleaned';
+
+                $template = DB::table('ebmr_templates')->where('id', $record->template_id)->first();
+                $productName = $template ? $this->resolveProductName($template->type, $template->caterogy_id) : null;
+
+                DB::table('room_logbooks')->insert([
+                    'room_id' => $dist->room_id,
+                    'action_type' => 'producing',
+                    'product_name' => $productName,
+                    'batch_number' => $record->batch_number,
+                    'start_time' => $now,
+                    'employee_ids' => json_encode($userIds),
+                    'previous_status' => $prevStatus,
+                    'current_status' => 'producing',
+                    'remarks' => 'Bắt đầu sản xuất công đoạn: ' . ($dist->section_label ?: $dist->section_id),
+                    'created_by' => $currentUserId,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]);
+            }
+
+            // Tạo campaign dọn quang PHÒNG, gắn distribution_id để completeCampaign biết
+            // chốt clearance_completed_at cho đúng phiên sản xuất này.
+            $roomCampaign = ClearanceRoomCampaign::create([
+                'room_id' => $dist->room_id,
+                'distribution_id' => $dist->id,
+                'process_list_id' => $roomProcessList->id,
+                'status' => 'in_progress',
+                'started_by' => $currentUserId,
+                'started_at' => $now,
+                'employee_ids' => $userIds,
+            ]);
+            foreach (ClearanceRoomProcess::where('process_list_id', $roomProcessList->id)->orderBy('step')->get() as $s) {
+                ClearanceRoomCampaignStep::create([
+                    'campaign_id' => $roomCampaign->id,
+                    'process_step_id' => $s->id,
+                    'step' => $s->step,
+                    'is_done' => false,
+                ]);
+            }
+
+            // Tạo campaign dọn quang cho TỪNG thiết bị trong phòng, neo vào room_campaign_id.
+            foreach ($equipRows as $eq) {
+                $epl = $equipProcessLists[$eq->id];
+                $equipCampaign = ClearanceEquipCampaign::create([
+                    'equipment_id' => $eq->id,
+                    'room_campaign_id' => $roomCampaign->id,
+                    'process_list_id' => $epl->id,
+                    'status' => 'in_progress',
+                    'started_by' => $currentUserId,
+                    'started_at' => $now,
+                    'employee_ids' => $userIds,
+                ]);
+                foreach (ClearanceEquipProcess::where('process_list_id', $epl->id)->orderBy('step')->get() as $s) {
+                    ClearanceEquipCampaignStep::create([
+                        'campaign_id' => $equipCampaign->id,
+                        'process_step_id' => $s->id,
+                        'step' => $s->step,
+                        'is_checked' => false,
+                    ]);
+                }
+            }
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['success' => false, 'message' => 'Lỗi khởi tạo dọn quang: ' . $e->getMessage()]);
+        }
+
+        $clearanceUrl = route('pages.manu_env.clearance_process.campaign.open', ['room_id' => $dist->room_id])
+            . '?campaign_id=' . $roomCampaign->id;
+
+        return response()->json([
+            'success' => true,
+            'needs_clearance' => true,
+            'message' => 'Đã bắt đầu sản xuất. Vui lòng hoàn tất dọn quang phòng & thiết bị trước khi ghi chép hồ sơ.',
+            'redirect_url' => $clearanceUrl,
+        ]);
+    }
+
+    /**
+     * Kết thúc 1 phiên sản xuất đã bắt đầu tại phòng: chốt production_ended_at/ended_by,
+     * ghi nhật ký phòng chuyển 'dirty' (cần vệ sinh cho lô/công đoạn kế tiếp). Đây là mốc
+     * dừng của "Lịch sử môi trường sản xuất" — command RecordProductionEnvironment chỉ
+     * ghi nhận cho các phiên có started_at nhưng CHƯA có production_ended_at.
+     */
+    public function endProduction(Request $request)
+    {
+        $validated = $request->validate([
+            'distribution_id' => 'required|integer',
+        ]);
+
+        $dist = DB::table('ebmr_record_distributions')->where('id', $validated['distribution_id'])->first();
+        if (!$dist) {
+            return response()->json(['success' => false, 'message' => 'Phân phối không tồn tại hoặc đã bị thu hồi.']);
+        }
+        if (is_null($dist->started_at)) {
+            return response()->json(['success' => false, 'message' => 'Phiên sản xuất này chưa được bắt đầu.']);
+        }
+        if (!is_null($dist->production_ended_at)) {
+            return response()->json(['success' => true, 'already_ended' => true, 'message' => 'Phiên sản xuất đã được kết thúc trước đó.']);
+        }
+
+        $currentUserId = (int) (session('user')['userId'] ?? 0);
+        $userIds = array_map('intval', json_decode($dist->user_ids ?? '[]', true) ?: []);
+        if (!in_array($currentUserId, $userIds, true)) {
+            return response()->json(['success' => false, 'message' => 'Bạn không nằm trong danh sách được phân phối công đoạn này.']);
+        }
+
+        $now = now();
+        DB::table('ebmr_record_distributions')->where('id', $dist->id)->update([
+            'production_ended_at' => $now,
+            'ended_by' => $currentUserId,
+            'updated_at' => $now,
+        ]);
+
+        $prevStatus = DB::table('room_logbooks')
+            ->where('room_id', $dist->room_id)
+            ->whereNull('equipment_id')
+            ->orderByDesc('id')
+            ->value('current_status') ?? 'producing';
+
+        DB::table('room_logbooks')->insert([
+            'room_id' => $dist->room_id,
+            'action_type' => 'idle',
+            'start_time' => $now,
+            'end_time' => $now,
+            'employee_ids' => json_encode($userIds),
+            'previous_status' => $prevStatus,
+            'current_status' => 'dirty',
+            'remarks' => 'Kết thúc sản xuất công đoạn: ' . ($dist->section_label ?: $dist->section_id),
+            'created_by' => $currentUserId,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Đã kết thúc sản xuất. Phòng chuyển trạng thái "Cần vệ sinh" cho lô kế tiếp.',
+        ]);
     }
 
     /**
@@ -729,6 +1258,10 @@ class EbmrExecutionController extends Controller
             'distributions.*.section_label' => 'nullable|string',
             'distributions.*.room_id' => 'nullable|integer',
             'distributions.*.user_ids' => 'nullable|array',
+            // Các công đoạn ĐÃ NỐI TRANG được gộp chung 1 dòng cấu hình ở modal (xem index()) —
+            // member_section_ids chứa toàn bộ section_id gốc trong nhóm đó, mặc định về đúng
+            // section_id nếu client không gửi (tương thích ngược).
+            'distributions.*.member_section_ids' => 'nullable|array',
         ]);
 
         $recordId = $validated['record_id'];
@@ -746,30 +1279,60 @@ class EbmrExecutionController extends Controller
 
             $room = DB::connection('pms')->table('room')->where('id', $dist['room_id'])->first();
 
-            $payload = [
-                'section_label' => $dist['section_label'] ?? null,
-                'room_id' => $dist['room_id'],
-                'room_code' => $room->code ?? null,
-                'room_name' => $room->name ?? null,
-                'user_ids' => json_encode(array_values($dist['user_ids'] ?? [])),
-                'distributed_by' => $distributedBy,
-                'updated_at' => $now,
-            ];
+            $memberSectionIds = !empty($dist['member_section_ids'])
+                ? array_values(array_unique(array_map('strval', $dist['member_section_ids'])))
+                : [(string) $dist['section_id']];
 
-            $existing = DB::table('ebmr_record_distributions')
-                ->where('record_id', $recordId)
-                ->where('section_id', $dist['section_id'])
-                ->first();
+            foreach ($memberSectionIds as $memberSectionId) {
+                $payload = [
+                    'section_label' => $dist['section_label'] ?? null,
+                    'room_id' => $dist['room_id'],
+                    'room_code' => $room->code ?? null,
+                    'room_name' => $room->name ?? null,
+                    'user_ids' => json_encode(array_values($dist['user_ids'] ?? [])),
+                    'distributed_by' => $distributedBy,
+                    'updated_at' => $now,
+                ];
 
-            if ($existing) {
-                DB::table('ebmr_record_distributions')->where('id', $existing->id)->update($payload);
-            } else {
-                DB::table('ebmr_record_distributions')->insert(array_merge($payload, [
+                $existing = DB::table('ebmr_record_distributions')
+                    ->where('record_id', $recordId)
+                    ->where('section_id', $memberSectionId)
+                    ->first();
+
+                if ($existing) {
+                    // Phân phối lại sang PHÒNG KHÁC → phiên sản xuất cũ (nếu đã bắt đầu)
+                    // không còn giá trị: reset started_at/started_by để buộc bấm "Bắt đầu
+                    // sản xuất" lại tại phòng mới (kiểm tra lại vệ sinh & dọn quang).
+                    if ((int) $existing->room_id !== (int) $dist['room_id']) {
+                        $payload['started_at'] = null;
+                        $payload['started_by'] = null;
+                    }
+                    DB::table('ebmr_record_distributions')->where('id', $existing->id)->update($payload);
+                } else {
+                    DB::table('ebmr_record_distributions')->insert(array_merge($payload, [
+                        'record_id' => $recordId,
+                        'section_id' => $memberSectionId,
+                        'created_at' => $now,
+                    ]));
+                }
+
+                // Ghi vết lịch sử (append-only) song song với việc cập nhật trạng thái hiện tại ở trên,
+                // để giữ lại toàn bộ các lần phân phối/phân phối lại thay vì chỉ giữ bản mới nhất.
+                DB::table('ebmr_record_distribution_logs')->insert([
                     'record_id' => $recordId,
-                    'section_id' => $dist['section_id'],
+                    'section_id' => $memberSectionId,
+                    'section_label' => $dist['section_label'] ?? null,
+                    'room_id' => $dist['room_id'],
+                    'room_code' => $room->code ?? null,
+                    'room_name' => $room->name ?? null,
+                    'user_ids' => json_encode(array_values($dist['user_ids'] ?? [])),
+                    'distributed_by' => $distributedBy,
+                    'distributed_at' => $now,
                     'created_at' => $now,
-                ]));
+                    'updated_at' => $now,
+                ]);
             }
+
             $count++;
         }
 
@@ -778,6 +1341,35 @@ class EbmrExecutionController extends Controller
         }
 
         return response()->json(['success' => true, 'message' => "Đã phân phối $count công đoạn thành công"]);
+    }
+
+    /**
+     * Lịch sử phân phối của 1 hồ sơ (tất cả công đoạn), dùng để hiển thị "Lịch sử phân phối"
+     * trong modal Phân Phối Công Đoạn: ai phân phối, phân phối tới phòng nào, cho những ai,
+     * và lần thứ mấy của công đoạn đó (sắp xếp tăng dần theo thời gian để đánh số đúng thứ tự).
+     */
+    public function getRecordDistributionHistory($recordId)
+    {
+        $logs = DB::table('ebmr_record_distribution_logs')
+            ->where('record_id', $recordId)
+            ->orderBy('section_id')
+            ->orderBy('distributed_at')
+            ->orderBy('id')
+            ->get();
+
+        $userIds = $logs->pluck('distributed_by')->filter()->unique()->values();
+        $userNames = DB::table('user_management')->whereIn('id', $userIds)->pluck('fullName', 'id');
+
+        $seq = [];
+        $result = $logs->map(function ($log) use ($userNames, &$seq) {
+            $seq[$log->section_id] = ($seq[$log->section_id] ?? 0) + 1;
+            $log->attempt_no = $seq[$log->section_id];
+            $log->distributed_by_name = $userNames[$log->distributed_by] ?? null;
+            $log->user_ids = json_decode($log->user_ids ?? '[]', true) ?: [];
+            return $log;
+        });
+
+        return response()->json($result);
     }
 
     /**
@@ -799,6 +1391,23 @@ class EbmrExecutionController extends Controller
         $dataEntries = $request->input('data') ?? [];
         $reasons = is_string($request->input('reasons')) ? json_decode($request->input('reasons'), true) : ($request->input('reasons') ?? []);
         Log::info("Data Entries to process: " . count($dataEntries));
+
+        // Hồ sơ đã hoàn thành/duyệt: KHÔNG cho ghi thêm giá trị nữa (chặn cả POST trực tiếp
+        // vòng qua giao diện). Ngoại lệ duy nhất: chuyển trạng thái completed -> reviewed
+        // ("Xác nhận đã đọc") với data rỗng.
+        $record = DB::table('ebmr_records')->where('id', $validated['record_id'])->first();
+        if (!$record) {
+            return response()->json(['success' => false, 'message' => 'Hồ sơ không tồn tại.']);
+        }
+        if (in_array($record->status, ['completed', 'reviewed'])) {
+            $isReviewTransition = ($validated['status'] ?? null) === 'reviewed'
+                && $record->status === 'completed'
+                && empty($dataEntries);
+            if (!$isReviewTransition) {
+                return response()->json(['success' => false, 'message' => 'Hồ sơ đã khóa (hoàn thành/đã duyệt) — không thể ghi thêm dữ liệu.']);
+            }
+        }
+
         DB::beginTransaction();
         try {
             if (!empty($validated['status'])) {
@@ -812,6 +1421,12 @@ class EbmrExecutionController extends Controller
             foreach ($dataEntries as $blockUuid => $value) {
                 Log::info("Processing block: " . $blockUuid . " with value: " . json_encode($value));
                 if (empty($blockUuid)) continue;
+
+                // Field thuộc GF liên kết (id dạng "{hostBlockId}__gf{...}") — lần đầu ghi dữ liệu
+                // vào field này thì chốt (pin) đúng ấn bản GF active hiện tại cho vị trí liên kết đó.
+                if (preg_match('/^(\d+)__gf/', (string) $blockUuid, $m)) {
+                    \App\Services\LinkedGfResolver::pinIfMissing((int) $validated['record_id'], (int) $m[1], $userId);
+                }
 
                 // Nếu value là mảng hoặc đối tượng (dành cho bảng/ô có tọa độ)
                 if (is_array($value) || is_object($value)) {
@@ -935,6 +1550,60 @@ class EbmrExecutionController extends Controller
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
+            return response()->json(['success' => false, 'message' => 'Lỗi Database: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Lưu CẤU TRÚC PHÁT SINH lúc thực thi của 1 block cho 1 lô (hiện là các dòng
+     * "Thêm dòng (Cấp 2)"). Client luôn gửi TOÀN BỘ overlay hiện tại của block —
+     * rows rỗng nghĩa là đã xoá hết dòng động -> xoá luôn overlay.
+     * Template gốc (ebmr_template_blocks) không bị đụng tới.
+     */
+    public function saveRecordStructure(Request $request)
+    {
+        $validated = $request->validate([
+            'record_id' => 'required',
+            'block_uuid' => 'required|string|max:100',
+            'kind' => 'required|string|max:30',
+            'payload' => 'nullable|array',
+        ]);
+
+        $record = DB::table('ebmr_records')->where('id', $validated['record_id'])->first();
+        if (!$record) {
+            return response()->json(['success' => false, 'message' => 'Hồ sơ không tồn tại.']);
+        }
+        if (in_array($record->status, ['completed', 'reviewed'])) {
+            return response()->json(['success' => false, 'message' => 'Hồ sơ đã khóa (hoàn thành/đã duyệt) — không thể thay đổi cấu trúc.']);
+        }
+
+        $payload = $validated['payload'] ?? [];
+        $rows = $payload['rows'] ?? [];
+
+        try {
+            if (empty($rows)) {
+                DB::table('ebmr_record_structures')->where([
+                    'record_id' => $validated['record_id'],
+                    'block_uuid' => $validated['block_uuid'],
+                    'kind' => $validated['kind'],
+                ])->delete();
+            } else {
+                DB::table('ebmr_record_structures')->updateOrInsert(
+                    [
+                        'record_id' => $validated['record_id'],
+                        'block_uuid' => $validated['block_uuid'],
+                        'kind' => $validated['kind'],
+                    ],
+                    [
+                        'payload' => json_encode($payload, JSON_UNESCAPED_UNICODE),
+                        'updated_at' => now(),
+                        'created_at' => now(),
+                    ]
+                );
+            }
+            return response()->json(['success' => true]);
+        } catch (\Exception $e) {
+            Log::error('saveRecordStructure error: ' . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Lỗi Database: ' . $e->getMessage()]);
         }
     }

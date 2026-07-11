@@ -9,11 +9,11 @@ Quản lý quy trình sản xuất điện tử (Electronic Batch Manufacturing 
 
 | Chức năng chính | Chức năng con | File liên quan | Trạng thái |
 | :--- | :--- | :--- | :--- |
-| **Thiết kế Biểu mẫu (Designer)** | Thiết kế bảng (kiểu Google Docs), Editor kéo thả, Comment, Dịch thuật AI | `Pages/Ebmr/Designer/EbmrDesignerController.php`, `ebmrRoute.php`, `resources/views/pages/ebmr/designer.blade.php` | Hoàn thành |
+| **Thiết kế Biểu mẫu (Designer V2)** | Thiết kế bảng (kiểu Google Docs), Editor TipTap/ProseMirror, Comment, Dịch thuật AI | `Pages/Ebmr/Designer/EbmrDesignerController.php`, `ebmrRoute.php`, `resources/views/pages/ebmr/designer_v2.blade.php`, `resources/js/designer-v2/` | Hoàn thành (V1 đã gỡ bỏ) |
 | **Quản lý Template** | Lưu metadata, phiên bản (versioning), lịch sử thay đổi | `Pages/Ebmr/Templates/EbmrTemplateController.php`, `EbmrTemplate.php` | Hoàn thành |
 | **Phê duyệt (Approval)** | Luồng phê duyệt (Workflow), ký duyệt điện tử | `Pages/Ebmr/Approvals/EbmrApprovalController.php`, `ebmr_approvals` table | Hoàn thành |
 | **Cấp phát (Issuance)** | Phát hành lệnh sản xuất từ template đã duyệt | `Pages/Ebmr/Issuance/EbmrIssuanceController.php` | Hoàn thành |
-| **Thực thi (Execution)** | Ghi chép số liệu sản xuất thực tế, xác thực mật khẩu | `Pages/Ebmr/Records/EbmrExecutionController.php`, `execute.blade.php` | Hoàn thành |
+| **Thực thi (Execution)** | Ghi chép số liệu sản xuất thực tế, xác thực mật khẩu | `Pages/Ebmr/Records/EbmrExecutionController.php`, `designer_v2.blade.php` (chế độ thực thi) | Hoàn thành (V1 đã gỡ bỏ) |
 
 ---
 

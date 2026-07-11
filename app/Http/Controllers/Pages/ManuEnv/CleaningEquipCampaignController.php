@@ -10,9 +10,12 @@ use App\Models\CleaningEquipProcessList;
 use App\Models\CleaningEquipCampaign;
 use App\Models\CleaningEquipCampaignStep;
 use App\Models\CleaningRoomCampaign;
+use App\Traits\EditsCampaignStepResults;
 
 class CleaningEquipCampaignController extends Controller
 {
+    use EditsCampaignStepResults;
+
     /**
      * GET /cleaning-process/equip/{equip_id}/campaign/open
      * Mở trang thực hiện vệ sinh thiết bị.
@@ -172,6 +175,30 @@ class CleaningEquipCampaignController extends Controller
             'total_steps' => $totalSteps,
             'done_by'     => $fullName,
         ]);
+    }
+
+    /**
+     * POST /cleaning-process/equip-campaign/{campaign_id}/step/{step_id}/edit
+     */
+    public function editStep(Request $request, $campaign_id, $step_id)
+    {
+        return $this->handleEditCampaignStep(
+            $request,
+            'cleaning_equip',
+            CleaningEquipCampaignStep::class,
+            CleaningEquipCampaign::class,
+            $campaign_id,
+            $step_id,
+            ['done' => 'is_done', 'note' => 'result_note', 'by' => 'done_by', 'at' => 'done_at']
+        );
+    }
+
+    /**
+     * GET /cleaning-process/equip-campaign/step/{step_id}/history
+     */
+    public function getStepHistory($step_id)
+    {
+        return $this->handleGetCampaignStepHistory('cleaning_equip', $step_id);
     }
 
     /**

@@ -17,21 +17,20 @@ Module tích hợp cân điện tử sử dụng **Web Serial API** của trình
 
 ### Các file liên quan
 
+Trình soạn thảo V1 (`designer.blade.php`, `execute.blade.php` và toàn bộ `designer/scripts/*`, `designer/partials/*`) đã bị xoá — module cân điện tử giờ chỉ còn tồn tại trong V2, namespaced dưới `window.__V2__`.
+
 | File | Vai trò |
 |---|---|
-| [`scale_reader.blade.php`](file:///c:/eBMR/resources/views/pages/ebmr/designer/scripts/scale_reader.blade.php) | Module cốt lõi: ScaleManager + ScaleParsers + hàm điều phối |
-| [`canvas.blade.php`](file:///c:/eBMR/resources/views/pages/ebmr/designer/partials/canvas.blade.php) | HTML Modal `#scaleConnectionModal` |
-| [`render.blade.php`](file:///c:/eBMR/resources/views/pages/ebmr/designer/scripts/render.blade.php) | Nút ⚖️ `btn-read-scale` bên cạnh ô số trong execution mode |
-| [`ui_handlers.blade.php`](file:///c:/eBMR/resources/views/pages/ebmr/designer/scripts/ui_handlers.blade.php) | Section "Kết nối Cân điện tử" trong Property Panel |
-| [`styles.blade.php`](file:///c:/eBMR/resources/views/pages/ebmr/designer/partials/styles.blade.php) | CSS cho `.btn-read-scale`, `.scale-status-dot`, `.scale-live-value` |
-| [`designer.blade.php`](file:///c:/eBMR/resources/views/pages/ebmr/designer.blade.php) | Include `scale_reader` |
-| [`execute.blade.php`](file:///c:/eBMR/resources/views/pages/ebmr/execute.blade.php) | Include `scale_reader` |
+| [`scale-reader.js`](file:///c:/eBMR/resources/js/designer-v2/scale-reader.js) | Module cốt lõi: ScaleManager + ScaleParsers + hàm điều phối, gắn vào `window.__V2__` |
+| [`designer_v2.blade.php`](file:///c:/eBMR/resources/views/pages/ebmr/designer_v2.blade.php) | HTML Modal `#scaleConnectionModal` + CSS liên quan (cùng file, không tách riêng canvas/styles như V1) |
 
 ---
 
 ## Các Object/API công khai (Public API)
 
-### `window.ScaleManager`
+> V2 gắn toàn bộ vào `window.__V2__` thay vì gắn thẳng vào `window` như V1 trước đây — ví dụ `window.ScaleManager.connect(...)` (V1, đã xoá) nay là `window.__V2__.ScaleManager.connect(...)`. Các hàm điều khiển modal (`connectScaleFromModal`, `readScaleFromModal`, `toggleCustomScaleFields`, `toggleScaleDetails`, `onScaleDeviceSelected`, `onChangeScaleConnectionType`) vẫn được `scale-reader.js` gắn thẳng vào `window` để khớp với `onclick=""` inline trong modal.
+
+### `window.__V2__.ScaleManager`
 
 Object singleton quản lý toàn bộ vòng đời kết nối RS-232.
 
@@ -192,33 +191,37 @@ window.scaleConfig = {
 
 ## Thêm hãng cân mới
 
-1. **Thêm preset** vào `window.SCALE_PRESETS` trong `scale_reader.blade.php`:
+1. **Thêm preset** vào hằng số `SCALE_PRESETS` (module-scope, không gắn ra `window`) trong `resources/js/designer-v2/scale-reader.js`:
 ```javascript
-window.SCALE_PRESETS['myhrand'] = {
-    label: 'Tên Hãng',
-    icon: 'fa-balance-scale',
-    baudRate: 9600,
-    dataBits: 8,
-    parity: 'none',
-    stopBits: 1,
-    description: 'Mô tả giao thức'
+const SCALE_PRESETS = {
+    // ...
+    myhrand: {
+        label: 'Tên Hãng',
+        baudRate: 9600,
+        dataBits: 8,
+        parity: 'none',
+        stopBits: 1,
+    },
 };
 ```
 
-2. **Thêm parser** vào `window.ScaleParsers`:
+2. **Thêm parser** vào `ScaleParsers` (cùng file):
 ```javascript
-window.ScaleParsers.parseMyBrand = function(rawLine) {
-    // Nhận dạng và tách giá trị từ chuỗi rawLine
-    // Trả về: { value: number, unit: string, stable: boolean, brand: 'mybrand' } | null
+const ScaleParsers = {
+    // ...
+    parseMyBrand(rawLine) {
+        // Nhận dạng và tách giá trị từ chuỗi rawLine
+        // Trả về: { value: number, unit: string, stable: boolean, brand: 'mybrand' } | null
+    },
 };
 ```
 
-3. **Cập nhật** hàm `parse()` trong ScaleParsers để gọi parser mới:
+3. **Cập nhật** hàm `parse()` trong `ScaleParsers` để gọi parser mới:
 ```javascript
 case 'mybrand': return this.parseMyBrand(rawLine);
 ```
 
-4. **Cập nhật** select trong `canvas.blade.php` (Modal) và `ui_handlers.blade.php` (Property Panel).
+4. **Cập nhật** `<select id="scale-brand-select">` trong `designer_v2.blade.php` (modal `#scaleConnectionModal`).
 
 ## Vận hành và cấu hình WebSocket Bridge (Chạy ngầm với PM2)
 

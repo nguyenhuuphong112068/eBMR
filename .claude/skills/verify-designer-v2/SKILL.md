@@ -49,7 +49,7 @@ description: Checklist kiểm thử thủ công chức năng CHỌN đối tư�
 
 ## Regression bắt buộc
 
-- Lưu (`v2-btn-save`) → mở lại: style ô (đậm/căn/nền) và ô gộp (rs/cs/hidden) giữ nguyên; mở bằng trình thiết kế V1 vẫn đúng.
+- Lưu (`v2-btn-save`) → mở lại: style ô (đậm/căn/nền) và ô gộp (rs/cs/hidden) giữ nguyên.
 - Dán Word/Excel (cả khi đang gõ trong ô lẫn khi chưa mở editor) vẫn hoạt động.
 - Kéo resize cột/hàng (`.v2-col-resizer`/`.v2-row-resizer`) không bị thao tác chọn nuốt mất.
 - Nút bình luận trên block, thanh chèn khối (inserter), kéo-thả Thiết bị/Thành phần CO vẫn chạy.

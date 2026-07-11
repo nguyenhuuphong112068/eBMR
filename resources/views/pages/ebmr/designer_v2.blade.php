@@ -11,7 +11,12 @@
 @endsection
 
 @section('mainContent')
-    <div class="content-wrapper" style="background-color: #f1f3f4; min-height: 100vh;">
+    {{-- Trang THỰC THI LÔ (có $record) dùng chung blade này: class execution-mode-active
+         phải gắn từ server vì không có nút toggle để JS tự thêm như lúc Chạy thử.
+         readonly-active: hồ sơ đang trong luồng kiểm tra/phê duyệt/ban hành — không được sửa
+         nội dung, thanh công cụ chỉ còn bình luận và Chạy thử. --}}
+    <div class="content-wrapper @if(!empty($isExecutionMode)) execution-mode-active @endif @if(!empty($isReadOnly)) readonly-active @endif"
+        style="background-color: #f1f3f4; min-height: 100vh;">
 
         {{-- ===== Toolbar V2 ===== --}}
         <div id="v2-toolbar" class="shadow-sm bg-white px-3 py-2 d-flex align-items-center flex-wrap gap-2"
@@ -19,9 +24,6 @@
 
             <button class="btn btn-sm btn-light" id="v2-btn-toc" title="Mục lục (danh sách công đoạn)">
                 <i class="fas fa-list-ul"></i>
-            </button>
-            <button class="btn btn-sm btn-light" id="v2-btn-comments" title="Bình luận">
-                <i class="fas fa-comment-dots"></i>
             </button>
             <button class="btn btn-sm btn-light" id="v2-btn-equipment" title="Thiết bị liên quan (kéo thả vào tài liệu)">
                 <i class="fas fa-tools"></i>
@@ -101,8 +103,6 @@
             </datalist>
             <button class="btn btn-sm btn-light" id="v2-btn-unhighlight" title="Bỏ màu nền chữ"><i
                     class="fas fa-eraser"></i></button>
-            <button class="btn btn-sm btn-light" id="v2-btn-link" title="Chèn liên kết (Ctrl+K)"><i
-                    class="fas fa-link"></i></button>
 
             <div class="vr mx-2"></div>
 
@@ -225,10 +225,26 @@
                     class="fas fa-square-root-alt"></i></button>
             <button class="btn btn-sm btn-light" id="v2-btn-image" title="Chèn hình ảnh"><i
                     class="fas fa-image"></i></button>
+            <button class="btn btn-sm btn-light" id="v2-btn-link-gf" title="Biểu mẫu chung GF (kéo thả vào tài liệu)"><i
+                    class="fas fa-link"></i></button>
             <button class="btn btn-sm btn-light" id="v2-btn-docprop" title="Chèn Document Property"><i
                     class="fas fa-tags"></i></button>
             <button class="btn btn-sm btn-light" id="v2-btn-split" title="Chia đôi màn hình (Split View)"><i
                     class="fas fa-columns"></i></button>
+            @php
+                // Chỉ hiện nút "Lịch sử thay đổi ấn bản" khi doc này có ấn bản liền kề trước đó
+                $hasPrevVersion = \DB::table('ebmr_templates')
+                    ->where('caterogy_id', $template->caterogy_id)
+                    ->where('type', $template->type)
+                    ->where('version', '<', $template->version)
+                    ->exists();
+            @endphp
+            @if ($hasPrevVersion && empty($isExecutionMode))
+                <button class="btn btn-sm btn-light" id="v2-btn-version-diff"
+                    title="Lịch sử thay đổi ấn bản — so sánh tự động với ấn bản liền kề trước">
+                    <i class="fas fa-history text-primary"></i>
+                </button>
+            @endif
 
             <div class="vr mx-2"></div>
 
@@ -257,21 +273,94 @@
             </div>
 
             <div class="ms-auto d-flex align-items-center gap-2">
-                <button id="v2-btn-toggle-mode" class="btn btn-sm btn-primary text-white px-2 ml-2"
-                    title="Chuyển đổi Thiết kế / hạy thử">
-                    <i class="fas fa-play"></i> Chạy thử
-                </button>
-                @if (!$isReadOnly)
-                    <button id="v2-btn-save" class="btn btn-sm btn-success text-white px-2 ml-2"
-                        title="Lưu lại (Không có thay đổi)">
-                        <i class="fas fa-save"></i>
+                {{-- Bình luận đứng cạnh nhóm hành động bên phải. Nút THÊM bình luận nằm ở menu
+                     chuột phải (xem section 5c trong main.js), đây chỉ là ẩn/hiện và điều hướng.
+                     Mở từ tab "Nhận Ban Hành" (isIssuanceView): ẩn toàn bộ nút bình luận. --}}
+                @if (empty($isIssuanceView))
+                    <button class="btn btn-sm btn-light" id="v2-btn-comments" title="Ẩn/hiện toàn bộ bình luận">
+                        <i class="fas fa-comment-dots"></i>
                     </button>
+                    <button class="btn btn-sm btn-light" id="v2-btn-next-comment" title="Tới bình luận kế tiếp">
+                        <i class="fas fa-angle-double-down"></i>
+                    </button>
+                    <div class="vr mx-1"></div>
+                @endif
+
+                {{-- Gạch chéo KHÔNG SỬ DỤNG (N/A): chỉ dùng được lúc Chạy thử/Thực thi và hồ sơ
+                     chưa khóa — main.js (na-marks.js) tự ẩn/hiện qua refreshButton(). --}}
+                <button id="v2-btn-na-mode" class="btn btn-sm btn-outline-danger px-2 d-none"
+                    title="Gạch chéo phần không sử dụng (ghi lý do) — chạm chọn ô / khối / bảng rồi bấm Gạch chéo">
+                    <i class="fas fa-ban me-1"></i> Gạch chéo N/A
+                </button>
+
+                @if (!empty($record))
+                    {{-- ===== Trang THỰC THI LÔ: chỉ có các nút lưu hồ sơ, KHÔNG có toggle Thiết kế ===== --}}
+                    {{-- Số lô: đỏ, to, rõ ràng để người ghi chép không nhầm lô --}}
+                    <span class="badge bg-danger text-white me-1 px-3 py-2" title="Số lô đang thực thi"
+                        style="font-size: 1.1rem; letter-spacing: 1.5px; font-weight: 700;">
+                        <i class="fas fa-barcode me-1"></i>{{ $record->batch_number ?? '' }}
+                    </span>
+                    @if ($activeSectionId ?? false)
+                        <a class="btn btn-sm btn-outline-info" href="{{ route('pages.ebmr.execute', $record->id) }}">
+                            <i class="fas fa-eye me-1"></i> Xem tất cả công đoạn
+                        </a>
+                    @endif
+                    @if ($isReadOnly)
+                        @if ($record->status === 'completed')
+                            <button id="v2-btn-record-confirm-read" class="btn btn-sm btn-primary text-white px-2">
+                                <i class="fas fa-check-double me-1"></i> Xác nhận đã Đọc hồ sơ
+                            </button>
+                        @elseif ($record->status === 'reviewed')
+                            <span class="badge bg-success p-2"><i class="fas fa-check me-1"></i> Hồ sơ đã được duyệt</span>
+                        @endif
+                    @else
+                        <button id="v2-btn-record-draft" class="btn btn-sm btn-outline-secondary px-2">
+                            <i class="fas fa-save me-1"></i> Lưu bản nháp
+                        </button>
+                        <button id="v2-btn-record-complete" class="btn btn-sm btn-success text-white px-2">
+                            <i class="fas fa-check-circle me-1"></i> Hoàn Thành Nhập Liệu
+                        </button>
+                    @endif
+                @else
+                    <button id="v2-btn-toggle-mode" class="btn btn-sm btn-primary text-white px-2 ml-2"
+                        title="Chuyển đổi Thiết kế / hạy thử">
+                        <i class="fas fa-play"></i> Chạy thử
+                    </button>
+                    @if (!$isReadOnly)
+                        <button id="v2-btn-save" class="btn btn-sm btn-success text-white px-2 ml-2"
+                            title="Lưu lại (Không có thay đổi)">
+                            <i class="fas fa-save"></i>
+                        </button>
+                    @endif
+                    @if (!empty($myApprovalWorkflow))
+                        {{-- Hồ sơ đang chờ CHÍNH user này duyệt: cho xử lý ngay tại đây,
+                             không cần quay về trang "Hồ Sơ Thiết Kế Chờ Bạn Duyệt". --}}
+                        @php
+                            $myWfRoleLabel = ['reviewer' => 'Kiểm tra', 'approver' => 'Phê duyệt', 'authorizer' => 'Ban hành'][$myApprovalWorkflow->role] ?? 'Duyệt';
+                        @endphp
+                        <div class="vr mx-1"></div>
+                        <button id="v2-btn-approve" class="btn btn-sm btn-success text-white px-3"
+                            title="Đồng ý ({{ $myWfRoleLabel }}) hồ sơ này">
+                            <i class="fas fa-check me-1"></i> Đồng ý
+                        </button>
+                        <button id="v2-btn-reject" class="btn btn-sm btn-danger text-white px-3"
+                            title="Từ chối hồ sơ — toàn bộ tiến trình trình ký sẽ bị hủy">
+                            <i class="fas fa-times me-1"></i> Từ chối
+                        </button>
+                    @endif
                 @endif
             </div>
         </div>
 
-        {{-- ===== Canvas: mỗi section là 1 trang riêng (tự ngắt trang) ===== --}}
-        <div class="d-flex flex-column align-items-center py-4 gap-4" id="v2-pages"></div>
+        {{-- ===== Canvas: mỗi section là 1 trang riêng (tự ngắt trang) =====
+             #v2-canvas-wrap làm mốc toạ độ (position:relative) cho rail bình luận và lớp SVG vẽ
+             đường nối — nhờ vậy card/đường nối chỉ tính lại khi render, không phải bám sự kiện scroll. --}}
+        <div id="v2-canvas-wrap">
+            <div class="d-flex flex-column align-items-center py-4 gap-4" id="v2-pages"></div>
+            <svg id="v2-cmt-links" xmlns="http://www.w3.org/2000/svg"></svg>
+            <div id="v2-cmt-rail"></div>
+        </div>
+
 
         {{-- ===== Panel cấu hình biến số ===== --}}
         <div id="v2-field-panel" class="v2-field-panel shadow-lg"></div>
@@ -321,23 +410,22 @@
             <div id="v2-co-list" class="v2-panel-body overflow-auto" style="height: calc(100% - 120px);"></div>
         </div>
 
-        {{-- ===== Panel Bình luận bên phải (kiểu Google Docs) ===== --}}
-        <div id="v2-comments" class="v2-comments shadow-lg">
-            <div class="v2-panel-head">
-                <span><i class="fas fa-comment-dots me-2"></i>Bình luận</span>
-                <button class="btn-close-panel" id="v2-comments-close"><i class="fas fa-times"></i></button>
+        {{-- ===== Sidebar Biểu mẫu chung GF (kéo thả chèn liên kết SỐNG theo doc_code) ===== --}}
+        <div id="v2-gf" class="v2-toc shadow-lg">
+            <div class="v2-panel-head" style="background: #6f42c1;">
+                <span><i class="fas fa-link me-2"></i>Biểu mẫu chung (GF)</span>
+                <button class="btn-close-panel" data-close-panel="v2-gf"><i class="fas fa-times"></i></button>
             </div>
-            <div class="v2-panel-body p-0 d-flex flex-column" style="height: calc(100% - 42px);">
-                <div id="v2-comments-list" class="flex-grow-1 overflow-auto p-3"></div>
-                <div class="p-3 border-top bg-light" id="v2-comment-composer">
-                    <div class="small text-muted mb-1" id="v2-comment-target">Bình luận chung</div>
-                    <textarea id="v2-comment-input" class="form-control form-control-sm" rows="2" placeholder="Viết bình luận..."></textarea>
-                    <button class="btn btn-sm btn-navy text-white w-100 mt-2" id="v2-comment-send">
-                        <i class="fas fa-paper-plane me-1"></i> Gửi bình luận
-                    </button>
+            <div class="p-2 border-bottom bg-light">
+                <input type="text" id="v2-gf-search" class="form-control form-control-sm"
+                    placeholder="Tìm biểu mẫu chung...">
+                <div class="text-muted mt-1" style="font-size: 0.68rem; font-style: italic;">
+                    <i class="fas fa-info-circle me-1"></i>Kéo thẻ thả vào đúng vị trí bất kỳ trong tài liệu.
                 </div>
             </div>
+            <div id="v2-gf-list" class="v2-panel-body overflow-auto" style="height: calc(100% - 120px);"></div>
         </div>
+
     </div>
 
     {{-- ===== Modal: Tạo Bảng KT Khối lượng Trung bình (port từ V1 weightChartCreatorModal) ===== --}}
@@ -345,7 +433,7 @@
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content shadow-lg border-0" style="border-radius: 12px;">
                 <div class="modal-header bg-danger text-white border-0 py-2 px-3">
-                    <h5 class="modal-title fw-bold small"><i class="fas fa-balance-scale me-2"></i> BẢNG KT KHỐI LƯỢNG
+                    <h5 class="modal-title fw-bold small" id="v2-wc-modal-title"><i class="fas fa-balance-scale me-2"></i> BẢNG KT KHỐI LƯỢNG
                         TRUNG BÌNH</h5>
                     <button type="button" class="close text-white" data-bs-dismiss="modal" data-dismiss="modal"
                         aria-label="Close"><span aria-hidden="true">&times;</span></button>
@@ -401,6 +489,39 @@
                     <button type="button" class="btn btn-secondary btn-sm px-4" data-bs-dismiss="modal"
                         data-dismiss="modal">Hủy</button>
                     <button type="button" class="btn btn-primary btn-sm px-4 fw-bold" id="v2-abbr-save">Lưu</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- ===== Modal: Lịch sử thay đổi ấn bản (diff tự động với ấn bản liền kề) ===== --}}
+    <div class="modal fade" id="v2VersionDiffModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-scrollable" style="max-width: 95vw; width: 95vw;">
+            <div class="modal-content shadow-lg border-0" style="border-radius: 12px;">
+                <div class="modal-header text-white border-0 py-2 px-3" style="background: #1e3a5f;">
+                    <h5 class="modal-title fw-bold small"><i class="fas fa-history me-2"></i> LỊCH SỬ THAY ĐỔI ẤN BẢN</h5>
+                    <button type="button" class="close text-white" data-bs-dismiss="modal" data-dismiss="modal"
+                        aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div id="v2-vdiff-searchbar" class="px-3 py-2 border-bottom bg-white d-flex align-items-center gap-2"
+                    hidden>
+                    <i class="fas fa-search text-muted small"></i>
+                    <input type="text" id="v2-vdiff-search" class="form-control form-control-sm"
+                        placeholder="Tìm trong lịch sử thay đổi (tên mục, nội dung, giá trị cũ/mới...)"
+                        style="max-width: 420px;">
+                    <span id="v2-vdiff-search-count" class="small text-muted"></span>
+                </div>
+                <div id="v2-vdiff-noresult" class="px-3 py-2 small text-muted" hidden>
+                    <i class="fas fa-search me-1"></i>Không tìm thấy kết quả phù hợp với từ khoá đang tìm.
+                </div>
+                <div class="modal-body" id="v2-vdiff-body" style="background: #f8fafc;">
+                    <div class="text-center text-muted py-5">
+                        <i class="fas fa-spinner fa-spin me-2"></i>Đang so sánh với ấn bản liền kề…
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-0 py-2">
+                    <button type="button" class="btn btn-secondary btn-sm px-4" data-bs-dismiss="modal"
+                        data-dismiss="modal">Đóng</button>
                 </div>
             </div>
         </div>
@@ -945,14 +1066,10 @@
             position: relative;
         }
 
-        /* Số trang góc dưới phải */
-        .v2-page::after {
-            content: attr(data-page-label);
-            position: absolute;
-            bottom: 12px;
-            right: 20px;
-            font-size: 0.7rem;
-            color: #94a3b8;
+        /* Trang chỉ chứa block/section hệ thống (HEADER, PHÊ DUYỆT...): co theo nội dung,
+           không ép cao bằng 1 trang A4 để tránh dư khoảng trắng phía dưới. */
+        .v2-page.v2-page-auto {
+            min-height: 0;
         }
 
         @media print {
@@ -1154,6 +1271,110 @@
             margin: 26px 0 14px;
         }
 
+        /* Các con dấu chọn lúc ban hành lô: đóng CẠNH NHAU lên góc trên bên phải của mỗi
+           phân đoạn (chỉ hiện ở trang thực thi/xem hồ sơ — main.js chỉ gắn khi isExecutionMode).
+           Wrapper neo vị trí; từng dấu format do người dùng thiết kế: viền đơn/đôi +
+           tối đa 3 dòng (tiêu đề trên / nội dung chính / dòng phụ dưới) + kích thước %. */
+        .v2-seal-stamps {
+            position: absolute;
+            top: -14px;
+            right: 0;
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        /* Tem "SỐ LÔ" — góc trên bên TRÁI mỗi phân đoạn (đối xứng với con dấu bên
+           phải). Luôn hiện ở hồ sơ đã ban hành (nhận ban hành / thực thi / hoàn
+           thành). Màu đỏ, in ra vẫn giữ màu (print-color-adjust). */
+        .v2-batch-stamp {
+            position: absolute;
+            top: -30px;
+            left: 0;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 0;
+            font-size: 0.8rem;
+            font-weight: 800;
+            letter-spacing: 0.3px;
+            line-height: 1.3;
+            color: #dc3545;
+            white-space: nowrap;
+            pointer-events: none;
+            z-index: 6;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        .v2-batch-stamp .v2-batch-label {
+            font-weight: 700;
+        }
+
+        /* Con dấu ban hành đặt TRONG hàng cuối bảng HEADER (xem buildHeaderBatchRowV2
+           trong virtual_blocks_v2.blade.php) — dòng chảy bình thường trong ô bảng,
+           không định vị tuyệt đối như .v2-seal-stamps (dùng cho phân đoạn). */
+        .v2-seal-stamps-row {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        /* Cột cuối hàng "Số lô" chỉ rộng 25% (1/4 bảng) — nới con dấu để chữ tự xuống
+           dòng thay vì bị cắt (khác với con dấu trên phân đoạn, có nguyên chiều rộng). */
+        .v2-seal-stamps-row .v2-seal-stamp {
+            white-space: normal;
+            overflow: visible;
+            max-width: 100%;
+        }
+
+        .v2-seal-stamp {
+            border: 2px solid currentColor;
+            border-radius: 6px;
+            text-align: center;
+            opacity: 0.85;
+            white-space: nowrap;
+            overflow: hidden;
+            /* Kích thước dấu: main.js nhân thêm size (%) đã lưu vào font-size này,
+               các dòng bên trong dùng em nên phóng to/thu nhỏ đồng bộ */
+            font-size: 0.85rem;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        .v2-seal-stamp.seal-border-double {
+            border: 4px double currentColor;
+        }
+
+        .v2-seal-stamp .seal-line-header {
+            display: block;
+            font-size: 0.7em;
+            font-weight: 700;
+            padding: 0.15em 1.1em;
+            border-bottom: 1.5px solid currentColor;
+        }
+
+        .v2-seal-stamp .seal-line-content {
+            display: block;
+            font-size: 0.95em;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 0.2em 1em;
+        }
+
+        .v2-seal-stamp .seal-line-footer {
+            display: block;
+            font-size: 0.7em;
+            font-weight: 600;
+            padding: 0.15em 1.1em;
+            border-top: 1.5px solid currentColor;
+        }
+
         /* Toolbar Đổi tên / Tách nhánh phòng / Xóa nhánh — tái dùng style nút của
            .v2-block-toolbar, chỉ khác điều kiện hiện: hover vào section (không phụ thuộc
            activeBlockId vì section không phải .v2-block). */
@@ -1167,12 +1388,28 @@
             z-index: 21;
         }
 
+        /* Cầu nối vô hình lấp khoảng trống giữa mép phải section và cụm nút (đặt ở -34px) để
+           khi rê chuột từ tiêu đề sang nút KHÔNG bị rớt hover → nút không còn "ẩn rất nhanh".
+           Trải suốt chiều cao cụm nút (thường xếp dọc dài hơn section) nên bấm nút dưới cũng dễ. */
+        .v2-section-toolbar::before {
+            content: '';
+            position: absolute;
+            top: -6px;
+            bottom: -6px;
+            left: -44px;
+            right: -6px;
+            z-index: -1;
+        }
+
         .v2-section-toolbar .v2-block-action-btn {
             opacity: 0;
             transition: opacity 0.15s;
         }
 
-        .v2-section:hover .v2-section-toolbar .v2-block-action-btn {
+        /* Hiện nút khi hover VÀO section HOẶC vào chính cụm nút (giữ nút sáng suốt lúc di
+           chuột tới bấm — cụm nút xếp dọc thường vượt quá đáy section). */
+        .v2-section:hover .v2-section-toolbar .v2-block-action-btn,
+        .v2-section-toolbar:hover .v2-block-action-btn {
             opacity: 1;
         }
 
@@ -1368,6 +1605,25 @@
         .v2-table-addrow-btn:hover {
             background: #0d6efd;
             color: #fff;
+        }
+
+        /* Thiết kế: dấu hiệu góc bảng đã bật "Thêm dòng (Cấp 2)" — xem renderTable() (main.js) */
+        .v2-table-canaddrows-badge {
+            position: absolute;
+            top: -9px;
+            right: 6px;
+            width: 18px;
+            height: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #0d6efd;
+            color: #fff;
+            border-radius: 50%;
+            font-size: 0.7rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+            pointer-events: none;
+            z-index: 5;
         }
 
         .v2-table th {
@@ -1641,38 +1897,108 @@
             min-width: 0;
         }
 
-        /* ===== Bình luận (kiểu Google Docs) — trượt từ phải ===== */
-        .v2-comments {
-            position: fixed;
-            top: 70px;
-            bottom: 20px;
-            right: -360px;
-            width: 340px;
-            background: #fff;
-            border-radius: 10px 0 0 10px;
-            border: 1px solid #e2e8f0;
-            border-right: none;
-            transition: right 0.25s ease;
-            z-index: 1990;
-            overflow: hidden;
+        /* ===== Bình luận vùng chọn (kiểu Word) =====
+           Card nằm trong rail cạnh phải trang giấy, nối tới đoạn được bình luận bằng
+           đường polyline vẽ trên lớp SVG phủ toàn canvas. */
+        #v2-canvas-wrap {
+            position: relative;
         }
 
-        .v2-comments.open {
-            right: 0;
+        /* Bật rail: chừa lề phải để trang giấy dịch trái, không bị card đè lên */
+        body.v2-cmt-on #v2-pages {
+            padding-right: 380px;
+            transition: padding-right 0.2s ease;
+        }
+
+        #v2-cmt-rail {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 320px;
+            display: none;
+            z-index: 6;
+        }
+
+        #v2-cmt-links {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            display: none;
+            pointer-events: none;
+            z-index: 5;
+            overflow: visible;
+        }
+
+        body.v2-cmt-on #v2-cmt-rail,
+        body.v2-cmt-on #v2-cmt-links {
+            display: block;
+        }
+
+        .v2-cmt-link {
+            fill: none;
+            stroke: #c4b5fd;
+            stroke-width: 1;
+        }
+
+        .v2-cmt-link.active {
+            stroke: #7c3aed;
+            stroke-width: 1.5;
+        }
+
+        /* Đoạn văn bản được bình luận */
+        .v2-cmt-hl {
+            background: #ede9fe;
+            border-bottom: 1px solid #c4b5fd;
+            cursor: pointer;
+        }
+
+        .v2-cmt-hl.active {
+            background: #ddd6fe;
+        }
+
+        .v2-cmt-hl.v2-cmt-pending {
+            background: #fef08a;
+            border-bottom-color: #eab308;
         }
 
         .v2-comment-card {
+            position: absolute;
+            left: 0;
+            width: 320px;
             background: #fff;
             border: 1px solid #e2e8f0;
             border-radius: 10px;
             padding: 10px 12px;
-            margin-bottom: 10px;
-            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+            transition: top 0.15s ease, box-shadow 0.15s;
+            cursor: pointer;
         }
 
-        .v2-comment-card.highlight {
-            border-color: #0ea5e9;
-            box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.2);
+        .v2-comment-card.active {
+            border-color: #7c3aed;
+            box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.18);
+        }
+
+        /* Bình luận không còn tìm thấy đoạn neo (đoạn đã bị xoá/sửa hết) */
+        .v2-comment-card.v2-cmt-orphan {
+            border-style: dashed;
+            border-color: #f59e0b;
+            background: #fffbeb;
+        }
+
+        .v2-comment-quote {
+            font-size: 0.7rem;
+            color: #6d28d9;
+            background: #f5f3ff;
+            border-left: 3px solid #c4b5fd;
+            padding: 2px 6px;
+            margin-bottom: 6px;
+            border-radius: 0 4px 4px 0;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
         }
 
         .v2-comment-author {
@@ -1690,17 +2016,6 @@
             font-size: 0.82rem;
             margin: 4px 0;
             white-space: pre-wrap;
-        }
-
-        .v2-comment-block-ref {
-            font-size: 0.68rem;
-            color: #0369a1;
-            background: #e0f2fe;
-            border-radius: 8px;
-            padding: 1px 8px;
-            display: inline-block;
-            margin-bottom: 4px;
-            cursor: pointer;
         }
 
         .v2-comment-reply {
@@ -1726,6 +2041,42 @@
             color: #dc3545;
         }
 
+        .v2-cmt-editor textarea {
+            font-size: 0.82rem;
+            resize: vertical;
+        }
+
+        .v2-cmt-editor .v2-cmt-editor-btns {
+            display: flex;
+            justify-content: flex-end;
+            gap: 6px;
+            margin-top: 6px;
+        }
+
+        /* Bình luận mặc định ẩn -> badge cho biết hồ sơ đang có bao nhiêu bình luận */
+        #v2-btn-comments {
+            position: relative;
+        }
+
+        #v2-btn-comments.active {
+            background: #ede9fe;
+            color: #6d28d9;
+        }
+
+        #v2-btn-comments .v2-cmt-badge {
+            position: absolute;
+            top: -4px;
+            right: -4px;
+            background: #7c3aed;
+            color: #fff;
+            border-radius: 8px;
+            font-size: 0.58rem;
+            font-weight: 700;
+            line-height: 1.3;
+            padding: 0 4px;
+            min-width: 14px;
+        }
+
         /* Toolbar dọc bên phải mỗi block (hiện khi rê chuột): đổi vị trí / xóa / bình luận */
         .v2-block {
             position: relative;
@@ -1741,7 +2092,6 @@
             z-index: 21;
         }
 
-        .v2-comment-btn,
         .v2-block-action-btn {
             width: 28px;
             height: 28px;
@@ -1759,12 +2109,10 @@
             transition: opacity 0.15s;
         }
 
-        .v2-block.v2-block-active .v2-comment-btn,
         .v2-block.v2-block-active .v2-block-action-btn {
             opacity: 1;
         }
 
-        .v2-comment-btn:hover,
         .v2-block-action-btn:hover {
             background: #003A4F;
             color: #fff;
@@ -1773,24 +2121,6 @@
         .v2-block.v2-block-active {
             outline: 2px solid rgba(14, 165, 233, 0.4);
             border-radius: 4px;
-        }
-
-        .v2-comment-btn .v2-cmt-count {
-            position: absolute;
-            top: -6px;
-            right: -6px;
-            background: #f59e0b;
-            color: #fff;
-            border-radius: 8px;
-            font-size: 0.58rem;
-            font-weight: 700;
-            padding: 0 4px;
-            min-width: 14px;
-        }
-
-        .v2-comment-btn.has-comments {
-            opacity: 1;
-            border-color: #f59e0b;
         }
 
         .v2-block-action-btn:disabled {
@@ -2135,6 +2465,20 @@
             display: none !important;
         }
 
+        /* Luồng kiểm tra / phê duyệt / ban hành (chỉ-đọc): mọi công cụ SOẠN THẢO đều vô nghĩa
+           vì nội dung không được sửa. Chỉ giữ nhóm bên phải — nó chứa nút bình luận (để góp ý)
+           và các nút hành động (Chạy thử / Xác nhận đã đọc...). */
+        .readonly-active #v2-toolbar > * {
+            display: none !important;
+        }
+
+        /* margin-left:auto phải đặt tường minh: bình thường nhóm này bị đám nút soạn thảo đẩy
+           sang phải nên trông như đã canh phải, nhưng khi ẩn hết thì nó tụt về sát lề trái. */
+        .readonly-active #v2-toolbar > .ms-auto {
+            display: flex !important;
+            margin-left: auto !important;
+        }
+
         /* Khung ngoài của mỗi biến số khi Chạy thử: chỉ làm container xếp dọc
                                            (control + dòng meta người/giờ bên dưới) — style thật nằm ở control con. */
         .v2-field-badge.v2-field-exec {
@@ -2151,6 +2495,142 @@
             vertical-align: middle;
             outline: 2px solid #fbbf24;
             outline-offset: 2px;
+        }
+
+        /* ===== Gạch chéo "KHÔNG SỬ DỤNG" (N/A) — xem na-marks.js ===== */
+        /* Lớp phủ 2 đường chéo đỏ (SVG để in ấn được) + chip lý do */
+        td.v2-na-cell { position: relative; }
+        .v2-na-block { position: relative; }
+
+        .v2-na-x {
+            position: absolute;
+            inset: 0;
+            z-index: 40;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            background: rgba(220, 53, 69, 0.04);
+        }
+
+        .v2-na-x svg {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .v2-na-x svg line {
+            stroke: #dc3545;
+            stroke-width: 1.6;
+        }
+
+        .v2-na-reason {
+            position: relative;
+            z-index: 1;
+            max-width: 94%;
+            background: #fff;
+            border: 1px solid #f1aeb5;
+            color: #b02a37;
+            border-radius: 4px;
+            padding: 1px 6px;
+            font-size: 0.68rem;
+            font-weight: 600;
+            line-height: 1.3;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+        }
+
+        .v2-na-x-block .v2-na-reason {
+            font-size: 0.82rem;
+            padding: 4px 12px;
+            white-space: normal;
+            text-align: center;
+        }
+
+        .v2-na-x-block .v2-na-reason small {
+            display: block;
+            font-weight: 400;
+            color: #6c757d;
+            font-size: 0.7rem;
+        }
+
+        /* Nội dung dưới lớp gạch chéo mờ đi — thấy được nhưng rõ là không còn hiệu lực */
+        td.v2-na-cell > .v2-cell,
+        .v2-na-block > :not(.v2-na-x) {
+            opacity: 0.55;
+        }
+
+        /* — Chế độ gạch chéo (chọn bằng chạm, tối ưu máy tính bảng) — */
+        body.v2-na-mode #v2-pages {
+            cursor: pointer;
+        }
+
+        body.v2-na-mode #v2-pages td[data-row],
+        body.v2-na-mode #v2-pages .v2-block {
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        .v2-na-picked {
+            outline: 3px dashed #0d6efd !important;
+            outline-offset: -3px;
+            background-color: rgba(13, 110, 253, 0.08) !important;
+        }
+
+        /* Thanh hành động đáy màn hình — nút cỡ ngón tay (>=46px) */
+        #v2-na-bar {
+            position: fixed;
+            left: 50%;
+            transform: translateX(-50%);
+            bottom: 14px;
+            z-index: 10500;
+            display: none;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+            max-width: 96vw;
+            padding: 10px 12px;
+            background: #212529;
+            border-radius: 14px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+        }
+
+        #v2-na-bar.show { display: flex; }
+
+        #v2-na-bar button {
+            min-height: 46px;
+            min-width: 56px;
+            border: none;
+            border-radius: 10px;
+            background: #495057;
+            color: #fff;
+            font-size: 0.95rem;
+            font-weight: 500;
+            padding: 6px 14px;
+            touch-action: manipulation;
+        }
+
+        #v2-na-bar button:disabled { opacity: 0.35; }
+        #v2-na-bar button:not(:disabled):active { filter: brightness(1.25); }
+        #v2-na-bar .v2-na-btn-danger { background: #dc3545; font-weight: 700; }
+        #v2-na-bar .v2-na-btn-done { background: #198754; font-weight: 700; }
+
+        #v2-na-bar .v2-na-bar-info {
+            color: #ffc107;
+            font-weight: 600;
+            padding: 0 8px;
+            white-space: nowrap;
+        }
+
+        @media print {
+            #v2-na-bar { display: none !important; }
+            .v2-na-x { cursor: default; background: transparent; }
+            .v2-na-picked { outline: none !important; background: transparent !important; }
         }
 
         /* text / number / date: pill gạch chân chấm, click để nhập/tự điền */
@@ -2867,11 +3347,224 @@
             background: #ffb300;
             box-shadow: 0 0 0 1px #ff8f00;
         }
+        /* ===== Lịch sử thay đổi ấn bản (version diff) ===== */
+        #v2-vdiff-body .vdiff-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 4px;
+        }
+
+        #v2-vdiff-body .vdiff-legend {
+            font-size: 12px;
+            color: #64748b;
+            margin-bottom: 12px;
+        }
+
+        #v2-vdiff-body .vdiff-chip {
+            display: inline-block;
+            font-size: 12px;
+            font-weight: 600;
+            border-radius: 999px;
+            padding: 2px 10px;
+            margin-left: 6px;
+        }
+
+        #v2-vdiff-body .vdiff-chip.vdiff-added { background: #dcfce7; color: #166534; }
+        #v2-vdiff-body .vdiff-chip.vdiff-removed { background: #fee2e2; color: #991b1b; }
+        #v2-vdiff-body .vdiff-chip.vdiff-modified { background: #fef9c3; color: #854d0e; }
+
+        #v2-vdiff-body .vdiff-group-title {
+            margin: 18px 0 8px;
+            padding-bottom: 4px;
+            border-bottom: 2px solid #e2e8f0;
+            color: #1e3a5f;
+            font-weight: 700;
+            font-size: 13px;
+            text-transform: uppercase;
+        }
+
+        #v2-vdiff-body .vdiff-card {
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-left: 4px solid #94a3b8;
+            border-radius: 8px;
+            padding: 10px 12px;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+
+        #v2-vdiff-body .vdiff-card.vdiff-added { border-left-color: #22c55e; }
+        #v2-vdiff-body .vdiff-card.vdiff-removed { border-left-color: #ef4444; }
+        #v2-vdiff-body .vdiff-card.vdiff-modified { border-left-color: #eab308; }
+
+        #v2-vdiff-body .vdiff-card-title {
+            font-weight: 600;
+            color: #0f172a;
+            margin-bottom: 4px;
+        }
+
+        #v2-vdiff-body .vdiff-kind {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            border-radius: 4px;
+            padding: 1px 6px;
+            margin-right: 6px;
+        }
+
+        #v2-vdiff-body .vdiff-added .vdiff-kind { background: #dcfce7; color: #166534; }
+        #v2-vdiff-body .vdiff-removed .vdiff-kind { background: #fee2e2; color: #991b1b; }
+        #v2-vdiff-body .vdiff-modified .vdiff-kind { background: #fef9c3; color: #854d0e; }
+
+        #v2-vdiff-body .vdiff-type {
+            font-size: 11px;
+            color: #64748b;
+            background: #f1f5f9;
+            border-radius: 4px;
+            padding: 1px 6px;
+            margin-right: 4px;
+        }
+
+        #v2-vdiff-body .vdiff-text {
+            word-break: break-word;
+            background: #f8fafc;
+            border-radius: 6px;
+            padding: 6px 8px;
+            margin-top: 4px;
+            line-height: 1.6;
+        }
+
+        #v2-vdiff-body .vdiff-line {
+            white-space: pre-wrap;
+        }
+
+        #v2-vdiff-body .vdiff-line.vdiff-ctx {
+            color: #94a3b8;
+        }
+
+        #v2-vdiff-body .vdiff-line.vdiff-chgline {
+            background: #fefce8;
+            border-radius: 4px;
+        }
+
+        #v2-vdiff-body .vdiff-fold {
+            display: block;
+            width: 100%;
+            border: 1px dashed #cbd5e1;
+            background: #f1f5f9;
+            color: #64748b;
+            font-size: 11px;
+            border-radius: 4px;
+            padding: 2px 8px;
+            margin: 3px 0;
+            cursor: pointer;
+            text-align: center;
+        }
+
+        #v2-vdiff-body .vdiff-fold:hover {
+            background: #e2e8f0;
+            color: #334155;
+        }
+
+        #v2-vdiff-body .vdiff-hidden {
+            white-space: pre-wrap;
+        }
+
+        #v2-vdiff-body .vdiff-skip {
+            color: #94a3b8;
+            font-weight: 600;
+        }
+
+        #v2-vdiff-body mark.vdiff-hit {
+            background: #fde047;
+            color: #713f12;
+            border-radius: 2px;
+            padding: 0 1px;
+        }
+
+        #v2-vdiff-body .vdiff-prop {
+            margin-top: 4px;
+            color: #334155;
+        }
+
+        #v2-vdiff-body ins {
+            background: #dcfce7;
+            color: #14532d;
+            text-decoration: none;
+            border-radius: 3px;
+            padding: 0 2px;
+        }
+
+        #v2-vdiff-body del {
+            background: #fee2e2;
+            color: #7f1d1d;
+            border-radius: 3px;
+            padding: 0 2px;
+        }
     </style>
 @endsection
 
 @section('script')
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    @if (!empty($myApprovalWorkflow))
+        {{-- Đồng ý / Từ chối hồ sơ ngay trong trình soạn thảo (cùng endpoint với trang Phê Duyệt) --}}
+        <script>
+            (function() {
+                const processUrl = "{{ route('pages.ebmr.processApproval') }}";
+                const approvalsUrl = "{{ route('pages.ebmr.approvals') }}";
+
+                function handleApproval(action) {
+                    const isApprove = action === 'approve';
+                    Swal.fire({
+                        title: isApprove ? 'Đồng ý phê duyệt hồ sơ?' : 'Từ chối hồ sơ?',
+                        html: isApprove ? '' :
+                            '<div class="text-danger" style="font-size:0.9rem;">Khi từ chối, toàn bộ tiến trình trình ký của hồ sơ sẽ bị hủy bỏ và hồ sơ chuyển về trạng thái Nháp.</div>',
+                        icon: isApprove ? 'question' : 'warning',
+                        input: 'textarea',
+                        inputPlaceholder: 'Ý kiến / Ghi chú (không bắt buộc)...',
+                        showCancelButton: true,
+                        confirmButtonText: isApprove ? 'Phê Duyệt' : 'Từ Chối',
+                        cancelButtonText: 'Hủy',
+                        confirmButtonColor: isApprove ? '#28a745' : '#dc3545',
+                        showLoaderOnConfirm: true,
+                        allowOutsideClick: () => !Swal.isLoading(),
+                        preConfirm: (comment) => fetch(processUrl, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-CSRF-TOKEN': "{{ csrf_token() }}",
+                                    'Accept': 'application/json',
+                                },
+                                body: JSON.stringify({
+                                    workflow_id: {{ $myApprovalWorkflow->id }},
+                                    workflow_type: 'ebmr',
+                                    action: action,
+                                    comment: comment || null,
+                                }),
+                            })
+                            .then((r) => r.json())
+                            .catch(() => ({ success: false, message: 'Có lỗi xảy ra khi thực hiện xử lý.' })),
+                    }).then((result) => {
+                        if (!result.isConfirmed) return;
+                        const res = result.value || {};
+                        if (res.success) {
+                            Swal.fire('Thành công', res.message, 'success').then(() => {
+                                window.location.href = approvalsUrl;
+                            });
+                        } else {
+                            Swal.fire('Lỗi', res.message || 'Có lỗi xảy ra khi thực hiện xử lý.', 'error');
+                        }
+                    });
+                }
+
+                document.getElementById('v2-btn-approve')?.addEventListener('click', () => handleApproval('approve'));
+                document.getElementById('v2-btn-reject')?.addEventListener('click', () => handleApproval('reject'));
+            })();
+        </script>
+    @endif
     {{-- Virtual blocks (header/phê duyệt/công thức...) — trích nguyên văn logic V1 --}}
     @include('pages.ebmr.designer.scripts.virtual_blocks_v2')
     <script>
@@ -2880,8 +3573,20 @@
             items: @json($template->schema->fields ?? []),
             fieldsConfig: @json($template->schema->fieldsConfig ?? (object) []),
             isReadOnly: @json($isReadOnly),
-            isExecutionMode: false,
-            executionValues: {},
+            // Trang THỰC THI LÔ (mở từ /ebmr/execute/{id}) dùng chung blade này với Designer:
+            // isExecutionMode bật sẵn từ server + recordId để main.js chuyển sang luồng lưu hồ sơ lô.
+            isExecutionMode: @json(!empty($isExecutionMode)),
+            recordId: @json($record->id ?? null),
+            // Số thứ tự THẬT của công đoạn trong toàn hồ sơ gốc, chỉ có khi mở qua ?section=
+            // (VD: xem trước 1 công đoạn trong modal Phân phối) — bù trừ cho updateHeadingNumbersV2()
+            // vì DOM lúc này chỉ còn đúng 1 công đoạn nên đếm lại sẽ luôn ra "1." nếu không bù.
+            activeSectionNumber: @json($activeSectionNumber ?? null),
+            recordStatus: @json($record->status ?? null),
+            batchNumber: @json($record->batch_number ?? null),
+            // Các con dấu chọn lúc ban hành — đóng cạnh nhau lên góc trên bên phải mỗi phân đoạn
+            recordSeals: @json($recordSeals ?? []),
+            executionValues: @json($executionValues ?? (object) []),
+            recordStructures: @json($recordStructures ?? (object) []),
             pageOrientation: @json($template->schema->pageOrientation ?? 'portrait'),
             docProperties: @json(json_decode($template->doc_properties ?? '{}') ?: (object) []),
             saveUrl: "{{ route('pages.ebmr.storeTemplate') }}",
@@ -2891,6 +3596,7 @@
                 store: "{{ route('pages.ebmr.storeComment') }}",
                 reply: "{{ route('pages.ebmr.replyComment') }}",
                 remove: "{{ route('pages.ebmr.deleteComment') }}",
+                reanchor: "{{ route('pages.ebmr.reanchorComment') }}",
             },
             importantVars: @json($importantVars ?? []),
             currentUserName: @json(session('user')['fullName'] ?? ''),
@@ -2900,10 +3606,16 @@
                 equipmentList: "{{ route('pages.ebmr.designerEquipmentList') }}",
                 templates: "{{ route('pages.ebmr.getTemplates') }}",
                 templateBlocksBase: "{{ url('/ebmr/templates') }}", // + /{id}/blocks
+                gfBlocksByDocCode: "{{ route('pages.ebmr.getGfBlocksByDocCode') }}", // ?doc_code=...
                 docViewBase: "{{ route('pages.ebmr.viewDocumentByCode', ['code' => '__CODE__']) }}",
                 verifyPassword: "{{ route('pages.ebmr.verifyPassword') }}",
                 verifyChecker: "{{ route('pages.ebmr.verifyChecker') }}",
                 dynamicOptions: "{{ route('pages.ebmr.dynamicOptions') }}",
+                updateRecordData: "{{ route('pages.ebmr.updateRecordData') }}",
+                saveRecordStructure: "{{ route('pages.ebmr.saveRecordStructure') }}",
+                runDataHistoryBase: "{{ url('/ebmr/run-data-history') }}", // + /{record}/{blockUuid}/{cellId}
+                recordsIndex: "{{ route('pages.ebmr.indexRecords') }}",
+                versionDiff: "{{ route('pages.ebmr.getVersionDiff', ['id' => $template->id]) }}",
             },
         };
         // Danh sách thiết bị cân từ DB — dùng bởi scale-reader.js (window.SCALE_DEVICES)
@@ -2925,6 +3637,373 @@
             } catch (e) {
                 console.error('Lỗi đọc abbreviations_List', e);
             }
+        })();
+    </script>
+    <script>
+        // ===== Lịch sử thay đổi ấn bản: so sánh tự động với ấn bản liền kề =====
+        (function() {
+            const btn = document.getElementById('v2-btn-version-diff');
+            if (!btn) return;
+            const body = document.getElementById('v2-vdiff-body');
+            const loadingHtml = '<div class="text-center text-muted py-5">' +
+                '<i class="fas fa-spinner fa-spin me-2"></i>Đang so sánh với ấn bản liền kề…</div>';
+
+            const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[c]));
+
+            // LCS tổng quát trên mảng chuỗi -> chuỗi thao tác [type, value]
+            // type: eq (giữ nguyên) | del (xoá) | ins (thêm)
+            function lcsOps(a, b) {
+                const m = a.length, n = b.length;
+                const dp = new Uint32Array((m + 1) * (n + 1));
+                for (let i = m - 1; i >= 0; i--) {
+                    for (let j = n - 1; j >= 0; j--) {
+                        dp[i * (n + 1) + j] = a[i] === b[j] ?
+                            dp[(i + 1) * (n + 1) + j + 1] + 1 :
+                            Math.max(dp[(i + 1) * (n + 1) + j], dp[i * (n + 1) + j + 1]);
+                    }
+                }
+                let i = 0, j = 0;
+                const ops = [];
+                while (i < m && j < n) {
+                    if (a[i] === b[j]) { ops.push(['eq', a[i]]); i++; j++; }
+                    else if (dp[(i + 1) * (n + 1) + j] >= dp[i * (n + 1) + j + 1]) { ops.push(['del', a[i]]); i++; }
+                    else { ops.push(['ins', b[j]]); j++; }
+                }
+                while (i < m) ops.push(['del', a[i++]]);
+                while (j < n) ops.push(['ins', b[j++]]);
+                return ops;
+            }
+
+            let foldSeq = 0;
+            function foldButton(hiddenHtml, label) {
+                const id = 'vdf_' + (++foldSeq);
+                return '<button type="button" class="vdiff-fold" data-vdiff-fold="' + id + '">⋯ ' +
+                    label + ' — bấm để xem ⋯</button>' +
+                    '<div class="vdiff-hidden" id="' + id + '" hidden>' + hiddenHtml + '</div>';
+            }
+
+            // Diff theo TỪ trong 1 dòng đã bị sửa; đoạn không đổi quá dài rút gọn bằng "…"
+            function wordDiffLine(oldLine, newLine) {
+                const a = String(oldLine).split(/(\s+)/).filter((t) => t !== '');
+                const b = String(newLine).split(/(\s+)/).filter((t) => t !== '');
+                if (a.length * b.length > 250000) {
+                    return '<del>' + esc(oldLine) + '</del> <ins>' + esc(newLine) + '</ins>';
+                }
+                // Gộp các thao tác cùng loại liền nhau thành đoạn
+                const segs = [];
+                lcsOps(a, b).forEach(([t, v]) => {
+                    if (segs.length && segs[segs.length - 1].t === t) segs[segs.length - 1].v += v;
+                    else segs.push({ t, v });
+                });
+                return segs.map((s, idx) => {
+                    if (s.t === 'del') return '<del>' + esc(s.v) + '</del>';
+                    if (s.t === 'ins') return '<ins>' + esc(s.v) + '</ins>';
+                    // Đoạn giữ nguyên quá dài: giữ đầu/cuối đủ ngữ cảnh, rút gọn phần giữa
+                    const toks = s.v.split(/(\s+)/).filter((t) => t !== '');
+                    if (toks.length <= 24) return esc(s.v);
+                    const head = idx === 0 ? '' : esc(toks.slice(0, 10).join(''));
+                    const tail = idx === segs.length - 1 ? '' : esc(toks.slice(-10).join(''));
+                    return head + ' <span class="vdiff-skip" title="Đoạn không thay đổi đã được rút gọn">(…)</span> ' + tail;
+                }).join('');
+            }
+
+            const line = (cls, inner) => '<div class="vdiff-line' + (cls ? ' ' + cls : '') + '">' + inner + '</div>';
+
+            // Khối chỉ có 1 phía (block thêm mới / xoá hẳn): hiện tối đa 8 dòng đầu, còn lại gấp gọn
+            function oneSideHtml(text, tag) {
+                const lines = String(text).split('\n');
+                if (lines.length <= 10) {
+                    return line('', '<' + tag + '>' + esc(text) + '</' + tag + '>');
+                }
+                return line('', '<' + tag + '>' + esc(lines.slice(0, 8).join('\n')) + '</' + tag + '>') +
+                    foldButton(line('', '<' + tag + '>' + esc(lines.slice(8).join('\n')) + '</' + tag + '>'),
+                        (lines.length - 8) + ' dòng nữa');
+            }
+
+            // Hiển thị RÚT GỌN kiểu unified-diff: diff theo DÒNG (mỗi hàng bảng = 1 dòng),
+            // chỉ hiện dòng có thay đổi + 1 dòng ngữ cảnh; dòng không đổi gấp lại được.
+            const CONTEXT_LINES = 1;
+            function textDiffHtml(oldText, newText) {
+                if (oldText == null && newText == null) return '';
+                let inner;
+                if (oldText == null) inner = oneSideHtml(newText, 'ins');
+                else if (newText == null) inner = oneSideHtml(oldText, 'del');
+                else {
+                    const a = String(oldText).split('\n');
+                    const b = String(newText).split('\n');
+                    if (a.length * b.length > 4000000) {
+                        inner = oneSideHtml(oldText, 'del') + oneSideHtml(newText, 'ins');
+                    } else {
+                        // Ghép run del + run ins liền kề thành cặp "dòng bị sửa" để diff theo từ
+                        const ops = lcsOps(a, b);
+                        const items = [];
+                        let k = 0;
+                        while (k < ops.length) {
+                            if (ops[k][0] === 'eq') { items.push({ t: 'eq', s: ops[k][1] }); k++; continue; }
+                            const dels = [], inss = [];
+                            while (k < ops.length && ops[k][0] === 'del') { dels.push(ops[k][1]); k++; }
+                            while (k < ops.length && ops[k][0] === 'ins') { inss.push(ops[k][1]); k++; }
+                            const np = Math.min(dels.length, inss.length);
+                            for (let x = 0; x < np; x++) items.push({ t: 'chg', a: dels[x], b: inss[x] });
+                            for (let x = np; x < dels.length; x++) items.push({ t: 'del', s: dels[x] });
+                            for (let x = np; x < inss.length; x++) items.push({ t: 'ins', s: inss[x] });
+                        }
+
+                        const parts = [];
+                        let eqRun = [];
+                        let sawChange = false;
+                        const flushEq = (changeFollows) => {
+                            if (!eqRun.length) return;
+                            const keepStart = sawChange ? CONTEXT_LINES : 0;
+                            const keepEnd = changeFollows ? CONTEXT_LINES : 0;
+                            if (eqRun.length <= keepStart + keepEnd + 1) {
+                                eqRun.forEach((s) => parts.push(line('vdiff-ctx', esc(s))));
+                            } else {
+                                eqRun.slice(0, keepStart).forEach((s) => parts.push(line('vdiff-ctx', esc(s))));
+                                const hidden = eqRun.slice(keepStart, eqRun.length - keepEnd || undefined);
+                                parts.push(foldButton(
+                                    hidden.map((s) => line('vdiff-ctx', esc(s))).join(''),
+                                    hidden.length + ' dòng không thay đổi'));
+                                if (keepEnd) eqRun.slice(-keepEnd).forEach((s) => parts.push(line('vdiff-ctx', esc(s))));
+                            }
+                            eqRun = [];
+                        };
+                        items.forEach((it) => {
+                            if (it.t === 'eq') { eqRun.push(it.s); return; }
+                            flushEq(true);
+                            sawChange = true;
+                            if (it.t === 'chg') parts.push(line('vdiff-chgline', wordDiffLine(it.a, it.b)));
+                            else if (it.t === 'del') parts.push(line('', '<del>' + esc(it.s) + '</del>'));
+                            else parts.push(line('', '<ins>' + esc(it.s) + '</ins>'));
+                        });
+                        flushEq(false);
+                        inner = parts.join('');
+                    }
+                }
+                return '<div class="vdiff-text">' + inner + '</div>';
+            }
+
+            const KIND = {
+                added: { label: 'Thêm mới', cls: 'vdiff-added', icon: 'fa-plus-circle' },
+                removed: { label: 'Đã xoá', cls: 'vdiff-removed', icon: 'fa-minus-circle' },
+                modified: { label: 'Chỉnh sửa', cls: 'vdiff-modified', icon: 'fa-pen' },
+            };
+
+            function propRows(changes) {
+                return (changes || []).map((pc) =>
+                    '<div class="vdiff-prop"><b>' + esc(pc.label) + ':</b> <del>' + esc(pc.old) +
+                    '</del> → <ins>' + esc(pc.new) + '</ins></div>'
+                ).join('');
+            }
+
+            function simpleCard(kind, title, typeLabel, extra) {
+                const k = KIND[kind];
+                return '<div class="vdiff-card ' + k.cls + '"><div class="vdiff-card-title">' +
+                    '<i class="fas ' + k.icon + ' me-1"></i><span class="vdiff-kind">' + k.label + '</span>' +
+                    (typeLabel ? '<span class="vdiff-type">' + esc(typeLabel) + '</span> ' : '') +
+                    esc(title) + '</div>' + (extra || '') + '</div>';
+            }
+
+            function chip(n, label, cls) {
+                return n ? '<span class="vdiff-chip ' + cls + '">' + n + ' ' + label + '</span>' : '';
+            }
+
+            // Bọc 1 nhóm (tiêu đề + các thẻ thay đổi bên trong) để tìm kiếm có thể
+            // ẩn/hiện CẢ NHÓM khi không có thẻ nào khớp từ khoá. Nhóm rỗng bỏ qua.
+            function group(headerHtml, cardsHtml) {
+                const cards = cardsHtml.filter(Boolean);
+                if (!cards.length) return '';
+                return '<div class="vdiff-group">' + headerHtml + cards.join('') + '</div>';
+            }
+
+            const searchBar = document.getElementById('v2-vdiff-searchbar');
+            const searchInput = document.getElementById('v2-vdiff-search');
+            const searchCountEl = document.getElementById('v2-vdiff-search-count');
+            const noResultEl = document.getElementById('v2-vdiff-noresult');
+            let cardOriginalHtml = new WeakMap();
+
+            function cacheCardHtml() {
+                cardOriginalHtml = new WeakMap();
+                body.querySelectorAll('.vdiff-card').forEach((c) => cardOriginalHtml.set(c, c.innerHTML));
+            }
+
+            function render(d) {
+                searchBar.hidden = true;
+                noResultEl.hidden = true;
+                if (!d.has_previous) {
+                    body.innerHTML = '<div class="alert alert-info m-0">' + esc(d.message) + '</div>';
+                    return;
+                }
+                const s = d.summary;
+                const total = s.added + s.removed + s.modified +
+                    s.variables_added + s.variables_removed + s.variables_modified +
+                    s.testing_added + s.testing_removed + s.testing_modified + s.metadata_changed;
+
+                let html = '<div class="vdiff-head"><div>So sánh ' +
+                    '<span class="badge bg-primary">Ấn bản ' + esc(d.current.version) + ' (đang mở)</span> với ' +
+                    '<span class="badge bg-secondary">Ấn bản ' + esc(d.previous.version) + '</span></div>' +
+                    '<div>' + chip(s.added + s.variables_added + s.testing_added, 'thêm', 'vdiff-added') +
+                    chip(s.removed + s.variables_removed + s.testing_removed, 'xoá', 'vdiff-removed') +
+                    chip(s.modified + s.variables_modified + s.testing_modified + s.metadata_changed, 'sửa', 'vdiff-modified') +
+                    '</div></div>' +
+                    '<div class="vdiff-legend">Chú thích: <ins>chữ thêm mới</ins> · <del>chữ bị xoá</del> — ' +
+                    'lịch sử được tính tự động từ nội dung thật của 2 ấn bản.</div>';
+
+                if (total === 0) {
+                    body.innerHTML = html + '<div class="alert alert-success mt-2"><i class="fas fa-check-circle me-1"></i>' +
+                        'Chưa có khác biệt nào so với ấn bản ' + esc(d.previous.version) + '.</div>';
+                    return;
+                }
+
+                if (d.metadata.length) {
+                    html += group(
+                        '<h6 class="vdiff-group-title"><i class="fas fa-info-circle me-1"></i>Thông tin chung</h6>',
+                        d.metadata.map((mc) =>
+                            '<div class="vdiff-card vdiff-modified"><div class="vdiff-card-title">' +
+                            '<i class="fas fa-pen me-1"></i><span class="vdiff-kind">Chỉnh sửa</span>' + esc(mc.label) +
+                            '</div>' + textDiffHtml(mc.old, mc.new) + '</div>')
+                    );
+                }
+
+                d.sections.forEach((sec) => {
+                    html += group(
+                        '<h6 class="vdiff-group-title"><i class="fas fa-layer-group me-1"></i>' + esc(sec.name) + '</h6>',
+                        sec.changes.map((c) => {
+                            const k = KIND[c.kind];
+                            return '<div class="vdiff-card ' + k.cls + '"><div class="vdiff-card-title">' +
+                                '<i class="fas ' + k.icon + ' me-1"></i><span class="vdiff-kind">' + k.label + '</span>' +
+                                '<span class="vdiff-type">' + esc(c.type_label) + '</span> ' + esc(c.title) + '</div>' +
+                                textDiffHtml(c.old_text, c.new_text) + propRows(c.prop_changes) + '</div>';
+                        })
+                    );
+                });
+
+                const v = d.variables;
+                if (v.added.length || v.removed.length || v.modified.length) {
+                    html += group(
+                        '<h6 class="vdiff-group-title"><i class="fas fa-i-cursor me-1"></i>Biến số / ô nhập liệu</h6>',
+                        [
+                            ...v.added.map((x) => simpleCard('added', x.label || x.name || x.key, x.type)),
+                            ...v.removed.map((x) => simpleCard('removed', x.label || x.name || x.key, x.type)),
+                            ...v.modified.map((x) => simpleCard('modified', x.label || x.name || x.key, null, propRows(x.changes))),
+                        ]
+                    );
+                }
+
+                const t = d.testing;
+                if (t.added.length || t.removed.length || t.modified.length) {
+                    const tTitle = (x) => (x.stage ? x.stage + ' — ' : '') + (x.name || ('STT ' + x.stt));
+                    html += group(
+                        '<h6 class="vdiff-group-title"><i class="fas fa-vial me-1"></i>Tiêu chuẩn kiểm nghiệm</h6>',
+                        [
+                            ...t.added.map((x) => simpleCard('added', tTitle(x))),
+                            ...t.removed.map((x) => simpleCard('removed', tTitle(x))),
+                            ...t.modified.map((x) => simpleCard('modified', tTitle(x), null, propRows(x.changes))),
+                        ]
+                    );
+                }
+
+                body.innerHTML = html;
+
+                searchBar.hidden = false;
+                searchInput.value = '';
+                searchCountEl.textContent = '';
+                cacheCardHtml();
+            }
+
+            // Đánh dấu (highlight) mọi chỗ khớp từ khoá trong 1 thẻ, CHỈ chạm vào text
+            // node (không đụng cấu trúc thẻ <ins>/<del> đang tô màu diff sẵn có).
+            function highlightMatches(root, query) {
+                const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+                const nodes = [];
+                let n;
+                while ((n = walker.nextNode())) nodes.push(n);
+                nodes.forEach((node) => {
+                    const text = node.nodeValue;
+                    const lower = text.toLowerCase();
+                    if (!lower.includes(query)) return;
+                    const frag = document.createDocumentFragment();
+                    let idx = 0, pos;
+                    while ((pos = lower.indexOf(query, idx)) !== -1) {
+                        if (pos > idx) frag.appendChild(document.createTextNode(text.slice(idx, pos)));
+                        const mark = document.createElement('mark');
+                        mark.className = 'vdiff-hit';
+                        mark.textContent = text.slice(pos, pos + query.length);
+                        frag.appendChild(mark);
+                        idx = pos + query.length;
+                    }
+                    if (idx < text.length) frag.appendChild(document.createTextNode(text.slice(idx)));
+                    node.parentNode.replaceChild(frag, node);
+                });
+            }
+
+            // Lọc + đánh dấu theo từ khoá. Thẻ khớp: tự MỞ các đoạn "N dòng không đổi"
+            // đang gấp bên trong (chỗ khớp có thể nằm trong phần đã gấp lại).
+            function applySearch(rawQuery) {
+                const query = rawQuery.trim().toLowerCase();
+                let totalCards = 0, visibleCards = 0;
+
+                body.querySelectorAll('.vdiff-group').forEach((grp) => {
+                    let groupHasVisible = false;
+                    grp.querySelectorAll('.vdiff-card').forEach((card) => {
+                        totalCards++;
+                        const original = cardOriginalHtml.get(card);
+                        if (original !== undefined) card.innerHTML = original;
+
+                        const matches = !query || card.textContent.toLowerCase().includes(query);
+                        card.style.display = matches ? '' : 'none';
+                        if (!matches) return;
+
+                        groupHasVisible = true;
+                        visibleCards++;
+                        if (query) {
+                            card.querySelectorAll('.vdiff-hidden[hidden]').forEach((h) => { h.hidden = false; });
+                            card.querySelectorAll('.vdiff-fold').forEach((b) => b.remove());
+                            highlightMatches(card, query);
+                        }
+                    });
+                    grp.style.display = groupHasVisible ? '' : 'none';
+                });
+
+                searchCountEl.textContent = query ? (visibleCards + '/' + totalCards + ' mục khớp') : '';
+                noResultEl.hidden = !(query && visibleCards === 0 && totalCards > 0);
+            }
+
+            let searchTimer = null;
+            searchInput.addEventListener('input', () => {
+                clearTimeout(searchTimer);
+                searchTimer = setTimeout(() => applySearch(searchInput.value), 120);
+            });
+
+            // Mở các đoạn "N dòng không thay đổi" khi bấm
+            body.addEventListener('click', (ev) => {
+                const foldBtn = ev.target.closest('[data-vdiff-fold]');
+                if (!foldBtn) return;
+                const hidden = document.getElementById(foldBtn.getAttribute('data-vdiff-fold'));
+                if (hidden) hidden.hidden = false;
+                foldBtn.remove();
+            });
+
+            btn.addEventListener('click', async () => {
+                // Không cache: người dùng có thể vừa lưu chỉnh sửa mới — mỗi lần mở so sánh lại
+                body.innerHTML = loadingHtml;
+                searchBar.hidden = true;
+                noResultEl.hidden = true;
+                window.jQuery('#v2VersionDiffModal').modal('show');
+                try {
+                    const res = await fetch(window.__V2__.urls.versionDiff, {
+                        headers: { 'Accept': 'application/json' }
+                    });
+                    const data = await res.json();
+                    if (!data.success) throw new Error(data.message || 'Không so sánh được ấn bản.');
+                    render(data);
+                } catch (e) {
+                    body.innerHTML = '<div class="alert alert-danger m-0"><i class="fas fa-exclamation-triangle me-1"></i>' +
+                        esc(e.message || 'Lỗi khi so sánh ấn bản.') + '</div>';
+                }
+            });
         })();
     </script>
     @vite('resources/js/designer-v2/main.js')

@@ -4,6 +4,8 @@ namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Pagination\Paginator;
+use Illuminate\Support\Facades\View;
+use App\Services\PendingApprovalCounter;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -21,5 +23,10 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Paginator::useBootstrap();
+
+        View::composer('layout.leftNAV', function ($view) {
+            $userId = session('user')['userId'] ?? null;
+            $view->with('pendingApprovalCount', PendingApprovalCounter::countForUser($userId));
+        });
     }
 }

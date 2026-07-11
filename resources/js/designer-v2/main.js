@@ -24,6 +24,7 @@ import { EbmrField, FIELD_TYPES, paintFieldElement, handleFieldBadgeClick } from
 import { createSelectionController } from './selection';
 import { initScaleReaderV2 } from './scale-reader';
 import { initMmsBarcodeV2 } from './mms-barcode';
+import { createNaMarksV2 } from './na-marks';
 import { MathEquation, V2Image, V2InlineImage, DocPropField, paintEquationBadge, paintDocPropBadge, refreshAllDocPropBadges } from './media-nodes';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
@@ -83,6 +84,7 @@ let internalPasteHandledV2 = false; // true trong khoảnh khắc vừa Ctrl+V d
 let activeLoopTabIdx = {};    // groupId -> tab "Lần i" đang xem (Chạy thử)
 const loopIterFieldMapCache = {}; // groupId -> { [i]: idMap } bản đồ field riêng cho từng lần lặp (Chạy thử)
 let loopClonedFieldIds = new Set(); // id các field đã nhân bản riêng cho lần lặp — dọn khi thoát Chạy thử
+let dynamicClonedFieldIds = new Set(); // id các field nhân bản cho DÒNG THÊM (Cấp 2) — dọn khi thoát Chạy thử
 
 // Lắng nghe sự kiện click toàn cục để set activeBlockId (dùng capture phase để tránh bị stopPropagation chặn)
 document.addEventListener('click', (e) => {
@@ -198,6 +200,13 @@ const selection = createSelectionController({
     convertStaticSelectionToEditable: (action) => convertStaticSelectionToEditableV2(action),
 });
 
+// Gạch chéo "KHÔNG SỬ DỤNG" (N/A) lúc Chạy thử/Thực thi — xem na-marks.js
+const naMarks = createNaMarksV2({
+    BOOT,
+    renderDocument: () => renderDocument(),
+    unmountEditor: () => unmountEditor(),
+});
+
 /* =========================================================
  * 0. UNDO/REDO CẤP TÀI LIỆU (thao tác block: thêm/dán/resize...)
  * Trong vùng đang gõ thì TipTap tự có history riêng; stack này
@@ -262,13 +271,13 @@ function esc(s) {
 }
 
 /** Thay badge cũ bằng badge hiển thị đẹp (chỉ để XEM — khi edit sẽ do TipTap NodeView vẽ) */
-function decorateBadges(html) {
+function decorateBadges(html, fieldsOverride) {
     if (!html) return '';
     const tmp = document.createElement('div');
     tmp.innerHTML = html;
     tmp.querySelectorAll('span.ebmr-field-badge').forEach((el) => {
         const fid = el.getAttribute('data-field-id');
-        const cfg = fieldsConfig[fid] || {};
+        const cfg = (fieldsOverride && fieldsOverride[fid]) || fieldsConfig[fid] || {};
         const t = FIELD_TYPES[cfg.type] || FIELD_TYPES.text;
         // HTML lưu từ V1 mang theo onclick="selectField(...)" — hàm không tồn tại
         // trong V2, phải gỡ bỏ kẻo click là ReferenceError.
@@ -321,10 +330,18 @@ function activateStaticBadges() {
     staticPaintRegs.forEach(({ fieldId, fn }) => window.__V2__.unregisterFieldPaint(fieldId, fn));
     staticPaintRegs = [];
     if (!BOOT.isExecutionMode) return;
+    activateStaticBadgesIn(document.getElementById('v2-pages'));
+}
 
-    document.querySelectorAll('#v2-pages .v2-field-badge--static').forEach((el) => {
+/** Kích hoạt badge tĩnh TRONG 1 vùng DOM — tách riêng để gọi thêm cho nội dung GF liên kết
+ *  (fetch bất đồng bộ, chỉ xuất hiện SAU khi activateStaticBadges của renderDocument chạy xong). */
+function activateStaticBadgesIn(root) {
+    if (!root || !BOOT.isExecutionMode) return;
+    root.querySelectorAll('.v2-field-badge--static').forEach((el) => {
+        if (el.dataset.v2BadgeActive) return; // đã kích hoạt (tránh gắn listener trùng)
         const fid = el.getAttribute('data-field-id');
         if (!fid || !fieldsConfig[fid]) return;
+        el.dataset.v2BadgeActive = '1';
         const paint = () => paintFieldElement(el, fid);
         paint();
         window.__V2__.registerFieldPaint(fid, paint);
@@ -360,9 +377,14 @@ function makeInserter(afterIndex) {
         ins.classList.remove('v2-drop-active');
         document.body.classList.remove('v2-dragging');
 
-        if (e.dataTransfer.getData('action') === 'insertEquipmentTable') {
+        const action = e.dataTransfer.getData('action');
+        if (action === 'insertEquipmentTable') {
             const d = e.dataTransfer.getData('equipmentData');
             if (d) insertEquipmentTableV2(afterIndex, JSON.parse(d));
+            return;
+        }
+        if (action === 'insertLinkedGf') {
+            insertLinkedGfV2(afterIndex, e.dataTransfer.getData('gfDocCode'), e.dataTransfer.getData('gfName'));
             return;
         }
         const compId = e.dataTransfer.getData('componentId');
@@ -376,7 +398,7 @@ function makeInserter(afterIndex) {
 /** Chỉ dựng phần NỘI DUNG của 1 block (không toolbar). Dùng chung cho luồng phẳng,
  *  wrapper Lặp nhóm (thiết kế) và từng tab "Lần i" (Chạy thử — khi đó contentOverride/
  *  dataOverride đã được thay data-field-id sang bản sao riêng của lần lặp đó). */
-function renderBlockContentV2(item, contentOverride, dataOverride) {
+function renderBlockContentV2(item, contentOverride, dataOverride, fieldsOverride) {
     const isLocked = item.locked || item.isVirtual;
     if (item.type === 'static-text') {
         const el = document.createElement('div');
@@ -385,7 +407,7 @@ function renderBlockContentV2(item, contentOverride, dataOverride) {
         const inner = document.createElement('div');
         inner.className = 'v2-editable';
         const content = contentOverride !== undefined ? contentOverride : (item.content || '<p></p>');
-        inner.innerHTML = decorateBadges(content);
+        inner.innerHTML = decorateBadges(content, fieldsOverride);
         el.appendChild(inner);
         if (!BOOT.isReadOnly && !BOOT.isExecutionMode && !isLocked && contentOverride === undefined) {
             inner.addEventListener('click', (e) => {
@@ -401,7 +423,7 @@ function renderBlockContentV2(item, contentOverride, dataOverride) {
         return el;
     }
     if (item.type === 'table') {
-        const el = renderTable(dataOverride ? { ...item, data: dataOverride } : item);
+        const el = renderTable(dataOverride ? { ...item, data: dataOverride } : item, fieldsOverride);
         if (isLocked) el.classList.add('v2-locked');
         if (item.isAbbreviationTable) {
             const title = document.createElement('div');
@@ -425,7 +447,35 @@ function renderBlockContentV2(item, contentOverride, dataOverride) {
         setTimeout(() => renderChartV2(canvasId, item), 50);
         return el;
     }
-    // Loại block chưa hỗ trợ trong pilot (linked-template...) — hiển thị placeholder
+    if (item.type === 'linked-template') {
+        // Chạy thử/thực thi: GF liên kết LUÔN bung toàn bộ nội dung để điền dữ liệu và
+        // KHÔNG có nút Thu gọn/Xem trước — tránh người dùng thu gọn rồi bỏ sót field.
+        // Thiết kế: đóng mặc định, bấm "Xem trước" mới mở.
+        const expanded = BOOT.isExecutionMode || !!item.showPreview;
+        const el = document.createElement('div');
+        el.className = 'v2-block v2-linked-gf' + (isLocked ? ' v2-locked' : '');
+        el.setAttribute('data-id', item.id);
+        el.innerHTML = `
+            <div class="d-flex align-items-center justify-content-between py-3 px-3 border border-primary border-dashed rounded bg-light">
+                <div class="text-navy">
+                    <i class="fas fa-link me-2 text-primary"></i><strong>Biểu mẫu chung: ${esc(item.label || item.ref_doc_code || '')}</strong>
+                    ${item.ref_doc_code ? `<span class="badge bg-primary ms-2">${esc(item.ref_doc_code)}</span>` : ''}
+                </div>
+                ${BOOT.isExecutionMode ? '' : `<button type="button" class="btn btn-sm btn-outline-primary" data-act="toggle-gf-preview">
+                    <i class="fas fa-eye me-1"></i> ${expanded ? 'Thu gọn' : 'Xem trước'}
+                </button>`}
+            </div>
+            <div class="v2-gf-preview mt-2" id="v2-gf-preview-${item.id}" style="display:${expanded ? 'block' : 'none'};"></div>`;
+        el.querySelector('[data-act="toggle-gf-preview"]')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleGfPreviewV2(item.id, item.ref_doc_code);
+        });
+        // el CHƯA nằm trong DOM lúc này (renderDocument gắn sau) — getElementById trong
+        // fetchAndRenderGfPreviewV2 sẽ ra null nếu gọi ngay. Đợi hết lượt render (như chart).
+        if (expanded) setTimeout(() => fetchAndRenderGfPreviewV2(item.id, item.ref_doc_code), 0);
+        return el;
+    }
+    // Loại block chưa hỗ trợ trong pilot — hiển thị placeholder
     const el = document.createElement('div');
     el.className = 'v2-block v2-unsupported';
     el.innerHTML = `<i class="fas fa-cube me-2"></i>[${esc(item.type)}] ${esc(item.label || '')} — <em>chưa hỗ trợ trong bản thử nghiệm, giữ nguyên khi lưu</em>`;
@@ -450,32 +500,23 @@ function buildBlockElV2(item, idx) {
             const canMoveUp = !!prev && prev.type !== 'section' && !prev.locked && !prev.isVirtual && prev.section_id === item.section_id;
             const canMoveDown = !!next && next.type !== 'section' && !next.locked && !next.isVirtual && next.section_id === item.section_id;
             const isPicked = blockPickIds.includes(item.id);
+            const isWeightChart = item.type === 'chart' && !!item.chartConfig?.tableSourceId;
 
             toolbar.innerHTML = `
                 <button type="button" class="v2-block-action-btn${isPicked ? ' active' : ''}" data-act="pick" title="Chọn khối (giữ Shift để chọn dải nhiều khối liên tiếp) — Ctrl+C/X/V để copy/cắt/dán cả cụm, hoặc dùng để cài Lặp nhóm"><i class="fas fa-clone"></i></button>
+                ${isWeightChart ? '<button type="button" class="v2-block-action-btn" data-act="edit-weight" title="Sửa thông số Bảng KT Khối lượng Trung bình"><i class="fas fa-pen"></i></button>' : ''}
                 <button type="button" class="v2-block-action-btn" data-act="up" title="Di chuyển lên"${canMoveUp ? '' : ' disabled'}><i class="fas fa-arrow-up"></i></button>
                 <button type="button" class="v2-block-action-btn" data-act="down" title="Di chuyển xuống"${canMoveDown ? '' : ' disabled'}><i class="fas fa-arrow-down"></i></button>
                 <button type="button" class="v2-block-action-btn v2-block-action-danger" data-act="del" title="Xóa khối"><i class="fas fa-trash-alt"></i></button>`;
             toolbar.querySelectorAll('button').forEach((b) => b.addEventListener('mousedown', (e) => e.preventDefault()));
             toolbar.querySelector('[data-act="pick"]').addEventListener('click', (e) => { e.stopPropagation(); pickBlockV2(item, e.shiftKey); });
+            if (isWeightChart) {
+                toolbar.querySelector('[data-act="edit-weight"]').addEventListener('click', (e) => { e.stopPropagation(); openWeightChartEditModalV2(item); });
+            }
             toolbar.querySelector('[data-act="up"]').addEventListener('click', (e) => { e.stopPropagation(); moveBlock(item.id, -1); });
             toolbar.querySelector('[data-act="down"]').addEventListener('click', (e) => { e.stopPropagation(); moveBlock(item.id, 1); });
             toolbar.querySelector('[data-act="del"]').addEventListener('click', (e) => { e.stopPropagation(); deleteBlock(item.id); });
         }
-
-        const cmtCount = getBlockComments(item.id).length;
-        const cmtBtn = document.createElement('button');
-        cmtBtn.type = 'button';
-        cmtBtn.className = 'v2-comment-btn' + (cmtCount > 0 ? ' has-comments' : '');
-        cmtBtn.title = cmtCount > 0 ? `${cmtCount} bình luận` : 'Thêm bình luận';
-        cmtBtn.innerHTML = '<i class="fas fa-comment"></i>' +
-            (cmtCount > 0 ? `<span class="v2-cmt-count">${cmtCount}</span>` : '');
-        cmtBtn.addEventListener('mousedown', (e) => e.preventDefault());
-        cmtBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            openCommentsPanel(item.id);
-        });
-        toolbar.appendChild(cmtBtn);
 
         el.appendChild(toolbar);
     }
@@ -483,7 +524,10 @@ function buildBlockElV2(item, idx) {
 }
 
 /** Bản sao field riêng cho lần lặp thứ i (i=1 dùng field GỐC, không nhân bản).
- *  Cache theo groupId để giữ ổn định ID qua các lần renderDocument() (không mất giá trị đã nhập). */
+ *  Cache theo groupId để giữ ổn định ID qua các lần renderDocument() (không mất giá trị đã nhập).
+ *  ID nhân bản là XÁC ĐỊNH (`${oldId}__it${i}`) — nhờ vậy ở trang Thực thi thật, giá trị của
+ *  "Lần i" lưu trong ebmr_run_data theo id này sẽ tự khớp lại sau khi tải lại trang, không cần
+ *  lưu bản đồ id theo lô. */
 function getLoopIterFieldMapV2(groupId, i, entries) {
     if (!loopIterFieldMapCache[groupId]) loopIterFieldMapCache[groupId] = {};
     if (loopIterFieldMapCache[groupId][i]) return loopIterFieldMapCache[groupId][i];
@@ -496,13 +540,21 @@ function getLoopIterFieldMapV2(groupId, i, entries) {
             }));
         }
     });
-    const { idMap, nameMap } = buildFieldDuplicateMapV2(htmlList);
+    const { idMap, nameMap } = buildFieldDuplicateMapV2(htmlList, (oldId) => `${oldId}__it${i}`);
     if (Object.keys(idMap).length) {
         applyFieldDuplicateMapV2(idMap, nameMap);
         Object.values(idMap).forEach((newId) => loopClonedFieldIds.add(newId));
     }
     loopIterFieldMapCache[groupId][i] = idMap;
     return idMap;
+}
+
+/** Tên tab cho lần lặp thứ i: ưu tiên tên riêng (loopLabels[i-1]) nếu có,
+ *  nếu không thì dùng "<loopLabel> <i>" (VD: "Lần 1", "Mẻ 2"...). */
+function getLoopIterNameV2(run, i) {
+    const custom = (run.loopLabels && run.loopLabels[i - 1] || '').trim();
+    if (custom) return custom;
+    return (run.loopLabel || 'Lần') + ' ' + i;
 }
 
 /** Thiết kế: bọc các khối cùng 1 nhóm lặp trong khung nét đứt + badge "Lặp nhóm: N lần". */
@@ -512,7 +564,10 @@ function renderLoopGroupDesignV2(run, page) {
 
     const badge = document.createElement('div');
     badge.className = 'v2-loop-group-badge';
-    const lbl = run.loopLabel && run.loopLabel !== 'Lần' ? ` (${esc(run.loopLabel)} 1..${run.loopCount})` : '';
+    const hasCustomNames = (run.loopLabels || []).some((s) => (s || '').trim());
+    const lbl = hasCustomNames
+        ? ` (${Array.from({ length: run.loopCount }, (_, k) => esc(getLoopIterNameV2(run, k + 1))).join(', ')})`
+        : (run.loopLabel && run.loopLabel !== 'Lần' ? ` (${esc(run.loopLabel)} 1..${run.loopCount})` : '');
     badge.innerHTML = `<i class="fas fa-redo me-1"></i> Lặp nhóm: ${run.loopCount} lần${lbl}`;
     if (!BOOT.isReadOnly) {
         badge.title = 'Nhấp để chỉnh sửa cài đặt lặp nhóm';
@@ -536,7 +591,6 @@ function renderLoopGroupDesignV2(run, page) {
  *  (field của lần i>1 được nhân bản riêng qua getLoopIterFieldMapV2). */
 function renderLoopGroupExecutionV2(run, page) {
     const { groupId, loopCount, entries } = run;
-    const loopLabel = run.loopLabel || 'Lần';
     let activeIdx = activeLoopTabIdx[groupId] || 1;
     if (activeIdx > loopCount) activeIdx = 1;
     activeLoopTabIdx[groupId] = activeIdx;
@@ -547,7 +601,7 @@ function renderLoopGroupExecutionV2(run, page) {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'btn btn-sm ' + (i === activeIdx ? 'btn-primary' : 'btn-outline-primary');
-        btn.textContent = loopLabel + ' ' + i;
+        btn.textContent = getLoopIterNameV2(run, i);
         btn.addEventListener('click', () => { activeLoopTabIdx[groupId] = i; renderDocument(); });
         header.appendChild(btn);
     }
@@ -581,13 +635,51 @@ function renderDocument() {
 
     // Mỗi SECTION tự động bắt đầu 1 TRANG MỚI (ngắt trang như yêu cầu).
     let page = null;
-    let pageNo = 0;
     const newPage = () => {
-        pageNo++;
         page = document.createElement('div');
         page.className = 'v2-page shadow';
-        page.setAttribute('data-page-label', 'Trang ' + pageNo);
+        page.__allVirtual = true; // true nếu tới giờ trang này chỉ chứa block/section ẢO (hệ thống)
         container.appendChild(page);
+    };
+
+    // Dựng cụm con dấu (chọn lúc ban hành, nằm ngang, cạnh nhau) — null nếu không có dấu.
+    // Đóng lên: section THƯỜNG, section ảo CÔNG THỨC PHA CHẾ, và bảng HEADER hệ thống.
+    const buildSealStampsV2 = () => {
+        if (!BOOT.isExecutionMode || !Array.isArray(BOOT.recordSeals) || !BOOT.recordSeals.length) return null;
+        const wrap = document.createElement('div');
+        wrap.className = 'v2-seal-stamps';
+        BOOT.recordSeals.forEach((s) => {
+            if (!s || !s.content) return;
+            const seal = document.createElement('div');
+            seal.className = 'v2-seal-stamp' + ((s.border_style || 'double') === 'double' ? ' seal-border-double' : '');
+            seal.style.color = s.color || '#dc3545';
+            // Kích thước dấu (%): nhân vào cỡ chuẩn 0.85rem của .v2-seal-stamp
+            seal.style.fontSize = (0.85 * ((parseInt(s.size, 10) || 100) / 100)) + 'rem';
+            seal.title = s.name || '';
+            const addLine = (cls, text) => {
+                const line = document.createElement('div');
+                line.className = cls;
+                line.textContent = text;
+                seal.appendChild(line);
+            };
+            if (s.header) addLine('seal-line-header', s.header);
+            addLine('seal-line-content', s.content);
+            if (s.footer) addLine('seal-line-footer', s.footer);
+            wrap.appendChild(seal);
+        });
+        return wrap.childElementCount ? wrap : null;
+    };
+
+    // Tem "SỐ LÔ" — đóng lên góc trên bên TRÁI mỗi phân đoạn (màu đỏ). Hiện ở MỌI
+    // hồ sơ gắn với 1 lô (ebmr_record): nhận ban hành, đang thực thi, đã hoàn thành —
+    // tức bất cứ khi nào mở qua execute() (isExecutionMode). null nếu lô chưa có số.
+    const buildBatchStampV2 = () => {
+        if (!BOOT.isExecutionMode || !BOOT.batchNumber) return null;
+        const el = document.createElement('div');
+        el.className = 'v2-batch-stamp';
+        el.title = 'Số lô';
+        el.innerHTML = `<span class="v2-batch-label">Số lô:</span> <span>${esc(String(BOOT.batchNumber))}</span>`;
+        return el;
     };
 
     let renderedAny = false;
@@ -608,6 +700,7 @@ function renderDocument() {
                     kind: 'loop', groupId: gid,
                     loopCount: Math.max(1, parseInt(item.loop_count, 10) || 1),
                     loopLabel: (item.loop_label || '').trim() || 'Lần', // tên gọi mỗi lần lặp (VD: Mẻ, Lô)
+                    loopLabels: Array.isArray(item.loop_labels) ? item.loop_labels : [], // tên riêng cho từng lần (VD: Đầu lô, Giữa lô, Cuối lô)
                     entries: [{ item, idx }],
                 }
                 : { kind: 'plain', entries: [{ item, idx }] };
@@ -619,9 +712,25 @@ function renderDocument() {
         if (run.kind === 'section') {
             const { item } = run;
             const isLocked = item.locked || item.isVirtual;
-            // Ngắt trang tại mỗi section, TRỪ KHI đánh dấu noPageBreak (VD: PHÊ DUYỆT nối
-            // liền ngay sau HEADER trên cùng 1 trang thay vì luôn nhảy sang trang mới).
-            if (!page || !item.noPageBreak) newPage();
+            // Ngắt trang tại mỗi section, TRỪ KHI "nối lên trang trước":
+            //  - section tự đánh dấu noPageBreak (VD: PHÊ DUYỆT nối sau HEADER, hoặc section rỗng
+            //    tự nối lên), HOẶC
+            //  - đây là NHÁNH PHÒNG (track>=2) mà section GỐC (track 1) của nhóm đã bật noPageBreak
+            //    — "nối trang" ở TIÊU ĐỀ CHÍNH kéo mọi nhánh con lên CÙNG trang với tiêu đề chính.
+            // Riêng section gốc CÓ nhánh: noPageBreak dành cho việc kéo nhánh lên, nên BẢN THÂN gốc
+            // vẫn mở trang mới (đứng đầu trang của mình) — khớp kết quả người dùng mong muốn.
+            const _ti = sectionTrackInfoV2(item);
+            let joinUp;
+            if (_ti.track >= 2) {
+                const root = sectionTrackRootV2(item);
+                joinUp = item.noPageBreak || !!(root && root.noPageBreak);
+            } else {
+                joinUp = sectionHasBranchesV2(item) ? false : item.noPageBreak;
+            }
+            // section CHÍNH của trang = section KHÔNG nối lên trang trước (tự mở trang mới,
+            // hoặc là section đầu tiên). Dùng để quyết định chỉ đóng SỐ LÔ đúng 1 lần/trang.
+            const startsNewPageV2 = !page || !joinUp;
+            if (startsNewPageV2) newPage();
             const el = document.createElement('div');
             el.className = 'v2-section' + (item.hideTitle ? ' v2-section-notitle' : '');
             el.id = 'v2-sec-' + item.id;
@@ -639,10 +748,20 @@ function renderDocument() {
                     const toolbar = document.createElement('div');
                     toolbar.className = 'v2-section-toolbar';
                     const { track } = sectionTrackInfoV2(item);
+                    // TIÊU ĐỀ CHÍNH (gốc) có nhánh phòng: nút "nối trang" kéo các nhánh con lên cùng
+                    // trang. Section thường/nhánh: nút nối chính section này lên trang trước.
+                    const isBranchRoot = track === 1 && sectionHasBranchesV2(item);
+                    const pbTitle = isBranchRoot
+                        ? (item.noPageBreak
+                            ? 'Đang nối các nhánh phòng lên cùng trang với tiêu đề này — bấm để tách mỗi nhánh sang trang riêng'
+                            : 'Mỗi nhánh phòng đang ở trang riêng — bấm để nối tất cả nhánh lên cùng trang với tiêu đề này')
+                        : (item.noPageBreak
+                            ? 'Đang nối liền trang trước — bấm để tách sang trang riêng'
+                            : 'Đang tự sang trang riêng — bấm để nối liền ngay sau trang trước (section không có nội dung)');
                     toolbar.innerHTML = `
                         <button type="button" class="v2-block-action-btn" data-act="rename" title="Đổi tên phân đoạn"><i class="fas fa-pen"></i></button>
                         ${isRoomTrackEligibleV2(item) ? '<button type="button" class="v2-block-action-btn" data-act="split" title="Tách nhánh phòng (công đoạn này chạy song song ở phòng khác)"><i class="fas fa-code-branch"></i></button>' : ''}
-                        <button type="button" class="v2-block-action-btn" data-act="toggle-pagebreak" title="${item.noPageBreak ? 'Đang nối liền trang trước — bấm để tách sang trang riêng' : 'Đang tự sang trang riêng — bấm để nối liền ngay sau trang trước (section không có nội dung)'}"><i class="fas fa-${item.noPageBreak ? 'link' : 'file'}"></i></button>
+                        <button type="button" class="v2-block-action-btn" data-act="toggle-pagebreak" title="${pbTitle}"><i class="fas fa-${item.noPageBreak ? 'link' : 'file'}"></i></button>
                         ${track >= 2 ? '<button type="button" class="v2-block-action-btn v2-block-action-danger" data-act="del-track" title="Xóa nhánh này"><i class="fas fa-trash-alt"></i></button>' : ''}`;
                     toolbar.querySelectorAll('button').forEach((b) => b.addEventListener('mousedown', (e) => e.preventDefault()));
                     toolbar.querySelector('[data-act="rename"]').addEventListener('click', (e) => { e.stopPropagation(); renameSectionV2(item); });
@@ -651,8 +770,26 @@ function renderDocument() {
                     toolbar.querySelector('[data-act="del-track"]')?.addEventListener('click', (e) => { e.stopPropagation(); deleteBlock(item.id); });
                     el.appendChild(toolbar);
                 }
+
+                // Con dấu: section THƯỜNG luôn đóng; section ẢO (hệ thống) chỉ đóng ở
+                // CÔNG THỨC PHA CHẾ (PHÊ DUYỆT / LỊCH SỬ ẤN BẢN / THÔNG TIN SẢN PHẨM không
+                // đóng). Bảng HEADER đóng riêng trên chính bảng — xem nhánh run 'plain'.
+                let sealStampsV2 = null;
+                if (!item.isVirtual || item.id === 'sys_bmr_sec_recipe') {
+                    sealStampsV2 = buildSealStampsV2();
+                    if (sealStampsV2) el.appendChild(sealStampsV2);
+                }
+
+                // Số lô: chỉ đóng ở block THỰC SỰ CÓ MỘC (đồng bộ điều kiện con dấu ở trên),
+                // VÀ chỉ ở section CHÍNH của trang — nếu 2 section đã nối chung 1 trang thì
+                // không lặp lại số lô ở section nối theo sau (tránh chồng chữ lên tiêu đề).
+                if (startsNewPageV2 && sealStampsV2) {
+                    const batch = buildBatchStampV2();
+                    if (batch) el.appendChild(batch);
+                }
             }
             page.appendChild(el);
+            if (!item.isVirtual) page.__allVirtual = false;
             renderedAny = true;
             return;
         }
@@ -663,7 +800,11 @@ function renderDocument() {
             run.entries.forEach(({ item, idx }) => {
                 const el = buildBlockElV2(item, idx);
                 if (!el) return;
+                // Bảng HEADER hệ thống (sys_bmr_tbl_header / sys_gf_tbl_header): số lô + con dấu
+                // giờ nằm ngay TRONG bảng (hàng cuối, do virtual_blocks_v2.blade.php dựng sẵn) —
+                // không còn đóng dấu nổi ở góc bảng nữa (tránh trùng lặp/che chữ khóa hệ thống).
                 page.appendChild(el);
+                if (!item.isVirtual) page.__allVirtual = false;
                 renderedAny = true;
                 // Cho chèn khối mới dưới block thường, hoặc dưới block ảo CUỐI CÙNG
                 // (để thêm nội dung ngay sau vùng hệ thống)
@@ -676,9 +817,16 @@ function renderDocument() {
         }
 
         // run.kind === 'loop'
+        if (run.entries.some(({ item }) => !item.isVirtual)) page.__allVirtual = false;
         if (BOOT.isExecutionMode) renderLoopGroupExecutionV2(run, page);
         else renderLoopGroupDesignV2(run, page);
         renderedAny = true;
+    });
+
+    // Trang chỉ chứa block/section HỆ THỐNG (isVirtual, VD: HEADER + PHÊ DUYỆT) thường có ít
+    // nội dung -> co chiều cao theo nội dung thay vì luôn cao full A4, tránh dư khoảng trắng.
+    Array.from(container.children).forEach((p) => {
+        p.classList.toggle('v2-page-auto', !!p.__allVirtual);
     });
 
     if (!renderedAny) {
@@ -694,6 +842,8 @@ function renderDocument() {
     activateStaticBadges(); // Chạy thử: vẽ UI nhập liệu lên badge tĩnh (block không mount TipTap)
     updateHeadingNumbersV2(); // đánh số tiêu đề tự động (nếu đang bật)
     syncSplitPreviewV2(); // Split View: đồng bộ pane xem-thử nếu đang mở
+    cmtApplyAll(); // vẽ lại highlight + rail bình luận lên DOM vừa dựng
+    naMarks.onAfterRender(); // vẽ lại lớp gạch chéo "Không sử dụng" (Chạy thử/Thực thi)
 }
 
 /* ----------------------------------------------------------
@@ -724,7 +874,10 @@ function updateHeadingNumbersV2() {
     // đây là tiêu đề CHUNG của công đoạn dù đã tách nhánh hay chưa. Nhánh MỚI (track>=2) được
     // đánh số con "N.1.", "N.2.", ... theo đúng số track (không phụ thuộc thứ tự DOM), để
     // xoá 1 nhánh không làm đổi số của các nhánh còn lại.
-    let secN = 0;           // số thứ tự section thường
+    // Xem qua ?section= (VD: iframe xem trước trong modal Phân phối): DOM chỉ còn đúng 1 công
+    // đoạn nên đếm từ 0 sẽ luôn ra "1." dù công đoạn đó là số mấy trong hồ sơ gốc. Server đã
+    // tính sẵn số thật (activeSectionNumber) -> khởi tạo bộ đếm từ đó thay vì từ 0.
+    let secN = BOOT.activeSectionNumber ? BOOT.activeSectionNumber - 1 : 0; // số thứ tự section thường
     let inSystemSec = false; // đang duyệt bên trong section hệ thống -> bỏ qua tiêu đề
     let curPrefix = '';     // tiền tố số của section hiện tại (VD "3." hoặc "3.2.") cho tiêu đề con
     const groupSecN = new Map(); // key nhóm (category::stageCode) -> số cấp 1 đã gán (gán khi gặp lần đầu)
@@ -913,25 +1066,39 @@ function openBlockLoopModalV2() {
     let existingCount = 3;
     let existingGroupId = null;
     let existingLabel = '';
+    let existingLabels = [];
     for (const id of blockPickIds) {
         const b = items.find((i) => i.id === id);
         if (b && b.loop_group_id) {
             existingCount = b.loop_count || 3;
             existingGroupId = b.loop_group_id;
             existingLabel = b.loop_label || '';
+            existingLabels = Array.isArray(b.loop_labels) ? b.loop_labels : [];
             break;
         }
     }
+
+    const renderNameRows = (count, prefix, labels) => Array.from({ length: count }, (_, k) => {
+        const i = k + 1;
+        return `<div class="d-flex align-items-center gap-2 mb-1">
+                <span class="text-muted small" style="width:20px">${i}.</span>
+                <input type="text" class="form-control form-control-sm v2-loop-name-item" data-idx="${i}" maxlength="40"
+                    placeholder="${esc(prefix + ' ' + i)}" value="${esc((labels && labels[k]) || '')}">
+            </div>`;
+    }).join('');
 
     window.Swal.fire({
         title: existingGroupId ? 'Chỉnh sửa Lặp nhóm khối' : 'Cài đặt Lặp nhóm khối',
         html: `<div class="text-start">
                 <label class="form-label small fw-bold mb-1">Số lần lặp</label>
                 <input type="number" id="v2-loop-count-input" class="form-control" min="1" max="50" value="${existingCount}">
-                <label class="form-label small fw-bold mb-1 mt-3">Tên gọi mỗi lần lặp</label>
+                <label class="form-label small fw-bold mb-1 mt-3">Tên gọi mặc định</label>
                 <input type="text" id="v2-loop-label-input" class="form-control" maxlength="30"
                     placeholder="Mặc định: Lần" value="${esc(existingLabel)}">
-                <div class="form-text" style="font-size:0.72rem">Tab khi Chạy thử sẽ hiện "&lt;tên gọi&gt; 1", "&lt;tên gọi&gt; 2"... — VD: Mẻ, Lô, Thùng. Bỏ trống = "Lần".</div>
+                <div class="form-text" style="font-size:0.72rem">Dùng khi 1 lần lặp không có tên riêng bên dưới — VD: Mẻ, Lô, Thùng. Bỏ trống = "Lần".</div>
+                <label class="form-label small fw-bold mb-1 mt-3">Đặt tên riêng cho từng lần (tùy chọn)</label>
+                <div id="v2-loop-names-list">${renderNameRows(existingCount, existingLabel || 'Lần', existingLabels)}</div>
+                <div class="form-text" style="font-size:0.72rem">Bỏ trống dòng nào thì tab đó dùng tên mặc định ở trên. VD: Đầu lô, Giữa lô, Cuối lô.</div>
                 <div class="form-text" style="font-size:0.72rem">${blockPickIds.length} khối đang được chọn.</div>
             </div>`,
         showCancelButton: true,
@@ -940,14 +1107,32 @@ function openBlockLoopModalV2() {
         denyButtonText: 'Gỡ bỏ lặp',
         denyButtonColor: '#dc3545',
         cancelButtonText: 'Hủy',
+        didOpen: () => {
+            const countInput = document.getElementById('v2-loop-count-input');
+            const labelInput = document.getElementById('v2-loop-label-input');
+            const listEl = document.getElementById('v2-loop-names-list');
+            const regenerate = () => {
+                const v = Math.min(50, Math.max(1, parseInt(countInput.value, 10) || 1));
+                const curLabels = Array.from(listEl.querySelectorAll('.v2-loop-name-item')).map((el) => el.value);
+                listEl.innerHTML = renderNameRows(v, (labelInput.value || '').trim() || 'Lần', curLabels);
+            };
+            countInput.addEventListener('input', regenerate);
+            labelInput.addEventListener('input', regenerate);
+        },
         preConfirm: () => {
             const v = parseInt(document.getElementById('v2-loop-count-input').value, 10);
             if (!v || v < 1) { window.Swal.showValidationMessage('Số lần lặp phải >= 1'); return false; }
-            return { count: v, label: (document.getElementById('v2-loop-label-input').value || '').trim() };
+            const names = Array.from(document.querySelectorAll('#v2-loop-names-list .v2-loop-name-item'))
+                .slice(0, v).map((el) => el.value.trim());
+            return {
+                count: v,
+                label: (document.getElementById('v2-loop-label-input').value || '').trim(),
+                labels: names.some((s) => s) ? names : [],
+            };
         },
     }).then((result) => {
         if (result.isConfirmed) {
-            const { count: loopCount, label: loopLabel } = result.value;
+            const { count: loopCount, label: loopLabel, labels: loopLabels } = result.value;
             const groupId = existingGroupId || ('loopgrp_v2_' + Date.now().toString(36));
             saveDocState();
             blockPickIds.forEach((id) => {
@@ -956,6 +1141,7 @@ function openBlockLoopModalV2() {
                     b.loop_group_id = groupId;
                     b.loop_count = loopCount;
                     if (loopLabel) b.loop_label = loopLabel; else delete b.loop_label;
+                    if (loopLabels.length) b.loop_labels = loopLabels; else delete b.loop_labels;
                     b.dirty = true;
                 }
             });
@@ -968,7 +1154,7 @@ function openBlockLoopModalV2() {
             saveDocState();
             blockPickIds.forEach((id) => {
                 const b = items.find((i) => i.id === id);
-                if (b) { delete b.loop_group_id; delete b.loop_count; delete b.loop_label; b.dirty = true; }
+                if (b) { delete b.loop_group_id; delete b.loop_count; delete b.loop_label; delete b.loop_labels; b.dirty = true; }
             });
             setBlockPickModeV2(false);
             clearBlockPickV2();
@@ -1054,6 +1240,7 @@ function pasteBlockClipboardV2() {
         delete nb.loop_group_id; // không mang theo nhóm Lặp của bản gốc
         delete nb.loop_count;
         delete nb.loop_label;
+        delete nb.loop_labels;
         if (typeof nb.content === 'string') nb.content = rewriteFieldIdsInHtmlV2(nb.content, idMap);
         if (nb.type === 'table' && Array.isArray(nb.data)) {
             nb.data.forEach((row) => row.forEach((cell) => {
@@ -1101,6 +1288,182 @@ function buildNewBlockV2(type, sectionId, rows = 2, cols = 3) {
         id: newBlockId(), type: 'static-text', label: 'Văn bản',
         content: '<p></p>', section_id: sectionId, dirty: true,
     };
+}
+
+/* =========================================================
+ * 1b-bis. SIDEBAR BIỂU MẪU CHUNG (GF) — kéo thả chèn liên kết SỐNG theo doc_code
+ * (như sidebar Thành phần CO/Thiết bị: cho phép thả vào BẤT KỲ vị trí nào giữa
+ * 2 khối liên tiếp, thay vì chỉ chèn tại điểm click cuối cùng qua modal).
+ * Khối chỉ lưu ref_doc_code + label, KHÔNG copy nội dung; nội dung thật được
+ * server (LinkedGfResolver) resolve lúc thiết kế/thực thi. */
+let allGfsV2 = null;
+
+async function loadGfListV2() {
+    const list = document.getElementById('v2-gf-list');
+    list.innerHTML = '<div class="text-center text-muted small py-3"><div class="spinner-border spinner-border-sm me-1"></div> Đang tải...</div>';
+    const data = await fetch(BOOT.urls.templates).then((r) => r.json()).catch(() => null);
+    if (!data) { list.innerHTML = '<div class="text-danger small text-center py-3">Lỗi tải dữ liệu.</div>'; return; }
+
+    // Chỉ giữ GF đang active, gộp theo doc_code (mỗi Số BM chỉ hiện 1 dòng — bản mới nhất để hiển thị,
+    // việc resolve bản active thật sự luôn được server làm lại tại thời điểm chèn/thực thi).
+    const gfs = data.filter((t) => t.type === 'GF' && t.status === 'active' && t.doc_code);
+    const byDocCode = new Map();
+    gfs.forEach((t) => {
+        const existed = byDocCode.get(t.doc_code);
+        if (!existed || (t.version || 0) > (existed.version || 0)) byDocCode.set(t.doc_code, t);
+    });
+    allGfsV2 = Array.from(byDocCode.values());
+    renderGfListV2(allGfsV2);
+}
+
+function renderGfListV2(gfs) {
+    const list = document.getElementById('v2-gf-list');
+    const kw = (document.getElementById('v2-gf-search').value || '').toLowerCase();
+    const filtered = gfs.filter((t) => !kw || (t.name || '').toLowerCase().includes(kw) || (t.doc_code || '').toLowerCase().includes(kw));
+    if (!filtered.length) {
+        list.innerHTML = '<div class="text-muted small text-center py-3">Không có biểu mẫu chung nào.</div>';
+        return;
+    }
+    list.innerHTML = filtered.map((t) => `
+        <div class="v2-drag-card" draggable="true" data-gf-doc-code="${esc(t.doc_code)}" data-gf-name="${esc(t.name)}">
+            <i class="fas fa-grip-vertical text-muted mt-1"></i>
+            <div style="min-width:0;">
+                <div class="fw-bold text-truncate" title="${esc(t.name)}">${esc(t.name)}</div>
+                <div class="small-muted">Số BM: ${esc(t.doc_code)} · Cập nhật: ${new Date(t.updated_at).toLocaleString('vi-VN')}</div>
+            </div>
+        </div>`).join('');
+    list.querySelectorAll('.v2-drag-card').forEach((card) => {
+        card.addEventListener('dragstart', (e) => {
+            e.dataTransfer.setData('action', 'insertLinkedGf');
+            e.dataTransfer.setData('gfDocCode', card.getAttribute('data-gf-doc-code'));
+            e.dataTransfer.setData('gfName', card.getAttribute('data-gf-name'));
+            e.dataTransfer.effectAllowed = 'copy';
+            document.body.classList.add('v2-dragging');
+        });
+    });
+}
+
+function filterGfsV2() {
+    renderGfListV2(allGfsV2 || []);
+}
+
+function insertLinkedGfV2(afterIndex, docCode, name) {
+    if (BOOT.isReadOnly || BOOT.isExecutionMode) return; // Chạy thử: không cho chèn khối mới
+    const anchor = items[afterIndex] || null;
+    const sectionId = anchor ? (anchor.type === 'section' ? (anchor.section_id || anchor.id) : anchor.section_id) : null;
+    const block = {
+        id: newBlockId(), type: 'linked-template', ref_doc_code: docCode, label: name,
+        locked: false, section_id: sectionId, dirty: true,
+    };
+    saveDocState();
+    insertBlockAndFocusV2(block, Math.min(afterIndex + 1, items.length));
+}
+
+function toggleGfPreviewV2(id, docCode) {
+    const item = items.find((i) => i.id === id);
+    if (item) {
+        // Chỉ gọi được ở chế độ Thiết kế — Chạy thử/thực thi không render nút toggle (GF luôn bung).
+        item.showPreview = !item.showPreview;
+        if (!BOOT.isExecutionMode) { item.dirty = true; markDirty(); }
+        renderDocument();
+        return;
+    }
+    // Khối linked-template LỒNG bên trong 1 GF khác (chỉ tồn tại trong bản xem trước
+    // fetch riêng qua API, không nằm trong items[] của tài liệu chủ) — không có state
+    // showPreview để markDirty/renderDocument lại, nên bật/tắt trực tiếp trên DOM.
+    const container = document.getElementById(`v2-gf-preview-${id}`);
+    if (!container) return;
+    const show = container.style.display === 'none';
+    container.style.display = show ? 'block' : 'none';
+    if (show && !container.dataset.loaded) {
+        container.dataset.loaded = '1';
+        fetchAndRenderGfPreviewV2(id, docCode);
+    }
+}
+
+let gfPreviewCacheV2 = {};
+
+async function fetchAndRenderGfPreviewV2(blockId, docCode) {
+    const container = document.getElementById(`v2-gf-preview-${blockId}`);
+    if (!container || !docCode) return;
+    if (gfPreviewCacheV2[docCode]) {
+        renderGfPreviewContentV2(container, gfPreviewCacheV2[docCode].blocks, gfPreviewCacheV2[docCode].fields);
+        return;
+    }
+    container.innerHTML = '<div class="text-muted small py-2"><div class="spinner-border spinner-border-sm me-1"></div> Đang tải xem trước...</div>';
+    const data = await fetch(`${BOOT.urls.gfBlocksByDocCode}?doc_code=${encodeURIComponent(docCode)}`)
+        .then((r) => r.json()).catch(() => null);
+    if (!data || !Array.isArray(data.blocks)) {
+        container.innerHTML = '<div class="text-danger small py-2">Không tải được nội dung xem trước.</div>';
+        return;
+    }
+    const fields = data.fields || {};
+    gfPreviewCacheV2[docCode] = { blocks: data.blocks, fields };
+    renderGfPreviewContentV2(container, data.blocks, fields);
+}
+
+/** Bảng của GF được thiết kế theo bề rộng trang đầy đủ (cột lưu px). Khung xem trước
+ *  hẹp hơn trang (padding + viền) nên tổng px vượt bề rộng vùng chứa → bảng tràn khỏi
+ *  trang giấy. Đổi px sang % (giữ nguyên tỉ lệ) để bảng co theo khung chứa.
+ *  Trả về BẢN SAO nông — không sửa block trong cache gfPreviewCacheV2. */
+function scaleGfTableColumnsV2(block) {
+    const cols = Array.isArray(block.columns) ? block.columns : [];
+    const px = cols.map((c) => (typeof c?.width === 'string' && c.width.endsWith('px')) ? parseFloat(c.width) : null);
+    const total = px.reduce((s, v) => s + (v || 0), 0);
+    // Có cột auto/thiếu px thì bỏ qua (không suy được tỉ lệ); toàn auto thì tự chia đều, không tràn.
+    if (!total || px.some((v) => v === null || isNaN(v))) return block;
+    return {
+        ...block,
+        columns: cols.map((c, i) => ({ ...c, width: (px[i] / total * 100).toFixed(2) + '%' })),
+    };
+}
+
+/** Render các khối của GF (đọc riêng qua API, không nằm trong items[]) ở chế độ CHỈ ĐỌC —
+ *  dùng lại renderBlockContentV2 với contentOverride để không gắn listener chỉnh sửa.
+ *  fields: fieldsConfig RIÊNG của GF (field-id của GF không tồn tại trong fieldsConfig
+ *  của tài liệu chủ) — phải truyền vào để badge hiện đúng nhãn/loại thay vì rơi về mặc định.
+ *  Mỗi block được bọc try/catch riêng để 1 khối lỗi không chặn các khối còn lại hiển thị. */
+function renderGfPreviewContentV2(container, blocks, fields) {
+    if (!blocks.length) {
+        container.innerHTML = '<div class="text-muted small text-center py-3 fst-italic">Biểu mẫu này chưa có nội dung.</div>';
+        return;
+    }
+    container.innerHTML = '';
+    const wrap = document.createElement('div');
+    wrap.className = 'v2-gf-preview-content border rounded p-3 bg-white';
+    blocks.filter((b) => b.type !== 'section').forEach((canonicalBlock) => {
+        try {
+            let b = canonicalBlock;
+            if (b.type === 'table') {
+                // scaleGfTableColumnsV2 trả BẢN SAO nông (khi cột dạng px) → "Thêm/Xóa dòng"
+                // sẽ mutate rows trên bản sao mà mất write-back về cache. Giữ tham chiếu block
+                // gốc trong cache để đồng bộ ngược (xem syncGfCanonicalRowsV2).
+                b = scaleGfTableColumnsV2(b);
+                if (b !== canonicalBlock) b.__gfCanonical = canonicalBlock;
+            }
+            const el = renderBlockContentV2(
+                b,
+                b.type === 'static-text' ? (b.content || '') : undefined,
+                b.type === 'table' ? b.data : undefined,
+                fields
+            );
+            if (el) wrap.appendChild(el);
+        } catch (err) {
+            console.error('Lỗi render khối xem trước GF:', b, err);
+            const warn = document.createElement('div');
+            warn.className = 'text-danger small py-1';
+            warn.textContent = `[Không hiển thị được khối "${b.label || b.type || ''}"]`;
+            wrap.appendChild(warn);
+        }
+    });
+    container.appendChild(wrap);
+
+    // Chạy thử: field của GF không có trong fieldsConfig tài liệu chủ — bổ sung (không đè
+    // key trùng) rồi kích hoạt badge trong vùng này để điền dữ liệu được như field thường.
+    if (BOOT.isExecutionMode && fields) {
+        Object.keys(fields).forEach((k) => { if (!fieldsConfig[k]) fieldsConfig[k] = fields[k]; });
+        activateStaticBadgesIn(wrap);
+    }
 }
 
 /** Chèn 1 khối đã dựng sẵn vào items tại insertAt, render lại rồi focus/scroll tới đó. */
@@ -1174,6 +1537,26 @@ function sectionTrackInfoV2(item) {
         if (!isNaN(track)) return { category: parts[0], stageCode: parts.slice(2).join('_'), track };
     }
     return { category: parts.slice(0, -1).join('_'), stageCode: parts[parts.length - 1] || '', track: 1 };
+}
+
+/** Khóa nhóm CÔNG ĐOẠN (category::stageCode) — mọi nhánh phòng cùng công đoạn dùng chung khóa này. */
+function sectionGroupKeyV2(item) {
+    const { category, stageCode } = sectionTrackInfoV2(item);
+    return category + '::' + stageCode;
+}
+
+/** Section GỐC (track 1) của nhóm công đoạn chứa item — là tiêu đề CHUNG "N." của các nhánh phòng. */
+function sectionTrackRootV2(item) {
+    const key = sectionGroupKeyV2(item);
+    return items.find((it) => it.type === 'section' && !it.isVirtual
+        && sectionGroupKeyV2(it) === key && sectionTrackInfoV2(it).track === 1) || null;
+}
+
+/** Nhóm công đoạn của item có ít nhất 1 nhánh phòng (track>=2) hay không. */
+function sectionHasBranchesV2(item) {
+    const key = sectionGroupKeyV2(item);
+    return items.some((it) => it.type === 'section' && !it.isVirtual
+        && sectionGroupKeyV2(it) === key && sectionTrackInfoV2(it).track >= 2);
 }
 
 /** Chỉ công đoạn sản xuất THẬT (stage_code số 1-7, không hệ thống/khóa) mới được tách nhánh —
@@ -1286,7 +1669,7 @@ function moveBlock(id, dir) {
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
-function renderTable(item) {
+function renderTable(item, fieldsOverride) {
     const wrap = document.createElement('div');
     wrap.className = 'v2-block v2-table-wrap';
     wrap.setAttribute('data-id', item.id);
@@ -1369,7 +1752,7 @@ function renderTable(item) {
 
             const inner = document.createElement('div');
             inner.className = 'v2-editable v2-cell';
-            inner.innerHTML = decorateBadges(cell.content || '');
+            inner.innerHTML = decorateBadges(cell.content || '', fieldsOverride);
             td.appendChild(inner);
 
             if (!BOOT.isReadOnly && !BOOT.isExecutionMode && !item.locked) {
@@ -1391,7 +1774,7 @@ function renderTable(item) {
             const extraTd = document.createElement('td');
             extraTd.className = 'v2-table-extra-col';
             const isDynamicRow = item.data[r][0] && item.data[r][0].is_dynamic;
-            if (BOOT.isExecutionMode && isDynamicRow) {
+            if (isDynamicRow) { // showAddRowUI đã đảm bảo đang ở Chạy thử/thực thi
                 const delBtn = document.createElement('button');
                 delBtn.type = 'button';
                 delBtn.className = 'v2-table-row-del-btn';
@@ -1422,6 +1805,16 @@ function renderTable(item) {
         addBtn.addEventListener('click', (e) => { e.stopPropagation(); addRuntimeTableRowV2(item); });
         addWrap.appendChild(addBtn);
         wrap.appendChild(addWrap);
+    }
+
+    // Thiết kế: đánh dấu góc bảng đã bật "Thêm dòng (Cấp 2)" để không cần mở menu
+    // chuột phải mới biết — xem toggle ở buildTableContextMenuItemsV2 (fa-plus-circle).
+    if (!!item.canAddRows && !BOOT.isExecutionMode && !BOOT.isReadOnly) {
+        const capBadge = document.createElement('div');
+        capBadge.className = 'v2-table-canaddrows-badge';
+        capBadge.title = 'Bảng đã bật "Cho phép người dùng cấp 2 thêm dòng" lúc Chạy thử/thực thi';
+        capBadge.innerHTML = '<i class="fas fa-plus-circle"></i>';
+        wrap.appendChild(capBadge);
     }
     return wrap;
 }
@@ -1958,6 +2351,9 @@ function mountEditor(host, getHTML, setHTML, context = null, clickPos = null) {
         if (headingNumberingOnV2()) updateHeadingNumbersV2();
     });
     if (headingNumberingOnV2()) updateHeadingNumbersV2(); // mount xong: áp số lên DOM editor mới
+    // Mount xoá sạch DOM của host -> highlight trong khối này biến mất. Vẽ lại phần còn lại
+    // và bỏ đường nối tới khối đang sửa (TipTap quản lý DOM của nó, không chèn span vào được).
+    cmtApplyAll();
 }
 
 /**
@@ -2135,6 +2531,7 @@ function unmountEditor() {
     try { editor.destroy(); } catch (err) { console.error('[V2] unmountEditor: editor.destroy() thất bại:', err); }
     host.classList.remove('v2-editing');
     host.innerHTML = decorateBadges(html); // trở lại chế độ xem tĩnh — LUÔN chạy dù các bước trên lỗi
+    cmtApplyAll(); // chữ vừa sửa có thể làm lệch neo -> dò lại và vẽ lại highlight
     refreshToolbarState();
 }
 
@@ -2146,6 +2543,9 @@ document.addEventListener('mousedown', (e) => {
     if (activeHost.contains(e.target)) return;
     if (e.target.closest('#v2-toolbar') || e.target.closest('#v2-field-panel') || e.target.closest('.modal')
         || e.target.closest('#v2-context-menu')) return; // menu chuột phải: giữ editor + con trỏ để "Dán biến" đúng vị trí
+    // Rail bình luận: unmount sẽ render lại rail ngay trong lượt mousedown, phần tử dưới con trỏ
+    // bị thay mới nên sự kiện click (Trả lời/Xóa) không bao giờ bắn ra. Giữ editor sống.
+    if (e.target.closest('#v2-cmt-rail')) return;
     unmountEditor();
 });
 
@@ -2214,16 +2614,6 @@ function smartRedo() {
     else redoDoc();
 }
 
-/** Chèn/sửa liên kết như Google Docs (Ctrl+K) */
-function promptLink() {
-    if (!activeEditor) return;
-    const prev = activeEditor.getAttributes('link').href || '';
-    const url = window.prompt('Địa chỉ liên kết (để trống để gỡ liên kết):', prev);
-    if (url === null) return;
-    if (url === '') activeEditor.chain().focus().unsetLink().run();
-    else activeEditor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
-}
-
 // Các lệnh áp dụng được ở CẤP Ô khi chọn nhiều ô (không cần editor)
 const CELL_LEVEL_CMDS = ['bold', 'italic', 'align-left', 'align-center', 'align-right', 'align-justify', 'clear-format'];
 
@@ -2231,7 +2621,7 @@ function refreshToolbarState() {
     const bar = document.getElementById('v2-toolbar');
     if (!bar) return;
     const hasCellSel = selection.hasCells();
-    bar.querySelectorAll('[data-cmd], [data-fmt], #v2-btn-link').forEach((el) => {
+    bar.querySelectorAll('[data-cmd], [data-fmt]').forEach((el) => {
         // Undo/Redo luôn bật (hoạt động cả ở cấp tài liệu khi không gõ trong editor)
         const cmdName = el.getAttribute && el.getAttribute('data-cmd');
         if (cmdName === 'undo' || cmdName === 'redo') { el.disabled = false; return; }
@@ -2377,12 +2767,6 @@ function initFormatControls() {
             });
         });
     }
-    const linkBtn = document.getElementById('v2-btn-link');
-    if (linkBtn) {
-        linkBtn.addEventListener('mousedown', (e) => e.preventDefault());
-        linkBtn.addEventListener('click', promptLink);
-    }
-
     // Căn nội dung ô bảng theo chiều dọc (trên/giữa/dưới)
     [['v2-btn-valign-top', 'top'], ['v2-btn-valign-middle', 'middle'], ['v2-btn-valign-bottom', 'bottom']]
         .forEach(([bid, v]) => {
@@ -3108,7 +3492,7 @@ function insertVariable(type) {
  * bản sao mới thay vì trỏ ngược về biến gốc (bug: copy cả formula + biến
  * phụ thuộc của nó thì formula bản sao vẫn tính theo biến GỐC).
  */
-function buildFieldDuplicateMapV2(htmlList) {
+function buildFieldDuplicateMapV2(htmlList, makeId) {
     const idMap = {};   // oldId -> newId
     const nameMap = {}; // oldName -> newName (name cũ của field bị nhân bản)
     const tmp = document.createElement('div');
@@ -3118,7 +3502,9 @@ function buildFieldDuplicateMapV2(htmlList) {
         tmp.querySelectorAll('[data-field-id]').forEach((el) => {
             const oldId = el.getAttribute('data-field-id');
             if (!oldId || idMap[oldId] || !fieldsConfig[oldId]) return;
-            const newId = 'field_v2_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8) + i;
+            const newId = makeId
+                ? makeId(oldId)
+                : 'field_v2_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8) + i;
             idMap[oldId] = newId;
             nameMap[fieldsConfig[oldId].name || oldId] = newId;
         });
@@ -4194,6 +4580,10 @@ window.batchDeleteFieldsV2 = batchDeleteFieldsV2;
 window.openBatchFieldPanelV2 = openBatchFieldPanelV2;
 
 function markDirty() {
+    // Chạy thử/thực thi KHÔNG BAO GIỜ sửa được cấu trúc template — mọi biến động cấu trúc
+    // trong 2 chế độ này (thêm dòng Cấp 2, nhân bản field Lặp nhóm...) là tạm thời/theo lô,
+    // không được làm nút Lưu template chuyển "có thay đổi".
+    if (BOOT.isExecutionMode) return;
     isDirtyDoc = true;
     const btn = document.getElementById('v2-btn-save');
     if (btn) {
@@ -4386,14 +4776,14 @@ function saveTemplate() {
         hideHeader: i.hideHeader || false,
         canAddRows: i.canAddRows || false, addRowsCount: i.addRowsCount || 1,
         freq_minutes: i.freq_minutes || null,
-        locked: i.locked || false, template_id: i.template_id || null,
+        locked: i.locked || false, template_id: i.template_id || null, ref_doc_code: i.ref_doc_code || null,
         showPreview: i.showPreview || false, stage_code: i.stage_code || null,
         chartConfig: i.chartConfig || null, backgroundColor: i.backgroundColor || null,
         section_id: i.section_id || null,
         isBmrHeader: i.isBmrHeader || false, isGfHeader: i.isGfHeader || false,
         isAbbreviationTable: i.isAbbreviationTable || false,
         loop_group_id: i.loop_group_id || null, loop_count: i.loop_count || null,
-        loop_label: i.loop_label || null,
+        loop_label: i.loop_label || null, loop_labels: i.loop_labels || null,
         typography: i.typography || null,
         cell_notes: i.cell_notes || null, conditional_logic: i.conditional_logic || null,
         textAlign: i.textAlign || null, verticalAlign: i.verticalAlign || null,
@@ -4454,11 +4844,28 @@ function saveTemplate() {
                             const info = res.block_ids[fId];
                             if (info.db_id) it.db_id = info.db_id;
                             if (info.content_db_id) it.content_db_id = info.content_db_id;
-                            if (info.data) it.data = info.data;
+                            // Server chỉ bổ sung db_id cho TỪNG Ô (để lần lưu sau UPDATE thay vì
+                            // INSERT trùng) — phần content trong info.data chỉ là ảnh chụp lúc gửi.
+                            // KHÔNG được thay cả mảng (it.data = info.data): DOM đang hiển thị giữ
+                            // closure cellRef trỏ vào object ô CŨ (renderTable), thay mảng làm mọi
+                            // chỉnh sửa sau đó (gõ chữ, chèn biến) ghi vào object mồ côi — biến số
+                            // hiện trên màn hình nhưng biến mất khỏi dữ liệu ở lần lưu kế tiếp.
+                            if (info.data && Array.isArray(it.data)) {
+                                info.data.forEach((row, r) => (row || []).forEach((srvCell, c) => {
+                                    const cur = it.data[r] && it.data[r][c];
+                                    if (cur && typeof cur === 'object' && srvCell && typeof srvCell === 'object' && srvCell.db_id) {
+                                        cur.db_id = srvCell.db_id;
+                                    }
+                                }));
+                            }
                         }
                     });
                 }
-                items.forEach((i) => (i.dirty = false));
+                // Chỉ hạ cờ dirty cho block ĐÃ gửi trong lượt lưu này — block được sửa
+                // trong lúc request đang chạy (dirty bật sau khi payload đã chốt) phải
+                // giữ nguyên cờ, kẻo lần lưu sau bỏ sót nội dung mới.
+                const sentIds = new Set(dirtyFields.map((f) => f.id));
+                items.forEach((i) => { if (sentIds.has(i.id)) i.dirty = false; });
                 deletedBlockIds = [];
                 deletedFieldKeys = [];
                 markSaved();
@@ -4530,12 +4937,55 @@ function buildToc() {
 }
 
 /* =========================================================
- * 5c. BÌNH LUẬN (kiểu Google Docs) — dùng API comment sẵn có của V1
+ * 5c. BÌNH LUẬN VÙNG CHỌN (kiểu MS Word)
+ *
+ * Người dùng quét chọn một đoạn chữ -> bấm bong bóng bình luận -> nhập nội dung.
+ * Đoạn đó được tô nền tím và nối bằng một đường kẻ sang card bình luận nằm ở rail
+ * bên phải trang giấy. Card hỗ trợ trả lời (thread) và xoá.
+ *
+ * NEO (anchor) — điểm mấu chốt:
+ *   Vùng chọn KHÔNG được ghi vào item.content dưới dạng thẻ <span>. Thay vào đó nó được
+ *   mô tả bằng `selection_data` = {blockId, r, c, start, end, quote, prefix, suffix} và
+ *   highlight được VẼ LẠI lên DOM sau mỗi lượt render. Nhờ vậy:
+ *     • nội dung template sạch tuyệt đối — không có markup bình luận rò xuống trang
+ *       Thực thi / In / Export;
+ *     • tạo và xoá bình luận có hiệu lực ngay, không cần bấm Lưu template;
+ *     • xoá bình luận là mất sạch highlight, không để lại rác cần dọn.
+ *   Đổi lại, khi người dùng sửa chữ phía trước đoạn neo thì {start,end} lệch đi. Lúc đó
+ *   cmtLocate() dò lại bằng `quote` (chọn lần xuất hiện gần offset cũ nhất) rồi ghi offset
+ *   mới về server qua cmtQueueReanchor(). Nếu đoạn neo bị xoá hẳn, bình luận thành "mồ côi":
+ *   vẫn hiện ở rail (viền vàng, không có đường nối) chứ không biến mất.
+ *
+ * OFFSET được đếm trên DOM ĐÃ RENDER (sau decorateBadges), không phải trên HTML gốc —
+ * cả lúc bắt vùng chọn lẫn lúc dò lại đều dùng cùng một phép duyệt text node nên khớp nhau.
  * ========================================================= */
-let commentsFocusBlockId = null; // block đang được bình luận (null = bình luận chung)
 
-function getBlockComments(blockId) {
-    return (BOOT.comments || []).filter((c) => c.selection_id === blockId);
+const CMT_CONTEXT_LEN = 32; // số ký tự trước/sau đoạn neo lưu lại để phân biệt các đoạn trùng chữ
+
+let cmtPending = null;      // bình luận đang soạn (chưa gửi): { sd }
+let cmtActiveId = null;     // id bình luận đang được chọn (tô đậm + đường nối đậm)
+// Vùng chọn gần nhất còn hợp lệ. Bấm bong bóng bình luận sẽ kích hoạt handler mousedown
+// toàn cục -> unmountEditor() -> DOM dựng lại và selection biến mất TRƯỚC khi sự kiện click
+// tới được cmtStartNew(). Cache này giữ lại neo đã bắt được để không mất vùng chọn.
+let cmtLastSel = null;
+
+/* ---------- 5c.1 Tiện ích chung ---------- */
+
+function cmtVisible() {
+    return document.body.classList.contains('v2-cmt-on');
+}
+
+/** selection_data có thể là chuỗi JSON (từ DB) hoặc object (vừa tạo tại client). */
+function cmtSel(c) {
+    if (!c.selection_data) return null;
+    if (typeof c.selection_data === 'object') return c.selection_data;
+    try {
+        const sd = JSON.parse(c.selection_data);
+        c.selection_data = sd; // chuẩn hoá về object để các lần sau khỏi parse lại
+        return sd && typeof sd === 'object' && sd.blockId ? sd : null;
+    } catch (e) {
+        return null;
+    }
 }
 
 /** content trong DB có thể là text thuần hoặc JSON {text, replies[]} */
@@ -4549,136 +4999,532 @@ function parseCommentContent(raw) {
     return { text: raw, replies: [] };
 }
 
-function blockLabelOf(blockId) {
-    const it = items.find((i) => i.id === blockId);
-    if (!it) return blockId;
-    return `${it.label || it.type}`;
+/* ---------- 5c.2 Định vị "root" neo (khối văn bản hoặc ô bảng) ---------- */
+
+/** Phần tử .v2-editable chứa node — đơn vị nhỏ nhất mà offset được tính bên trong. */
+function cmtRootOf(node) {
+    const el = node && node.nodeType === 1 ? node : (node && node.parentElement);
+    return el ? el.closest('.v2-editable') : null;
 }
 
-function renderCommentsList() {
-    const list = document.getElementById('v2-comments-list');
-    if (!list) return;
-    const all = BOOT.comments || [];
-    const shown = commentsFocusBlockId ? all.filter((c) => c.selection_id === commentsFocusBlockId) : all;
+/** Khoá nhận diện root: khối văn bản {blockId,r:null} hoặc ô bảng {blockId,r,c}. */
+function cmtRootKey(root) {
+    const blockEl = root.closest('#v2-pages .v2-block[data-id]');
+    if (!blockEl) return null;
+    const blockId = blockEl.getAttribute('data-id');
+    const td = root.closest('td[data-row][data-col]');
+    if (td) return { blockId, r: parseInt(td.dataset.row, 10), c: parseInt(td.dataset.col, 10) };
+    return { blockId, r: null, c: null };
+}
 
-    const target = document.getElementById('v2-comment-target');
-    if (target) {
-        target.innerHTML = commentsFocusBlockId
-            ? `Bình luận cho khối: <b>${esc(blockLabelOf(commentsFocusBlockId))}</b>
-               <a href="javascript:void(0)" id="v2-cmt-showall" class="ms-2">(xem tất cả)</a>`
-            : 'Bình luận chung cho hồ sơ';
-        const showAll = target.querySelector('#v2-cmt-showall');
-        if (showAll) showAll.addEventListener('click', () => { commentsFocusBlockId = null; renderCommentsList(); });
+/** Tìm lại root trong DOM hiện tại từ selection_data. */
+function cmtFindRoot(sd) {
+    const blockEl = document.querySelector(`#v2-pages .v2-block[data-id="${window.CSS.escape(sd.blockId)}"]`);
+    if (!blockEl) return null;
+    if (sd.r === null || sd.r === undefined) return blockEl.querySelector('.v2-editable');
+    const td = blockEl.querySelector(`td[data-row="${sd.r}"][data-col="${sd.c}"]`);
+    return td ? td.querySelector('.v2-editable') : null;
+}
+
+/* ---------- 5c.3 Quy đổi offset ký tự <-> Range ---------- */
+
+function cmtTextNodes(root) {
+    const out = [];
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+    let n;
+    while ((n = walker.nextNode())) out.push(n);
+    return out;
+}
+
+function cmtRootText(root) {
+    return cmtTextNodes(root).map((t) => t.nodeValue).join('');
+}
+
+/** Offset ký tự của một điểm (node,offset) tính từ đầu root. */
+function cmtOffsetOfPoint(root, node, offset) {
+    const r = document.createRange();
+    r.setStart(root, 0);
+    r.setEnd(node, offset);
+    return r.toString().length;
+}
+
+function cmtRangeFromOffsets(root, start, end) {
+    const range = document.createRange();
+    let acc = 0, started = false;
+    for (const t of cmtTextNodes(root)) {
+        const len = t.nodeValue.length;
+        if (!started && start <= acc + len) { range.setStart(t, start - acc); started = true; }
+        if (started && end <= acc + len) { range.setEnd(t, end - acc); return range; }
+        acc += len;
     }
+    return null;
+}
 
-    if (shown.length === 0) {
-        list.innerHTML = '<div class="text-muted small text-center py-4"><i class="far fa-comments fa-2x mb-2 d-block opacity-50"></i>Chưa có bình luận nào.</div>';
+/* ---------- 5c.4 Bắt vùng chọn & dò lại vị trí neo ---------- */
+
+/** Dựng selection_data từ vùng chọn hiện tại. Trả null nếu không chọn được (rỗng, xuyên khối...). */
+function cmtCaptureSelection() {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed || !String(sel).trim()) return null;
+    const range = sel.getRangeAt(0);
+    const root = cmtRootOf(range.startContainer);
+    // Chỉ nhận vùng chọn NẰM GỌN trong một khối/ô — bình luận xuyên khối không có neo rõ ràng
+    if (!root || !root.contains(range.endContainer)) return null;
+    const key = cmtRootKey(root);
+    if (!key) return null;
+
+    const start = cmtOffsetOfPoint(root, range.startContainer, range.startOffset);
+    const end = cmtOffsetOfPoint(root, range.endContainer, range.endOffset);
+    if (end <= start) return null;
+
+    const full = cmtRootText(root);
+    return {
+        ...key,
+        start,
+        end,
+        quote: full.slice(start, end),
+        prefix: full.slice(Math.max(0, start - CMT_CONTEXT_LEN), start),
+        suffix: full.slice(end, end + CMT_CONTEXT_LEN),
+    };
+}
+
+/**
+ * Dò vị trí đoạn neo trong root.
+ * Trả { start, end, drift } — drift=true nghĩa là offset đã lệch và cần ghi lại về server.
+ * Trả null nếu đoạn neo không còn tồn tại (bình luận mồ côi).
+ */
+function cmtLocate(root, sd) {
+    const full = cmtRootText(root);
+    if (!sd.quote) return null;
+    if (full.slice(sd.start, sd.end) === sd.quote) return { start: sd.start, end: sd.end, drift: false };
+
+    // Chữ đã bị sửa -> tìm lại `quote`. Nếu đoạn đó xuất hiện nhiều lần, chọn lần gần
+    // offset cũ nhất; hoà nhau thì ưu tiên lần có prefix khớp (phân biệt các ô/dòng giống hệt).
+    let best = -1, bestScore = Infinity;
+    for (let i = full.indexOf(sd.quote); i !== -1; i = full.indexOf(sd.quote, i + 1)) {
+        const prefixOk = !sd.prefix || full.slice(Math.max(0, i - sd.prefix.length), i) === sd.prefix;
+        const score = Math.abs(i - sd.start) - (prefixOk ? 0.5 : 0);
+        if (score < bestScore) { bestScore = score; best = i; }
+    }
+    if (best < 0) return null;
+    return { start: best, end: best + sd.quote.length, drift: true };
+}
+
+/** Ghi offset mới về server (im lặng) sau khi dò lại được đoạn neo bị lệch. */
+function cmtQueueReanchor(comment, sd) {
+    if (!BOOT.commentUrls?.reanchor || BOOT.isReadOnly) return;
+    fetch(BOOT.commentUrls.reanchor, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ id: parseInt(comment.id, 10), selection_data: sd, _token: BOOT.csrf }),
+    }).catch(() => { /* lệch offset không phải lỗi chặn người dùng — lần sau dò lại bằng quote */ });
+}
+
+/* ---------- 5c.5 Vẽ / xoá highlight trên DOM ---------- */
+
+function cmtClearHighlights() {
+    document.querySelectorAll('#v2-pages .v2-cmt-hl').forEach((span) => {
+        const parent = span.parentNode;
+        if (!parent) return;
+        while (span.firstChild) parent.insertBefore(span.firstChild, span);
+        parent.removeChild(span);
+        parent.normalize(); // gộp lại các text node đã bị splitText cắt ra
+    });
+}
+
+/**
+ * Bọc đoạn [start,end) trong root bằng các <span class="v2-cmt-hl">.
+ * Vùng chọn có thể trải qua nhiều text node (in đậm, xuống dòng...) nên phải bọc từng mảnh.
+ * Bọc KHÔNG làm đổi text content của root, nên các bình luận sau vẫn dùng đúng offset cũ.
+ */
+function cmtHighlight(root, start, end, cid) {
+    const jobs = [];
+    let acc = 0;
+    for (const node of cmtTextNodes(root)) {
+        const len = node.nodeValue.length;
+        const s = Math.max(start, acc), e = Math.min(end, acc + len);
+        // Badge biến số là DOM sinh ra (contenteditable=false) — vẫn tính vào offset nhưng
+        // không bọc span vào trong, tránh phá cấu trúc badge.
+        if (e > s && !node.parentElement.closest('[contenteditable="false"]')) {
+            jobs.push({ node, s: s - acc, e: e - acc });
+        }
+        acc += len;
+        if (acc >= end) break;
+    }
+    jobs.forEach(({ node, s, e }) => {
+        let n = node;
+        if (e < n.nodeValue.length) n.splitText(e);
+        if (s > 0) n = n.splitText(s);
+        const span = document.createElement('span');
+        span.className = 'v2-cmt-hl';
+        span.dataset.cid = String(cid);
+        n.parentNode.insertBefore(span, n);
+        span.appendChild(n);
+    });
+    return jobs.length > 0;
+}
+
+/* ---------- 5c.6 Rail: card bình luận + đường nối ---------- */
+
+function cmtCardHtml(c) {
+    const d = parseCommentContent(c.content);
+    const sd = cmtSel(c);
+    const replies = d.replies.map((r) => `
+        <div class="v2-comment-reply">
+            <span class="v2-comment-author">${esc(r.user_name)}</span>
+            <span class="v2-comment-time ms-1">${esc(String(r.created_at || '').slice(0, 16))}</span>
+            <div class="v2-comment-text">${esc(r.content)}</div>
+        </div>`).join('');
+    const quote = sd && sd.quote
+        ? `<div class="v2-comment-quote" title="${esc(sd.quote)}">${esc(sd.quote)}</div>` : '';
+    const orphanNote = c.__orphan
+        ? '<div class="v2-comment-quote" style="color:#b45309;background:#fef3c7;border-left-color:#f59e0b;">Đoạn văn bản neo đã bị xoá hoặc sửa</div>' : '';
+    return `
+        <div class="v2-comment-card${c.__orphan ? ' v2-cmt-orphan' : ''}" data-cid="${c.id}">
+            ${orphanNote}${quote}
+            <div class="d-flex justify-content-between">
+                <span class="v2-comment-author"><i class="fas fa-user-circle me-1"></i>${esc(c.user_name || '?')}</span>
+                <span class="v2-comment-time">${esc(String(c.created_at || '').slice(0, 16))}</span>
+            </div>
+            <div class="v2-comment-text">${esc(d.text)}</div>
+            ${replies}
+            <div class="v2-comment-actions">
+                <a data-reply="${c.id}"><i class="fas fa-reply me-1"></i>Trả lời</a>
+            </div>
+        </div>`;
+}
+
+/** Card soạn bình luận mới — neo vào highlight tạm (data-cid="__new"). */
+function cmtComposerHtml() {
+    return `
+        <div class="v2-comment-card active v2-cmt-editor" data-cid="__new">
+            <div class="v2-comment-quote">${esc(cmtPending.sd.quote)}</div>
+            <textarea class="form-control form-control-sm" rows="2" id="v2-cmt-new-input"
+                placeholder="Nhập nội dung bình luận..."></textarea>
+            <div class="v2-cmt-editor-btns">
+                <button type="button" class="btn btn-sm btn-light" data-cmt-cancel>Hủy</button>
+                <button type="button" class="btn btn-sm btn-navy text-white" data-cmt-submit>
+                    <i class="fas fa-paper-plane me-1"></i>Gửi
+                </button>
+            </div>
+        </div>`;
+}
+
+/** Dựng lại toàn bộ card trong rail, theo THỨ TỰ XUẤT HIỆN của highlight trong tài liệu. */
+function cmtRenderRail() {
+    const rail = document.getElementById('v2-cmt-rail');
+    if (!rail) return;
+    const all = BOOT.comments || [];
+
+    // Thứ tự đọc: lấy theo highlight đã vẽ trên DOM. Card soạn thảo ("__new") phải nằm ĐÚNG
+    // vị trí đọc của nó chứ không phải đầu rail — cmtLayout() xếp card theo thứ tự DOM và đẩy
+    // dần xuống, nên một composer đặt sai chỗ sẽ kéo mọi bình luận phía trên nó tụt xuống theo.
+    const order = [];
+    document.querySelectorAll('#v2-pages .v2-cmt-hl').forEach((hl) => {
+        const cid = hl.dataset.cid;
+        if (!order.includes(cid)) order.push(cid);
+    });
+    const seen = new Set(order);
+
+    let html = order.map((cid) => {
+        if (cid === '__new') return cmtPending ? cmtComposerHtml() : '';
+        const c = all.find((x) => String(x.id) === cid);
+        return c ? cmtCardHtml(c) : '';
+    }).join('');
+    // Composer chưa dò được đoạn neo (VD: khối đang mở editor) -> vẫn phải hiện, đặt lên đầu
+    if (cmtPending && !seen.has('__new')) html = cmtComposerHtml() + html;
+    // Bình luận mồ côi / khối đang sửa: không có highlight -> xếp cuối, không có đường nối
+    html += all.filter((c) => !seen.has(String(c.id))).map(cmtCardHtml).join('');
+
+    rail.innerHTML = html;
+    cmtBindRail(rail);
+    cmtLayout();
+    if (cmtPending) document.getElementById('v2-cmt-new-input')?.focus();
+}
+
+/**
+ * Đặt mỗi card thẳng hàng với đoạn neo của nó, đẩy xuống khi chồng nhau (như Word),
+ * rồi vẽ đường nối từ mép phải highlight sang mép trái card.
+ * Toạ độ tính tương đối với #v2-canvas-wrap (position:relative) nên không cần bám scroll.
+ */
+function cmtLayout() {
+    const wrap = document.getElementById('v2-canvas-wrap');
+    const rail = document.getElementById('v2-cmt-rail');
+    const svg = document.getElementById('v2-cmt-links');
+    if (!wrap || !rail || !svg) return;
+    if (!cmtVisible()) { svg.innerHTML = ''; return; }
+
+    const wrapRect = wrap.getBoundingClientRect();
+    const page = document.querySelector('#v2-pages .v2-page');
+    // Rail phải NẰM GỌN trong wrap: tràn ra ngoài sẽ sinh thanh cuộn ngang cho cả trang, và
+    // khi cuộn ngang thì thanh công cụ (sticky theo trục dọc) trượt xuống dưới sidebar trái.
+    const RAIL_W = 320, RAIL_GAP = 28;
+    const railLeft = Math.max(8, Math.min(
+        page ? page.getBoundingClientRect().right - wrapRect.left + RAIL_GAP : Infinity,
+        wrap.clientWidth - RAIL_W - 8,
+    ));
+    rail.style.left = railLeft + 'px';
+
+    const paths = [];
+    let prevBottom = 12;
+    rail.querySelectorAll('.v2-comment-card').forEach((card) => {
+        const cid = card.dataset.cid;
+        const hl = document.querySelector(`#v2-pages .v2-cmt-hl[data-cid="${window.CSS.escape(cid)}"]`);
+        let top = prevBottom;
+        if (hl) {
+            const r = hl.getBoundingClientRect();
+            top = Math.max(r.top - wrapRect.top, prevBottom);
+        }
+        card.style.top = top + 'px';
+        prevBottom = top + card.offsetHeight + 10;
+
+        if (hl) {
+            const r = hl.getBoundingClientRect();
+            const x1 = r.right - wrapRect.left;
+            const y1 = (r.top + r.bottom) / 2 - wrapRect.top;
+            const y2 = top + 14; // ngang dòng đầu của card
+            const active = cid === String(cmtActiveId) ? ' active' : '';
+            paths.push(`<path class="v2-cmt-link${active}" data-cid="${esc(cid)}" `
+                + `d="M ${x1} ${y1} H ${railLeft - 16} V ${y2} H ${railLeft}" />`);
+        }
+    });
+
+    const h = Math.max(wrap.scrollHeight, prevBottom + 20);
+    svg.setAttribute('height', h);
+    svg.style.height = h + 'px';
+    svg.innerHTML = paths.join('');
+}
+
+function cmtBindRail(rail) {
+    rail.querySelectorAll('.v2-comment-card').forEach((card) => {
+        card.addEventListener('click', (e) => {
+            if (e.target.closest('a, button, textarea')) return;
+            cmtSetActive(card.dataset.cid, true);
+        });
+    });
+    rail.querySelector('[data-cmt-cancel]')?.addEventListener('click', cmtCancelPending);
+    rail.querySelector('[data-cmt-submit]')?.addEventListener('click', cmtSubmitPending);
+    rail.querySelectorAll('[data-reply]').forEach((el) =>
+        el.addEventListener('click', () => cmtOpenReplyBox(el.closest('.v2-comment-card'), el.getAttribute('data-reply'))));
+}
+
+/** Làm nổi bật cặp (highlight, card) đang chọn; scroll=true thì cuộn tới đoạn văn bản. */
+function cmtSetActive(cid, scrollToAnchor) {
+    cmtActiveId = cid === cmtActiveId ? null : cid;
+    document.querySelectorAll('#v2-pages .v2-cmt-hl').forEach((h) =>
+        h.classList.toggle('active', h.dataset.cid === String(cmtActiveId)));
+    document.querySelectorAll('#v2-cmt-rail .v2-comment-card').forEach((c) =>
+        c.classList.toggle('active', c.dataset.cid === String(cmtActiveId)));
+    document.querySelectorAll('.v2-cmt-link').forEach((p) =>
+        p.classList.toggle('active', p.dataset.cid === String(cmtActiveId)));
+    if (scrollToAnchor && cmtActiveId) {
+        document.querySelector(`#v2-pages .v2-cmt-hl[data-cid="${window.CSS.escape(cmtActiveId)}"]`)
+            ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+}
+
+/**
+ * Vẽ lại toàn bộ highlight + rail. Gọi sau mỗi renderDocument()/unmountEditor().
+ * Khối đang mở editor (.v2-editing) bị bỏ qua: DOM của TipTap do ProseMirror quản lý,
+ * chèn span lạ vào sẽ bị nó dọn hoặc gây lỗi vị trí con trỏ.
+ */
+function cmtApplyAll() {
+    cmtClearHighlights();
+    cmtUpdateToggleBtn(); // số đếm phải đúng cả khi đang ẩn (vừa thêm/xoá bình luận)
+    if (!cmtVisible()) {
+        document.getElementById('v2-cmt-links')?.replaceChildren();
         return;
     }
-
-    list.innerHTML = shown.map((c) => {
-        const d = parseCommentContent(c.content);
-        const replies = d.replies.map((r) => `
-            <div class="v2-comment-reply">
-                <span class="v2-comment-author">${esc(r.user_name)}</span>
-                <span class="v2-comment-time ms-1">${esc(r.created_at || '')}</span>
-                <div class="v2-comment-text">${esc(r.content)}</div>
-            </div>`).join('');
-        const blockRef = c.selection_id
-            ? `<span class="v2-comment-block-ref" data-goto="${esc(c.selection_id)}"><i class="fas fa-cube me-1"></i>${esc(blockLabelOf(c.selection_id))}</span>` : '';
-        return `
-            <div class="v2-comment-card" data-cid="${c.id}">
-                ${blockRef}
-                <div class="d-flex justify-content-between">
-                    <span class="v2-comment-author"><i class="fas fa-user-circle me-1"></i>${esc(c.user_name || '?')}</span>
-                    <span class="v2-comment-time">${esc(String(c.created_at || '').slice(0, 16))}</span>
-                </div>
-                <div class="v2-comment-text">${esc(d.text)}</div>
-                ${replies}
-                <div class="v2-comment-actions">
-                    <a data-reply="${c.id}"><i class="fas fa-reply me-1"></i>Trả lời</a>
-                    <a data-del="${c.id}" class="text-danger"><i class="fas fa-trash me-1"></i>Xóa</a>
-                </div>
-            </div>`;
-    }).join('');
-
-    // Gắn hành vi: nhảy tới block / trả lời / xóa
-    list.querySelectorAll('[data-goto]').forEach((el) => el.addEventListener('click', () => {
-        const blk = document.querySelector(`.v2-block[data-id="${el.getAttribute('data-goto')}"]`);
-        if (blk) blk.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }));
-    list.querySelectorAll('[data-reply]').forEach((el) => el.addEventListener('click', async () => {
-        const id = el.getAttribute('data-reply');
-        const { value } = await window.Swal.fire({
-            title: 'Trả lời bình luận', input: 'textarea', inputPlaceholder: 'Nội dung trả lời...',
-            showCancelButton: true, confirmButtonText: 'Gửi', cancelButtonText: 'Hủy',
-        });
-        if (!value) return;
-        const res = await fetch(BOOT.commentUrls.reply, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-            body: JSON.stringify({ id: parseInt(id, 10), content: value, _token: BOOT.csrf }),
-        }).then((r) => r.json());
-        if (res.success) {
-            const c = (BOOT.comments || []).find((x) => String(x.id) === String(id));
-            if (c) {
-                const d = parseCommentContent(c.content);
-                d.replies.push(res.reply);
-                c.content = JSON.stringify({ text: d.text, replies: d.replies });
+    (BOOT.comments || []).forEach((c) => {
+        c.__orphan = false;
+        const sd = cmtSel(c);
+        if (!sd) { c.__orphan = true; return; } // bình luận cấp khối cũ (chưa có neo vùng chọn)
+        const root = cmtFindRoot(sd);
+        if (!root || root.classList.contains('v2-editing')) { c.__orphan = !root; return; }
+        const loc = cmtLocate(root, sd);
+        if (!loc) { c.__orphan = true; return; }
+        if (loc.drift) {
+            sd.start = loc.start;
+            sd.end = loc.end;
+            cmtQueueReanchor(c, sd);
+        }
+        if (!cmtHighlight(root, loc.start, loc.end, c.id)) c.__orphan = true;
+    });
+    if (cmtPending) {
+        const root = cmtFindRoot(cmtPending.sd);
+        if (root && !root.classList.contains('v2-editing')) {
+            const loc = cmtLocate(root, cmtPending.sd);
+            if (loc) {
+                // Neo bắt từ DOM của editor thường lệch vài ký tự so với DOM tĩnh — chốt lại
+                // theo vị trí vừa dò được, nếu không lúc Gửi sẽ lưu offset sai vào DB.
+                cmtPending.sd.start = loc.start;
+                cmtPending.sd.end = loc.end;
+                cmtHighlight(root, loc.start, loc.end, '__new');
+                document.querySelectorAll('#v2-pages .v2-cmt-hl[data-cid="__new"]')
+                    .forEach((el) => el.classList.add('v2-cmt-pending'));
             }
-            renderCommentsList();
-        } else window.Swal.fire('Lỗi', res.message || 'Không thể trả lời', 'error');
-    }));
-    list.querySelectorAll('[data-del]').forEach((el) => el.addEventListener('click', async () => {
-        const id = el.getAttribute('data-del');
-        const ok = await window.Swal.fire({
-            title: 'Xóa bình luận?', icon: 'warning', showCancelButton: true,
-            confirmButtonText: 'Xóa', cancelButtonText: 'Hủy',
-        });
-        if (!ok.isConfirmed) return;
-        const res = await fetch(BOOT.commentUrls.remove, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-            body: JSON.stringify({ id: parseInt(id, 10), _token: BOOT.csrf }),
-        }).then((r) => r.json()).catch(() => ({ success: false }));
-        if (res.success) {
-            BOOT.comments = (BOOT.comments || []).filter((x) => String(x.id) !== String(id));
-            renderCommentsList();
-            renderDocument(); // cập nhật số đếm trên nút comment của block
-        } else window.Swal.fire('Không thể xóa', res.message || 'Bạn không có quyền xóa bình luận này.', 'error');
-    }));
+        }
+    }
+    cmtRenderRail();
 }
 
-function openCommentsPanel(blockId) {
-    commentsFocusBlockId = blockId || null;
-    document.getElementById('v2-comments')?.classList.add('open');
-    renderCommentsList();
-    document.getElementById('v2-comment-input')?.focus();
+/* ---------- 5c.7 Tạo / trả lời ---------- */
+
+/** Mở ô soạn bình luận cho vùng đang chọn. Lối vào duy nhất: menu chuột phải. */
+function cmtStartNew() {
+    const sd = cmtCaptureSelection() || cmtLastSel;
+    if (!sd) {
+        showToast('info', 'Hãy quét chọn đoạn văn bản cần bình luận trước.');
+        return;
+    }
+    // Neo bắt trong DOM của TipTap có thể lệch vài ký tự so với DOM tĩnh (badge biến số render
+    // khác nhau). Đóng editor trước để chốt nội dung, sau đó cmtLocate() dò lại bằng `quote`.
+    unmountEditor();
+    cmtPending = { sd };
+    cmtLastSel = null;
+    if (!cmtVisible()) cmtToggle(true);
+    else cmtApplyAll();
+    window.getSelection()?.removeAllRanges();
 }
 
-async function sendComment() {
-    const input = document.getElementById('v2-comment-input');
+function cmtCancelPending() {
+    cmtPending = null;
+    cmtApplyAll();
+}
+
+async function cmtSubmitPending() {
+    const input = document.getElementById('v2-cmt-new-input');
     const content = (input?.value || '').trim();
-    if (!content) return;
+    if (!content || !cmtPending) return;
+    const sd = cmtPending.sd;
     const res = await fetch(BOOT.commentUrls.store, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({
             template_id: BOOT.templateId,
             content,
-            selection_id: commentsFocusBlockId,
+            selection_id: sd.blockId,
+            selection_data: sd,
             _token: BOOT.csrf,
         }),
     }).then((r) => r.json()).catch(() => ({ success: false }));
-    if (res.success) {
-        BOOT.comments = BOOT.comments || [];
-        BOOT.comments.push(res.comment);
-        input.value = '';
-        renderCommentsList();
-        renderDocument(); // cập nhật số đếm trên nút comment của block
-    } else {
+
+    if (!res.success) {
         window.Swal?.fire('Lỗi', 'Không thể gửi bình luận', 'error');
+        return;
     }
+    BOOT.comments = BOOT.comments || [];
+    BOOT.comments.push({ ...res.comment, selection_data: sd });
+    cmtPending = null;
+    cmtActiveId = String(res.comment.id);
+    cmtApplyAll();
+}
+
+/** Ô trả lời hiện ngay trong card (như Word), thay cho hộp thoại Swal. */
+function cmtOpenReplyBox(card, id) {
+    if (card.querySelector('.v2-cmt-reply-box')) return;
+    const box = document.createElement('div');
+    box.className = 'v2-cmt-reply-box v2-cmt-editor mt-2';
+    box.innerHTML = `
+        <textarea class="form-control form-control-sm" rows="2" placeholder="Nhập nội dung trả lời..."></textarea>
+        <div class="v2-cmt-editor-btns">
+            <button type="button" class="btn btn-sm btn-light" data-cancel>Hủy</button>
+            <button type="button" class="btn btn-sm btn-navy text-white" data-send>Trả lời</button>
+        </div>`;
+    card.appendChild(box);
+    const ta = box.querySelector('textarea');
+    ta.focus();
+    box.querySelector('[data-cancel]').addEventListener('click', () => { box.remove(); cmtLayout(); });
+    box.querySelector('[data-send]').addEventListener('click', async () => {
+        const value = ta.value.trim();
+        if (!value) return;
+        const res = await fetch(BOOT.commentUrls.reply, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({ id: parseInt(id, 10), content: value, _token: BOOT.csrf }),
+        }).then((r) => r.json()).catch(() => ({ success: false }));
+        if (!res.success) { window.Swal.fire('Lỗi', res.message || 'Không thể trả lời', 'error'); return; }
+        const c = (BOOT.comments || []).find((x) => String(x.id) === String(id));
+        if (c) {
+            const d = parseCommentContent(c.content);
+            d.replies.push(res.reply);
+            c.content = JSON.stringify({ text: d.text, replies: d.replies });
+        }
+        cmtRenderRail();
+    });
+    cmtLayout(); // card cao thêm -> xếp lại các card phía dưới
+}
+
+/* ---------- 5c.8 Điều hướng: nhảy tới bình luận kế tiếp ---------- */
+
+/**
+ * Nhảy tới bình luận kế tiếp theo THỨ TỰ ĐỌC của tài liệu (thứ tự card trong rail),
+ * quay vòng về đầu khi hết. Tự bật rail nếu đang ẩn.
+ */
+function cmtGotoNext() {
+    if (!(BOOT.comments || []).length) {
+        showToast('info', 'Hồ sơ chưa có bình luận nào.');
+        return;
+    }
+    if (!cmtVisible()) cmtToggle(true);
+
+    const ids = Array.from(document.querySelectorAll('#v2-cmt-rail .v2-comment-card'))
+        .map((c) => c.dataset.cid)
+        .filter((cid) => cid !== '__new');
+    if (!ids.length) return;
+
+    const cur = ids.indexOf(String(cmtActiveId));
+    const next = ids[(cur + 1) % ids.length];
+
+    cmtActiveId = null; // cmtSetActive() bật/tắt theo id — ép nó luôn CHỌN chứ không tắt
+    cmtSetActive(next, true);
+
+    // Bình luận mồ côi không còn đoạn neo để cuộn tới -> cuộn tới chính card của nó
+    if (!document.querySelector(`#v2-pages .v2-cmt-hl[data-cid="${window.CSS.escape(next)}"]`)) {
+        document.querySelector(`#v2-cmt-rail .v2-comment-card[data-cid="${window.CSS.escape(next)}"]`)
+            ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+}
+
+/* ---------- 5c.9 Bật/tắt + gắn sự kiện ---------- */
+
+function cmtToggle(force) {
+    const on = force === undefined ? !cmtVisible() : !!force;
+    document.body.classList.toggle('v2-cmt-on', on);
+    document.getElementById('v2-btn-comments')?.classList.toggle('active', on);
+    if (!on) cmtPending = null;
+    cmtApplyAll();
+}
+
+/** Bình luận mặc định ẩn -> nút toolbar phải cho biết hồ sơ đang có bao nhiêu bình luận. */
+function cmtUpdateToggleBtn() {
+    const btn = document.getElementById('v2-btn-comments');
+    if (!btn) return;
+    const n = (BOOT.comments || []).length;
+    btn.innerHTML = '<i class="fas fa-comment-dots"></i>'
+        + (n ? `<span class="v2-cmt-badge">${n}</span>` : '');
+    btn.title = n
+        ? `${cmtVisible() ? 'Ẩn' : 'Hiện'} ${n} bình luận`
+        : 'Chưa có bình luận (quét chọn đoạn chữ rồi bấm chuột phải để thêm)';
+}
+
+function initCommentsV2() {
+    document.getElementById('v2-btn-comments')?.addEventListener('click', () => cmtToggle());
+    document.getElementById('v2-btn-next-comment')?.addEventListener('click', cmtGotoNext);
+
+    // Bấm vào đoạn được bình luận -> làm nổi card tương ứng. KHÔNG chặn sự kiện: click vẫn
+    // phải chạy tiếp xuống handler của khối để mở editor như mọi chỗ khác trong tài liệu.
+    document.getElementById('v2-pages')?.addEventListener('click', (e) => {
+        const hl = e.target.closest('.v2-cmt-hl');
+        if (!hl || hl.dataset.cid === '__new') return;
+        cmtSetActive(hl.dataset.cid, false);
+        document.querySelector(`#v2-cmt-rail .v2-comment-card[data-cid="${window.CSS.escape(hl.dataset.cid)}"]`)
+            ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, true);
+
+    window.addEventListener('resize', cmtLayout);
+    // Mặc định ẨN: mở tài liệu là thấy đúng bản in, không bị rail và highlight che.
+    // Nút toolbar (#v2-btn-comments) bật/tắt; tạo bình luận mới cũng tự bật.
 }
 
 /* =========================================================
@@ -4810,6 +5656,71 @@ function insertEquipmentTableV2(afterIndex, equipments) {
  *   - Chạy thử: dữ liệu biểu đồ đọc trực tiếp từ giá trị biến số của bảng nguồn
  * ========================================================= */
 const chartInstancesV2 = {};
+// ID của block chart đang được SỬA (Bảng KT Khối lượng Trung bình) — null nghĩa là modal
+// đang ở chế độ CHÈN MỚI. Xem generateWeightChartTableV2/updateWeightChartTableV2.
+let weightChartEditId = null;
+
+function setWeightChartModalModeV2(isEdit) {
+    const title = document.getElementById('v2-wc-modal-title');
+    const btn = document.getElementById('v2-wc-generate');
+    if (title) title.innerHTML = `<i class="fas fa-balance-scale me-2"></i> ${isEdit ? 'SỬA' : 'TẠO'} BẢNG KT KHỐI LƯỢNG TRUNG BÌNH`;
+    if (btn) btn.textContent = isEdit ? 'Cập nhật' : 'Chèn Bảng & Biểu Đồ';
+}
+
+/** Mở modal Bảng KT Khối lượng Trung bình để SỬA thông số của 1 cặp biểu đồ+bảng đã chèn. */
+function openWeightChartEditModalV2(chartItem) {
+    if (BOOT.isReadOnly || BOOT.isExecutionMode) return;
+    const cfg = chartItem.chartConfig || {};
+    const table = items.find((i) => i.id === cfg.tableSourceId && i.type === 'table');
+
+    weightChartEditId = chartItem.id;
+    const weightInput = document.getElementById('v2-wc-weight');
+    const devInput = document.getElementById('v2-wc-dev');
+    const freqInput = document.getElementById('v2-wc-freq');
+    if (weightInput) weightInput.value = cfg.weight ?? (((cfg.minY ?? 0) + (cfg.maxY ?? 0)) / 2).toFixed(2);
+    if (devInput) devInput.value = cfg.devPercent ?? 3;
+    if (freqInput) freqInput.value = table?.freq_minutes ?? 15;
+    setWeightChartModalModeV2(true);
+    showModalV2('v2WeightChartModal');
+}
+
+/** Cập nhật thông số của cặp biểu đồ+bảng đã tồn tại (không tạo biến/hàng mới): đổi tiêu
+ *  chuẩn min/max hiển thị trên biểu đồ, tần suất lấy mẫu, và validation min/max của các
+ *  biến số (number) đã sinh ra trong bảng nguồn — kể cả các hàng do "Thêm dòng" tạo thêm. */
+function updateWeightChartTableV2(chartId, weight, devPercent, freq, minY, maxY) {
+    const chartItem = items.find((i) => i.id === chartId && i.type === 'chart');
+    if (!chartItem) { weightChartEditId = null; hideModalV2('v2WeightChartModal'); return; }
+    const table = items.find((i) => i.id === chartItem.chartConfig?.tableSourceId && i.type === 'table');
+
+    saveDocState();
+
+    chartItem.chartConfig = {
+        ...chartItem.chartConfig,
+        title: `VẼ BIỂU ĐỒ THEO KHỐI LƯỢNG MỖI 10 VIÊN\nTiêu chuẩn: Khối lượng 10 viên ± ${devPercent}% = ${weight} g ± ${devPercent}% (${minY} - ${maxY} g)\nTần suất kiểm tra: Mỗi ${freq} phút`,
+        minY: parseFloat(minY),
+        maxY: parseFloat(maxY),
+        weight,
+        devPercent,
+    };
+    chartItem.label = `Biểu đồ Khối lượng (W10: ${weight}g ± ${devPercent}%)`;
+    chartItem.dirty = true;
+
+    if (table) {
+        table.freq_minutes = freq;
+        table.dirty = true;
+        Object.values(fieldsConfig).forEach((f) => {
+            if (f.block_id === table.id && f.type === 'number') {
+                f.validation = { ...(f.validation || {}), min: parseFloat(minY), max: parseFloat(maxY), decimal_places: 2 };
+            }
+        });
+    }
+
+    weightChartEditId = null;
+    hideModalV2('v2WeightChartModal');
+    markDirty();
+    renderDocument();
+    showToast('success', 'Đã cập nhật thông số Bảng KT Khối lượng Trung bình');
+}
 
 function stripHtmlV2(html) {
     if (!html) return '';
@@ -4979,6 +5890,13 @@ function generateWeightChartTableV2() {
     const minY = (weight - maxDev).toFixed(2);
     const maxY = (weight + maxDev).toFixed(2);
 
+    // Modal đang ở chế độ SỬA (mở từ nút bút chì trên 1 biểu đồ đã chèn) -> cập nhật
+    // thông số của cặp biểu đồ+bảng hiện có, KHÔNG tạo biến/hàng mới.
+    if (weightChartEditId) {
+        updateWeightChartTableV2(weightChartEditId, weight, devPercent, freq, minY, maxY);
+        return;
+    }
+
     // Chèn ngay tại điểm click gần nhất trong vùng thiết kế (giống mọi thao tác chèn khác
     // — xem getInsertPointV2()), KHÔNG dùng activeBlockId: bấm nút mở modal này đã tự làm
     // activeBlockId về null (click ra ngoài .v2-block), nên trước đây luôn rơi xuống cuối
@@ -5051,6 +5969,8 @@ function generateWeightChartTableV2() {
             data: [null, null, null],
             minY: parseFloat(minY),
             maxY: parseFloat(maxY),
+            weight,
+            devPercent,
             tableSourceId: tableId,
             isMatrix: false,
             xIdx: 1, // cột "Thời gian lấy mẫu" (đã lùi 1 bậc vì thêm cột STT đầu bảng)
@@ -5096,13 +6016,25 @@ function generateWeightChartTableV2() {
  *   counter — KHÔNG cần tính lại bằng JS mỗi lần thêm/xoá hàng.
  * ========================================================= */
 
+/** Bảng GF liên kết được render từ BẢN SAO nông của block trong gfPreviewCacheV2. Mảng
+ *  data/rowHeights dùng chung tham chiếu (push/splice đã tự thấm về cache), nhưng số rows
+ *  là primitive nằm trên bản sao → phải ghi ngược để lần render sau đọc đúng số dòng. */
+function syncGfCanonicalRowsV2(item) {
+    const canon = item && item.__gfCanonical;
+    if (!canon || canon === item) return;
+    canon.data = item.data;
+    canon.rows = item.rows;
+    if (item.rowHeights) canon.rowHeights = item.rowHeights;
+}
+
 function addRuntimeTableRowV2(item) {
     if (BOOT.isReadOnly || !item || !item.canAddRows || !item.rows) return;
     const addRowsCount = Math.max(1, parseInt(item.addRowsCount, 10) || 1);
     const actualRowsToAdd = Math.min(addRowsCount, item.rows);
     const baseRows = item.rows; // chốt TRƯỚC khi thêm để tính đúng hàng nguồn (giống V1)
 
-    saveDocState();
+    // KHÔNG saveDocState(): hàm này chỉ chạy lúc Chạy thử/thực thi — snapshot chứa dòng
+    // động sẽ làm Ctrl+Z ở Thiết kế "hồi sinh" dòng thử vào template.
     for (let offset = actualRowsToAdd; offset >= 1; offset--) {
         const sourceRowIdx = baseRows - offset;
         const sourceRow = item.data[sourceRowIdx];
@@ -5115,6 +6047,7 @@ function addRuntimeTableRowV2(item) {
         const { idMap, nameMap } = buildFieldDuplicateMapV2(htmlList);
         if (Object.keys(idMap).length) {
             applyFieldDuplicateMapV2(idMap, nameMap);
+            Object.values(idMap).forEach((newId) => dynamicClonedFieldIds.add(newId));
             Object.entries(idMap).forEach(([oldId, newId]) => {
                 const oldCfg = fieldsConfig[oldId];
                 const newCfg = fieldsConfig[newId];
@@ -5139,8 +6072,11 @@ function addRuntimeTableRowV2(item) {
         if (item.rowHeights) item.rowHeights.push(item.rowHeights[sourceRowIdx] || 'auto');
     }
     item.rows += actualRowsToAdd;
-    item.dirty = true;
-    markDirty();
+    syncGfCanonicalRowsV2(item); // GF liên kết: ghi số rows mới về block trong cache
+    // Bảng nằm trong Lặp nhóm: bản đồ field theo "Lần i" đã cache TRƯỚC khi có dòng mới
+    // → xoá cache để rebuild (id xác định nên field cũ giữ nguyên id, không mất giá trị).
+    if (item.loop_group_id) delete loopIterFieldMapCache[item.loop_group_id];
+    syncRecordStructureV2(item); // thực thi thật: lưu overlay dòng động của lô (no-op lúc Chạy thử)
     renderDocument();
     showToast('success', `Đã thêm ${actualRowsToAdd} dòng mới`);
 }
@@ -5157,14 +6093,95 @@ async function deleteRuntimeTableRowV2(item, rowIdx) {
     });
     if (!res.isConfirmed) return;
 
-    saveDocState();
+    // KHÔNG saveDocState() — xem ghi chú ở addRuntimeTableRowV2
     item.data.splice(rowIdx, 1);
     if (item.rowHeights) item.rowHeights.splice(rowIdx, 1);
     item.rows = Math.max(0, item.rows - 1);
-    item.dirty = true;
-    markDirty();
+    syncGfCanonicalRowsV2(item); // GF liên kết: ghi số rows mới về block trong cache
+    if (item.loop_group_id) delete loopIterFieldMapCache[item.loop_group_id];
+    syncRecordStructureV2(item);
     renderDocument();
     showToast('info', 'Đã xóa dòng');
+}
+
+/** Thoát Chạy thử → Thiết kế: gỡ MỌI dòng động (is_dynamic) khỏi mọi bảng + xoá config
+ *  các field đã nhân bản cho chúng — trả cấu trúc BMR về đúng bản thiết kế gốc. */
+function cleanupDynamicRowsV2() {
+    const purgeDynamicRows = (tbl) => {
+        if (!tbl || tbl.type !== 'table' || !Array.isArray(tbl.data)) return;
+        for (let r = tbl.data.length - 1; r >= 0; r--) {
+            const row = tbl.data[r];
+            if (!row || !row[0] || !row[0].is_dynamic) continue;
+            tbl.data.splice(r, 1);
+            if (tbl.rowHeights) tbl.rowHeights.splice(r, 1);
+            tbl.rows = Math.max(0, (tbl.rows || 0) - 1);
+        }
+    };
+    items.forEach(purgeDynamicRows);
+    // GF liên kết render từ gfPreviewCacheV2 (không nằm trong items[]) — cũng phải dọn dòng
+    // động ở đây, nếu không lần Chạy thử sau vẫn còn dòng thử của lần trước.
+    Object.values(gfPreviewCacheV2).forEach((entry) => (entry.blocks || []).forEach(purgeDynamicRows));
+    dynamicClonedFieldIds.forEach((id) => delete fieldsConfig[id]);
+    dynamicClonedFieldIds.clear();
+}
+
+/** Thực thi thật (BOOT.recordId): đồng bộ overlay dòng động của 1 bảng lên server —
+ *  gửi TOÀN BỘ dòng is_dynamic hiện có (thay thế overlay cũ; rỗng = server xoá overlay).
+ *  Chạy thử trong Designer (không có recordId): no-op, dòng động chỉ sống trong RAM. */
+function syncRecordStructureV2(item) {
+    if (!BOOT.recordId || !item || item.type !== 'table') return;
+    const rows = [];
+    const rowHeights = [];
+    (item.data || []).forEach((row, r) => {
+        if (!row || !row[0] || !row[0].is_dynamic) return;
+        rows.push(row);
+        rowHeights.push((item.rowHeights && item.rowHeights[r]) || 'auto');
+    });
+    // Gom config các biến số xuất hiện trong những dòng động này
+    const cfgOut = {};
+    const tmp = document.createElement('div');
+    rows.forEach((row) => row.forEach((cell) => {
+        if (!cell || !cell.content || cell.content.indexOf('data-field-id') === -1) return;
+        tmp.innerHTML = cell.content;
+        tmp.querySelectorAll('[data-field-id]').forEach((el) => {
+            const fid = el.getAttribute('data-field-id');
+            if (fid && fieldsConfig[fid]) cfgOut[fid] = fieldsConfig[fid];
+        });
+    }));
+
+    fetch(BOOT.urls.saveRecordStructure, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({
+            record_id: BOOT.recordId,
+            block_uuid: item.id,
+            kind: 'dynamic_rows',
+            payload: { rows, rowHeights, fieldsConfig: cfgOut },
+            _token: BOOT.csrf,
+        }),
+    }).then((r) => r.json()).then((res) => {
+        if (!res.success) showToast('error', res.message || 'Không lưu được cấu trúc dòng thêm');
+    }).catch(() => showToast('error', 'Mất kết nối — dòng vừa thêm/xoá CHƯA được lưu lên máy chủ'));
+}
+
+/** Mở lại lô đang thực thi: ghép các dòng động đã lưu (ebmr_record_structures) vào bảng
+ *  tương ứng + nạp lại config biến số của chúng — gọi 1 lần TRƯỚC renderDocument() đầu tiên. */
+function mergeRecordStructuresV2() {
+    const structures = BOOT.recordStructures || {};
+    Object.keys(structures).forEach((blockUuid) => {
+        const overlay = structures[blockUuid];
+        const payload = (overlay && overlay.payload) || overlay;
+        if (!payload || !Array.isArray(payload.rows) || !payload.rows.length) return;
+        const item = items.find((i) => i.id === blockUuid && i.type === 'table');
+        if (!item || !Array.isArray(item.data)) return;
+        payload.rows.forEach((row, k) => {
+            item.data.push(row);
+            if (item.rowHeights) item.rowHeights.push((payload.rowHeights && payload.rowHeights[k]) || 'auto');
+        });
+        item.rows = (item.rows || 0) + payload.rows.length;
+        Object.assign(fieldsConfig, payload.fieldsConfig || {});
+        Object.keys(payload.fieldsConfig || {}).forEach((id) => dynamicClonedFieldIds.add(id));
+    });
 }
 
 /* =========================================================
@@ -5725,12 +6742,19 @@ function toggleExecutionModeV2() {
     Object.keys(loopIterFieldMapCache).forEach((k) => delete loopIterFieldMapCache[k]);
     activeLoopTabIdx = {};
 
+    // Dọn các DÒNG THÊM (Cấp 2) tạo lúc Chạy thử — không được lọt vào cấu trúc Thiết kế
+    cleanupDynamicRowsV2();
+
     // Thêm/Xóa class CSS cho mode
     const contentWrapper = document.querySelector('.content-wrapper');
     if (contentWrapper) {
         if (isExec) contentWrapper.classList.add('execution-mode-active');
         else contentWrapper.classList.remove('execution-mode-active');
     }
+
+    // Nút "Gạch chéo N/A" chỉ dùng được lúc Chạy thử — cập nhật hiển thị,
+    // đồng thời thoát chế độ gạch chéo nếu đang bật mà quay về Thiết kế.
+    naMarks.refreshButton();
 
     // Repaint lại tất cả các field badge
     renderDocument();
@@ -5790,6 +6814,9 @@ initMmsBarcodeV2(BOOT);
 // Ghi giá trị + đóng dấu người/giờ. Nếu GHI ĐÈ 1 giá trị đã có (khác giá trị cũ),
 // bắt buộc nhập "Lý do thay đổi" trước khi áp dụng + lưu vào lịch sử (giống V1).
 window.__V2__.applyExecutionValue = function (fieldId, finalValue, onDone) {
+    // Gate trung tâm: hồ sơ readonly (đã hoàn thành/đã duyệt, hoặc không được phân phối)
+    // thì MỌI ngõ nhập liệu đều bị chặn tại đây.
+    if (BOOT.isReadOnly) { if (onDone) onDone(false); return; }
     const existing = getExecDefaultV2(fieldId);
     const hasExisting = existing !== undefined && existing !== null && existing !== '';
 
@@ -5833,7 +6860,98 @@ window.__V2__.applyExecutionValue = function (fieldId, finalValue, onDone) {
     }
 };
 
+/* ---------------------------------------------------------
+ * 6a2. LƯU HỒ SƠ LÔ (trang Thực thi thật — BOOT.recordId)
+ *   Gửi BOOT.executionValues (fieldId -> {default, _meta}) tới updateRecordData:
+ *   backend lưu từng field vào ebmr_run_data với block_uuid=fieldId, cell_id='default'
+ *   (bỏ qua khoá '_meta') — cùng endpoint/format với trang thực thi V1 cũ.
+ * --------------------------------------------------------- */
+function saveRecordDataV2(status, opts) {
+    if (!BOOT.recordId) return;
+    const statusOnly = !!(opts && opts.statusOnly); // "Xác nhận đã đọc": chỉ chuyển trạng thái
+    const data = statusOnly ? {} : (BOOT.executionValues || {});
+    const reasons = {};
+    if (!statusOnly) {
+        Object.keys(data).forEach((fieldId) => {
+            const reason = data[fieldId] && data[fieldId]._meta && data[fieldId]._meta.default
+                && data[fieldId]._meta.default.reason;
+            if (reason) reasons[fieldId] = { default: reason };
+        });
+        // Lý do gạch chéo / hủy gạch chéo N/A trong phiên — server đòi lý do khi
+        // ghi đè giá trị cũ (hủy gạch = JSON cũ -> '') nên phải gửi kèm.
+        const naReasons = naMarks.getPendingReasons();
+        if (Object.keys(naReasons).length) reasons['__na__'] = { ...naReasons };
+    }
+
+    window.Swal.fire({
+        title: 'Đang lưu dữ liệu...',
+        allowOutsideClick: false,
+        didOpen: () => window.Swal.showLoading(),
+    });
+
+    fetch(BOOT.urls.updateRecordData, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ record_id: BOOT.recordId, data, reasons, status, _token: BOOT.csrf }),
+    })
+        .then((res) => res.json())
+        .then((res) => {
+            if (!res.success) {
+                window.Swal.fire('Lỗi', res.message || 'Có lỗi xảy ra', 'error');
+                return;
+            }
+            // Đóng dấu người/giờ vừa lưu lên mọi field đã có giá trị (giống V1)
+            if (res.updated_by) {
+                Object.keys(BOOT.executionValues || {}).forEach((fieldId) => {
+                    const rec = BOOT.executionValues[fieldId];
+                    if (!rec || typeof rec !== 'object') return;
+                    if (!rec._meta) rec._meta = {};
+                    if (!rec._meta.default) rec._meta.default = {};
+                    rec._meta.default.by = res.updated_by;
+                    rec._meta.default.at = res.updated_at;
+                });
+                window.__V2__.repaintAllFields();
+            }
+            window.Swal.fire({
+                title: 'Thành công', text: 'Đã lưu dữ liệu hồ sơ lô!', icon: 'success',
+                showConfirmButton: false, timer: 1500,
+            }).then(() => {
+                if (status === 'completed' || status === 'reviewed') {
+                    window.location.href = BOOT.urls.recordsIndex;
+                }
+            });
+        })
+        .catch(() => window.Swal.fire('Lỗi mạng', 'Không thể kết nối đến máy chủ', 'error'));
+}
+
 window.__V2__.showFieldHistory = function (fieldId) {
+    // Trang thực thi lô: lịch sử nằm ở server (ebmr_run_data_history), _meta chỉ có history_count
+    if (BOOT.recordId) {
+        fetch(`${BOOT.urls.runDataHistoryBase}/${BOOT.recordId}/${encodeURIComponent(fieldId)}/default`, {
+            headers: { Accept: 'application/json' },
+        })
+            .then((r) => r.json())
+            .then((res) => {
+                const list = (res && res.data) || [];
+                if (!list.length) return;
+                const rows = list.map((h) => `
+                    <tr>
+                        <td style="text-align:left; padding:4px 8px; border-bottom:1px solid #e2e8f0;">
+                            <div><s style="color:#94a3b8;">${escapeHtmlV2(String(h.old_value ?? ''))}</s> &rarr; <b>${escapeHtmlV2(String(h.new_value ?? ''))}</b></div>
+                            <div class="small text-muted">${escapeHtmlV2(h.reason || '')}</div>
+                        </td>
+                        <td style="text-align:right; padding:4px 8px; border-bottom:1px solid #e2e8f0; white-space:nowrap; font-size:0.75rem; color:#64748b;">${escapeHtmlV2(h.changed_by || '')}<br>${escapeHtmlV2(h.changed_at || '')}</td>
+                    </tr>`).join('');
+                window.Swal.fire({
+                    title: 'Lịch sử thay đổi',
+                    html: `<table style="width:100%; border-collapse:collapse; font-size:0.85rem;">${rows}</table>`,
+                    confirmButtonText: 'Đóng',
+                    width: 480,
+                });
+            })
+            .catch(() => showToast('error', 'Không tải được lịch sử thay đổi'));
+        return;
+    }
     const rec = BOOT.executionValues[fieldId];
     const list = (rec && rec._meta && rec._meta.default && rec._meta.default.history_list) || [];
     if (!list.length) return;
@@ -5950,10 +7068,83 @@ function calculateFormulaV2(formula, decimalPlaces, targetFieldId) {
 window.__V2__.calculateFormula = calculateFormulaV2;
 
 /* ---------------------------------------------------------
+ * 6b2. CẢNH BÁO ÂM THANH khi tới chu kỳ lấy mẫu tiếp theo (port từ V1
+ *   startContinuousBeep/stopContinuousBeep + autoFillTime — xem
+ *   designer/scripts/ui_handlers.blade.php). Áp dụng cho bảng KT Khối lượng
+ *   Trung bình (freq_minutes): mỗi lần 1 hàng bất kỳ trong bảng lấy giờ mới
+ *   (autoFillExecutionDate), hẹn lại đồng hồ đếm — hết giờ thì phát còi hú
+ *   liên tục + hiện hộp thoại nhắc, đến khi người dùng bấm "Đã hiểu".
+ * --------------------------------------------------------- */
+const sampleTimersV2 = {};
+let sampleBeepIntervalV2 = null;
+
+function startContinuousBeepV2() {
+    stopContinuousBeepV2();
+    try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        const audioCtx = new AudioContext();
+
+        const playBeep = () => {
+            try {
+                // Còi hú đặc chủng phòng sản xuất (Dual Sawtooth + Frequency Sweep) — y hệt V1
+                const now = audioCtx.currentTime;
+                const osc1 = audioCtx.createOscillator();
+                const osc2 = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                osc1.connect(gainNode);
+                osc2.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                osc1.type = 'sawtooth';
+                osc2.type = 'sawtooth';
+                osc1.frequency.setValueAtTime(2000, now);
+                osc2.frequency.setValueAtTime(2025, now);
+                osc1.frequency.exponentialRampToValueAtTime(2800, now + 0.25);
+                osc2.frequency.exponentialRampToValueAtTime(2825, now + 0.25);
+                gainNode.gain.setValueAtTime(0.45, now);
+                gainNode.gain.linearRampToValueAtTime(0.45, now + 0.2);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+                osc1.start(now);
+                osc2.start(now);
+                osc1.stop(now + 0.3);
+                osc2.stop(now + 0.3);
+            } catch (e) { /* bỏ qua lỗi 1 nhịp còi, vòng lặp vẫn tiếp tục */ }
+        };
+        playBeep();
+        sampleBeepIntervalV2 = setInterval(playBeep, 700); // lặp dồn dập mỗi 0.7s
+    } catch (e) { /* trình duyệt không hỗ trợ Web Audio */ }
+}
+
+function stopContinuousBeepV2() {
+    if (sampleBeepIntervalV2) {
+        clearInterval(sampleBeepIntervalV2);
+        sampleBeepIntervalV2 = null;
+    }
+}
+
+/** Hẹn lại đồng hồ nhắc chu kỳ lấy mẫu của 1 bảng KT Khối lượng Trung bình. */
+function scheduleWeightSampleAlertV2(tableId, freqMinutes) {
+    if (!freqMinutes) return;
+    if (sampleTimersV2[tableId]) clearTimeout(sampleTimersV2[tableId]);
+    sampleTimersV2[tableId] = setTimeout(() => {
+        delete sampleTimersV2[tableId];
+        startContinuousBeepV2();
+        window.Swal.fire({
+            title: 'Đến giờ lấy mẫu!',
+            html: `Đã qua <b>${freqMinutes} phút</b> kể từ lần ghi nhận trước.<br>Vui lòng tiến hành lấy mẫu và cân trọng lượng!`,
+            icon: 'warning',
+            confirmButtonText: 'Đã hiểu',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+        }).then(() => stopContinuousBeepV2());
+    }, freqMinutes * 60 * 1000);
+}
+
+/* ---------------------------------------------------------
  * 6c. Tương tác theo từng loại biến trong Chạy thử
  * --------------------------------------------------------- */
 window.__V2__.toggleExecutionCheckbox = function (fieldId) {
-    if (!BOOT.isExecutionMode) return;
+    if (!BOOT.isExecutionMode || BOOT.isReadOnly) return;
     const field = fieldsConfig[fieldId];
     if (!field || field.formula) return; // biến khoá theo công thức: không cho tick tay
 
@@ -5965,12 +7156,12 @@ window.__V2__.toggleExecutionCheckbox = function (fieldId) {
 };
 
 window.__V2__.handleSelectChange = function (fieldId, value) {
-    if (!BOOT.isExecutionMode) return;
+    if (!BOOT.isExecutionMode || BOOT.isReadOnly) return;
     window.__V2__.applyExecutionValue(fieldId, value);
 };
 
 window.__V2__.autoFillExecutionDate = function (fieldId) {
-    if (!BOOT.isExecutionMode) return;
+    if (!BOOT.isExecutionMode || BOOT.isReadOnly) return;
     const field = fieldsConfig[fieldId];
     if (!field) return;
 
@@ -5978,11 +7169,21 @@ window.__V2__.autoFillExecutionDate = function (fieldId) {
     const timeString = field.date_format === 'hh:mm dd/mm/yyyy'
         ? `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} ${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`
         : `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
-    window.__V2__.applyExecutionValue(fieldId, timeString);
+    window.__V2__.applyExecutionValue(fieldId, timeString, (applied) => {
+        // Biến này thuộc bảng KT Khối lượng Trung bình (có freq_minutes) -> hẹn lại
+        // đồng hồ báo còi cho chu kỳ lấy mẫu tiếp theo (xem scheduleWeightSampleAlertV2).
+        if (!applied || !field.block_id) return;
+        const table = items.find((i) => i.id === field.block_id && i.type === 'table');
+        const freq = table && parseInt(table.freq_minutes, 10);
+        if (table && freq) {
+            scheduleWeightSampleAlertV2(table.id, freq);
+            showToast('info', `Đã lấy giờ. Hệ thống sẽ nhắc nhở sau ${freq} phút.`);
+        }
+    });
 };
 
 window.__V2__.openExecutionModal = function (fieldId) {
-    if (!BOOT.isExecutionMode) return;
+    if (!BOOT.isExecutionMode || BOOT.isReadOnly) return;
     const field = fieldsConfig[fieldId];
     if (!field) return;
 
@@ -6099,7 +7300,7 @@ window.__V2__.openExecutionModal = function (fieldId) {
  * 6d. Chữ ký điện tử — xác thực mật khẩu / xác thực người kiểm tra
  * --------------------------------------------------------- */
 window.__V2__.openSignatureModal = function (fieldId) {
-    if (!BOOT.isExecutionMode) return;
+    if (!BOOT.isExecutionMode || BOOT.isReadOnly) return;
     if (!fieldsConfig[fieldId]) return;
 
     window.Swal.fire({
@@ -6136,7 +7337,7 @@ window.__V2__.openSignatureModal = function (fieldId) {
 };
 
 window.__V2__.openCheckerAuthModal = function (fieldId) {
-    if (!BOOT.isExecutionMode) return;
+    if (!BOOT.isExecutionMode || BOOT.isReadOnly) return;
     if (!fieldsConfig[fieldId]) return;
 
     window.Swal.fire({
@@ -6529,6 +7730,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }, true); // capture phase để đón click trước handler khác
 
+    // Trang THỰC THI LÔ: ghép các dòng động (Thêm dòng Cấp 2) đã lưu của lô này vào
+    // bảng tương ứng TRƯỚC lần render đầu — giá trị của chúng tự khớp qua BOOT.executionValues.
+    if (BOOT.recordId) mergeRecordStructuresV2();
+
     renderDocument();
     initFormatControls();
     initFormatPainterV2();
@@ -6563,8 +7768,29 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Trang thực thi lô không có nút toggle (blade đã bỏ) — guard thêm cho chắc:
+    // không bao giờ cho phép rời execution mode khi đang ghi chép 1 lô thật.
     const btnToggleMode = document.getElementById('v2-btn-toggle-mode');
-    if (btnToggleMode) btnToggleMode.addEventListener('click', toggleExecutionModeV2);
+    if (btnToggleMode && !BOOT.recordId) btnToggleMode.addEventListener('click', toggleExecutionModeV2);
+
+    // Gạch chéo "KHÔNG SỬ DỤNG" (N/A): gắn listener chọn-bằng-chạm + nút toolbar
+    naMarks.init();
+
+    // Các nút lưu HỒ SƠ LÔ (chỉ tồn tại trên trang thực thi)
+    document.getElementById('v2-btn-record-draft')?.addEventListener('click', () => saveRecordDataV2('draft'));
+    document.getElementById('v2-btn-record-complete')?.addEventListener('click', () => saveRecordDataV2('completed'));
+    document.getElementById('v2-btn-record-confirm-read')?.addEventListener('click', () => {
+        window.Swal.fire({
+            title: 'Xác nhận Đọc hồ sơ',
+            text: 'Bạn có chắc chắn đã xem xét kỹ các số liệu trong hồ sơ này?',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'Xác nhận',
+            cancelButtonText: 'Hủy',
+        }).then((result) => {
+            if (result.isConfirmed) saveRecordDataV2('reviewed', { statusOnly: true });
+        });
+    });
 
     const btnLoopGroup = document.getElementById('v2-btn-loop-group');
     if (btnLoopGroup) {
@@ -6612,18 +7838,11 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('v2-toc-close')?.addEventListener('click', () =>
         document.getElementById('v2-toc').classList.remove('open'));
 
-    // Bình luận
-    document.getElementById('v2-btn-comments')?.addEventListener('click', () => {
-        const panel = document.getElementById('v2-comments');
-        if (panel.classList.contains('open')) panel.classList.remove('open');
-        else openCommentsPanel(null);
-    });
-    document.getElementById('v2-comments-close')?.addEventListener('click', () =>
-        document.getElementById('v2-comments').classList.remove('open'));
-    document.getElementById('v2-comment-send')?.addEventListener('click', sendComment);
+    // Bình luận vùng chọn (kiểu Word) — xem section 5c
+    initCommentsV2();
 
-    // Sidebar Thiết bị / Thành phần CO (chỉ 1 panel trái mở tại 1 thời điểm)
-    const leftPanels = ['v2-toc', 'v2-equipment', 'v2-components'];
+    // Sidebar Thiết bị / Thành phần CO / Biểu mẫu chung GF (chỉ 1 panel trái mở tại 1 thời điểm)
+    const leftPanels = ['v2-toc', 'v2-equipment', 'v2-components', 'v2-gf'];
     const togglePanel = (id, onOpen) => {
         const panel = document.getElementById(id);
         if (panel.classList.contains('open')) { panel.classList.remove('open'); return; }
@@ -6635,11 +7854,19 @@ document.addEventListener('DOMContentLoaded', () => {
         togglePanel('v2-equipment', () => { if (!equipmentCache) loadEquipmentList(); }));
     document.getElementById('v2-btn-components')?.addEventListener('click', () =>
         togglePanel('v2-components', () => { if (!componentsCache) loadComponentsList(); }));
+    document.getElementById('v2-btn-link-gf')?.addEventListener('click', () => {
+        if (BOOT.isReadOnly || BOOT.isExecutionMode) {
+            window.Swal?.fire({ toast: true, position: 'top-end', icon: 'info', title: 'Chỉ dùng được ở chế độ Thiết kế', showConfirmButton: false, timer: 2500 });
+            return;
+        }
+        togglePanel('v2-gf', () => { if (!allGfsV2) loadGfListV2(); });
+    });
     document.querySelectorAll('[data-close-panel]').forEach((btn) =>
         btn.addEventListener('click', () => document.getElementById(btn.getAttribute('data-close-panel')).classList.remove('open')));
     document.getElementById('v2-eq-dept')?.addEventListener('change', loadEquipmentList);
     document.getElementById('v2-eq-search')?.addEventListener('keyup', renderEquipmentList);
     document.getElementById('v2-co-search')?.addEventListener('keyup', renderComponentsList);
+    document.getElementById('v2-gf-search')?.addEventListener('keyup', filterGfsV2);
 
     // Bảng KT Khối lượng Trung bình (chèn bảng nhập + biểu đồ, như V1)
     document.getElementById('v2-btn-weight-chart')?.addEventListener('click', () => {
@@ -6647,9 +7874,21 @@ document.addEventListener('DOMContentLoaded', () => {
             window.Swal?.fire({ toast: true, position: 'top-end', icon: 'info', title: 'Chỉ dùng được ở chế độ Thiết kế', showConfirmButton: false, timer: 2500 });
             return;
         }
+        weightChartEditId = null;
+        setWeightChartModalModeV2(false);
+        document.getElementById('v2-wc-weight').value = '7.10';
+        document.getElementById('v2-wc-dev').value = '3';
+        document.getElementById('v2-wc-freq').value = '15';
         showModalV2('v2WeightChartModal');
     });
     document.getElementById('v2-wc-generate')?.addEventListener('click', generateWeightChartTableV2);
+    // Modal bị đóng bằng nút Hủy/X (không qua updateWeightChartTableV2) -> luôn thoát chế độ SỬA
+    if (window.jQuery) {
+        window.jQuery('#v2WeightChartModal').on('hidden.bs.modal', () => {
+            weightChartEditId = null;
+            setWeightChartModalModeV2(false);
+        });
+    }
 
     // Danh mục chữ viết tắt
     document.getElementById('v2-btn-abbreviation')?.addEventListener('click', () => {
@@ -6906,6 +8145,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (d) insertEquipmentTableV2(afterIndex, JSON.parse(d));
             return;
         }
+        if (action === 'insertLinkedGf') {
+            insertLinkedGfV2(afterIndex, e.dataTransfer.getData('gfDocCode'), e.dataTransfer.getData('gfName'));
+            return;
+        }
         const compId = e.dataTransfer.getData('componentId');
         if (compId) importComponentV2(parseInt(compId, 10), e.dataTransfer.getData('componentName') || '', afterIndex);
     });
@@ -6921,14 +8164,6 @@ document.addEventListener('DOMContentLoaded', () => {
             e.dataTransfer.effectAllowed = 'copy';
             document.body.classList.add('v2-dragging');
         });
-    });
-
-    // Ctrl+K chèn liên kết (giống Google Docs)
-    document.addEventListener('keydown', (e) => {
-        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && activeEditor) {
-            e.preventDefault();
-            promptLink();
-        }
     });
 
     // Ctrl+F Tìm kiếm / Ctrl+H Tìm & Thay thế (giống Google Docs) — chặn tìm kiếm mặc định của trình duyệt
@@ -7159,6 +8394,23 @@ document.addEventListener('contextmenu', (e) => {
     }
 
     menu.innerHTML = '';
+
+    // ── BÌNH LUẬN VÙNG CHỌN ── (đứng đầu menu, như Word)
+    // Chuột phải KHÔNG xoá vùng chọn hiện có, nên bắt neo ngay tại đây là chính xác nhất.
+    // Có cả ở chế độ chỉ-đọc: người kiểm tra/phê duyệt BMR cần góp ý mà không được sửa nội dung.
+    const cmtSd = cmtCaptureSelection();
+    if (cmtSd) {
+        const btnCmt = document.createElement('button');
+        btnCmt.className = 'dropdown-item small';
+        btnCmt.innerHTML = '<i class="fas fa-comment-medical me-2 text-primary"></i> Thêm bình luận';
+        btnCmt.onclick = () => {
+            hideContextMenuV2();
+            cmtLastSel = cmtSd; // cmtStartNew() dùng cache này vì menu đóng làm mất selection
+            cmtStartNew();
+        };
+        menu.appendChild(btnCmt);
+        menu.appendChild(document.createElement('hr'));
+    }
 
     // ── BIẾN SỐ ──
     if (varEl) {
@@ -7397,6 +8649,10 @@ document.addEventListener('contextmenu', (e) => {
             menu.appendChild(btnRemove);
         }
     }
+
+    // Bỏ đường kẻ thừa ở cuối (VD: chỉ có mục "Thêm bình luận", không có mục nào phía sau)
+    while (menu.lastElementChild?.tagName === 'HR') menu.lastElementChild.remove();
+    if (!menu.childElementCount) return;
 
     menu.style.left = e.clientX + 'px';
     menu.style.top = e.clientY + 'px';

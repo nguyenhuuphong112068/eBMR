@@ -59,5 +59,17 @@ Route::prefix('/materData')
             Route::post('update', 'update')->name('update');
             Route::post('delete', 'delete')->name('delete');
         });
-        
+        Route::prefix('/designation')->name('designation.')->controller(\App\Http\Controllers\Pages\MaterData\DesignationController::class)->group(function () {
+            Route::get('', 'index')->name('list');
+            Route::post('store', 'store')->name('store');
+            Route::post('update', 'update')->name('update');
+            Route::post('deActive', 'deActive')->name('deActive');
+        });
+        Route::prefix('/seal')->name('seal.')->controller(\App\Http\Controllers\Pages\MaterData\SealController::class)->group(function () {
+            Route::get('', 'index')->name('list');
+            Route::post('store', 'store')->name('store');
+            Route::post('update', 'update')->name('update');
+            Route::post('deActive', 'deActive')->name('deActive');
+        });
+
     });

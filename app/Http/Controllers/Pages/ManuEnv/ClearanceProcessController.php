@@ -13,10 +13,14 @@ use App\Models\ClearanceRoomCampaign;
 use App\Models\ClearanceRoomCampaignStep;
 use App\Models\ClearanceEquipCampaign;
 use App\Models\ClearanceEquipCampaignStep;
+use App\Services\ApprovalWorkflowNotifier;
+use App\Traits\EditsCampaignStepResults;
 use Carbon\Carbon;
 
 class ClearanceProcessController extends Controller
 {
+    use EditsCampaignStepResults;
+
     public function list($type, $id)
     {
         \App\Services\DocumentActivationService::activateAllIssuedDocuments();
@@ -269,7 +273,15 @@ class ClearanceProcessController extends Controller
             'reviewers' => 'nullable|array',
             'reviewers.*' => 'integer',
             'approver' => 'nullable|integer',
-            'authorizer' => 'nullable|integer'
+            'authorizer' => 'nullable|integer',
+            'reviewer_due_dates' => 'nullable|array',
+            'reviewer_due_dates.*' => 'nullable|date',
+            'reviewer_reasons' => 'nullable|array',
+            'reviewer_reasons.*' => 'nullable|string|max:500',
+            'approver_due_date' => 'nullable|date',
+            'approver_reason' => 'nullable|string|max:500',
+            'authorizer_due_date' => 'nullable|date',
+            'authorizer_reason' => 'nullable|string|max:500',
         ]);
 
         DB::transaction(function () use ($type, $list_id, $validated) {
@@ -278,20 +290,37 @@ class ClearanceProcessController extends Controller
             $insertData = [];
             if (!empty($validated['reviewers'])) {
                 foreach ($validated['reviewers'] as $userId) {
-                    $insertData[] = ['process_list_id' => $list_id, 'role' => 'reviewer', 'user_id' => $userId, 'step_order' => 1, 'status' => 'pending', 'created_at' => now(), 'updated_at' => now()];
+                    $insertData[] = [
+                        'process_list_id' => $list_id, 'role' => 'reviewer', 'user_id' => $userId, 'step_order' => 1, 'status' => 'pending',
+                        'due_date' => $validated['reviewer_due_dates'][$userId] ?? null,
+                        'reason' => $validated['reviewer_reasons'][$userId] ?? null,
+                        'created_at' => now(), 'updated_at' => now(),
+                    ];
                 }
             }
-            if (!empty($validated['approver'])) $insertData[] = ['process_list_id' => $list_id, 'role' => 'approver', 'user_id' => $validated['approver'], 'step_order' => 2, 'status' => 'pending', 'created_at' => now(), 'updated_at' => now()];
-            if (!empty($validated['authorizer'])) $insertData[] = ['process_list_id' => $list_id, 'role' => 'authorizer', 'user_id' => $validated['authorizer'], 'step_order' => 3, 'status' => 'pending', 'created_at' => now(), 'updated_at' => now()];
-            
+            if (!empty($validated['approver'])) $insertData[] = [
+                'process_list_id' => $list_id, 'role' => 'approver', 'user_id' => $validated['approver'], 'step_order' => 2, 'status' => 'pending',
+                'due_date' => $validated['approver_due_date'] ?? null,
+                'reason' => $validated['approver_reason'] ?? null,
+                'created_at' => now(), 'updated_at' => now(),
+            ];
+            if (!empty($validated['authorizer'])) $insertData[] = [
+                'process_list_id' => $list_id, 'role' => 'authorizer', 'user_id' => $validated['authorizer'], 'step_order' => 3, 'status' => 'pending',
+                'due_date' => $validated['authorizer_due_date'] ?? null,
+                'reason' => $validated['authorizer_reason'] ?? null,
+                'created_at' => now(), 'updated_at' => now(),
+            ];
+
             if (count($insertData) > 0) DB::table($wfTable)->insert($insertData);
-            
+
             if ($type === 'room') {
                 DB::table('clearance_room_processes_list')->where('id', $list_id)->where('status', 'draft')->update(['status' => 'submitted']);
             } else {
                 DB::table('clearance_equip_processes_list')->where('id', $list_id)->where('status', 'draft')->update(['status' => 'submitted']);
             }
         });
+
+        ApprovalWorkflowNotifier::notifyActionableStep($type === 'room' ? 'clearance_room' : 'clearance_equip', (int) $list_id);
 
         return response()->json(['success' => true, 'message' => 'Lưu luồng trình ký thành công']);
     }
@@ -344,16 +373,18 @@ class ClearanceProcessController extends Controller
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // CAMPAIGN METHODS – Thực hiện quy trình vệ sinh phòng
+    // CAMPAIGN METHODS – Thực hiện quy trình dọn quang phòng (+ thiết bị trong phòng)
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
      * GET /clearance-process/room/{room_id}/campaign/open
-     * Mở trang thực hiện vệ sinh: đổi trạng thái phòng → cleaning, tạo campaign, render trang.
+     * Mở trang thực hiện dọn quang phòng; luôn kèm campaign dọn quang của từng thiết bị
+     * trong phòng (nếu có) qua room_campaign_id — UI chỉ cho hoàn thành phòng khi toàn
+     * bộ thiết bị cũng đã hoàn thành (xem checkFinishButton() trong campaign_execute.blade.php).
      */
     public function openCampaignPage(Request $request, $room_id)
     {
-        session(['title' => 'Vệ Sinh Phòng']);
+        session(['title' => 'Dọn Quang Phòng']);
 
         $userId   = session('user')['userId']   ?? 1;
         $fullName = session('user')['fullName'] ?? 'N/A';
@@ -386,7 +417,7 @@ class ClearanceProcessController extends Controller
 
             if (!$activeProcess) {
                 return redirect()->route('pages.ebmr.production')
-                    ->with('error', "Phòng {$room->code} chưa có quy trình vệ sinh. Vui lòng thiết kế quy trình tại Môi Trường > Vệ Sinh Phòng.");
+                    ->with('error', "Phòng {$room->code} chưa có quy trình dọn quang. Vui lòng thiết kế quy trình tại Môi Trường > Dọn Quang Phòng.");
             }
 
             $processSteps = ClearanceRoomProcess::where('process_list_id', $activeProcess->id)
@@ -395,7 +426,7 @@ class ClearanceProcessController extends Controller
 
             if ($processSteps->isEmpty()) {
                 return redirect()->route('pages.ebmr.production')
-                    ->with('error', "Quy trình vệ sinh của phòng {$room->code} chưa có bước nào. Vui lòng thiết kế các bước thực hiện.");
+                    ->with('error', "Quy trình dọn quang của phòng {$room->code} chưa có bước nào. Vui lòng thiết kế các bước thực hiện.");
             }
 
             // Kiểm tra xem có campaign nào đang thực hiện dở dang không
@@ -415,9 +446,12 @@ class ClearanceProcessController extends Controller
                     $employeeIds[] = $userId;
                 }
 
-                // 1. Tạo campaign mới
+                // 1. Tạo campaign mới. Lưu ý: KHÔNG ghi room_logbooks ở đây — dọn quang
+                // (clearance) là quy trình độc lập với vệ sinh (cleaning); trạng thái
+                // 'cleaned'/'cleaning' của phòng chỉ do CleaningProcessController quản lý.
                 $campaign = ClearanceRoomCampaign::create([
                     'room_id'         => $room_id,
+                    'distribution_id' => $request->query('distribution_id'),
                     'process_list_id' => $activeProcess->id,
                     'status'          => 'in_progress',
                     'started_by'      => $userId,
@@ -425,25 +459,7 @@ class ClearanceProcessController extends Controller
                     'employee_ids'    => $employeeIds,
                 ]);
 
-                // 2. Đổi trạng thái phòng → 'cleaning'
-                DB::table('room_logbooks')->insert([
-                    'room_id'         => $room_id,
-                    'campaign_id'     => $campaign->id,
-                    'equipment_id'    => null,
-                    'action_type'     => 'cleaning',
-                    'start_time'      => now(),
-                    'employee_ids'    => json_encode($employeeIds),
-                    'previous_status' => 'dirty',
-                    'current_status'  => 'cleaning',
-                    'created_by'      => $userId,
-                    'remarks'         => 'Bắt đầu vệ sinh bởi ' . $fullName,
-                    'created_at'      => now(),
-                    'updated_at'      => now(),
-                ]);
-
-
-
-                // 3. Tạo các bước phòng tương ứng
+                // 2. Tạo các bước phòng tương ứng
                 foreach ($processSteps as $s) {
                     ClearanceRoomCampaignStep::create([
                         'campaign_id'     => $campaign->id,
@@ -453,13 +469,11 @@ class ClearanceProcessController extends Controller
                     ]);
                 }
 
-
-
                 DB::commit();
             } catch (\Exception $e) {
                 DB::rollBack();
                 return redirect()->route('pages.ebmr.production')
-                    ->with('error', 'Lỗi khởi tạo quy trình vệ sinh: ' . $e->getMessage());
+                    ->with('error', 'Lỗi khởi tạo quy trình dọn quang: ' . $e->getMessage());
             }
         }
 
@@ -480,13 +494,23 @@ class ClearanceProcessController extends Controller
             return $step;
         });
 
-
+        // Thiết bị cần dọn quang cùng phòng trong lần này (nếu có) — campaign phòng chỉ
+        // được phép hoàn thành khi tất cả các campaign này cũng đã 'completed'.
+        $equipCampaigns = ClearanceEquipCampaign::where('room_campaign_id', $campaign->id)
+            ->get()
+            ->map(function ($ec) {
+                $instrument = DB::table('instrument')->where('id', $ec->equipment_id)->first();
+                $ec->equipment_code = $instrument->code ?? '?';
+                $ec->equipment_name = $instrument->name ?? '';
+                return $ec;
+            });
 
         return view('pages.manu_env.clearance_process.campaign_execute', [
             'room'           => $room,
             'campaign'       => $campaign,
             'campaignSteps'  => $campaignSteps,
             'processList'    => $activeProcess,
+            'equipCampaigns' => $equipCampaigns,
         ]);
     }
 
@@ -602,7 +626,7 @@ class ClearanceProcessController extends Controller
 
     /**
      * POST /clearance-process/campaign/{campaign_id}/step/{step_id}/complete
-     * Ghi nhận hoàn thành một bước vệ sinh.
+     * Ghi nhận hoàn thành một bước dọn quang.
      */
     public function completeStep(Request $request, $campaign_id, $step_id)
     {
@@ -649,32 +673,43 @@ class ClearanceProcessController extends Controller
     }
 
     /**
+     * POST /clearance-process/campaign/{campaign_id}/step/{step_id}/edit
+     */
+    public function editStep(Request $request, $campaign_id, $step_id)
+    {
+        return $this->handleEditCampaignStep(
+            $request,
+            'clearance_room',
+            ClearanceRoomCampaignStep::class,
+            ClearanceRoomCampaign::class,
+            $campaign_id,
+            $step_id,
+            ['done' => 'is_done', 'note' => 'result_note', 'by' => 'done_by', 'at' => 'done_at']
+        );
+    }
+
+    /**
+     * GET /clearance-process/campaign/step/{step_id}/history
+     */
+    public function getStepHistory($step_id)
+    {
+        return $this->handleGetCampaignStepHistory('clearance_room', $step_id);
+    }
+
+    /**
      * POST /clearance-process/campaign/{campaign_id}/complete
-     * Hoàn thành toàn bộ campaign → cập nhật trạng thái phòng thành 'cleaned'.
+     * Hoàn thành toàn bộ campaign dọn quang phòng. KHÔNG đụng tới room_logbooks/trạng
+     * thái vệ sinh — dọn quang là quy trình độc lập với vệ sinh (khác campaign, khác
+     * mục đích). Nếu campaign gắn với 1 phiên sản xuất (distribution_id), yêu cầu toàn
+     * bộ campaign dọn quang thiết bị cùng phòng cũng đã 'completed' trước khi cho phép
+     * hoàn thành, rồi chốt clearance_completed_at trên ebmr_record_distributions —
+     * đây là mốc thật sự mở khóa trang ghi chép hồ sơ.
      */
     public function completeCampaign(Request $request, $campaign_id)
     {
-        $userId   = session('user')['userId']   ?? 1;
-        $fullName = session('user')['fullName'] ?? 'N/A';
+        $userId = session('user')['userId'] ?? 1;
 
         $campaign = ClearanceRoomCampaign::with('steps')->findOrFail($campaign_id);
-        
-        // Lấy loại quy trình để tính hạn vệ sinh
-        $processList = ClearanceRoomProcessList::find($campaign->process_list_id);
-        $cleaningType = $processList ? $processList->clearance_type : 1;
-        
-        $cleanExpiryDate = now();
-        $cleanLevel = '';
-        if ($cleaningType == 1) {
-            $cleanExpiryDate = now()->addDays(3);
-            $cleanLevel = 'Vệ Sinh Cấp I';
-        } elseif ($cleaningType == 2) {
-            $cleanExpiryDate = now()->addDays(7);
-            $cleanLevel = 'Vệ Sinh Cấp II';
-        } elseif ($cleaningType == 3) {
-            $cleanExpiryDate = now()->addHours(24);
-            $cleanLevel = 'Vệ Sinh Lại';
-        }
 
         // Kiểm tra tất cả bước đã hoàn thành chưa
         $undoneSteps = $campaign->steps->where('is_done', false)->count();
@@ -685,44 +720,63 @@ class ClearanceProcessController extends Controller
             ]);
         }
 
+        // Toàn bộ thiết bị cùng phòng trong lần dọn quang này cũng phải xong
+        $pendingEquip = ClearanceEquipCampaign::where('room_campaign_id', $campaign->id)
+            ->where('status', '!=', 'completed')
+            ->count();
+        if ($pendingEquip > 0) {
+            return response()->json([
+                'success' => false,
+                'message' => "Còn {$pendingEquip} thiết bị chưa hoàn thành dọn quang. Vui lòng thực hiện hết trước khi hoàn thành."
+            ]);
+        }
+
         DB::beginTransaction();
         try {
-            // Đánh dấu campaign hoàn thành
             $campaign->update([
                 'status'       => 'completed',
                 'completed_by' => $userId,
                 'completed_at' => now(),
             ]);
 
-            // Cập nhật room_logbooks: ghi nhận trạng thái 'cleaned'
-            DB::table('room_logbooks')->insert([
-                'room_id'           => $campaign->room_id,
-                'campaign_id'       => $campaign->id,
-                'equipment_id'      => null,
-                'action_type'       => 'cleaning',
-                'start_time'        => $campaign->started_at ?? now(),
-                'end_time'          => now(),
-                'employee_ids'      => json_encode([$userId]),
-                'previous_status'   => 'cleaning',
-                'current_status'    => 'cleaned',
-                'clean_level'       => $cleanLevel,
-                'clean_expiry_date' => $cleanExpiryDate,
-                'created_by'        => $userId,
-                'remarks'           => 'Hoàn thành vệ sinh bởi ' . $fullName,
-                'created_at'        => now(),
-                'updated_at'        => now(),
-            ]);
+            $redirectUrl = null;
+            if ($campaign->distribution_id) {
+                $dist = DB::table('ebmr_record_distributions')->where('id', $campaign->distribution_id)->first();
+                if ($dist) {
+                    DB::table('ebmr_record_distributions')->where('id', $dist->id)->update([
+                        'clearance_completed_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                    $redirectUrl = route('pages.ebmr.execute', $dist->record_id)
+                        . '?section=' . urlencode($dist->section_id) . '&dist=' . $dist->id;
+                }
+            }
 
             DB::commit();
 
             return response()->json([
                 'success' => true,
-                'message' => 'Hoàn thành quy trình vệ sinh! Trạng thái phòng đã được cập nhật thành "Đã vệ sinh".'
+                'message' => 'Hoàn thành dọn quang phòng & thiết bị!',
+                'redirect_url' => $redirectUrl,
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['success' => false, 'message' => 'Lỗi: ' . $e->getMessage()]);
         }
+    }
+
+    /**
+     * GET /clearance-process/room-campaign/{campaign_id}/equip-status
+     * Poll trạng thái các campaign dọn quang thiết bị cùng phòng — dùng để cập nhật
+     * badge realtime bên sidebar campaign_execute.blade.php mà không cần tải lại trang.
+     */
+    public function getEquipStatus($campaign_id)
+    {
+        $data = ClearanceEquipCampaign::where('room_campaign_id', $campaign_id)
+            ->get(['id', 'status'])
+            ->values();
+
+        return response()->json(['success' => true, 'data' => $data]);
     }
 }
 

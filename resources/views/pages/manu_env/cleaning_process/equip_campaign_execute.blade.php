@@ -509,16 +509,30 @@
                                             </div>
                                         @else
                                             {{-- Đã làm: hiển thị kết quả --}}
-                                            <div class="mb-3 d-flex align-items-center gap-2">
-                                                <div class="small text-muted fw-bold text-uppercase"
-                                                    style="font-size: 0.68rem;">Kết quả:</div>
-                                                @if ($step->is_passed)
-                                                    <span class="badge bg-success"><i class="fas fa-check me-1"></i>
-                                                        ĐẠT</span>
-                                                @else
-                                                    <span class="badge bg-danger"><i class="fas fa-times me-1"></i> KHÔNG
-                                                        ĐẠT</span>
-                                                @endif
+                                            <div class="mb-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <div class="small text-muted fw-bold text-uppercase"
+                                                        style="font-size: 0.68rem;">Kết quả:</div>
+                                                    @if ($step->is_passed)
+                                                        <span class="badge bg-success"><i class="fas fa-check me-1"></i>
+                                                            ĐẠT</span>
+                                                    @else
+                                                        <span class="badge bg-danger"><i class="fas fa-times me-1"></i> KHÔNG
+                                                            ĐẠT</span>
+                                                    @endif
+                                                </div>
+                                                <div class="d-flex gap-2">
+                                                    @if ($campaign->status !== 'completed')
+                                                        <button type="button" class="btn btn-sm btn-outline-warning rounded-pill"
+                                                            style="font-size: 0.7rem;" onclick="openEditStepModal({{ $idx }})">
+                                                            <i class="fas fa-edit me-1"></i> Sửa kết quả
+                                                        </button>
+                                                    @endif
+                                                    <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill"
+                                                        style="font-size: 0.7rem;" onclick="openStepHistoryModal({{ $idx }})">
+                                                        <i class="fas fa-history me-1"></i> Lịch sử
+                                                    </button>
+                                                </div>
                                             </div>
                                             @if ($step->doneByUser)
                                                 <div class="mb-3 p-3 bg-light rounded-3 border">
@@ -682,9 +696,11 @@
         const CSRF_TOKEN = '{{ csrf_token() }}';
 
         @php
-            $stepsArr = $campaignSteps->map(fn($s) => ['id' => $s->id, 'step' => $s->step, 'is_done' => (bool) $s->is_done])->values()->toArray();
+            $stepsArr = $campaignSteps->map(fn($s) => ['id' => $s->id, 'step' => $s->step, 'is_done' => (bool) $s->is_done, 'is_passed' => (bool) $s->is_passed, 'note' => $s->result_note])->values()->toArray();
         @endphp
         const stepsData = @json($stepsArr);
+        const EDIT_STEP_URL_BASE = "{{ url('/manu_env/cleaning-process/equip-campaign') }}";
+        const STEP_HISTORY_URL_BASE = "{{ url('/manu_env/cleaning-process/equip-campaign/step') }}";
 
         let currentIndex = (() => {
             const i = stepsData.findIndex(s => !s.is_done);
@@ -841,6 +857,119 @@
                 error: function() {
                     Swal.fire('Lỗi', 'Không thể ghi nhận. Vui lòng thử lại.', 'error');
                     btn.prop('disabled', false).html('<i class="fas fa-check me-2"></i> Ghi nhận & Bước tiếp');
+                }
+            });
+        }
+
+        // ── SỬA LẠI KẾT QUẢ 1 BƯỚC ĐÃ XÁC NHẬN ────────────────────────────
+        function openEditStepModal(idx) {
+            const step = stepsData[idx];
+            Swal.fire({
+                title: 'Sửa kết quả Bước ' + step.step,
+                html: `
+                    <div class="text-start">
+                        <div class="mb-3 p-2 bg-light rounded-3 d-flex align-items-center justify-content-between">
+                            <span class="small fw-bold">Kết quả:</span>
+                            <div class="form-check form-switch fs-5 mb-0 d-flex align-items-center">
+                                <input class="form-check-input mt-0" type="checkbox" role="switch" id="edit-is-passed" ${step.is_passed ? 'checked' : ''}>
+                                <label class="form-check-label ms-2 fw-bold ${step.is_passed ? 'text-success' : 'text-danger'}" id="edit-is-passed-label">${step.is_passed ? 'ĐẠT' : 'KHÔNG ĐẠT'}</label>
+                            </div>
+                        </div>
+                        <label class="small fw-bold d-block mb-1">Ghi chú kết quả</label>
+                        <textarea id="edit-note" class="form-control mb-3" rows="2">${step.note ?? ''}</textarea>
+                        <label class="small fw-bold d-block mb-1 text-danger">Lý do sửa (bắt buộc)</label>
+                        <textarea id="edit-reason" class="form-control" rows="2" placeholder="VD: Lỡ bấm nhầm Không đạt, thực tế đã Đạt"></textarea>
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: '<i class="fas fa-save me-1"></i> Lưu thay đổi',
+                cancelButtonText: 'Hủy',
+                confirmButtonColor: '#f59e0b',
+                focusConfirm: false,
+                didOpen: () => {
+                    document.getElementById('edit-is-passed').addEventListener('change', function() {
+                        const label = document.getElementById('edit-is-passed-label');
+                        label.textContent = this.checked ? 'ĐẠT' : 'KHÔNG ĐẠT';
+                        label.classList.toggle('text-success', this.checked);
+                        label.classList.toggle('text-danger', !this.checked);
+                    });
+                },
+                preConfirm: () => {
+                    const reason = document.getElementById('edit-reason').value.trim();
+                    if (!reason) {
+                        Swal.showValidationMessage('Vui lòng nhập lý do sửa');
+                        return false;
+                    }
+                    return {
+                        is_passed: document.getElementById('edit-is-passed').checked,
+                        result_note: document.getElementById('edit-note').value,
+                        reason: reason,
+                    };
+                }
+            }).then((result) => {
+                if (!result.isConfirmed) return;
+
+                Swal.fire({ title: 'Đang lưu...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+                $.ajax({
+                    url: EDIT_STEP_URL_BASE + '/' + CAMPAIGN_ID + '/step/' + step.id + '/edit',
+                    method: 'POST',
+                    data: {
+                        _token: CSRF_TOKEN,
+                        is_passed: result.value.is_passed,
+                        result_note: result.value.result_note,
+                        reason: result.value.reason,
+                    },
+                    success: function(res) {
+                        if (res.success) {
+                            Swal.fire({ icon: 'success', title: 'Đã cập nhật!', timer: 1500, showConfirmButton: false })
+                                .then(() => window.location.reload());
+                        } else {
+                            Swal.fire('Không thể sửa', res.message, 'warning');
+                        }
+                    },
+                    error: function() {
+                        Swal.fire('Lỗi', 'Không thể kết nối máy chủ', 'error');
+                    }
+                });
+            });
+        }
+
+        function openStepHistoryModal(idx) {
+            const step = stepsData[idx];
+            Swal.fire({ title: 'Đang tải lịch sử...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+            $.ajax({
+                url: STEP_HISTORY_URL_BASE + '/' + step.id + '/history',
+                method: 'GET',
+                success: function(res) {
+                    if (!res.success || res.history.length === 0) {
+                        Swal.fire({ icon: 'info', title: 'Lịch sử sửa', text: 'Bước này chưa từng được sửa lại.' });
+                        return;
+                    }
+                    const rows = res.history.map(h => `
+                        <tr>
+                            <td class="small text-nowrap">${h.changed_at}</td>
+                            <td class="small">${h.changed_by_name}</td>
+                            <td class="small text-nowrap">
+                                <span class="badge ${h.old_is_passed ? 'bg-success' : 'bg-danger'}">${h.old_is_passed ? 'ĐẠT' : 'KHÔNG ĐẠT'}</span>
+                                →
+                                <span class="badge ${h.new_is_passed ? 'bg-success' : 'bg-danger'}">${h.new_is_passed ? 'ĐẠT' : 'KHÔNG ĐẠT'}</span>
+                            </td>
+                            <td class="small">${h.reason ?? ''}</td>
+                        </tr>
+                    `).join('');
+                    Swal.fire({
+                        title: 'Lịch sử sửa Bước ' + step.step,
+                        html: `<div class="table-responsive text-start"><table class="table table-sm table-bordered">
+                            <thead><tr><th>Thời gian</th><th>Người sửa</th><th>Thay đổi</th><th>Lý do</th></tr></thead>
+                            <tbody>${rows}</tbody></table></div>`,
+                        width: 700,
+                        confirmButtonText: 'Đóng'
+                    });
+                },
+                error: function() {
+                    Swal.fire('Lỗi', 'Không thể tải lịch sử', 'error');
                 }
             });
         }

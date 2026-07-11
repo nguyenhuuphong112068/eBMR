@@ -146,17 +146,10 @@
                                 $hasActive = count($room->active_records) > 0;
 
                                 // Mock sensor readings dynamically based on room ID (fluctuating with time)
-                                $time = time();
-                                $mockTemp = number_format(
-                                    20.0 + ($room->id % 5) * 0.8 + sin($time / 30.0 + $room->id) * 0.4,
-                                    1,
-                                );
-                                $mockHumid = number_format(
-                                    42 + ($room->id % 6) * 1.5 + cos($time / 45.0 + $room->id) * 2,
-                                    0,
-                                );
-                                $mockPressure =
-                                    '+' . number_format(8 + ($room->id % 8) + sin($time / 60.0 + $room->id) * 1, 0);
+                                $envReading = \App\Services\ProductionEnvironmentService::simulateReading($room->id);
+                                $mockTemp = number_format($envReading['temperature'], 1);
+                                $mockHumid = number_format($envReading['humidity'], 0);
+                                $mockPressure = '+' . number_format($envReading['pressure'], 0);
 
                                 // Map real status to UI classes
                                 $rs = $room->room_status ?? 'ready';
@@ -292,7 +285,20 @@
                                                                 {{ $rec->batch_number }}</span>
                                                             @if ($rec->can_write)
                                                                 <span class="badge bg-success text-white"
-                                                                    style="font-size: 0.65rem;">Đang ghi</span>
+                                                                    style="font-size: 0.65rem;">
+                                                                    <i class="fas fa-cogs me-1"></i>Đang sản xuất</span>
+                                                            @elseif ($rec->can_resume_clearance)
+                                                                <span class="badge bg-warning text-dark"
+                                                                    style="font-size: 0.65rem;"
+                                                                    title="Đã bắt đầu sản xuất — cần hoàn tất dọn quang phòng &amp; thiết bị trước khi ghi chép">
+                                                                    <i class="fas fa-broom me-1"></i>Đang dọn quang
+                                                                </span>
+                                                            @elseif ($rec->can_start)
+                                                                <span class="badge bg-primary text-white"
+                                                                    style="font-size: 0.65rem;"
+                                                                    title="Phòng &amp; thiết bị đã vệ sinh, hồ sơ sẵn sàng — có thể bắt đầu sản xuất">
+                                                                    <i class="fas fa-check-double me-1"></i>Đủ điều kiện sản xuất
+                                                                </span>
                                                             @elseif ($rec->is_distributed)
                                                                 <span class="badge bg-info text-white"
                                                                     style="font-size: 0.65rem;"
@@ -312,32 +318,98 @@
                                                                 <span class="fw-medium text-navy">{{ $rec->assigned_user_names ?: 'Chưa gán người' }}</span>
                                                             </p>
                                                         @endif
-                                                        {{-- Chỉ được "Ghi chép" khi công đoạn này của lô đã được Phân phối
-                                                             tới phòng, user hiện tại nằm trong danh sách được phân phối,
-                                                             VÀ phòng + thiết bị đã đạt điều kiện vệ sinh + dọn quang.
-                                                             Nếu chưa đủ điều kiện, chỉ xem (read-only). --}}
+                                                        {{-- Điều kiện còn thiếu phải hiện thẳng lên card (không chỉ trong tooltip)
+                                                             để người dùng biết ngay cần làm gì — chỉ áp dụng khi đã phân phối +
+                                                             được phân công nhưng phòng/thiết bị chưa vệ sinh xong. --}}
+                                                        @if ($rec->is_distributed && $rec->is_assigned && !$rec->production_started && !empty($rec->cleaning_missing))
+                                                            <div class="mb-2 p-2 rounded-3 bg-soft-warning border border-warning-subtle"
+                                                                style="font-size: 0.68rem;">
+                                                                <div class="fw-bold text-warning-emphasis mb-1">
+                                                                    <i class="fas fa-exclamation-triangle me-1"></i>Thiếu điều kiện sản xuất:
+                                                                </div>
+                                                                <ul class="mb-0 ps-3">
+                                                                    @foreach ($rec->cleaning_missing as $reason)
+                                                                        <li>{{ $reason }}</li>
+                                                                    @endforeach
+                                                                </ul>
+                                                            </div>
+                                                        @endif
+                                                        {{-- Luồng 3 bước: (1) đủ điều kiện vệ sinh → "Bắt đầu sản xuất"; (2) sau khi
+                                                             bắt đầu, dọn quang phòng + thiết bị là bước bắt buộc kế tiếp → "Tiếp tục
+                                                             dọn quang"; (3) dọn quang xong mới mở "Ghi chép dữ liệu". --}}
                                                         @if ($rec->can_write)
                                                             <a href="{{ route('pages.ebmr.execute', $rec->id) }}?section={{ $rec->section_id }}&dist={{ $rec->distribution_id }}"
-                                                                class="btn btn-sm btn-navy w-100 py-1 text-white shadow-sm font-weight-bold"
+                                                                class="btn btn-sm btn-navy w-100 py-1 text-white shadow-sm font-weight-bold mb-1"
                                                                 style="font-size: 0.75rem; border-radius: 6px;">
                                                                 <i class="fas fa-edit me-1 text-white"></i> Ghi chép dữ liệu
                                                             </a>
+                                                            @if (!$rec->production_ended)
+                                                                <button type="button"
+                                                                    class="btn btn-sm btn-outline-danger w-100 py-1 fw-bold js-end-production"
+                                                                    style="font-size: 0.72rem; border-radius: 6px;"
+                                                                    data-distribution-id="{{ $rec->distribution_id }}"
+                                                                    data-batch="{{ $rec->batch_number }}"
+                                                                    data-room="{{ $rec->room_id === $room->id ? $room->code : '' }}">
+                                                                    <i class="fas fa-flag-checkered me-1"></i> Kết thúc sản xuất
+                                                                </button>
+                                                            @else
+                                                                <span class="badge bg-secondary w-100 py-1 d-block" style="font-size: 0.68rem;">
+                                                                    <i class="fas fa-check-double me-1"></i>Đã kết thúc sản xuất
+                                                                </span>
+                                                            @endif
+                                                        @elseif ($rec->can_resume_clearance)
+                                                            <button type="button"
+                                                                class="btn-resume-clearance js-start-production w-100 d-flex align-items-center justify-content-center gap-2"
+                                                                data-mode="resume"
+                                                                data-distribution-id="{{ $rec->distribution_id }}">
+                                                                <span class="start-btn-icon"><i class="fas fa-broom"></i></span>
+                                                                <span>Tiếp tục dọn quang</span>
+                                                            </button>
+                                                        @elseif ($rec->can_start)
+                                                            <button type="button"
+                                                                class="btn-start-production js-start-production w-100 d-flex align-items-center justify-content-center gap-2"
+                                                                data-mode="start"
+                                                                data-distribution-id="{{ $rec->distribution_id }}"
+                                                                data-batch="{{ $rec->batch_number }}"
+                                                                data-product="{{ $rec->product_name }}"
+                                                                data-section="{{ $rec->section_label ?: 'Công đoạn ' . $rec->section_id }}">
+                                                                <span class="start-btn-icon"><i class="fas fa-play"></i></span>
+                                                                <span>Bắt đầu sản xuất</span>
+                                                            </button>
                                                         @else
+                                                            @php
+                                                                if (!$rec->is_distributed) {
+                                                                    $viewReason = 'Chưa được phân phối tới phòng này';
+                                                                    $viewReasonShort = '(Chưa phân phối)';
+                                                                } elseif (!$rec->is_assigned) {
+                                                                    $viewReason = 'Bạn không nằm trong danh sách được phân công ghi chép công đoạn này';
+                                                                    $viewReasonShort = '(Không được phân công)';
+                                                                } elseif (!$rec->room_cleaning_ready) {
+                                                                    $viewReason = 'Phòng/thiết bị chưa đủ điều kiện vệ sinh';
+                                                                    $viewReasonShort = '(Chưa đủ điều kiện vệ sinh)';
+                                                                } else {
+                                                                    $viewReason = 'Chỉ xem hồ sơ';
+                                                                    $viewReasonShort = '(Chỉ xem)';
+                                                                }
+                                                            @endphp
                                                             <a href="{{ route('pages.ebmr.execute', $rec->id) }}?section={{ $rec->section_id }}"
                                                                 class="btn btn-sm btn-outline-secondary w-100 py-1 fw-bold"
                                                                 style="font-size: 0.75rem; border-radius: 6px;"
-                                                                title="{{ !$rec->is_distributed ? 'Chưa được phân phối tới phòng này' : 'Phòng/thiết bị chưa đủ điều kiện vệ sinh & dọn quang' }}">
+                                                                title="{{ $viewReason }}">
                                                                 <i class="fas fa-eye me-1"></i> Xem hồ sơ
                                                                 <span class="d-block" style="font-size: 0.62rem; opacity: 0.85;">
-                                                                    {{ !$rec->is_distributed ? '(Chưa phân phối)' : '(Chưa đủ điều kiện)' }}
+                                                                    {{ $viewReasonShort }}
                                                                 </span>
                                                             </a>
                                                         @endif
                                                     </div>
                                                 @endforeach
                                             </div>
-                                        @else
-                                            <!-- Danh sách thiết bị -->
+                                        @endif
+                                        @if (!$hasActive || count($room->equipments) > 0)
+                                            <!-- Danh sách thiết bị — luôn hiện kể cả khi phòng đang có lô, vì thẻ
+                                                 "Thiếu điều kiện sản xuất" phía trên có thể chỉ đích danh 1 thiết bị
+                                                 chưa vệ sinh; người dùng cần xem/nhấn ngay tại đây để xử lý. -->
                                             <div class="equipment-list-container mt-3 pt-2"
                                                 style="border-top: 1px dashed rgba(0,0,0,0.1);">
                                                 <div class="small text-muted fw-bold mb-2 text-uppercase d-flex justify-content-between align-items-center"
@@ -752,6 +824,95 @@
             transform: translateX(4px);
             opacity: 1;
         }
+
+        /* ── START PRODUCTION BUTTON ─────────────────────────── */
+        /* Nút to, đậm — production thao tác trên tablet cảm ứng */
+        .btn-start-production {
+            background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+            color: #fff;
+            font-weight: 700;
+            font-size: 0.8rem;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            padding: 10px 16px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 4px 14px rgba(22, 163, 74, 0.35);
+            transition: all 0.28s cubic-bezier(0.25, 0.8, 0.25, 1);
+            position: relative;
+            overflow: hidden;
+            animation: start-production-glow 2s ease-in-out infinite;
+        }
+        .btn-start-production::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(255,255,255,0.18) 0%, transparent 60%);
+            border-radius: inherit;
+            pointer-events: none;
+        }
+        .btn-start-production:hover {
+            background: linear-gradient(135deg, #22c55e 0%, #166534 100%);
+            box-shadow: 0 8px 24px rgba(22, 163, 74, 0.55);
+            transform: translateY(-2px);
+            color: #fff;
+        }
+        .btn-start-production:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 8px rgba(22, 163, 74, 0.4);
+        }
+        .btn-start-production .start-btn-icon {
+            width: 26px;
+            height: 26px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            flex-shrink: 0;
+            transition: transform 0.3s;
+        }
+        .btn-start-production:hover .start-btn-icon {
+            transform: scale(1.15);
+        }
+        @keyframes start-production-glow {
+            0%, 100% { box-shadow: 0 4px 14px rgba(22, 163, 74, 0.35); }
+            50% { box-shadow: 0 4px 20px rgba(22, 163, 74, 0.6); }
+        }
+
+        /* ── RESUME CLEARANCE BUTTON ─────────────────────────── */
+        .btn-resume-clearance {
+            background: linear-gradient(135deg, #f59e0b 0%, #b45309 100%);
+            color: #fff;
+            font-weight: 700;
+            font-size: 0.8rem;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            padding: 10px 16px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 4px 14px rgba(245, 158, 11, 0.35);
+            transition: all 0.28s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+        .btn-resume-clearance:hover {
+            background: linear-gradient(135deg, #fbbf24 0%, #92400e 100%);
+            box-shadow: 0 8px 24px rgba(245, 158, 11, 0.55);
+            transform: translateY(-2px);
+            color: #fff;
+        }
+        .btn-resume-clearance .start-btn-icon {
+            width: 26px; height: 26px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.7rem; flex-shrink: 0;
+        }
+
+        /* ── MISSING CONDITIONS BLOCK ────────────────────────── */
+        .bg-soft-warning { background-color: rgba(245, 158, 11, 0.08); }
+        .border-warning-subtle { border-color: rgba(245, 158, 11, 0.35) !important; }
+        .text-warning-emphasis { color: #92400e !important; }
     </style>
 @endsection
 
@@ -1550,6 +1711,147 @@
                     }
                 });
             };
+        });
+
+        // ── BẮT ĐẦU SẢN XUẤT / TIẾP TỤC DỌN QUANG ───────────────────────────
+        // Nút chỉ render khi server đã xác nhận đủ điều kiện vệ sinh, hồ sơ đã phân
+        // phối, user được phân công; endpoint startProduction kiểm tra lại toàn bộ
+        // trước khi chốt phiên. mode=start hỏi xác nhận trước (thao tác lần đầu, có
+        // thể đổi ý); mode=resume gọi thẳng (chỉ là quay lại dọn quang dở dang).
+        $(document).on('click', '.js-start-production', function() {
+            const btn = $(this);
+            const mode = btn.data('mode') || 'start';
+            const distributionId = btn.data('distribution-id');
+
+            if (mode === 'resume') {
+                callStartProduction(distributionId, 'Đang mở trang dọn quang...');
+                return;
+            }
+
+            confirmStartProduction(
+                distributionId,
+                String(btn.data('batch') ?? ''),
+                String(btn.data('product') ?? ''),
+                String(btn.data('section') ?? '')
+            );
+        });
+
+        function escapeHtml(str) {
+            return String(str).replace(/[&<>"']/g, function(c) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+            });
+        }
+
+        function confirmStartProduction(distributionId, batchNumber, productName, sectionLabel) {
+            Swal.fire({
+                title: 'Bắt đầu sản xuất?',
+                html: `
+                    <div class="text-start" style="font-size: 0.9rem;">
+                        <div class="mb-3 p-3 bg-light rounded-3">
+                            <div class="mb-1"><strong>Sản phẩm:</strong> ${escapeHtml(productName)}</div>
+                            <div class="mb-1"><strong>Số lô:</strong> <span class="font-monospace">${escapeHtml(batchNumber)}</span></div>
+                            <div><strong>Công đoạn:</strong> ${escapeHtml(sectionLabel)}</div>
+                        </div>
+                        <div class="mb-1"><i class="fas fa-check-circle text-success me-2"></i>Phòng đã vệ sinh</div>
+                        <div class="mb-1"><i class="fas fa-check-circle text-success me-2"></i>Thiết bị trong phòng đã vệ sinh</div>
+                        <div class="mb-1"><i class="fas fa-check-circle text-success me-2"></i>Hồ sơ đã phân phối, sẵn sàng ghi chép</div>
+                        <div class="mt-3 small text-muted"><i class="fas fa-broom me-1"></i>Sau khi bắt đầu, bạn cần hoàn tất <strong>dọn quang phòng &amp; thiết bị</strong> trước khi mở trang ghi chép hồ sơ.</div>
+                    </div>`,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: '<i class="fas fa-play me-1"></i> Bắt đầu sản xuất',
+                cancelButtonText: 'Hủy bỏ',
+                confirmButtonColor: '#15803d',
+                focusCancel: true
+            }).then((result) => {
+                if (!result.isConfirmed) return;
+                callStartProduction(distributionId, 'Đang khởi tạo phiên sản xuất...');
+            });
+        }
+
+        function callStartProduction(distributionId, loadingTitle) {
+            Swal.fire({
+                title: loadingTitle,
+                allowOutsideClick: false,
+                didOpen: () => Swal.showLoading()
+            });
+
+            $.ajax({
+                url: "{{ route('pages.ebmr.startProduction') }}",
+                method: 'POST',
+                data: {
+                    distribution_id: distributionId,
+                    _token: "{{ csrf_token() }}"
+                },
+                success: function(res) {
+                    if (res.success && res.redirect_url) {
+                        window.location.href = res.redirect_url;
+                    } else {
+                        // Điều kiện đổi giữa chừng (vd nhãn vệ sinh vừa hết hạn) — tải
+                        // lại trang để card phản ánh đúng trạng thái mới nhất.
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'Không thể tiếp tục',
+                            text: res.message || 'Có lỗi xảy ra',
+                            confirmButtonColor: '#003A4F'
+                        }).then(() => window.location.reload());
+                    }
+                },
+                error: function() {
+                    Swal.fire('Lỗi', 'Không thể kết nối đến máy chủ', 'error');
+                }
+            });
+        }
+
+        // ── KẾT THÚC SẢN XUẤT ────────────────────────────────────────────────
+        // Chốt mốc dừng của phiên sản xuất — dùng để "Lịch sử môi trường sản xuất"
+        // biết dừng ghi nhận ở đâu, và giải phóng phòng sang trạng thái "Cần vệ sinh"
+        // cho lô/công đoạn kế tiếp. KHÔNG khoá quyền "Ghi chép dữ liệu" hồ sơ.
+        $(document).on('click', '.js-end-production', function() {
+            const btn = $(this);
+            const distributionId = btn.data('distribution-id');
+            const batchNumber = String(btn.data('batch') ?? '');
+
+            Swal.fire({
+                title: 'Kết thúc sản xuất?',
+                html: `
+                    <div class="text-start" style="font-size: 0.9rem;">
+                        <div class="mb-3 p-3 bg-light rounded-3">
+                            <div><strong>Số lô:</strong> <span class="font-monospace">${escapeHtml(batchNumber)}</span></div>
+                        </div>
+                        <div class="small text-muted"><i class="fas fa-info-circle me-1"></i>Phòng sẽ chuyển sang trạng thái "Cần vệ sinh" cho lô kế tiếp. Việc ghi chép hồ sơ vẫn tiếp tục bình thường sau khi kết thúc.</div>
+                    </div>`,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: '<i class="fas fa-flag-checkered me-1"></i> Kết thúc sản xuất',
+                cancelButtonText: 'Hủy bỏ',
+                confirmButtonColor: '#dc3545',
+                focusCancel: true
+            }).then((result) => {
+                if (!result.isConfirmed) return;
+
+                Swal.fire({ title: 'Đang kết thúc sản xuất...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+                $.ajax({
+                    url: "{{ route('pages.ebmr.endProduction') }}",
+                    method: 'POST',
+                    data: {
+                        distribution_id: distributionId,
+                        _token: "{{ csrf_token() }}"
+                    },
+                    success: function(res) {
+                        if (res.success) {
+                            Swal.fire({ icon: 'success', title: 'Đã kết thúc sản xuất!', text: res.message, timer: 1800, showConfirmButton: false })
+                                .then(() => window.location.reload());
+                        } else {
+                            Swal.fire('Không thể kết thúc', res.message, 'warning');
+                        }
+                    },
+                    error: function() {
+                        Swal.fire('Lỗi', 'Không thể kết nối đến máy chủ', 'error');
+                    }
+                });
+            });
         });
 
         function openStartCleaningModal(roomId, type, roomName) {

@@ -12,6 +12,7 @@ class EbmrRecordBms extends Model
         'ebmr_record_id',
         'stage_code',
         'room_id',
+        'distribution_id',
         'temperature',
         'humidity',
         'pressure',

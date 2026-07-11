@@ -245,6 +245,29 @@
 
                             <p class="text-muted small mt-2"><i class="fas fa-info-circle me-1"></i> Hệ thống sẽ tự động
                                 tăng số lô nếu bạn chọn ban hành nhiều lô cùng lúc.</p>
+
+                            <hr class="my-3">
+
+                            <div class="mb-1">
+                                <label class="form-label fw-bold"><i class="fas fa-stamp me-1 text-danger"></i> Đóng dấu
+                                    hồ sơ <span class="text-muted small fw-normal">(tuỳ chọn — chọn được nhiều
+                                        dấu)</span></label>
+                                <select class="form-control" name="seal_ids[]" id="issueSealIds" multiple
+                                    style="width: 100%;">
+                                    @foreach ($seals ?? [] as $seal)
+                                        <option value="{{ $seal->id }}" data-header="{{ $seal->header }}"
+                                            data-content="{{ $seal->content }}" data-footer="{{ $seal->footer }}"
+                                            data-color="{{ $seal->color }}"
+                                            data-border="{{ $seal->border_style ?? 'double' }}"
+                                            data-size="{{ $seal->size ?? 100 }}">{{ $seal->name }}</option>
+                                    @endforeach
+                                </select>
+                                <div id="issueSealPreviewWrap" class="bg-light border rounded py-3 mt-2"
+                                    style="display: none; flex-wrap: wrap; align-items: center; justify-content: center; gap: 18px;">
+                                </div>
+                                <p class="text-muted small mt-2 mb-0"><i class="fas fa-info-circle me-1"></i> Các dấu đã
+                                    chọn sẽ được đóng cạnh nhau lên góc trên bên phải của mỗi phân đoạn trong hồ sơ.</p>
+                            </div>
                         </div>
                         <div class="modal-footer bg-light p-3">
                             <button type="button" class="btn btn-light rounded-pill px-4" data-dismiss="modal">Hủy
@@ -272,6 +295,47 @@
             background-color: rgba(23, 162, 184, 0.1);
             color: #17a2b8;
         }
+
+        /* Xem trước con dấu trong modal ban hành: khung viền + tối đa 3 dòng.
+           Kích thước chỉnh bằng font-size của khung (theo % đã lưu), dòng trong dùng em. */
+        .seal-stamp-preview {
+            display: inline-block;
+            border: 2px solid currentColor;
+            border-radius: 6px;
+            white-space: nowrap;
+            text-align: center;
+            overflow: hidden;
+            font-size: 1rem;
+        }
+
+        .seal-stamp-preview.seal-border-double {
+            border: 4px double currentColor;
+        }
+
+        .seal-stamp-preview .seal-line-header {
+            display: block;
+            font-size: 0.7em;
+            font-weight: 700;
+            padding: 0.15em 1.1em;
+            border-bottom: 1.5px solid currentColor;
+        }
+
+        .seal-stamp-preview .seal-line-content {
+            display: block;
+            font-size: 0.95em;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 0.2em 1em;
+        }
+
+        .seal-stamp-preview .seal-line-footer {
+            display: block;
+            font-size: 0.7em;
+            font-weight: 600;
+            padding: 0.15em 1.1em;
+            border-top: 1.5px solid currentColor;
+        }
     </style>
 @endsection
 
@@ -287,6 +351,18 @@
                     [0, 'asc']
                 ]
             });
+
+            // Chọn nhiều con dấu: dùng select2 nếu có (đẹp + có nút xoá), fallback select multiple thường
+            if ($.fn.select2) {
+                $('#issueSealIds').select2({
+                    theme: 'bootstrap4',
+                    dropdownParent: $('#issueModal'),
+                    placeholder: '-- Không đóng dấu --',
+                    closeOnSelect: false,
+                    width: '100%'
+                });
+            }
+            $('#issueSealIds').on('change', previewIssueSeal);
         });
 
         function openIssueModal(id, name, code) {
@@ -297,10 +373,35 @@
             $('#batchNumberWarning').addClass('d-none');
             $('#format1').prop('checked', true); // Reset về AAMMYY mặc định
             $('#issueQuantity').val(1);
+            $('#issueSealIds').val(null).trigger('change');
             $('#issueModal').modal('show');
 
             // Tự động gợi ý khi mở
             suggestBatchNumber();
+        }
+
+        // Xem trước TẤT CẢ con dấu đã chọn trong modal ban hành (mỗi dấu đủ 3 dòng + viền + kích thước)
+        function previewIssueSeal() {
+            const wrap = $('#issueSealPreviewWrap').empty();
+            const selected = $('#issueSealIds option:selected');
+            if (selected.length === 0) {
+                wrap.css('display', 'none');
+                return;
+            }
+            selected.each(function() {
+                const opt = $(this);
+                const stamp = $('<span class="seal-stamp-preview"></span>')
+                    .css({
+                        color: opt.data('color'),
+                        'font-size': ((parseInt(opt.data('size'), 10) || 100) / 100) + 'rem'
+                    })
+                    .toggleClass('seal-border-double', (opt.data('border') || 'double') === 'double');
+                if (opt.data('header')) stamp.append($('<span class="seal-line-header"></span>').text(opt.data('header')));
+                stamp.append($('<span class="seal-line-content"></span>').text(opt.data('content')));
+                if (opt.data('footer')) stamp.append($('<span class="seal-line-footer"></span>').text(opt.data('footer')));
+                wrap.append(stamp);
+            });
+            wrap.css('display', 'flex');
         }
 
         function suggestBatchNumber() {

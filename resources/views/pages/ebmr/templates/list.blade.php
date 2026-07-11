@@ -117,7 +117,6 @@
                                             </th>
                                             <th>Tên nội dung</th>
                                             <th>Phiên bản</th>
-                                            <th>Công đoạn</th>
                                             <th>Trạng thái</th>
                                             <th>Dược sĩ phụ trách</th>
                                             <th>Ngày ban hành</th>
@@ -133,20 +132,6 @@
                                                 <td class="fw-bold text-primary">{{ $t->doc_code ?? '-' }}</td>
                                                 <td>{{ $t->category_name }}</td>
                                                 <td><span class="badge bg-soft-info">V.{{ $t->version }}</span></td>
-                                                <td>
-                                                    <div class="d-flex flex-wrap gap-1">
-                                                        @forelse($t->sections as $s)
-                                                            <button
-                                                                class="btn btn-xs btn-outline-info rounded-pill py-0 px-2"
-                                                                style="font-size: 0.7rem;"
-                                                                onclick="window.location.href='{{ route('pages.ebmr.designer', $t->id) }}?section={{ $s['id'] }}'">
-                                                                {{ $s['label'] }}
-                                                            </button>
-                                                        @empty
-                                                            <span class="text-muted small">N/A</span>
-                                                        @endforelse
-                                                    </div>
-                                                </td>
                                                 <td>
                                                     @if ($t->status === 'draft')
                                                         <span class="badge bg-secondary"><i class="fas fa-edit me-1"></i>
@@ -193,6 +178,11 @@
                                                 </td>
                                                 <td class="text-center">
                                                     <div class="btn-group shadow-sm rounded-pill overflow-hidden">
+                                                        <button class="btn btn-sm btn-white text-secondary"
+                                                            onclick="openVersionHistoryModal({{ $t->id }}, '{{ addslashes($t->category_name) }}')"
+                                                            title="Lịch sử ấn bản">
+                                                            <i class="fas fa-history"></i> Lịch sử ấn bản
+                                                        </button>
                                                         @if ($current_type === 'BMR')
                                                             <button class="btn btn-sm btn-white text-info fw-bold"
                                                                 onclick="openConfigSXModal({{ $t->id }}, '{{ addslashes($t->category_name) }}')"
@@ -210,13 +200,8 @@
                                                         @if ($t->status === 'draft')
                                                             <a href="{{ route('pages.ebmr.designer', $t->id) }}"
                                                                 class="btn btn-sm btn-white text-navy"
-                                                                title="Thiết kế nội dung (trình soạn thảo hiện tại)">
-                                                                <i class="fas fa-pencil-ruler"></i> Thiết kế V1
-                                                            </a>
-                                                            <a href="{{ route('pages.ebmr.designer', $t->id) }}?editor=v2"
-                                                                class="btn btn-sm btn-white text-warning fw-bold"
-                                                                title="Thiết kế bằng trình soạn thảo mới TipTap/ProseMirror (Beta)">
-                                                                <i class="fas fa-flask"></i> Thiết kế V2
+                                                                title="Thiết kế nội dung">
+                                                                <i class="fas fa-pencil-ruler"></i> Thiết kế
                                                             </a>
                                                             @if ($current_type !== 'CO')
                                                             <button class="btn btn-sm btn-white text-success"
@@ -240,7 +225,7 @@
                                                             @endif
                                                         @endif
 
-                                                        @if ($t->issued_date && !$t->effective_date && $t->owner_id == session('user')['userId'])
+                                                        @if ($t->issued_date && !$t->effective_date && ($t->owner_id == session('user')['userId'] || (session('user')['userGroup'] ?? '') === 'Admin'))
                                                             <button class="btn btn-sm btn-white text-warning"
                                                                 onclick="openEffectiveDateModal({{ $t->id }})"
                                                                 title="Xác định ngày hiệu lực">
@@ -341,8 +326,8 @@
                                                     <!-- Sections / stages timeline list -->
                                                     <div class="mb-4 flex-grow-1">
                                                         <div class="small fw-semibold text-navy mb-2"><i
-                                                                class="fas fa-project-diagram me-1 text-info"></i> Công
-                                                            đoạn:</div>
+                                                                class="fas fa-project-diagram me-1 text-info"></i> Thành
+                                                            phần:</div>
                                                         <div class="d-flex flex-wrap gap-1.5"
                                                             style="max-height: 80px; overflow-y: auto;">
                                                             @forelse($t->sections as $s)
@@ -350,11 +335,11 @@
                                                                     class="btn btn-xs btn-outline-info rounded-pill py-0.5 px-2 bg-light text-nowrap"
                                                                     style="font-size: 0.65rem; border-color: rgba(23, 162, 184, 0.2);"
                                                                     onclick="window.location.href='{{ route('pages.ebmr.designer', $t->id) }}?section={{ $s['id'] }}'">
-                                                                    {{ $s['label'] }}
+                                                                    {{ $s['code'] }}. {{ $s['label'] }}
                                                                 </button>
                                                             @empty
-                                                                <span class="text-muted small italic">Không có công
-                                                                    đoạn</span>
+                                                                <span class="text-muted small italic">Không có thành
+                                                                    phần</span>
                                                             @endforelse
                                                         </div>
                                                     </div>
@@ -389,6 +374,12 @@
                                                 <div
                                                     class="card-footer bg-light border-0 py-3 px-4 d-flex justify-content-end">
                                                     <div class="d-flex gap-1">
+                                                        <button
+                                                            class="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1"
+                                                            onclick="openVersionHistoryModal({{ $t->id }}, '{{ addslashes($t->category_name) }}')"
+                                                            title="Lịch sử ấn bản">
+                                                            <i class="fas fa-history me-1"></i> Lịch sử ấn bản
+                                                        </button>
                                                         @if ($current_type === 'BMR')
                                                             <button
                                                                 class="btn btn-sm btn-outline-info rounded-pill px-3 py-1 fw-bold"
@@ -408,13 +399,8 @@
                                                         @if ($t->status === 'draft')
                                                             <a href="{{ route('pages.ebmr.designer', $t->id) }}"
                                                                 class="btn btn-sm btn-navy rounded-pill px-3 py-1"
-                                                                title="Thiết kế nội dung (trình soạn thảo hiện tại)">
-                                                                <i class="fas fa-pencil-ruler me-1"></i> Thiết kế V1
-                                                            </a>
-                                                            <a href="{{ route('pages.ebmr.designer', $t->id) }}?editor=v2"
-                                                                class="btn btn-sm btn-warning rounded-pill px-3 py-1 fw-bold"
-                                                                title="Thiết kế bằng trình soạn thảo mới TipTap/ProseMirror (Beta)">
-                                                                <i class="fas fa-flask me-1"></i> Thiết kế V2
+                                                                title="Thiết kế nội dung">
+                                                                <i class="fas fa-pencil-ruler me-1"></i> Thiết kế
                                                             </a>
                                                             @if ($current_type !== 'CO')
                                                             <button class="btn btn-sm btn-success rounded-pill px-3 py-1"
@@ -439,7 +425,7 @@
                                                             @endif
                                                         @endif
 
-                                                        @if ($t->issued_date && !$t->effective_date && $t->owner_id == session('user')['userId'])
+                                                        @if ($t->issued_date && !$t->effective_date && ($t->owner_id == session('user')['userId'] || (session('user')['userGroup'] ?? '') === 'Admin'))
                                                             <button class="btn btn-sm btn-warning rounded-pill px-3 py-1"
                                                                 onclick="openEffectiveDateModal({{ $t->id }})"
                                                                 title="Xác định ngày hiệu lực">
@@ -854,6 +840,16 @@
                                     </div>
                                 </div>
                             </div>
+
+                            <!-- Hạn hoàn thành & lý do theo từng người -->
+                            <div class="mt-4 pt-3" id="wfAssignmentDetails"
+                                style="border-top: 1px dashed #dae0e5; display:none;">
+                                <label class="form-label fw-bold text-navy mb-2" style="font-size: 0.85rem;">
+                                    <i class="far fa-calendar-check me-1"></i> Hạn hoàn thành &amp; lý do (tuỳ chọn,
+                                    theo từng người)
+                                </label>
+                                <div id="wfAssignmentRows"></div>
+                            </div>
                         </div>
                         <div class="modal-footer bg-white border-top py-3 px-4 d-flex justify-content-end gap-2">
                             <button type="button" class="btn btn-outline-secondary rounded-pill px-4"
@@ -861,6 +857,50 @@
                             <button type="submit" class="btn btn-success rounded-pill px-4 shadow-sm"
                                 style="font-size: 0.85rem; font-weight: 600;">
                                 <i class="fas fa-paper-plane me-2"></i> Gửi trình ký
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Lịch Sử Ấn Bản (lý do tạo ấn bản) -->
+        <div class="modal fade" id="versionHistoryModal" tabindex="-1" role="dialog" aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+                <div class="modal-content border-0 shadow-lg" style="border-radius: 16px; overflow: hidden;">
+                    <form id="versionHistoryForm">
+                        @csrf
+                        <input type="hidden" id="versionHistoryTemplateId" name="template_id">
+                        <div
+                            class="modal-header bg-white border-bottom py-3 px-4 d-flex justify-content-between align-items-center">
+                            <h5 class="modal-title fw-bold text-navy mb-0" style="font-size: 1.1rem;">
+                                <i class="fas fa-history text-primary me-2"></i> Lịch Sử Ấn Bản
+                                <span id="versionHistoryNameDisplay" class="text-muted fw-normal small ms-1"></span>
+                            </h5>
+                            <button type="button" class="close border-0 bg-transparent text-muted fs-4 p-0 m-0"
+                                data-dismiss="modal" aria-label="Close" style="line-height: 1; outline: none;">
+                                <span aria-hidden="true">&times;</span>
+                            </button>
+                        </div>
+                        <div class="modal-body p-4" style="background-color: #f8fafc;">
+                            <div class="mb-3">
+                                <span class="text-muted small me-1">Ấn bản:</span>
+                                <span id="versionHistoryVersionBadge" class="badge bg-soft-info">V.-</span>
+                            </div>
+                            <label class="form-label fw-bold small text-uppercase text-muted mb-1">Nội dung thay đổi
+                                của ấn bản này</label>
+                            <div class="summernote" id="versionHistoryEditor"></div>
+                            <small class="form-text text-muted d-block mt-2" style="font-size: 0.75rem;">
+                                <i class="far fa-lightbulb me-1"></i> Nội dung này sẽ được hiển thị trong bảng
+                                "Lịch sử thay đổi ấn bản" bên trong tài liệu.
+                            </small>
+                        </div>
+                        <div class="modal-footer bg-white border-top py-3 px-4 d-flex justify-content-end gap-2">
+                            <button type="button" class="btn btn-outline-secondary rounded-pill px-4"
+                                data-dismiss="modal" style="font-size: 0.85rem; font-weight: 600;">Hủy bỏ</button>
+                            <button type="submit" class="btn btn-primary rounded-pill px-4 shadow-sm"
+                                style="font-size: 0.85rem; font-weight: 600;">
+                                <i class="fas fa-save me-2"></i> Lưu
                             </button>
                         </div>
                     </form>
@@ -2159,9 +2199,79 @@
                 });
             }
 
+            // Hạn hoàn thành & lý do theo từng người được gán (reviewer/approver/authorizer).
+            // State lưu theo key "role_userId" để giữ lại giá trị đã nhập khi người dùng
+            // đổi lựa chọn qua lại giữa các select2.
+            let wfAssignmentState = {};
+            const wfRoleLabels = {
+                reviewer: 'Kiểm tra',
+                approver: 'Phê duyệt',
+                authorizer: 'Ban hành'
+            };
+
+            function wfEscapeHtml(str) {
+                return String(str ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+            }
+
+            function wfGetSelectedAssignments() {
+                const list = [];
+                $('#wfReviewers option:selected').each(function() {
+                    list.push({ role: 'reviewer', userId: String($(this).val()), name: $(this).text() });
+                });
+                const approverId = $('#wfApprover').val();
+                if (approverId) list.push({ role: 'approver', userId: String(approverId), name: $('#wfApprover option:selected').text() });
+                const authorizerId = $('#wfAuthorizer').val();
+                if (authorizerId) list.push({ role: 'authorizer', userId: String(authorizerId), name: $('#wfAuthorizer option:selected').text() });
+                return list;
+            }
+
+            function wfRenderAssignmentRows() {
+                const assignments = wfGetSelectedAssignments();
+                const $container = $('#wfAssignmentRows');
+                $container.empty();
+                $('#wfAssignmentDetails').toggle(assignments.length > 0);
+
+                assignments.forEach(a => {
+                    const key = a.role + '_' + a.userId;
+                    if (!wfAssignmentState[key]) wfAssignmentState[key] = { due_date: '', reason: '' };
+                    const state = wfAssignmentState[key];
+
+                    const $row = $(`
+                        <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+                            <div class="small text-muted" style="min-width: 150px;">${wfRoleLabels[a.role]}: <strong class="text-navy">${wfEscapeHtml(a.name)}</strong></div>
+                            <input type="date" class="form-control form-control-sm wf-due-date" style="max-width: 150px;" value="${wfEscapeHtml(state.due_date)}" title="Ngày mong muốn hoàn thành">
+                            <input type="text" class="form-control form-control-sm wf-reason" style="max-width: 220px;" placeholder="Lý do mong muốn hoàn thành sớm (nếu có)" value="${wfEscapeHtml(state.reason)}">
+                        </div>
+                    `);
+
+                    $row.find('.wf-due-date').on('change', function() { state.due_date = $(this).val(); });
+                    $row.find('.wf-reason').on('input', function() { state.reason = $(this).val(); });
+
+                    $container.append($row);
+                });
+            }
+
+            function wfApplyAssignmentsToForm() {
+                $('#workflowForm .wf-hidden-field').remove();
+
+                wfGetSelectedAssignments().forEach(a => {
+                    const key = a.role + '_' + a.userId;
+                    const state = wfAssignmentState[key] || { due_date: '', reason: '' };
+                    const dueName = a.role === 'reviewer' ? `reviewer_due_dates[${a.userId}]` : `${a.role}_due_date`;
+                    const reasonName = a.role === 'reviewer' ? `reviewer_reasons[${a.userId}]` : `${a.role}_reason`;
+
+                    $('#workflowForm').append(`<input type="hidden" class="wf-hidden-field" name="${dueName}" value="${wfEscapeHtml(state.due_date)}">`);
+                    $('#workflowForm').append(`<input type="hidden" class="wf-hidden-field" name="${reasonName}" value="${wfEscapeHtml(state.reason)}">`);
+                });
+            }
+
+            $('#wfReviewers, #wfApprover, #wfAuthorizer').on('change', wfRenderAssignmentRows);
+
             function openWorkflowModal(id) {
                 $('#workflowForm')[0].reset();
                 $('#workflowTemplateId').val(id);
+                wfAssignmentState = {};
 
                 // Reset selections
                 $('#wfReviewers').val([]).trigger('change');
@@ -2172,6 +2282,10 @@
                 $.get(`/ebmr/templates/${id}/workflow`, function(data) {
                     let reviewers = [];
                     data.forEach(item => {
+                        wfAssignmentState[item.role + '_' + item.user_id] = {
+                            due_date: item.due_date || '',
+                            reason: item.reason || ''
+                        };
                         if (item.role === 'reviewer') reviewers.push(item.user_id);
                         if (item.role === 'approver') $('#wfApprover').val(item.user_id).trigger('change');
                         if (item.role === 'authorizer') $('#wfAuthorizer').val(item.user_id).trigger('change');
@@ -2184,6 +2298,7 @@
             $('#workflowForm').submit(function(e) {
                 e.preventDefault();
                 const id = $('#workflowTemplateId').val();
+                wfApplyAssignmentsToForm();
                 const data = $(this).serialize();
 
                 $.post(`/ebmr/templates/${id}/workflow`, data, function(res) {
@@ -2193,6 +2308,59 @@
                             location.reload();
                         });
                     }
+                });
+            });
+
+            function openVersionHistoryModal(id, name) {
+                $('#versionHistoryForm')[0].reset();
+                $('#versionHistoryTemplateId').val(id);
+                $('#versionHistoryNameDisplay').text(name ? '- ' + name : '');
+                $('#versionHistoryVersionBadge').text('V.-');
+                if ($.fn.summernote) $('#versionHistoryEditor').summernote('code', '');
+
+                $.get(`/ebmr/templates/${id}/data`, function(data) {
+                    $('#versionHistoryVersionBadge').text('V.' + data.version);
+                    if ($.fn.summernote) $('#versionHistoryEditor').summernote('code', data.change_reason || '');
+
+                    // Chỉ nháp (hoặc trình ký bị trả về - cũng về trạng thái nháp) mới được sửa,
+                    // giống hệt quy tắc của Cấu hình sản xuất (isConfigReadOnly).
+                    const isReadOnly = data.status !== 'draft';
+                    if ($.fn.summernote) {
+                        if (isReadOnly) {
+                            $('#versionHistoryEditor').summernote('disable');
+                        } else {
+                            $('#versionHistoryEditor').summernote('enable');
+                        }
+                    }
+                    $('#versionHistoryForm button[type="submit"]').toggle(!isReadOnly);
+
+                    $('#versionHistoryModal').modal('show');
+                });
+            }
+
+            $('#versionHistoryForm').on('submit', function(e) {
+                e.preventDefault();
+                const id = $('#versionHistoryTemplateId').val();
+                const changeReason = $.fn.summernote ? $('#versionHistoryEditor').summernote('code') : '';
+                const btn = $(this).find('button[type="submit"]');
+                const originalHtml = btn.html();
+                btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-2"></i> Đang lưu...');
+
+                $.post(`/ebmr/templates/${id}/change-reason`, {
+                    _token: '{{ csrf_token() }}',
+                    change_reason: changeReason
+                }, function(res) {
+                    if (res.success) {
+                        Swal.fire('Thành công', res.message, 'success').then(() => {
+                            $('#versionHistoryModal').modal('hide');
+                        });
+                    } else {
+                        Swal.fire('Lỗi', res.message || 'Có lỗi xảy ra.', 'error');
+                    }
+                }).fail(function(xhr) {
+                    Swal.fire('Lỗi', xhr.responseJSON?.message || 'Không thể kết nối đến máy chủ.', 'error');
+                }).always(function() {
+                    btn.prop('disabled', false).html(originalHtml);
                 });
             });
 

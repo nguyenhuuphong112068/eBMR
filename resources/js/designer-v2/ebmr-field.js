@@ -124,6 +124,8 @@ export function paintFieldElement(dom, fieldId) {
 
     if (window.__V2__?.isExecutionMode) {
         dom.classList.add('v2-field-exec');
+        // Hồ sơ readonly (đã hoàn thành/duyệt hoặc không được phân phối): chỉ XEM giá trị
+        const isRO = !!window.__V2__?.isReadOnly;
         let val = (window.__V2__?.executionValues || {})[fieldId]?.default;
         if (val === undefined || val === null || val === '') val = cfg.defaultValue || '';
 
@@ -152,11 +154,12 @@ export function paintFieldElement(dom, fieldId) {
                 ? cfg.options
                 : (typeof cfg.options === 'string' ? cfg.options.split(/[,;\n]/).map((o) => o.trim()).filter(Boolean) : []);
             const dsType = cfg.dataSource && cfg.dataSource.type;
+            const selDisabled = isRO ? ' disabled' : '';
             if (dsType === 'database') {
-                valueHtml = `<select class="v2-exec-select" onchange="window.__V2__.handleSelectChange('${fieldId}', this.value)"><option value="">-- Đang tải... --</option></select>`;
+                valueHtml = `<select class="v2-exec-select"${selDisabled} onchange="window.__V2__.handleSelectChange('${fieldId}', this.value)"><option value="">-- Đang tải... --</option></select>`;
             } else {
                 valueHtml =
-                    `<select class="v2-exec-select" onchange="window.__V2__.handleSelectChange('${fieldId}', this.value)">` +
+                    `<select class="v2-exec-select"${selDisabled} onchange="window.__V2__.handleSelectChange('${fieldId}', this.value)">` +
                     `<option value="">--</option>` +
                     optionsFromCfg.map((o) => `<option value="${escapeHtml(o)}" ${val === o ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('') +
                     `</select>`;
@@ -219,7 +222,9 @@ export function paintFieldElement(dom, fieldId) {
         }
 
         dom.innerHTML = valueHtml + metaHtml;
-        if (cfg.type !== 'signature' && cfg.type !== 'formula') {
+        if (isRO) {
+            dom.title = ''; // readonly: không mời gọi click nhập liệu
+        } else if (cfg.type !== 'signature' && cfg.type !== 'formula') {
             dom.title = cfg.type === 'checkbox' ? 'Click để tick (Chạy thử)' : 'Click để nhập liệu (Chạy thử)';
         } else if (cfg.type === 'signature') {
             dom.title = cfg.is_checker ? 'Click để xác thực người kiểm tra' : 'Click để ký (Chạy thử)';

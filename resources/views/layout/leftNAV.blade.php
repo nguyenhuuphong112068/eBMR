@@ -117,7 +117,7 @@
         margin-bottom: 10px;
         height: auto !important;
     }
-    
+
     body.sidebar-collapse .brand-link {
         padding: 10px 0 !important;
     }
@@ -160,11 +160,42 @@
         margin: 0 auto !important;
         display: block !important;
     }
-    
+
     /* Cho text xuống dòng khi không thu nhỏ */
     body:not(.sidebar-collapse) .brand-text {
         display: block;
         margin-top: 5px;
+    }
+
+    /* Badge số lượng hồ sơ chờ phê duyệt trên menu — cùng tông gradient cyan
+       với nav-link active để hợp tổng thể sidebar */
+    .nav-sidebar .nav-link .nav-badge {
+        display: inline-block;
+        font-size: 0.68rem;
+        font-weight: 700;
+        min-width: 19px;
+        height: 19px;
+        line-height: 19px;
+        padding: 0 6px;
+        border-radius: 999px;
+        text-align: center;
+        background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+        color: #fff;
+        box-shadow: 0 3px 8px -2px rgba(8, 145, 178, 0.45);
+    }
+
+    .nav-sidebar .nav-link>p>.nav-badge {
+        position: absolute;
+        right: 2.4rem;
+        top: 50%;
+        transform: translateY(-50%);
+    }
+
+    /* Trên nền active gradient cyan của mục con: đảo màu trắng/cyan cho nổi */
+    .nav-treeview .nav-link.active .nav-badge {
+        background: #fff;
+        color: var(--primary);
+        box-shadow: 0 2px 6px rgba(15, 23, 42, 0.2);
     }
 </style>
 
@@ -220,6 +251,16 @@
                         <li class="nav-item"><a href="{{ route('pages.materData.materialSpec.list') }}"
                                 class="nav-link"><i class="far fa-circle nav-icon text-success"></i>
                                 <p>Tiêu chuẩn NL</p>
+                            </a></li>
+
+                        <li class="nav-item"><a href="{{ route('pages.materData.designation.list') }}"
+                                class="nav-link"><i class="far fa-circle nav-icon text-success"></i>
+                                <p>Chức Vụ</p>
+                            </a></li>
+
+                        <li class="nav-item"><a href="{{ route('pages.materData.seal.list') }}"
+                                class="nav-link"><i class="far fa-circle nav-icon text-danger"></i>
+                                <p>Con Dấu</p>
                             </a></li>
                     </ul>
                 </li>
@@ -277,35 +318,35 @@
                         <li class="nav-item">
                             <a href="{{ route('pages.ebmr.templates') }}?type=CO" class="nav-link">
                                 <i class="far fa-circle nav-icon"></i>
-                                <p>Danh sách Thành Phần</p>
+                                <p>Thành Phần (CO)</p>
                             </a>
                         </li>
 
                         <li class="nav-item">
                             <a href="{{ route('pages.category.gf.list') }}" class="nav-link">
                                 <i class="far fa-circle nav-icon"></i>
-                                <p>Biểu mẫu</p>
+                                <p>Biểu mẫu chung (GF)</p>
                             </a>
                         </li>
 
                         <li class="nav-item">
                             <a href="{{ route('pages.category.mf.list') }}" class="nav-link">
                                 <i class="far fa-circle nav-icon"></i>
-                                <p>Biểu mẫu gốc</p>
+                                <p>Biểu mẫu gốc (MF)</p>
                             </a>
                         </li>
 
                         <li class="nav-item">
                             <a href="{{ route('pages.category.intermediate.list') }}" class="nav-link">
                                 <i class="far fa-circle nav-icon"></i>
-                                <p>Hồ sơ sản xuất </p>
+                                <p>Hồ sơ sản xuất (BMR) </p>
                             </a>
                         </li>
 
                         <li class="nav-item">
                             <a href="{{ route('pages.category.product.list') }}" class="nav-link">
                                 <i class="far fa-circle nav-icon"></i>
-                                <p>Hồ sơ đóng gói</p>
+                                <p>Hồ sơ đóng gói (PBR)</p>
                             </a>
                         </li>
 
@@ -315,48 +356,7 @@
                     </ul>
                 </li>
 
-                <!-- Droplist Menu Soạn Hồ Sơ  -->
-                {{-- <li
-                    class="nav-item has-treeview {{ str_contains(url()->current(), 'ebmr/templates') ? 'menu-open' : '' }}">
-                    <a href="#"
-                        class="nav-link {{ str_contains(url()->current(), 'ebmr/templates') ? 'active' : '' }}">
-                        <i class="fas fa-folder-open"></i>
-                        <p>
-                            Soạn Hồ Sơ
-                            <i class="right fas fa-angle-left"></i>
-                        </p>
-                    </a>
-                    <ul class="nav nav-treeview pl-3">
-                        <li class="nav-item">
-                            <a href="{{ route('pages.ebmr.templates') }}?type=GF"
-                                class="nav-link {{ request('type') == 'GF' ? 'active' : '' }}">
-                                <i class="fas fa-layer-group nav-icon"></i>
-                                <p>Biểu mẫu dùng chung</p>
-                            </a>
-                        </li>
-                        {{-- <li class="nav-item">
-                            <a href="{{ route('pages.ebmr.templates') }}?type=MF"
-                                class="nav-link {{ request('type') == 'MF' ? 'active' : '' }}">
-                                <i class="fas fa-file-invoice nav-icon"></i>
-                                <p>Biểu mẫu gốc</p>
-                            </a>
-                        </li>
-                    <li class="nav-item">
-                        <a href="{{ route('pages.ebmr.templates') }}?type=BMR"
-                            class="nav-link {{ request('type') == 'BMR' || !request('type') ? 'active' : '' }}">
-                            <i class="fas fa-file-medical nav-icon"></i>
-                            <p>Hồ sơ sản xuất</p>
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                    <a href="{{ route('pages.ebmr.templates') }}?type=BPR"
-                        class="nav-link {{ request('type') == 'BPR' ? 'active' : '' }}">
-                        <i class="fas fa-box-open nav-icon"></i>
-                        <p>Hồ sơ đóng gói</p>
-                    </a>
-                </li>
-                </ul>
-                </li> --}}
+
 
                 <!-- Duyệt Hồ Sơ -->
                 <li
@@ -366,6 +366,9 @@
                         <i class="fas fa-clipboard-check"></i>
                         <p>
                             Phê Duyệt
+                            @if (!empty($pendingApprovalCount))
+                                <span class="nav-badge">{{ $pendingApprovalCount }}</span>
+                            @endif
                             <i class="right fas fa-angle-left"></i>
                         </p>
                     </a>
@@ -375,6 +378,9 @@
                                 class="nav-link {{ str_contains(url()->current(), 'ebmr/approvals') ? 'active' : '' }}">
                                 <i class="fas fa-tasks"></i>
                                 <p>Hồ Sơ Cần Duyệt</p>
+                                @if (!empty($pendingApprovalCount))
+                                    <span class="nav-badge">{{ $pendingApprovalCount }}</span>
+                                @endif
                             </a>
                         </li>
                     </ul>
@@ -492,6 +498,13 @@
                                 <p>Nhật ký Thiết bị</p>
                             </a>
                         </li>
+                        <li class="nav-item">
+                            <a href="{{ route('pages.ebmr.logbooks.production_environment') }}"
+                                class="nav-link {{ request()->routeIs('pages.ebmr.logbooks.production_environment*') ? 'active' : '' }}">
+                                <i class="fas fa-thermometer-half"></i>
+                                <p>Lịch Sử Môi Trường SX</p>
+                            </a>
+                        </li>
                     </ul>
                 </li>
 
@@ -526,6 +539,14 @@
                     </ul>
                 </li>
 
+
+                <li class="nav-item">
+                    <a href="{{ route('pages.settings.general_policy') }}"
+                        class="nav-link {{ request()->routeIs('pages.settings.*') ? 'active' : '' }}">
+                        <i class="fas fa-sliders-h"></i>
+                        <p>Chính Sách Chung</p>
+                    </a>
+                </li>
 
                 <li class="nav-item mt-3">
                     <a href="{{ route('pages.AuditTrail.list') }}" class="nav-link">

@@ -32,6 +32,8 @@ class EbmrIssuanceController extends Controller
 
         foreach($templates as $t) {
             $t->edition = $t->version; // Map version to edition for view compatibility
+            $t->name = $t->name ?? 'N/A';
+            $t->document_code = $t->doc_code ?? 'N/A';
             $t->dosage_form = 'N/A';
             $t->batch_size = 'N/A';
             $t->department = 'N/A';
@@ -82,9 +84,13 @@ class EbmrIssuanceController extends Controller
             }
         }
 
+        // Danh sách con dấu đang hoạt động — tuỳ chọn đóng dấu khi ban hành
+        $seals = DB::table('seals')->where('active', true)->orderBy('name')->get();
+
         return view('pages.ebmr.issuance.index', [
             'templates' => $templates,
             'current_type' => $type,
+            'seals' => $seals,
         ]);
     }
 
@@ -97,13 +103,17 @@ class EbmrIssuanceController extends Controller
             'template_id' => 'required|integer',
             'batch_number' => 'required|string',
             'quantity' => 'nullable|integer|min:1|max:50',
-            'format' => 'nullable|string'
+            'format' => 'nullable|string',
+            'seal_ids' => 'nullable|array',
+            'seal_ids.*' => 'integer|exists:seals,id'
         ]);
 
         $templateId = $validated['template_id'];
         $qty = $request->input('quantity', 1);
         $format = $request->input('format', 'MANUAL');
         $startBatch = $validated['batch_number'];
+        // Nhiều con dấu / lô — giữ nguyên thứ tự người dùng chọn
+        $sealIds = array_values(array_map('intval', $request->input('seal_ids', [])));
 
         $template = DB::table('ebmr_templates')->where('id', $templateId)->first();
         if (!$template || $template->status !== 'active') {
@@ -133,6 +143,7 @@ class EbmrIssuanceController extends Controller
                     'sequence_in_year' => $this->extractSequence($currentBatch, $format, $templateId),
                     'created_by' => session('user')['userId'] ?? null,
                     'status' => 'active',
+                    'seal_ids' => $sealIds ? json_encode($sealIds) : null,
                     'created_at' => now(),
                     'updated_at' => now()
                 ]);

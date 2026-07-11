@@ -47,11 +47,15 @@ Route::prefix('/manu_env')
             Route::post('/room/{room_id}/campaign/start', 'startCampaign')->name('campaign.start');
             Route::get('/campaign/{campaign_id}', 'getCampaign')->name('campaign.get');
             Route::post('/campaign/{campaign_id}/step/{step_id}/complete', 'completeStep')->name('campaign.completeStep');
+            Route::post('/campaign/{campaign_id}/step/{step_id}/edit', 'editStep')->name('campaign.editStep');
+            Route::get('/campaign/step/{step_id}/history', 'getStepHistory')->name('campaign.stepHistory');
             Route::post('/campaign/{campaign_id}/complete', 'completeCampaign')->name('campaign.complete');
             // Equip campaign routes
             Route::get('/equip/{equip_id}/campaign/open', [\App\Http\Controllers\Pages\ManuEnv\CleaningEquipCampaignController::class, 'openCampaignPage'])->name('equip.campaign.open');
             Route::get('/equip/{equip_id}/campaign/print', [\App\Http\Controllers\Pages\ManuEnv\CleaningEquipCampaignController::class, 'printCampaign'])->name('equip.campaign.print');
             Route::post('/equip-campaign/{campaign_id}/step/{step_id}/complete', [\App\Http\Controllers\Pages\ManuEnv\CleaningEquipCampaignController::class, 'completeStep'])->name('equip.campaign.completeStep');
+            Route::post('/equip-campaign/{campaign_id}/step/{step_id}/edit', [\App\Http\Controllers\Pages\ManuEnv\CleaningEquipCampaignController::class, 'editStep'])->name('equip.campaign.editStep');
+            Route::get('/equip-campaign/step/{step_id}/history', [\App\Http\Controllers\Pages\ManuEnv\CleaningEquipCampaignController::class, 'getStepHistory'])->name('equip.campaign.stepHistory');
             Route::post('/equip-campaign/{campaign_id}/complete', [\App\Http\Controllers\Pages\ManuEnv\CleaningEquipCampaignController::class, 'completeCampaign'])->name('equip.campaign.complete');
             Route::get('/equip-campaign/{campaign_id}', [\App\Http\Controllers\Pages\ManuEnv\CleaningEquipCampaignController::class, 'getCampaign'])->name('equip.campaign.get');
         });
@@ -71,7 +75,17 @@ Route::prefix('/manu_env')
             Route::post('/room/{room_id}/campaign/start', 'startCampaign')->name('campaign.start');
             Route::get('/campaign/{campaign_id}', 'getCampaign')->name('campaign.get');
             Route::post('/campaign/{campaign_id}/step/{step_id}/complete', 'completeStep')->name('campaign.completeStep');
+            Route::post('/campaign/{campaign_id}/step/{step_id}/edit', 'editStep')->name('campaign.editStep');
+            Route::get('/campaign/step/{step_id}/history', 'getStepHistory')->name('campaign.stepHistory');
             Route::post('/campaign/{campaign_id}/complete', 'completeCampaign')->name('campaign.complete');
+            Route::get('/room-campaign/{campaign_id}/equip-status', 'getEquipStatus')->name('room_campaign.equip_status');
+            // Equip campaign routes (dọn quang thiết bị)
+            Route::get('/equip/{equip_id}/campaign/open', [\App\Http\Controllers\Pages\ManuEnv\ClearanceEquipCampaignController::class, 'openCampaignPage'])->name('equip.campaign.open');
+            Route::post('/equip-campaign/{campaign_id}/step/{step_id}/complete', [\App\Http\Controllers\Pages\ManuEnv\ClearanceEquipCampaignController::class, 'completeStep'])->name('equip.campaign.completeStep');
+            Route::post('/equip-campaign/{campaign_id}/step/{step_id}/edit', [\App\Http\Controllers\Pages\ManuEnv\ClearanceEquipCampaignController::class, 'editStep'])->name('equip.campaign.editStep');
+            Route::get('/equip-campaign/step/{step_id}/history', [\App\Http\Controllers\Pages\ManuEnv\ClearanceEquipCampaignController::class, 'getStepHistory'])->name('equip.campaign.stepHistory');
+            Route::post('/equip-campaign/{campaign_id}/complete', [\App\Http\Controllers\Pages\ManuEnv\ClearanceEquipCampaignController::class, 'completeCampaign'])->name('equip.campaign.complete');
+            Route::get('/equip-campaign/{campaign_id}', [\App\Http\Controllers\Pages\ManuEnv\ClearanceEquipCampaignController::class, 'getCampaign'])->name('equip.campaign.get');
         });
 
         // Room Clearing (Phòng Vệ Sinh Chung)

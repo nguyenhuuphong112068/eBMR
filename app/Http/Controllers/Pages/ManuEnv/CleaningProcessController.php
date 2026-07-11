@@ -13,10 +13,14 @@ use App\Models\CleaningRoomCampaign;
 use App\Models\CleaningRoomCampaignStep;
 use App\Models\CleaningEquipCampaign;
 use App\Models\CleaningEquipCampaignStep;
+use App\Services\ApprovalWorkflowNotifier;
+use App\Traits\EditsCampaignStepResults;
 use Carbon\Carbon;
 
 class CleaningProcessController extends Controller
 {
+    use EditsCampaignStepResults;
+
     public function list($type, $id)
     {
         \App\Services\DocumentActivationService::activateAllIssuedDocuments();
@@ -269,7 +273,15 @@ class CleaningProcessController extends Controller
             'reviewers' => 'nullable|array',
             'reviewers.*' => 'integer',
             'approver' => 'nullable|integer',
-            'authorizer' => 'nullable|integer'
+            'authorizer' => 'nullable|integer',
+            'reviewer_due_dates' => 'nullable|array',
+            'reviewer_due_dates.*' => 'nullable|date',
+            'reviewer_reasons' => 'nullable|array',
+            'reviewer_reasons.*' => 'nullable|string|max:500',
+            'approver_due_date' => 'nullable|date',
+            'approver_reason' => 'nullable|string|max:500',
+            'authorizer_due_date' => 'nullable|date',
+            'authorizer_reason' => 'nullable|string|max:500',
         ]);
 
         DB::transaction(function () use ($type, $list_id, $validated) {
@@ -277,20 +289,37 @@ class CleaningProcessController extends Controller
             $insertData = [];
             if (!empty($validated['reviewers'])) {
                 foreach ($validated['reviewers'] as $userId) {
-                    $insertData[] = ['type' => $type, 'process_list_id' => $list_id, 'role' => 'reviewer', 'user_id' => $userId, 'step_order' => 1, 'status' => 'pending', 'created_at' => now(), 'updated_at' => now()];
+                    $insertData[] = [
+                        'type' => $type, 'process_list_id' => $list_id, 'role' => 'reviewer', 'user_id' => $userId, 'step_order' => 1, 'status' => 'pending',
+                        'due_date' => $validated['reviewer_due_dates'][$userId] ?? null,
+                        'reason' => $validated['reviewer_reasons'][$userId] ?? null,
+                        'created_at' => now(), 'updated_at' => now(),
+                    ];
                 }
             }
-            if (!empty($validated['approver'])) $insertData[] = ['type' => $type, 'process_list_id' => $list_id, 'role' => 'approver', 'user_id' => $validated['approver'], 'step_order' => 2, 'status' => 'pending', 'created_at' => now(), 'updated_at' => now()];
-            if (!empty($validated['authorizer'])) $insertData[] = ['type' => $type, 'process_list_id' => $list_id, 'role' => 'authorizer', 'user_id' => $validated['authorizer'], 'step_order' => 3, 'status' => 'pending', 'created_at' => now(), 'updated_at' => now()];
-            
+            if (!empty($validated['approver'])) $insertData[] = [
+                'type' => $type, 'process_list_id' => $list_id, 'role' => 'approver', 'user_id' => $validated['approver'], 'step_order' => 2, 'status' => 'pending',
+                'due_date' => $validated['approver_due_date'] ?? null,
+                'reason' => $validated['approver_reason'] ?? null,
+                'created_at' => now(), 'updated_at' => now(),
+            ];
+            if (!empty($validated['authorizer'])) $insertData[] = [
+                'type' => $type, 'process_list_id' => $list_id, 'role' => 'authorizer', 'user_id' => $validated['authorizer'], 'step_order' => 3, 'status' => 'pending',
+                'due_date' => $validated['authorizer_due_date'] ?? null,
+                'reason' => $validated['authorizer_reason'] ?? null,
+                'created_at' => now(), 'updated_at' => now(),
+            ];
+
             if (count($insertData) > 0) DB::table('cleaning_process_workflows')->insert($insertData);
-            
+
             if ($type === 'room') {
                 DB::table('cleaning_room_processes_list')->where('id', $list_id)->where('status', 'draft')->update(['status' => 'submitted']);
             } else {
                 DB::table('cleaning_equip_processes_list')->where('id', $list_id)->where('status', 'draft')->update(['status' => 'submitted']);
             }
         });
+
+        ApprovalWorkflowNotifier::notifyActionableStep('cleaning', (int) $list_id, $type);
 
         return response()->json(['success' => true, 'message' => 'Lưu luồng trình ký thành công']);
     }
@@ -787,6 +816,32 @@ class CleaningProcessController extends Controller
             'total_steps' => $totalSteps,
             'done_by'     => $fullName,
         ]);
+    }
+
+    /**
+     * POST /cleaning-process/campaign/{campaign_id}/step/{step_id}/edit
+     * Sửa lại kết quả 1 bước đã xác nhận (vd lỡ bấm "Không đạt" khi thực tế "Đạt") —
+     * bắt buộc nhập lý do, luôn ghi lịch sử trước/sau vào campaign_step_edit_history.
+     */
+    public function editStep(Request $request, $campaign_id, $step_id)
+    {
+        return $this->handleEditCampaignStep(
+            $request,
+            'cleaning_room',
+            CleaningRoomCampaignStep::class,
+            CleaningRoomCampaign::class,
+            $campaign_id,
+            $step_id,
+            ['done' => 'is_done', 'note' => 'result_note', 'by' => 'done_by', 'at' => 'done_at']
+        );
+    }
+
+    /**
+     * GET /cleaning-process/campaign/step/{step_id}/history
+     */
+    public function getStepHistory($step_id)
+    {
+        return $this->handleGetCampaignStepHistory('cleaning_room', $step_id);
     }
 
     /**

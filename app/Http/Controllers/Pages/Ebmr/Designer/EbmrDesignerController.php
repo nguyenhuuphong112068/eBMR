@@ -189,7 +189,7 @@ class EbmrDesignerController extends Controller
                     foreach ($blocks as $block) {
                         $f = json_decode($block->properties, true);
                         if (isset($f['type']) && $f['type'] === 'linked-template') {
-                            $ltId = $f['template_id'] ?? null;
+                            $ltId = \App\Services\LinkedGfResolver::resolveTemplateId($f, null, $block->id);
                             if ($ltId) {
                                 $templateIds[] = $ltId;
                             }
@@ -313,20 +313,54 @@ class EbmrDesignerController extends Controller
 
                     $importantVars = DB::table('important_var')->get();
 
+                    // Chỉ lấy vòng trình ký mới nhất (các dòng cùng created_at với dòng
+                    // mới nhất — cùng cách nhóm với getTemplateWorkflow), bỏ các vòng
+                    // cũ đã bị từ chối để bảng chữ ký không lặp người duyệt.
+                    $latestWfBatch = DB::table('ebmr_template_workflows')->where('template_id', $id)->orderBy('id', 'desc')->value('created_at');
                     $workflows = DB::table('ebmr_template_workflows')
                         ->leftJoin('user_management', 'ebmr_template_workflows.user_id', '=', 'user_management.id')
                         ->leftJoin('designations', 'user_management.designation_id', '=', 'designations.id')
                         ->where('template_id', $id)
+                        ->when($latestWfBatch, fn($q) => $q->where('ebmr_template_workflows.created_at', $latestWfBatch))
                         ->orderBy('step_order')
                         ->select('ebmr_template_workflows.*', 'user_management.fullName', 'user_management.groupName as title', 'user_management.deparment as department_name', 'user_management.signature_image as signature_image', 'designations.name as designation_name')
                         ->get();
                     $template->workflows = $workflows;
 
-                    // Pilot trình soạn thảo mới (ProseMirror/TipTap) — chạy song song,
-                    // dùng chung toàn bộ dữ liệu đã nạp ở trên. Vào bằng ?editor=v2.
-                    $viewName = $request->query('editor') === 'v2' ? 'pages.ebmr.designer_v2' : 'pages.ebmr.designer';
+                    // Bước trình ký đang chờ CHÍNH user này xử lý (nếu có) — để hiện nút
+                    // Đồng ý / Từ chối ngay trên toolbar, không phải quay về trang Phê Duyệt.
+                    // Chỉ actionable khi không còn bước nào trước đó (step_order nhỏ hơn) đang pending.
+                    $myApprovalWorkflow = null;
+                    if ($currentUserId && $template->status === 'submitted') {
+                        $wfForMe = DB::table('ebmr_template_workflows')
+                            ->where('template_id', $id)
+                            ->where('user_id', $currentUserId)
+                            ->where('status', 'pending')
+                            ->orderBy('step_order')
+                            ->first();
+                        if ($wfForMe) {
+                            $hasEarlierPending = DB::table('ebmr_template_workflows')
+                                ->where('template_id', $id)
+                                ->where('status', 'pending')
+                                ->where('step_order', '<', $wfForMe->step_order)
+                                ->exists();
+                            if (!$hasEarlierPending) {
+                                $myApprovalWorkflow = $wfForMe;
+                            }
+                        }
+                    }
 
-                    return view($viewName, [
+                    // Lịch sử thay đổi ấn bản (dùng cho khối ảo "LỊCH SỬ THAY ĐỔI ẤN BẢN")
+                    // Chỉ hiện các ấn bản <= ấn bản đang xem (vd: xem ấn bản 02 thì hiện lý do của 00, 01, 02)
+                    $template->version_history = DB::table('ebmr_templates')
+                        ->where('caterogy_id', $template->caterogy_id)
+                        ->where('type', $template->type)
+                        ->where('version', '<=', $template->version)
+                        ->orderBy('version', 'asc')
+                        ->select('version', 'change_reason', 'effective_date')
+                        ->get();
+
+                    return view('pages.ebmr.designer_v2', [
                         'template' => $template,
                         'isReadOnly' => ($lang === 'dual') ? true : $isReadOnly,
                         'comments' => $comments,
@@ -334,6 +368,7 @@ class EbmrDesignerController extends Controller
                         'lang' => $lang,
                         'importantVars' => $importantVars,
                         'isAdmin' => (session('user')['userGroup'] ?? '') === 'Admin',
+                        'myApprovalWorkflow' => $myApprovalWorkflow,
                     ]);
                 }
             }
@@ -443,9 +478,11 @@ class EbmrDesignerController extends Controller
             }
 
             // --- 3. HANDLE DELETIONS ---
+            // deletedIds do client gửi lên — luôn ràng buộc template_id để 1 id lạc
+            // (tab cũ, dữ liệu nhân bản sót) không xoá được block của ẤN BẢN KHÁC.
             if ($isIncremental && ! empty($deletedIds)) {
-                DB::table('ebmr_template_blocks')->whereIn('id', $deletedIds)->delete();
-                DB::table('ebmr_content_blocks')->whereIn('ebmr_template_blocks_id', $deletedIds)->delete();
+                DB::table('ebmr_template_blocks')->whereIn('id', $deletedIds)->where('template_id', $id)->delete();
+                DB::table('ebmr_content_blocks')->whereIn('ebmr_template_blocks_id', $deletedIds)->where('template_id', $id)->delete();
             }
 
             // --- 4. INSERT/UPDATE DIRTY BLOCKS ---
@@ -477,7 +514,7 @@ class EbmrDesignerController extends Controller
                 if (! $finalSectionId) {
                     if ($isIncremental && $blockDbId) {
                         // For incremental updates, if section_id is missing from frontend, keep existing one from DB
-                        $existingBlock = DB::table('ebmr_template_blocks')->where('id', $blockDbId)->first();
+                        $existingBlock = DB::table('ebmr_template_blocks')->where('id', $blockDbId)->where('template_id', $id)->first();
                         $finalSectionId = $existingBlock->section_id ?? ($sectionId ?: $currentSectionId);
                     } else {
                         $finalSectionId = $sectionId ?: $currentSectionId;
@@ -543,8 +580,10 @@ class EbmrDesignerController extends Controller
                     }
                 }
 
-                if ($blockDbId && DB::table('ebmr_template_blocks')->where('id', $blockDbId)->exists()) {
-                    DB::table('ebmr_template_blocks')->where('id', $blockDbId)->update($blockData);
+                // Ràng buộc template_id: db_id thuộc template khác (payload hỏng/tab cũ)
+                // sẽ rơi xuống nhánh INSERT thay vì kéo block của ấn bản kia về template này.
+                if ($blockDbId && DB::table('ebmr_template_blocks')->where('id', $blockDbId)->where('template_id', $id)->exists()) {
+                    DB::table('ebmr_template_blocks')->where('id', $blockDbId)->where('template_id', $id)->update($blockData);
                     $blockId = $blockDbId;
                 } else {
                     $blockData['created_at'] = now();
@@ -573,8 +612,8 @@ class EbmrDesignerController extends Controller
                         'updated_at' => now(),
                     ];
 
-                    if ($contentDbId && DB::table('ebmr_content_blocks')->where('id', $contentDbId)->exists()) {
-                        DB::table('ebmr_content_blocks')->where('id', $contentDbId)->update($contentData);
+                    if ($contentDbId && DB::table('ebmr_content_blocks')->where('id', $contentDbId)->where('template_id', $id)->exists()) {
+                        DB::table('ebmr_content_blocks')->where('id', $contentDbId)->where('template_id', $id)->update($contentData);
                         $contentId = $contentDbId;
                     } else {
                         $contentData['created_at'] = now();
@@ -891,8 +930,36 @@ class EbmrDesignerController extends Controller
                 'user_name' => $user->fullName,
                 'created_at' => now()->format('Y-m-d H:i:s'),
                 'selection_id' => $validated['selection_id'],
+                'selection_data' => $validated['selection_data'] ?? null,
             ],
         ]);
+    }
+
+    /**
+     * Cập nhật lại NEO của bình luận vùng chọn.
+     *
+     * Neo lưu offset ký tự {start,end} trong khối/ô. Khi người dùng sửa chữ phía trước đoạn
+     * được bình luận, offset cũ lệch đi; client dò lại vị trí bằng `quote` rồi gọi endpoint
+     * này ghi offset mới, để lần mở sau không phải dò chuỗi nữa.
+     */
+    public function reanchorComment(Request $request)
+    {
+        $validated = $request->validate([
+            'id' => 'required|integer',
+            'selection_data' => 'required|array',
+        ]);
+
+        $comment = DB::table('ebmr_template_comments')->where('id', $validated['id'])->first();
+        if (!$comment) {
+            return response()->json(['success' => false, 'message' => 'Bình luận không tồn tại.'], 404);
+        }
+
+        DB::table('ebmr_template_comments')->where('id', $validated['id'])->update([
+            'selection_data' => json_encode($validated['selection_data']),
+            'updated_at' => now(),
+        ]);
+
+        return response()->json(['success' => true]);
     }
 
     public function deleteComment(Request $request)
@@ -1255,8 +1322,8 @@ class EbmrDesignerController extends Controller
                     'updated_at' => now(),
                 ];
 
-                if ($cellDbId && DB::table('ebmr_content_blocks')->where('id', $cellDbId)->exists()) {
-                    DB::table('ebmr_content_blocks')->where('id', $cellDbId)->update($contentData);
+                if ($cellDbId && DB::table('ebmr_content_blocks')->where('id', $cellDbId)->where('template_id', $templateId)->exists()) {
+                    DB::table('ebmr_content_blocks')->where('id', $cellDbId)->where('template_id', $templateId)->update($contentData);
                     $contentId = $cellDbId;
                 } else {
                     $contentData['created_at'] = now();

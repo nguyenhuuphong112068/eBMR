@@ -13,10 +13,13 @@ Route::group(['prefix' => 'ebmr', 'as' => 'pages.ebmr.'], function () {
     Route::post('/templates/co-category', [EbmrTemplateController::class, 'storeCoCategory'])->name('storeCoCategory');
     Route::post('/templates/duplicate', [EbmrTemplateController::class, 'duplicateTemplate'])->name('duplicateTemplate');
     Route::post('/templates/effective-date', [EbmrTemplateController::class, 'updateEffectiveDate'])->name('updateEffectiveDate');
+    Route::post('/templates/{id}/change-reason', [EbmrTemplateController::class, 'saveChangeReason'])->name('saveChangeReason');
     Route::get('/templates/{id}/data', [EbmrTemplateController::class, 'getMetadata'])->name('getTemplateMetadata');
     Route::get('/get-templates', [EbmrTemplateController::class, 'getTemplates'])->name('getTemplates');
+    Route::get('/templates/gf-by-doc-code/blocks', [EbmrTemplateController::class, 'getGfBlocksByDocCode'])->name('getGfBlocksByDocCode');
     Route::get('/templates/{id}/blocks', [EbmrTemplateController::class, 'getTemplateBlocks'])->name('getTemplateBlocks');
     Route::get('/get-history/{id}', [EbmrTemplateController::class, 'getHistory'])->name('getHistory');
+    Route::get('/templates/{id}/version-diff', [EbmrTemplateController::class, 'getVersionDiff'])->name('getVersionDiff');
     Route::get('/templates/next-version', [EbmrTemplateController::class, 'getNextVersion'])->name('getNextVersion');
     Route::get('/material-info', [EbmrTemplateController::class, 'getMaterialInfo'])->name('getMaterialInfo');
     Route::get('/templates/{id}/testing-data', [EbmrTemplateController::class, 'getTestingData'])->name('getTestingData');
@@ -31,6 +34,7 @@ Route::group(['prefix' => 'ebmr', 'as' => 'pages.ebmr.'], function () {
     Route::post('/store-comment', [EbmrDesignerController::class, 'storeComment'])->name('storeComment');
     Route::post('/delete-comment', [EbmrDesignerController::class, 'deleteComment'])->name('deleteComment');
     Route::post('/reply-comment', [EbmrDesignerController::class, 'replyComment'])->name('replyComment');
+    Route::post('/reanchor-comment', [EbmrDesignerController::class, 'reanchorComment'])->name('reanchorComment');
     Route::post('/translate', [EbmrDesignerController::class, 'aiTranslate'])->name('aiTranslate');
     Route::post('/translate-single', [EbmrDesignerController::class, 'aiTranslateSingle'])->name('aiTranslateSingle');
 
@@ -55,12 +59,16 @@ Route::group(['prefix' => 'ebmr', 'as' => 'pages.ebmr.'], function () {
     Route::get('/dirty-equipments', [\App\Http\Controllers\Pages\ManuEnv\DirtyEquipmentController::class, 'index'])->name('dirty_equipments');
     Route::get('/production/bms-data', [EbmrExecutionController::class, 'getBmsData'])->name('productionBmsData');
     Route::get('/production/logbook-label', [EbmrExecutionController::class, 'getLogbookLabel'])->name('getLogbookLabel');
+    Route::post('/production/start', [EbmrExecutionController::class, 'startProduction'])->name('startProduction');
+    Route::post('/production/end', [EbmrExecutionController::class, 'endProduction'])->name('endProduction');
     Route::get('/execute/{id}', [EbmrExecutionController::class, 'execute'])->name('execute');
     Route::post('/update-record-data', [EbmrExecutionController::class, 'updateRecordData'])->name('updateRecordData');
+    Route::post('/record-structure', [EbmrExecutionController::class, 'saveRecordStructure'])->name('saveRecordStructure');
     Route::get('/run-data-history/{record_id}/{block_uuid}/{cell_id}', [EbmrExecutionController::class, 'getRunDataHistory'])->name('getRunDataHistory');
     Route::post('/verify-password', [EbmrExecutionController::class, 'verifyPassword'])->name('verifyPassword');
     Route::post('/verify-checker', [EbmrExecutionController::class, 'verifyChecker'])->name('verifyChecker');
     Route::get('/records/{recordId}/distribution', [EbmrExecutionController::class, 'getRecordDistribution'])->name('getRecordDistribution');
+    Route::get('/records/{recordId}/distribution-history', [EbmrExecutionController::class, 'getRecordDistributionHistory'])->name('getRecordDistributionHistory');
     Route::post('/records/distribute', [EbmrExecutionController::class, 'distributeSections'])->name('distributeSections');
     Route::get('/production/room-options', [EbmrExecutionController::class, 'getRoomOptions'])->name('getRoomOptions');
     Route::get('/records/{recordId}/workshop-users', [EbmrExecutionController::class, 'getRecordWorkshopUsers'])->name('getRecordWorkshopUsers');

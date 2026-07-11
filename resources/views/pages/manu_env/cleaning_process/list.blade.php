@@ -403,6 +403,16 @@
                                 </div>
                             </div>
                         </div>
+
+                        <!-- Hạn hoàn thành & lý do theo từng người -->
+                        <div class="mt-4 pt-3" id="wfAssignmentDetails"
+                            style="border-top: 1px dashed #dae0e5; display:none;">
+                            <label class="form-label fw-bold text-navy mb-2" style="font-size: 0.85rem;">
+                                <i class="far fa-calendar-check me-1"></i> Hạn hoàn thành &amp; lý do (tuỳ chọn, theo
+                                từng người)
+                            </label>
+                            <div id="wfAssignmentRows"></div>
+                        </div>
                     </div>
                     <div class="modal-footer bg-white border-top py-3 px-4 rounded-bottom">
                         <button type="button" class="btn btn-light rounded-pill px-4" data-dismiss="modal">Hủy
@@ -528,9 +538,79 @@
             })
         }
 
+        // Hạn hoàn thành & lý do theo từng người được gán (reviewer/approver/authorizer).
+        // State lưu theo key "role_userId" để giữ lại giá trị đã nhập khi người dùng
+        // đổi lựa chọn qua lại giữa các select2.
+        let wfAssignmentState = {};
+        const wfRoleLabels = {
+            reviewer: 'Kiểm tra',
+            approver: 'Phê duyệt',
+            authorizer: 'Ban hành'
+        };
+
+        function wfEscapeHtml(str) {
+            return String(str ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        function wfGetSelectedAssignments() {
+            const list = [];
+            $('#wfReviewers option:selected').each(function() {
+                list.push({ role: 'reviewer', userId: String($(this).val()), name: $(this).text() });
+            });
+            const approverId = $('#wfApprover').val();
+            if (approverId) list.push({ role: 'approver', userId: String(approverId), name: $('#wfApprover option:selected').text() });
+            const authorizerId = $('#wfAuthorizer').val();
+            if (authorizerId) list.push({ role: 'authorizer', userId: String(authorizerId), name: $('#wfAuthorizer option:selected').text() });
+            return list;
+        }
+
+        function wfRenderAssignmentRows() {
+            const assignments = wfGetSelectedAssignments();
+            const $container = $('#wfAssignmentRows');
+            $container.empty();
+            $('#wfAssignmentDetails').toggle(assignments.length > 0);
+
+            assignments.forEach(a => {
+                const key = a.role + '_' + a.userId;
+                if (!wfAssignmentState[key]) wfAssignmentState[key] = { due_date: '', reason: '' };
+                const state = wfAssignmentState[key];
+
+                const $row = $(`
+                    <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+                        <div class="small text-muted" style="min-width: 150px;">${wfRoleLabels[a.role]}: <strong class="text-navy">${wfEscapeHtml(a.name)}</strong></div>
+                        <input type="date" class="form-control form-control-sm wf-due-date" style="max-width: 150px;" value="${wfEscapeHtml(state.due_date)}" title="Ngày mong muốn hoàn thành">
+                        <input type="text" class="form-control form-control-sm wf-reason" style="max-width: 220px;" placeholder="Lý do mong muốn hoàn thành sớm (nếu có)" value="${wfEscapeHtml(state.reason)}">
+                    </div>
+                `);
+
+                $row.find('.wf-due-date').on('change', function() { state.due_date = $(this).val(); });
+                $row.find('.wf-reason').on('input', function() { state.reason = $(this).val(); });
+
+                $container.append($row);
+            });
+        }
+
+        function wfApplyAssignmentsToForm() {
+            $('#workflowForm .wf-hidden-field').remove();
+
+            wfGetSelectedAssignments().forEach(a => {
+                const key = a.role + '_' + a.userId;
+                const state = wfAssignmentState[key] || { due_date: '', reason: '' };
+                const dueName = a.role === 'reviewer' ? `reviewer_due_dates[${a.userId}]` : `${a.role}_due_date`;
+                const reasonName = a.role === 'reviewer' ? `reviewer_reasons[${a.userId}]` : `${a.role}_reason`;
+
+                $('#workflowForm').append(`<input type="hidden" class="wf-hidden-field" name="${dueName}" value="${wfEscapeHtml(state.due_date)}">`);
+                $('#workflowForm').append(`<input type="hidden" class="wf-hidden-field" name="${reasonName}" value="${wfEscapeHtml(state.reason)}">`);
+            });
+        }
+
+        $('#wfReviewers, #wfApprover, #wfAuthorizer').on('change', wfRenderAssignmentRows);
+
         function submitApproval(list_id) {
             $('#workflowForm')[0].reset();
             $('#workflowListId').val(list_id);
+            wfAssignmentState = {};
 
             // Reset selections
             $('#wfReviewers').val([]).trigger('change');
@@ -544,6 +624,10 @@
             $.get(getUrl, function(data) {
                 let reviewers = [];
                 data.forEach(item => {
+                    wfAssignmentState[item.role + '_' + item.user_id] = {
+                        due_date: item.due_date || '',
+                        reason: item.reason || ''
+                    };
                     if (item.role === 'reviewer') reviewers.push(item.user_id);
                     if (item.role === 'approver') $('#wfApprover').val(item.user_id).trigger('change');
                     if (item.role === 'authorizer') $('#wfAuthorizer').val(item.user_id).trigger('change');
@@ -556,6 +640,7 @@
         $('#workflowForm').submit(function(e) {
             e.preventDefault();
             const list_id = $('#workflowListId').val();
+            wfApplyAssignmentsToForm();
             const data = $(this).serialize();
 
             let postUrl =
