@@ -40,23 +40,33 @@ class ProductionEnvironmentService
     }
 
     /**
-     * So khớp 1 lần đọc với ngưỡng cấu hình của phòng (room_manufactured_condition,
-     * bộ ngưỡng 1) — dùng chung logic mặc định (20-25°C, 35-60%, 5-15Pa) đã áp dụng sẵn
-     * ở productionIndex()/production/index.blade.php khi phòng chưa khai báo ngưỡng riêng.
+     * Trích ngưỡng cấu hình của phòng (room_manufactured_condition, bộ ngưỡng 1) — dùng
+     * chung logic mặc định (20-25°C, 35-60%, 5-15Pa) đã áp dụng sẵn ở
+     * productionIndex()/production/index.blade.php khi phòng chưa khai báo ngưỡng riêng.
+     */
+    public static function thresholds(?object $condition): array
+    {
+        return [
+            'temp_min' => ($condition && $condition->temp_min_1 !== null) ? (float) $condition->temp_min_1 : 20.0,
+            'temp_max' => ($condition && $condition->temp_max_1 !== null) ? (float) $condition->temp_max_1 : 25.0,
+            'humid_min' => ($condition && $condition->humidity_min_1 !== null) ? (float) $condition->humidity_min_1 : 35.0,
+            'humid_max' => ($condition && $condition->humidity_max_1 !== null) ? (float) $condition->humidity_max_1 : 60.0,
+            'press_min' => ($condition && ($condition->diff_press_corridor_min ?? $condition->diff_press_pal_min ?? $condition->diff_press_mal_min) !== null)
+                ? (float) ($condition->diff_press_corridor_min ?? $condition->diff_press_pal_min ?? $condition->diff_press_mal_min) : 5.0,
+            'press_max' => ($condition && ($condition->diff_press_corridor_max ?? $condition->diff_press_pal_max ?? $condition->diff_press_mal_max) !== null)
+                ? (float) ($condition->diff_press_corridor_max ?? $condition->diff_press_pal_max ?? $condition->diff_press_mal_max) : 15.0,
+        ];
+    }
+
+    /**
+     * So khớp 1 lần đọc với ngưỡng cấu hình của phòng.
      */
     public static function isOutOfBounds(array $reading, ?object $condition): bool
     {
-        $tempMin = ($condition && $condition->temp_min_1 !== null) ? (float) $condition->temp_min_1 : 20.0;
-        $tempMax = ($condition && $condition->temp_max_1 !== null) ? (float) $condition->temp_max_1 : 25.0;
-        $humidMin = ($condition && $condition->humidity_min_1 !== null) ? (float) $condition->humidity_min_1 : 35.0;
-        $humidMax = ($condition && $condition->humidity_max_1 !== null) ? (float) $condition->humidity_max_1 : 60.0;
-        $pressMin = ($condition && ($condition->diff_press_corridor_min ?? $condition->diff_press_pal_min ?? $condition->diff_press_mal_min) !== null)
-            ? (float) ($condition->diff_press_corridor_min ?? $condition->diff_press_pal_min ?? $condition->diff_press_mal_min) : 5.0;
-        $pressMax = ($condition && ($condition->diff_press_corridor_max ?? $condition->diff_press_pal_max ?? $condition->diff_press_mal_max) !== null)
-            ? (float) ($condition->diff_press_corridor_max ?? $condition->diff_press_pal_max ?? $condition->diff_press_mal_max) : 15.0;
+        $t = self::thresholds($condition);
 
-        return $reading['temperature'] < $tempMin || $reading['temperature'] > $tempMax
-            || $reading['humidity'] < $humidMin || $reading['humidity'] > $humidMax
-            || $reading['pressure'] < $pressMin || $reading['pressure'] > $pressMax;
+        return $reading['temperature'] < $t['temp_min'] || $reading['temperature'] > $t['temp_max']
+            || $reading['humidity'] < $t['humid_min'] || $reading['humidity'] > $t['humid_max']
+            || $reading['pressure'] < $t['press_min'] || $reading['pressure'] > $t['press_max'];
     }
 }

@@ -259,6 +259,10 @@ class EbmrExecutionController extends Controller
         // phòng + toàn bộ thiết bị) — nhiều công đoạn cùng phòng chỉ cần check 1 lần.
         $roomReadinessCache = [];
 
+        // Memo danh sách quy trình dọn quang còn thiếu theo phòng — dùng để chặn ngay khi
+        // bấm "Bắt đầu sản xuất" nếu phòng/thiết bị chưa được thiết kế quy trình.
+        $clearanceProcessCache = [];
+
         // Populate product name + phân phối/ghi chép cho từng hồ sơ đang hoạt động
         foreach ($activeRecords as $r) {
             $r->product_name = $this->resolveProductName($r->type, $r->caterogy_id);
@@ -283,6 +287,10 @@ class EbmrExecutionController extends Controller
             $readiness = $r->room_id ? $roomReadinessCache[$r->room_id] : ['ready' => false, 'missing' => ['Chưa gán phòng']];
             $r->room_cleaning_ready = $readiness['ready'];
             $r->cleaning_missing = $readiness['missing'];
+            if ($r->room_id && !array_key_exists($r->room_id, $clearanceProcessCache)) {
+                $clearanceProcessCache[$r->room_id] = $this->getMissingClearanceProcesses($r->room_id);
+            }
+            $r->clearance_process_missing = $r->room_id ? $clearanceProcessCache[$r->room_id] : ['Chưa gán phòng'];
             $r->production_started = !is_null($r->production_started_at);
             $r->clearance_completed = !is_null($r->clearance_completed_at);
             $r->production_ended = !is_null($r->production_ended_at);
@@ -761,7 +769,7 @@ class EbmrExecutionController extends Controller
 
             // Lưu metadata
             $executionValues->$blockUuid->_meta->$cellId = (object)[
-                'by' => $rd->updated_by,
+                'by' => RunDataEncryptionService::decrypt($rd->updated_by),
                 'at' => $rd->updated_at ? \Carbon\Carbon::parse($rd->updated_at)->format('d/m/Y H:i') : null,
                 'history_count' => $historyCounts[$rd->id] ?? 0
             ];
@@ -783,6 +791,21 @@ class EbmrExecutionController extends Controller
             ->get();
         $importantVars = DB::table('important_var')->get();
 
+        // Phòng đang thực thi công đoạn này — dùng cho nút "Quay lại" ở thanh công cụ chế độ
+        // thực thi (không có leftNAV để quay về Phòng Sản Xuất): ưu tiên ?dist= của link vừa
+        // bấm tới, nếu không có thì tìm theo record + section (link "Xem hồ sơ" không kèm dist).
+        $backDistId = $request->query('dist');
+        $backDist = $backDistId
+            ? DB::table('ebmr_record_distributions')->where('id', $backDistId)->where('record_id', $record->id)->first()
+            : ($sectionId ? DB::table('ebmr_record_distributions')->where('record_id', $record->id)->where('section_id', $sectionId)->first() : null);
+        $backRoomId = $backDist->room_id ?? null;
+
+        // Người bấm "Bắt đầu sản xuất" cho phòng/công đoạn hiện tại — dùng cho modal
+        // Thông tin lô trên toolbar (designer_v2.blade.php).
+        $backDistExecutorName = ($backDist->started_by ?? null)
+            ? DB::table('user_management')->where('id', $backDist->started_by)->value('fullName')
+            : null;
+
         // Cấu trúc phát sinh (dòng thêm Cấp 2...) đã lưu riêng cho LÔ này
         $recordStructures = [];
         foreach (DB::table('ebmr_record_structures')->where('record_id', $id)->get() as $rs) {
@@ -792,12 +815,23 @@ class EbmrExecutionController extends Controller
             ];
         }
 
+        // Tài liệu PDF đã đính kèm cho từng phân đoạn của LÔ này (record_id + section_id,
+        // xem ebmr_record_section_attachments) — gom nhóm theo section_id để JS hiển thị
+        // badge số lượng + danh sách ngay trên từng phân đoạn (xem attachments.js).
+        $sectionAttachments = DB::table('ebmr_record_section_attachments')
+            ->where('record_id', $id)
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->groupBy('section_id')
+            ->map(fn($rows) => $rows->map(fn($r) => $this->formatSectionAttachment($r))->values());
+
         return view('pages.ebmr.designer_v2', [
             'record' => $record,
             'recordSeals' => $recordSeals,
             'template' => $template,
             'executionValues' => $executionValues,
             'recordStructures' => (object)$recordStructures,
+            'sectionAttachments' => (object)$sectionAttachments->toArray(),
             'isExecutionMode' => true,
             'isReadOnly' => $isReadOnly,
             'isIssuanceView' => $isIssuanceView,
@@ -807,6 +841,16 @@ class EbmrExecutionController extends Controller
             'activeSectionLabel' => $activeSectionLabel,
             'activeSectionNumber' => $activeSectionNumber,
             'isAdmin' => (session('user')['userGroup'] ?? '') === 'Admin',
+            'backRoomId' => $backRoomId,
+            'backDist' => $backDist,
+            'backDistExecutorName' => $backDistExecutorName,
+            // Đích "Quay lại ghi chép" khi đang ở chế độ Xem tất cả công đoạn — được nút "Xem
+            // tất cả công đoạn" nhúng vào link lúc điều hướng (xem designer_v2.blade.php),
+            // không tự tra cứu lại ở đây để tránh chọn nhầm công đoạn nếu 1 user được phân
+            // công nhiều công đoạn cùng lúc. Quyền ghi thật sự vẫn được computeIsReadOnly()
+            // thẩm định lại khi bấm quay lại (?section=&dist=), nên không phát sinh rủi ro.
+            'returnSectionId' => $request->query('returnSection'),
+            'returnDistId' => $request->query('returnDist'),
         ]);
     }
 
@@ -905,22 +949,7 @@ class EbmrExecutionController extends Controller
      */
     private function resolveProductName($type, $caterogyId)
     {
-        if ($type === 'GF') {
-            return DB::table('gf_category')->where('id', $caterogyId)->value('name') ?? 'N/A';
-        }
-        if ($type === 'MF') {
-            return DB::table('mf_category')->where('id', $caterogyId)->value('name') ?? 'N/A';
-        }
-        if ($type === 'BPR') {
-            return DB::table('finished_product_category')
-                ->leftJoin('product_name', 'finished_product_category.product_name_id', '=', 'product_name.id')
-                ->where('finished_product_category.id', $caterogyId)
-                ->value('product_name.name') ?? 'N/A';
-        }
-        return DB::table('intermediate_category')
-            ->leftJoin('product_name', 'intermediate_category.product_name_id', '=', 'product_name.id')
-            ->where('intermediate_category.id', $caterogyId)
-            ->value('product_name.name') ?? 'N/A';
+        return \App\Services\EbmrProductResolver::resolveName($type, $caterogyId);
     }
 
     /**
@@ -936,6 +965,39 @@ class EbmrExecutionController extends Controller
             ->orderByRaw("FIELD(status, 'active', 'approved', 'submitted', 'draft')")
             ->orderBy('version', 'desc')
             ->first();
+    }
+
+    /**
+     * Liệt kê các quy trình dọn quang còn THIẾU cho 1 phòng (phòng + từng thiết bị trong
+     * phòng). Trả mảng lý do rỗng nghĩa là đủ quy trình để bắt đầu sản xuất. Dùng ở trang
+     * Sản Xuất để chặn NGAY khi bấm "Bắt đầu sản xuất" (không cho vào dialog xác nhận nếu
+     * thiếu) — cùng bộ điều kiện mà startProduction() kiểm tra lại phía server.
+     */
+    private function getMissingClearanceProcesses($roomId): array
+    {
+        $missing = [];
+
+        if (!$this->findActiveClearanceProcessList(ClearanceRoomProcessList::class, 'room_id', $roomId)) {
+            $missing[] = 'Phòng chưa có quy trình dọn quang';
+        }
+
+        $equipRows = DB::table('equipment_in_room')
+            ->join('instrument', 'equipment_in_room.equipment_id', '=', 'instrument.id')
+            ->where('equipment_in_room.room_id', $roomId)
+            ->select('instrument.id', 'instrument.code')
+            ->get();
+
+        $missingEquip = [];
+        foreach ($equipRows as $eq) {
+            if (!$this->findActiveClearanceProcessList(ClearanceEquipProcessList::class, 'equipment_id', $eq->id)) {
+                $missingEquip[] = $eq->code;
+            }
+        }
+        if (!empty($missingEquip)) {
+            $missing[] = 'Thiết bị chưa có quy trình dọn quang: ' . implode(', ', $missingEquip);
+        }
+
+        return $missing;
     }
 
     /**
@@ -1177,9 +1239,24 @@ class EbmrExecutionController extends Controller
             'updated_at' => $now,
         ]);
 
+        // Tự xuất Báo cáo môi trường sản xuất của phiên này thành PDF và đính kèm vào
+        // phân đoạn (ebmr_record_section_attachments). Lỗi xuất báo cáo không được chặn
+        // nghiệp vụ kết thúc sản xuất (đã chốt production_ended_at ở trên) — chỉ báo lại.
+        $reportMessage = 'Báo cáo môi trường sản xuất (PDF) đã được đính kèm vào phân đoạn.';
+        try {
+            \App\Services\ProductionEnvironmentReportService::attachReportPdf(
+                (int) $dist->id,
+                $currentUserId,
+                session('user')['fullName'] ?? 'Hệ thống'
+            );
+        } catch (\Throwable $e) {
+            Log::error('endProduction: lỗi xuất báo cáo môi trường PDF cho phiên #' . $dist->id . ': ' . $e->getMessage());
+            $reportMessage = 'Lưu ý: xuất báo cáo môi trường PDF thất bại — có thể in thủ công từ Lịch Sử Môi Trường Sản Xuất.';
+        }
+
         return response()->json([
             'success' => true,
-            'message' => 'Đã kết thúc sản xuất. Phòng chuyển trạng thái "Cần vệ sinh" cho lô kế tiếp.',
+            'message' => 'Đã kết thúc sản xuất. Phòng chuyển trạng thái "Cần vệ sinh" cho lô kế tiếp. ' . $reportMessage,
         ]);
     }
 
@@ -1435,6 +1512,10 @@ class EbmrExecutionController extends Controller
 
                         $reason = $reasons[$blockUuid][$cellId] ?? null;
 
+                        // Ô bảng có thể là mảng/đối tượng (vd. block __na__: {reason,by,at,group}),
+                        // nên chuẩn hoá về chuỗi TRƯỚC khi so sánh — tránh "Array to string conversion".
+                        $rawValueStr = (is_array($rawValue) || is_object($rawValue)) ? json_encode($rawValue) : (string)$rawValue;
+
                         $existing = DB::table('ebmr_run_data')->where([
                             'record_id' => $validated['record_id'],
                             'block_uuid' => $blockUuid,
@@ -1444,14 +1525,12 @@ class EbmrExecutionController extends Controller
                         $oldRawValue = null;
                         if ($existing) {
                             $oldRawValue = RunDataEncryptionService::decrypt($existing->raw_value);
-                            if ((string)$oldRawValue !== (string)$rawValue && $oldRawValue !== null && $oldRawValue !== "") {
+                            if ((string)$oldRawValue !== $rawValueStr && $oldRawValue !== null && $oldRawValue !== "") {
                                 if (empty($reason)) {
                                     throw new \Exception("Vui lòng cung cấp lý do thay đổi dữ liệu.");
                                 }
                             }
                         }
-
-                        $rawValueStr = (is_array($rawValue) || is_object($rawValue)) ? json_encode($rawValue) : (string)$rawValue;
 
                         Log::info("Saving cell: " . $cellId . " = " . $rawValueStr);
                         DB::table('ebmr_run_data')->updateOrInsert(
@@ -1461,16 +1540,16 @@ class EbmrExecutionController extends Controller
                                 'cell_id' => $cellId
                             ],
                             [
-                                'filled_by' => $userId,
+                                'filled_by' => RunDataEncryptionService::encrypt((string)$userId),
                                 'filled_at' => $now,
                                 'value'     => RunDataEncryptionService::encryptJson([$cellId => $rawValue]),
                                 'raw_value' => RunDataEncryptionService::encrypt($rawValueStr),
                                 'updated_at' => $now,
-                                'updated_by' => $userName,
+                                'updated_by' => RunDataEncryptionService::encrypt($userName),
                             ]
                         );
 
-                        if ($existing && (string)$oldRawValue !== (string)$rawValue) {
+                        if ($existing && (string)$oldRawValue !== $rawValueStr) {
                             DB::table('ebmr_run_data_history')->insert([
                                 'ebmr_run_data_id' => $existing->id,
                                 'record_id' => $validated['record_id'],
@@ -1514,12 +1593,12 @@ class EbmrExecutionController extends Controller
                             'cell_id' => 'default'
                         ],
                         [
-                            'filled_by' => $userId,
+                            'filled_by' => RunDataEncryptionService::encrypt((string)$userId),
                             'filled_at' => $now,
                             'value'     => RunDataEncryptionService::encryptJson(['text' => $value]),
                             'raw_value' => RunDataEncryptionService::encrypt((string)$value),
                             'updated_at' => $now,
-                            'updated_by' => $userName,
+                            'updated_by' => RunDataEncryptionService::encrypt($userName),
                         ]
                     );
 
@@ -1606,6 +1685,108 @@ class EbmrExecutionController extends Controller
             Log::error('saveRecordStructure error: ' . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Lỗi Database: ' . $e->getMessage()]);
         }
+    }
+
+    /**
+     * Đính kèm 1 tài liệu PDF vào 1 phân đoạn của hồ sơ đang thực thi (khoá
+     * record_id + section_id, cùng cách định danh phân đoạn với
+     * ebmr_record_distributions/ebmr_record_structures).
+     */
+    public function uploadSectionAttachment(Request $request)
+    {
+        $validated = $request->validate([
+            'record_id' => 'required|exists:ebmr_records,id',
+            'section_id' => 'required|string|max:191',
+            'section_label' => 'nullable|string|max:255',
+            'title' => 'required|string|max:255',
+            'file' => 'required|file|mimes:pdf|max:20480',
+        ]);
+
+        $record = DB::table('ebmr_records')->where('id', $validated['record_id'])->first();
+        if (in_array($record->status, ['completed', 'reviewed'])) {
+            return response()->json(['success' => false, 'message' => 'Hồ sơ đã khóa (hoàn thành/đã duyệt) — không thể đính kèm thêm tài liệu.']);
+        }
+
+        $file = $request->file('file');
+        // Phải lấy tên gốc/kích thước TRƯỚC khi move() — sau khi move, UploadedFile không
+        // còn trỏ tới file vật lý ở đường dẫn cũ nữa nên getSize() sẽ ném lỗi stat failed.
+        $originalName = $file->getClientOriginalName();
+        $fileSize = $file->getSize();
+        $dir = public_path('upLoadData/doc/ebmr_records/' . $validated['record_id']);
+        if (!file_exists($dir)) {
+            mkdir($dir, 0755, true);
+        }
+        $filename = 'att_' . $validated['record_id'] . '_' . time() . '_' . \Illuminate\Support\Str::random(8) . '.pdf';
+        $file->move($dir, $filename);
+
+        $now = now();
+        $userId = session('user')['userId'] ?? null;
+        $userName = session('user')['fullName'] ?? 'System';
+        $id = DB::table('ebmr_record_section_attachments')->insertGetId([
+            'record_id' => $validated['record_id'],
+            'section_id' => $validated['section_id'],
+            'section_label' => $validated['section_label'] ?? null,
+            'title' => $validated['title'],
+            'file_name' => $originalName,
+            'file_path' => '/upLoadData/doc/ebmr_records/' . $validated['record_id'] . '/' . $filename,
+            'file_size' => $fileSize,
+            'uploaded_by' => $userId,
+            'uploaded_by_name' => $userName,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        $row = DB::table('ebmr_record_section_attachments')->where('id', $id)->first();
+        return response()->json(['success' => true, 'attachment' => $this->formatSectionAttachment($row)]);
+    }
+
+    /**
+     * Xoá 1 tài liệu đính kèm (file vật lý + bản ghi).
+     */
+    public function deleteSectionAttachment(Request $request, $id)
+    {
+        $row = DB::table('ebmr_record_section_attachments')->where('id', $id)->first();
+        if (!$row) {
+            return response()->json(['success' => false, 'message' => 'Tài liệu không tồn tại.'], 404);
+        }
+
+        $record = DB::table('ebmr_records')->where('id', $row->record_id)->first();
+        if ($record && in_array($record->status, ['completed', 'reviewed'])) {
+            return response()->json(['success' => false, 'message' => 'Hồ sơ đã khóa (hoàn thành/đã duyệt) — không thể xoá tài liệu.']);
+        }
+
+        $fullPath = public_path(ltrim($row->file_path, '/'));
+        if (file_exists($fullPath)) {
+            @unlink($fullPath);
+        }
+        DB::table('ebmr_record_section_attachments')->where('id', $id)->delete();
+
+        return response()->json(['success' => true]);
+    }
+
+    /**
+     * Chuẩn hoá 1 dòng ebmr_record_section_attachments thành JSON gửi cho JS
+     * (dùng chung giữa execute() khi tải trang và 2 endpoint upload/delete ở trên).
+     */
+    private function formatSectionAttachment($row): array
+    {
+        return [
+            'id' => $row->id,
+            'title' => $row->title,
+            'file_name' => $row->file_name,
+            'url' => $row->file_path,
+            'size_label' => $this->formatFileSize($row->file_size),
+            'uploaded_by_name' => $row->uploaded_by_name,
+            'uploaded_at' => $row->created_at ? Carbon::parse($row->created_at)->format('d/m/Y H:i') : null,
+        ];
+    }
+
+    private function formatFileSize($bytes): string
+    {
+        if (!$bytes) return '';
+        if ($bytes < 1024) return $bytes . ' B';
+        if ($bytes < 1048576) return round($bytes / 1024, 1) . ' KB';
+        return round($bytes / 1048576, 1) . ' MB';
     }
 
     /**

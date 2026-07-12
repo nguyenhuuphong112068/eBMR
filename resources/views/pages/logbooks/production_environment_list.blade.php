@@ -22,8 +22,10 @@
                             <thead class="bg-light">
                                 <tr>
                                     <th class="py-3 border-0">Phòng</th>
+                                    <th class="py-3 border-0">Sản Phẩm</th>
                                     <th class="py-3 border-0">Công Đoạn</th>
                                     <th class="py-3 border-0">Số Lô</th>
+                                    <th class="py-3 border-0">Nhân Sự Thực Hiện</th>
                                     <th class="py-3 border-0">Bắt Đầu SX</th>
                                     <th class="py-3 border-0">Kết Thúc SX</th>
                                     <th class="text-center py-3 border-0">Số Lần Ghi Nhận</th>
@@ -38,8 +40,10 @@
                                             <span class="badge bg-navy text-white font-monospace">{{ $s->room_code }}</span>
                                             <span class="small text-muted d-block mt-1">{{ $s->room_name }}</span>
                                         </td>
+                                        <td class="small">{{ $s->product_name }}</td>
                                         <td class="small">{{ $s->section_label ?: '-' }}</td>
-                                        <td class="font-monospace fw-bold text-navy">{{ $s->batch_number }}</td>
+                                        <td><span class="badge bg-danger font-monospace">{{ $s->batch_number }}</span></td>
+                                        <td class="small">{{ $s->executor_name }}</td>
                                         <td class="small">{{ \Carbon\Carbon::parse($s->started_at)->format('d/m/Y H:i') }}</td>
                                         <td class="small">
                                             @if ($s->production_ended_at)
@@ -65,7 +69,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="8" class="text-center py-5 text-muted">
+                                        <td colspan="10" class="text-center py-5 text-muted">
                                             <i class="fas fa-inbox fa-3x mb-3 d-block"></i>
                                             Chưa có phiên sản xuất nào được ghi nhận.
                                         </td>

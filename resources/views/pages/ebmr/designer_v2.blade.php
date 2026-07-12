@@ -273,10 +273,25 @@
             </div>
 
             <div class="ms-auto d-flex align-items-center gap-2">
+                {{-- Chế độ thực thi ẩn toàn bộ leftNAV/topNAV để tối đa không gian nhập liệu ->
+                     không còn cách nào quay lại trang Phòng Sản Xuất. Nút này thay thế, và khi
+                     biết được phòng của công đoạn đang ghi chép (backRoomId) thì đưa thẳng
+                     người dùng về đúng vị trí phòng đó (không phải màn hình chọn công đoạn trống). --}}
+                @if (!empty($isExecutionMode) && empty($isIssuanceView))
+                    <a class="btn btn-sm btn-outline-secondary" id="v2-btn-back-production"
+                        href="{{ route('pages.ebmr.production') }}{{ !empty($backRoomId) ? '?room=' . $backRoomId : '' }}"
+                        title="Quay lại Phòng Sản Xuất">
+                        <i class="fas fa-arrow-left"></i>
+                    </a>
+                    <div class="vr mx-1"></div>
+                @endif
+
                 {{-- Bình luận đứng cạnh nhóm hành động bên phải. Nút THÊM bình luận nằm ở menu
                      chuột phải (xem section 5c trong main.js), đây chỉ là ẩn/hiện và điều hướng.
-                     Mở từ tab "Nhận Ban Hành" (isIssuanceView): ẩn toàn bộ nút bình luận. --}}
-                @if (empty($isIssuanceView))
+                     Mở từ tab "Nhận Ban Hành" (isIssuanceView): ẩn toàn bộ nút bình luận.
+                     Chế độ thực thi lô (isExecutionMode): người ghi chép không dùng bình luận
+                     thiết kế -> ẩn luôn nhóm nút bình luận. --}}
+                @if (empty($isIssuanceView) && empty($isExecutionMode))
                     <button class="btn btn-sm btn-light" id="v2-btn-comments" title="Ẩn/hiện toàn bộ bình luận">
                         <i class="fas fa-comment-dots"></i>
                     </button>
@@ -295,14 +310,25 @@
 
                 @if (!empty($record))
                     {{-- ===== Trang THỰC THI LÔ: chỉ có các nút lưu hồ sơ, KHÔNG có toggle Thiết kế ===== --}}
-                    {{-- Số lô: đỏ, to, rõ ràng để người ghi chép không nhầm lô --}}
-                    <span class="badge bg-danger text-white me-1 px-3 py-2" title="Số lô đang thực thi"
-                        style="font-size: 1.1rem; letter-spacing: 1.5px; font-weight: 700;">
-                        <i class="fas fa-barcode me-1"></i>{{ $record->batch_number ?? '' }}
-                    </span>
+                    {{-- Số lô: đỏ, to, rõ ràng để người ghi chép không nhầm lô. Bấm vào mở modal
+                         xem toàn bộ thông tin của lô (xem #v2BatchInfoModal bên dưới). --}}
+                    <button type="button" class="btn btn-sm btn-outline-danger fw-bold px-2 me-1" title="Xem thông tin lô"
+                        data-bs-toggle="modal" data-toggle="modal" data-bs-target="#v2BatchInfoModal" data-target="#v2BatchInfoModal">
+                        <i class="fas fa-info-circle me-1"></i>{{ $record->batch_number ?? '' }}
+                    </button>
+
+                    {{-- Toggle: đang ở 1 công đoạn cụ thể (có thể đang ghi chép được) -> nút đưa
+                         sang xem toàn bộ hồ sơ (luôn chỉ-đọc, xem computeIsReadOnly()), đồng thời
+                         nhúng sẵn section/dist hiện tại vào link để nút Quay lại ghi chép biết
+                         đường về đúng công đoạn. Ngược lại, đang xem toàn bộ mà có "đường về"
+                         (returnSectionId/returnDistId) -> đổi thành nút quay lại ghi chép. --}}
                     @if ($activeSectionId ?? false)
-                        <a class="btn btn-sm btn-outline-info" href="{{ route('pages.ebmr.execute', $record->id) }}">
+                        <a class="btn btn-sm btn-outline-info" href="{{ route('pages.ebmr.execute', $record->id) }}?returnSection={{ $activeSectionId }}&returnDist={{ request('dist') }}">
                             <i class="fas fa-eye me-1"></i> Xem tất cả công đoạn
+                        </a>
+                    @elseif (!empty($returnSectionId) && !empty($returnDistId))
+                        <a class="btn btn-sm btn-outline-success" href="{{ route('pages.ebmr.execute', $record->id) }}?section={{ $returnSectionId }}&dist={{ $returnDistId }}">
+                            <i class="fas fa-pen me-1"></i> Quay lại ghi chép
                         </a>
                     @endif
                     @if ($isReadOnly)
@@ -313,13 +339,40 @@
                         @elseif ($record->status === 'reviewed')
                             <span class="badge bg-success p-2"><i class="fas fa-check me-1"></i> Hồ sơ đã được duyệt</span>
                         @endif
-                    @else
-                        <button id="v2-btn-record-draft" class="btn btn-sm btn-outline-secondary px-2">
-                            <i class="fas fa-save me-1"></i> Lưu bản nháp
+                    @endif
+
+                    {{-- Tài liệu PDF đính kèm theo phân đoạn — mở modal liệt kê/tải lên tài liệu
+                         cho từng phân đoạn (dropdown chọn phân đoạn trong modal; badge = TỔNG số
+                         tài liệu cả hồ sơ, xem attachments.js). Chỉ ở chế độ thực thi lô. --}}
+                    @if (!empty($isExecutionMode) && empty($isIssuanceView))
+                        <button type="button" class="btn btn-sm btn-outline-info position-relative" id="v2-btn-attachments"
+                            title="Tài liệu đính kèm theo phân đoạn">
+                            <i class="fas fa-paperclip me-1"></i> Tài liệu
+                            <span class="badge rounded-pill bg-danger" id="v2-attach-total-badge"
+                                style="display:none; position:absolute; top:-7px; right:-7px; font-size:0.62rem;">0</span>
                         </button>
-                        <button id="v2-btn-record-complete" class="btn btn-sm btn-success text-white px-2">
-                            <i class="fas fa-check-circle me-1"></i> Hoàn Thành Nhập Liệu
-                        </button>
+                    @endif
+
+                    {{-- Nhiệt độ/Độ ẩm/Chênh áp phòng — giá trị cập nhật liên tục (poll qua BMS
+                         giả lập, xem env-monitor.js) để người ghi chép theo dõi trong quá trình
+                         sản xuất. Bấm vào từng nút để xem biểu đồ + toàn bộ lần đọc đã ghi nhận
+                         từ lúc Bắt đầu sản xuất (ebmr_records_bms, ProductionEnvironmentController).
+                         Đặt cuối cùng bên phải thanh công cụ. Chỉ hiện khi đang ở đúng 1 phòng/phiên
+                         sản xuất cụ thể (?dist=). --}}
+                    @if (!empty($backRoomId) && request()->query('dist'))
+                        <div class="vr mx-1"></div>
+                        <div class="btn-group btn-group-sm" id="v2-env-monitor-group"
+                            data-room-id="{{ $backRoomId }}" data-dist-id="{{ request()->query('dist') }}">
+                            <button type="button" class="btn btn-outline-danger" id="v2-env-btn-temperature" data-metric="temperature" title="Xem lịch sử Nhiệt độ">
+                                <i class="fas fa-thermometer-half me-1"></i><span class="v2-env-value">--</span>°C
+                            </button>
+                            <button type="button" class="btn btn-outline-info" id="v2-env-btn-humidity" data-metric="humidity" title="Xem lịch sử Độ ẩm">
+                                <i class="fas fa-tint me-1"></i><span class="v2-env-value">--</span>%
+                            </button>
+                            <button type="button" class="btn btn-outline-success" id="v2-env-btn-pressure" data-metric="pressure" title="Xem lịch sử Chênh áp">
+                                <i class="fas fa-wind me-1"></i><span class="v2-env-value">--</span>Pa
+                            </button>
+                        </div>
                     @endif
                 @else
                     <button id="v2-btn-toggle-mode" class="btn btn-sm btn-primary text-white px-2 ml-2"
@@ -459,6 +512,156 @@
                         data-dismiss="modal">Hủy</button>
                     <button type="button" class="btn btn-danger btn-sm px-4 fw-bold" id="v2-wc-generate">Chèn Bảng &amp;
                         Biểu Đồ</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (!empty($record))
+        {{-- ===== Modal: Thông tin lô — bấm vào nút số lô trên toolbar để mở. Dữ liệu tĩnh
+             (không đổi trong phiên ghi chép) nên render sẵn từ server, không cần gọi AJAX.
+             Phòng/công đoạn/nhân sự/thời gian lấy từ $backDist (ebmr_record_distributions
+             của đúng phòng/công đoạn đang mở qua ?dist=, xem EbmrExecutionController::execute). ===== --}}
+        @php
+            $isFinishedProduct = ($template->type ?? null) === 'BPR';
+        @endphp
+        <div class="modal fade" id="v2BatchInfoModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content shadow-lg border-0" style="border-radius: 12px;">
+                    <div class="modal-header bg-danger text-white border-0 py-2 px-3">
+                        <h5 class="modal-title fw-bold small"><i class="fas fa-info-circle me-2"></i>Thông Tin Lô {{ $record->batch_number ?? '' }}</h5>
+                        <button type="button" class="close text-white" data-bs-dismiss="modal" data-dismiss="modal"
+                            aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                    </div>
+                    <div class="modal-body">
+                        <table class="table table-sm table-borderless mb-0">
+                            <tbody>
+                                <tr>
+                                    <td class="text-muted" style="width: 45%;">Mã BTP</td>
+                                    <td class="fw-bold">{{ !$isFinishedProduct ? ($template->category_code ?? '-') : '-' }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-muted">Mã TP</td>
+                                    <td class="fw-bold">{{ $isFinishedProduct ? ($template->category_code ?? '-') : '-' }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-muted">Tên sản phẩm</td>
+                                    <td class="fw-bold">{{ $template->name ?? '-' }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-muted">Số lô</td>
+                                    <td class="fw-bold">{{ $record->batch_number ?? '-' }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-muted">Phòng sản xuất</td>
+                                    <td class="fw-bold">{{ $backDist?->room_name ?? $backDist?->room_code ?? '-' }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-muted">Công đoạn</td>
+                                    <td class="fw-bold">{{ $backDist?->section_label ?? '-' }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-muted">Nhân sự sản xuất</td>
+                                    <td class="fw-bold">{{ $backDistExecutorName ?? '-' }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-muted">Thời gian bắt đầu</td>
+                                    <td class="fw-bold">{{ !empty($backDist?->started_at) ? \Carbon\Carbon::parse($backDist->started_at)->format('d/m/Y H:i') : '-' }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-muted">Thời gian kết thúc</td>
+                                    <td class="fw-bold">
+                                        @if (!empty($backDist?->production_ended_at))
+                                            {{ \Carbon\Carbon::parse($backDist->production_ended_at)->format('d/m/Y H:i') }}
+                                        @elseif (!empty($backDist?->started_at))
+                                            Đang sản xuất
+                                        @else
+                                            -
+                                        @endif
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    {{-- ===== Modal: Lịch sử Nhiệt độ/Độ ẩm/Chênh áp phòng — biểu đồ + toàn bộ lần đọc
+         từ lúc Bắt đầu sản xuất (xem resources/js/designer-v2/env-monitor.js) ===== --}}
+    <div class="modal fade" id="v2EnvHistoryModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content shadow-lg border-0" style="border-radius: 12px;">
+                <div class="modal-header bg-dark text-white border-0 py-2 px-3">
+                    <h5 class="modal-title fw-bold small" id="v2-env-history-title"><i class="fas fa-chart-line me-2"></i>Lịch Sử</h5>
+                    <button type="button" class="close text-white" data-bs-dismiss="modal" data-dismiss="modal"
+                        aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <canvas id="v2-env-history-chart" height="90"></canvas>
+                    <div class="table-responsive mt-3" style="max-height: 300px; overflow-y: auto;">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="bg-light" style="position: sticky; top: 0;">
+                                <tr>
+                                    <th>Thời điểm</th>
+                                    <th class="text-center">Giá trị</th>
+                                    <th class="text-center">Trạng thái</th>
+                                </tr>
+                            </thead>
+                            <tbody id="v2-env-history-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- ===== Modal: Tài liệu đính kèm của 1 phân đoạn (chế độ thực thi) — bấm nút kẹp giấy
+         trên từng phân đoạn để mở, xem attachments.js. Form tải lên bị ẩn khi isReadOnly. ===== --}}
+    <div class="modal fade" id="v2AttachmentsModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content shadow-lg border-0" style="border-radius: 12px;">
+                <div class="modal-header bg-info text-white border-0 py-2 px-3">
+                    <h5 class="modal-title fw-bold small" id="v2-attach-title"><i class="fas fa-paperclip me-2"></i>Tài Liệu Đính Kèm</h5>
+                    <button type="button" class="close text-white" data-bs-dismiss="modal" data-dismiss="modal"
+                        aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex align-items-center gap-2 mb-3">
+                        <label class="small fw-bold mb-0 text-nowrap" for="v2-attach-section-select">
+                            <i class="fas fa-layer-group me-1 text-info"></i>Phân đoạn
+                        </label>
+                        <select id="v2-attach-section-select" class="form-control form-control-sm"></select>
+                    </div>
+                    <div class="table-responsive" style="max-height: 320px; overflow-y: auto;">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="bg-light" style="position: sticky; top: 0;">
+                                <tr>
+                                    <th>Tên tài liệu</th>
+                                    <th>Người tải lên</th>
+                                    <th class="text-center">Kích thước</th>
+                                    <th class="text-center" style="width: 90px;">Thao tác</th>
+                                </tr>
+                            </thead>
+                            <tbody id="v2-attach-tbody"></tbody>
+                        </table>
+                    </div>
+                    <form id="v2-attach-upload-form" class="border-top pt-3 mt-3" enctype="multipart/form-data">
+                        <div class="mb-2">
+                            <label class="small fw-bold mb-1">Tên tài liệu</label>
+                            <input type="text" id="v2-attach-title-input" class="form-control form-control-sm"
+                                placeholder="VD: Phiếu kết quả kiểm nghiệm nguyên liệu X" required maxlength="255">
+                        </div>
+                        <div class="mb-2">
+                            <label class="small fw-bold mb-1">Tệp PDF</label>
+                            <input type="file" id="v2-attach-file-input" class="form-control form-control-sm"
+                                accept="application/pdf,.pdf" required>
+                        </div>
+                        <button type="submit" class="btn btn-info btn-sm text-white px-3" id="v2-attach-submit-btn">
+                            <i class="fas fa-upload me-1"></i> Tải lên
+                        </button>
+                    </form>
                 </div>
             </div>
         </div>
@@ -2482,6 +2685,7 @@
         /* Khung ngoài của mỗi biến số khi Chạy thử: chỉ làm container xếp dọc
                                            (control + dòng meta người/giờ bên dưới) — style thật nằm ở control con. */
         .v2-field-badge.v2-field-exec {
+            position: relative;
             display: inline-flex;
             flex-direction: column;
             align-items: center;
@@ -2497,8 +2701,35 @@
             outline-offset: 2px;
         }
 
+        /* Chỉ-đọc (readonly-active — vd. đang "Xem tất cả công đoạn" hoặc hồ sơ đã khoá):
+           làm mờ viền cam mời-click + tắt hiệu ứng hover, để người dùng biết ngay biến số
+           này không ghi được thay vì bấm thử rồi tưởng nhầm là lỗi không phản hồi. */
+        .readonly-active .v2-field-badge.v2-field-exec {
+            outline-color: #cbd5e1;
+            opacity: 0.75;
+        }
+
+        .readonly-active .v2-exec-input,
+        .readonly-active .v2-exec-checkbox,
+        .readonly-active .v2-exec-select {
+            cursor: default !important;
+        }
+
+        .readonly-active .v2-exec-input:hover {
+            background-color: transparent;
+            border-bottom-color: #94a3b8;
+        }
+
+        .readonly-active .v2-exec-checkbox:hover .v2-exec-checkbox-box {
+            border-color: #94a3b8;
+        }
+
+        .readonly-active .v2-exec-select:hover {
+            border-bottom-color: #94a3b8;
+        }
+
         /* ===== Gạch chéo "KHÔNG SỬ DỤNG" (N/A) — xem na-marks.js ===== */
-        /* Lớp phủ 2 đường chéo đỏ (SVG để in ấn được) + chip lý do */
+        /* Lớp phủ 1 đường chéo mảnh màu xanh dương (SVG để in ấn được) + chip lý do/người/giờ */
         td.v2-na-cell { position: relative; }
         .v2-na-block { position: relative; }
 
@@ -2506,11 +2737,25 @@
             position: absolute;
             inset: 0;
             z-index: 40;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            --na-angle: -45deg;
             cursor: pointer;
-            background: rgba(220, 53, 69, 0.04);
+            background: rgba(13, 110, 253, 0.04);
+        }
+
+        /* Lớp đường-chéo cấp VÙNG (nhiều ô, 1 lần gạch): nằm trên .v2-table-wrap, phủ khung bao.
+           Cho chạm XUYÊN QUA để không khóa nhầm ô kế bên; chỉ chip lý do bắt chạm. */
+        .v2-na-x-group {
+            position: absolute;
+            inset: auto;
+            z-index: 41;
+        }
+
+        .v2-na-x-passive {
+            pointer-events: none;
+        }
+
+        .v2-na-x-passive .v2-na-reason {
+            pointer-events: auto;
         }
 
         .v2-na-x svg {
@@ -2522,46 +2767,45 @@
         }
 
         .v2-na-x svg line {
-            stroke: #dc3545;
-            stroke-width: 1.6;
+            stroke: #0d6efd;
+            stroke-width: 1;
         }
 
+        /* Chữ chú thích viết SONG SONG với đường gạch (kiểu hồ sơ giấy):
+           .--main (lý do) nằm 1 bên đường, .--meta (người — giờ) nằm bên kia.
+           Xoay theo --na-angle (na-marks.js tính theo tỉ lệ khung); viền chữ trắng để đọc rõ. */
         .v2-na-reason {
-            position: relative;
+            position: absolute;
+            left: 50%;
+            top: 50%;
             z-index: 1;
-            max-width: 94%;
-            background: #fff;
-            border: 1px solid #f1aeb5;
-            color: #b02a37;
-            border-radius: 4px;
-            padding: 1px 6px;
-            font-size: 0.68rem;
-            font-weight: 600;
-            line-height: 1.3;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            max-width: 150%;
             white-space: nowrap;
-            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+            font-weight: 600;
+            font-size: 0.64rem;
+            line-height: 1.1;
+            color: #084298;
+            cursor: pointer;
+            pointer-events: auto;
+            text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff, 0 0 4px #fff;
         }
 
-        .v2-na-x-block .v2-na-reason {
-            font-size: 0.82rem;
-            padding: 4px 12px;
-            white-space: normal;
-            text-align: center;
+        /* translateY (trong hệ đã xoay) đẩy chữ vuông góc sang 2 phía của đường gạch */
+        .v2-na-reason--main {
+            transform: translate(-50%, -50%) rotate(var(--na-angle)) translateY(-0.8em);
         }
 
-        .v2-na-x-block .v2-na-reason small {
-            display: block;
+        .v2-na-reason--meta {
+            transform: translate(-50%, -50%) rotate(var(--na-angle)) translateY(0.8em);
             font-weight: 400;
-            color: #6c757d;
-            font-size: 0.7rem;
+            font-size: 0.58rem;
+            color: #5a6b7b;
         }
 
-        /* Nội dung dưới lớp gạch chéo mờ đi — thấy được nhưng rõ là không còn hiệu lực */
+        /* Nội dung dưới lớp gạch chéo mờ nhẹ — vẫn ĐỌC ĐƯỢC rõ, chỉ báo là không còn hiệu lực */
         td.v2-na-cell > .v2-cell,
         .v2-na-block > :not(.v2-na-x) {
-            opacity: 0.55;
+            opacity: 0.72;
         }
 
         /* — Chế độ gạch chéo (chọn bằng chạm, tối ưu máy tính bảng) — */
@@ -2711,15 +2955,31 @@
             white-space: normal;
         }
 
-        .v2-exec-history-pill {
-            display: inline-block;
-            margin-left: 4px;
-            padding: 0 6px;
-            border-radius: 8px;
-            background: #fef3c7;
-            color: #92400e;
-            font-weight: 700;
+        /* Biểu tượng "Lịch sử thay đổi" — 1 icon nhỏ ở góc trên bên phải của biến */
+        .v2-exec-history-icon {
+            position: absolute;
+            top: -9px;
+            right: -9px;
+            z-index: 20;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 17px;
+            height: 17px;
+            border-radius: 50%;
+            background: #f59e0b;
+            color: #fff;
+            font-size: 8.5px;
+            line-height: 1;
             cursor: pointer;
+            border: 1.5px solid #fff;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.3);
+            transition: transform 0.12s ease, background-color 0.12s ease;
+        }
+
+        .v2-exec-history-icon:hover {
+            background: #d97706;
+            transform: scale(1.18);
         }
 
         /* Ô tick biến số kiểu Checkbox trong Chế độ Chạy thử */
@@ -3585,8 +3845,17 @@
             batchNumber: @json($record->batch_number ?? null),
             // Các con dấu chọn lúc ban hành — đóng cạnh nhau lên góc trên bên phải mỗi phân đoạn
             recordSeals: @json($recordSeals ?? []),
+            // Phòng/phiên sản xuất đang thực thi — dùng bởi env-monitor.js để poll BMS +
+            // tải lịch sử Nhiệt độ/Độ ẩm/Chênh áp (null nếu không có ?dist= trong URL).
+            envRoomId: @json($backRoomId ?? null),
+            envDistId: @json(request()->query('dist')),
             executionValues: @json($executionValues ?? (object) []),
             recordStructures: @json($recordStructures ?? (object) []),
+            // Tài liệu PDF đã đính kèm cho từng phân đoạn (section_id -> mảng), xem attachments.js.
+            // activeSectionId: phân đoạn đang ghi chép (?section=, có thể là "id1,id2" khi nối
+            // trang) — modal Tài liệu mặc định chọn sẵn phân đoạn này.
+            sectionAttachments: @json($sectionAttachments ?? (object) []),
+            activeSectionId: @json($activeSectionId ?? null),
             pageOrientation: @json($template->schema->pageOrientation ?? 'portrait'),
             docProperties: @json(json_decode($template->doc_properties ?? '{}') ?: (object) []),
             saveUrl: "{{ route('pages.ebmr.storeTemplate') }}",
@@ -3616,6 +3885,10 @@
                 runDataHistoryBase: "{{ url('/ebmr/run-data-history') }}", // + /{record}/{blockUuid}/{cellId}
                 recordsIndex: "{{ route('pages.ebmr.indexRecords') }}",
                 versionDiff: "{{ route('pages.ebmr.getVersionDiff', ['id' => $template->id]) }}",
+                productionBmsData: "{{ route('pages.ebmr.productionBmsData') }}",
+                environmentReadingsBase: "{{ url('/ebmr/production/environment-readings') }}", // + /{distributionId}
+                uploadSectionAttachment: "{{ route('pages.ebmr.uploadSectionAttachment') }}",
+                deleteSectionAttachmentBase: "{{ url('/ebmr/records/attachments') }}", // + /{id}
             },
         };
         // Danh sách thiết bị cân từ DB — dùng bởi scale-reader.js (window.SCALE_DEVICES)

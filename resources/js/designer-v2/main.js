@@ -25,6 +25,8 @@ import { createSelectionController } from './selection';
 import { initScaleReaderV2 } from './scale-reader';
 import { initMmsBarcodeV2 } from './mms-barcode';
 import { createNaMarksV2 } from './na-marks';
+import { createEnvMonitorV2 } from './env-monitor';
+import { createAttachmentsV2 } from './attachments';
 import { MathEquation, V2Image, V2InlineImage, DocPropField, paintEquationBadge, paintDocPropBadge, refreshAllDocPropBadges } from './media-nodes';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
@@ -206,6 +208,9 @@ const naMarks = createNaMarksV2({
     renderDocument: () => renderDocument(),
     unmountEditor: () => unmountEditor(),
 });
+
+// Tài liệu PDF đính kèm theo phân đoạn lúc Chạy thử/Thực thi — xem attachments.js
+const sectionAttachments = createAttachmentsV2({ BOOT });
 
 /* =========================================================
  * 0. UNDO/REDO CẤP TÀI LIỆU (thao tác block: thêm/dán/resize...)
@@ -6811,6 +6816,12 @@ window.__V2__.repaintAllFields = function () {
 initScaleReaderV2(BOOT);
 initMmsBarcodeV2(BOOT);
 
+// Nhiệt độ/Độ ẩm/Chênh áp phòng — giá trị live + lịch sử trên toolbar (xem env-monitor.js)
+createEnvMonitorV2(BOOT).init();
+
+// Tài liệu PDF đính kèm theo phân đoạn — nút kẹp giấy trên mỗi section (xem attachments.js)
+sectionAttachments.init();
+
 // Ghi giá trị + đóng dấu người/giờ. Nếu GHI ĐÈ 1 giá trị đã có (khác giá trị cũ),
 // bắt buộc nhập "Lý do thay đổi" trước khi áp dụng + lưu vào lịch sử (giống V1).
 window.__V2__.applyExecutionValue = function (fieldId, finalValue, onDone) {
@@ -6838,6 +6849,8 @@ window.__V2__.applyExecutionValue = function (fieldId, finalValue, onDone) {
             rec._meta.default.history_list.push({ val: finalValue, old_val: oldVal, reason, by: rec._meta.default.by, at: rec._meta.default.at });
         }
         window.__V2__.repaintAllFields();
+        // Lưu ngay sau mỗi thao tác nhập liệu (không còn nút Lưu bản nháp)
+        window.__V2__.autoSaveRecordData && window.__V2__.autoSaveRecordData();
         if (onDone) onDone(true);
     };
 
@@ -6924,6 +6937,121 @@ function saveRecordDataV2(status, opts) {
         .catch(() => window.Swal.fire('Lỗi mạng', 'Không thể kết nối đến máy chủ', 'error'));
 }
 
+/* ---------------------------------------------------------
+ * 6a3. LƯU TỰ ĐỘNG (trang Thực thi lô — bỏ nút "Lưu bản nháp")
+ *   Mỗi thao tác nhập liệu / gạch chéo N/A gọi hàm này để ghi NGAY vào hồ sơ.
+ *   Khác saveRecordDataV2: KHÔNG mở modal chặn, KHÔNG đổi trạng thái hồ sơ
+ *   (status rỗng -> server bỏ qua), chỉ hiện toast nhỏ khi lưu xong. Gửi kèm
+ *   reasons (lý do thay đổi giá trị + lý do gạch/hủy N/A) như saveRecordDataV2.
+ *   Ghi tuần tự (autoSaveInFlight) để 2 thao tác liên tiếp không đua nhau.
+ * --------------------------------------------------------- */
+let autoSaveInFlight = false;
+let autoSavePending = false;
+window.__V2__.autoSaveRecordData = function () {
+    if (!BOOT.recordId || BOOT.isReadOnly) return;
+    if (autoSaveInFlight) { autoSavePending = true; return; }
+    autoSaveInFlight = true;
+
+    const data = BOOT.executionValues || {};
+    const reasons = {};
+    Object.keys(data).forEach((fieldId) => {
+        const reason = data[fieldId] && data[fieldId]._meta && data[fieldId]._meta.default
+            && data[fieldId]._meta.default.reason;
+        if (reason) reasons[fieldId] = { default: reason };
+    });
+    const naReasons = naMarks.getPendingReasons();
+    if (Object.keys(naReasons).length) reasons['__na__'] = { ...naReasons };
+
+    fetch(BOOT.urls.updateRecordData, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        // status rỗng: chỉ lưu dữ liệu, không đụng trạng thái hồ sơ
+        body: JSON.stringify({ record_id: BOOT.recordId, data, reasons, status: '', _token: BOOT.csrf }),
+    })
+        .then((res) => res.json())
+        .then((res) => {
+            if (!res.success) { showToast('error', res.message || 'Lưu tự động thất bại'); return; }
+            if (res.updated_by) {
+                Object.keys(BOOT.executionValues || {}).forEach((fieldId) => {
+                    const rec = BOOT.executionValues[fieldId];
+                    if (!rec || typeof rec !== 'object') return;
+                    if (!rec._meta) rec._meta = {};
+                    if (!rec._meta.default) rec._meta.default = {};
+                    rec._meta.default.by = res.updated_by;
+                    rec._meta.default.at = res.updated_at;
+                });
+                window.__V2__.repaintAllFields();
+            }
+            showToast('success', 'Đã lưu');
+        })
+        .catch(() => showToast('error', 'Lỗi mạng khi lưu tự động'))
+        .finally(() => {
+            autoSaveInFlight = false;
+            if (autoSavePending) { autoSavePending = false; window.__V2__.autoSaveRecordData(); }
+        });
+};
+
+/* Style dùng riêng cho modal "Lịch sử thay đổi" — nhúng kèm HTML để hiển thị
+ * đẹp, chuyên nghiệp (dạng timeline) ở mọi trang có nạp bundle designer-v2. */
+const HIST_MODAL_STYLE = `
+<style>
+.v2-hist-popup { border-radius: 16px !important; }
+.v2-hist-popup .swal2-title { padding-top: 1.1em !important; }
+.v2-hist-popup .swal2-html-container { margin: 0.6em 0 0 !important; padding: 0 1.1em 0.3em !important; }
+.v2-hist-timeline { position: relative; text-align: left; max-height: 58vh; overflow-y: auto; padding: 4px 6px 4px 4px; }
+.v2-hist-item { position: relative; display: flex; gap: 12px; padding-bottom: 14px; }
+.v2-hist-item:last-child { padding-bottom: 2px; }
+.v2-hist-line { position: relative; flex: 0 0 14px; display: flex; justify-content: center; }
+.v2-hist-line::before { content: ''; position: absolute; top: 5px; bottom: -14px; width: 2px; background: #e2e8f0; }
+.v2-hist-item:last-child .v2-hist-line::before { display: none; }
+.v2-hist-dot { position: relative; z-index: 1; width: 12px; height: 12px; margin-top: 3px; border-radius: 50%; background: #f59e0b; box-shadow: 0 0 0 3px #fef3c7; }
+.v2-hist-card { flex: 1; min-width: 0; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 9px 12px; }
+.v2-hist-values { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 0.95rem; word-break: break-word; }
+.v2-hist-old { color: #94a3b8; text-decoration: line-through; }
+.v2-hist-arrow { color: #cbd5e1; font-size: 0.75rem; }
+.v2-hist-new { color: #0f172a; font-weight: 700; }
+.v2-hist-empty { color: #cbd5e1; font-weight: 400; font-style: italic; }
+.v2-hist-reason { display: flex; gap: 6px; margin-top: 7px; font-size: 0.8rem; color: #64748b; line-height: 1.4; }
+.v2-hist-reason i { color: #f59e0b; margin-top: 2px; flex-shrink: 0; }
+.v2-hist-foot { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 9px; padding-top: 8px; border-top: 1px dashed #e2e8f0; font-size: 0.72rem; color: #64748b; }
+.v2-hist-foot i { margin-right: 4px; color: #94a3b8; }
+.v2-hist-by { font-weight: 600; color: #475569; }
+</style>`;
+
+// entries: [{ oldVal, newVal, reason, by, at }] — mới nhất tuỳ nguồn dữ liệu
+function renderFieldHistoryModal(entries) {
+    if (!entries || !entries.length) return;
+    const items = entries.map((e) => {
+        const oldV = escapeHtmlV2(String(e.oldVal ?? ''));
+        const newV = escapeHtmlV2(String(e.newVal ?? ''));
+        const reason = e.reason
+            ? `<div class="v2-hist-reason"><i class="fas fa-comment-dots"></i><span>${escapeHtmlV2(e.reason)}</span></div>`
+            : '';
+        return `
+            <div class="v2-hist-item">
+                <div class="v2-hist-line"><span class="v2-hist-dot"></span></div>
+                <div class="v2-hist-card">
+                    <div class="v2-hist-values">
+                        ${oldV ? `<span class="v2-hist-old">${oldV}</span><i class="fas fa-arrow-right v2-hist-arrow"></i>` : ''}
+                        <span class="v2-hist-new">${newV || '<span class="v2-hist-empty">(trống)</span>'}</span>
+                    </div>
+                    ${reason}
+                    <div class="v2-hist-foot">
+                        <span class="v2-hist-by"><i class="fas fa-user-edit"></i>${escapeHtmlV2(e.by || '—')}</span>
+                        <span class="v2-hist-at"><i class="fas fa-clock"></i>${escapeHtmlV2(e.at || '')}</span>
+                    </div>
+                </div>
+            </div>`;
+    }).join('');
+    window.Swal.fire({
+        title: '<i class="fas fa-history" style="color:#f59e0b; margin-right:8px;"></i>Lịch sử thay đổi',
+        html: `${HIST_MODAL_STYLE}<div class="v2-hist-timeline">${items}</div>`,
+        confirmButtonText: 'Đóng',
+        width: 540,
+        customClass: { popup: 'v2-hist-popup' },
+    });
+}
+
 window.__V2__.showFieldHistory = function (fieldId) {
     // Trang thực thi lô: lịch sử nằm ở server (ebmr_run_data_history), _meta chỉ có history_count
     if (BOOT.recordId) {
@@ -6933,42 +7061,18 @@ window.__V2__.showFieldHistory = function (fieldId) {
             .then((r) => r.json())
             .then((res) => {
                 const list = (res && res.data) || [];
-                if (!list.length) return;
-                const rows = list.map((h) => `
-                    <tr>
-                        <td style="text-align:left; padding:4px 8px; border-bottom:1px solid #e2e8f0;">
-                            <div><s style="color:#94a3b8;">${escapeHtmlV2(String(h.old_value ?? ''))}</s> &rarr; <b>${escapeHtmlV2(String(h.new_value ?? ''))}</b></div>
-                            <div class="small text-muted">${escapeHtmlV2(h.reason || '')}</div>
-                        </td>
-                        <td style="text-align:right; padding:4px 8px; border-bottom:1px solid #e2e8f0; white-space:nowrap; font-size:0.75rem; color:#64748b;">${escapeHtmlV2(h.changed_by || '')}<br>${escapeHtmlV2(h.changed_at || '')}</td>
-                    </tr>`).join('');
-                window.Swal.fire({
-                    title: 'Lịch sử thay đổi',
-                    html: `<table style="width:100%; border-collapse:collapse; font-size:0.85rem;">${rows}</table>`,
-                    confirmButtonText: 'Đóng',
-                    width: 480,
-                });
+                renderFieldHistoryModal(list.map((h) => ({
+                    oldVal: h.old_value, newVal: h.new_value, reason: h.reason, by: h.changed_by, at: h.changed_at,
+                })));
             })
             .catch(() => showToast('error', 'Không tải được lịch sử thay đổi'));
         return;
     }
     const rec = BOOT.executionValues[fieldId];
     const list = (rec && rec._meta && rec._meta.default && rec._meta.default.history_list) || [];
-    if (!list.length) return;
-    const rows = list.map((h) => `
-        <tr>
-            <td style="text-align:left; padding:4px 8px; border-bottom:1px solid #e2e8f0;">
-                <div><s style="color:#94a3b8;">${escapeHtmlV2(String(h.old_val ?? ''))}</s> &rarr; <b>${escapeHtmlV2(String(h.val ?? ''))}</b></div>
-                <div class="small text-muted">${escapeHtmlV2(h.reason || '')}</div>
-            </td>
-            <td style="text-align:right; padding:4px 8px; border-bottom:1px solid #e2e8f0; white-space:nowrap; font-size:0.75rem; color:#64748b;">${escapeHtmlV2(h.by || '')}<br>${escapeHtmlV2(h.at || '')}</td>
-        </tr>`).join('');
-    window.Swal.fire({
-        title: 'Lịch sử thay đổi',
-        html: `<table style="width:100%; border-collapse:collapse; font-size:0.85rem;">${rows}</table>`,
-        confirmButtonText: 'Đóng',
-        width: 480,
-    });
+    renderFieldHistoryModal(list.map((h) => ({
+        oldVal: h.old_val, newVal: h.val, reason: h.reason, by: h.by, at: h.at,
+    })));
 };
 
 /* ---------------------------------------------------------
@@ -7332,6 +7436,7 @@ window.__V2__.openSignatureModal = function (fieldId) {
         BOOT.executionValues[fieldId].default = data.signature_image || data.fullName || 'Đã ký';
         BOOT.executionValues[fieldId]._meta = { default: { by: data.fullName || '', at: nowViV2() } };
         window.__V2__.repaintAllFields();
+        window.__V2__.autoSaveRecordData && window.__V2__.autoSaveRecordData();
         window.Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: `Đã xác nhận chữ ký: ${data.fullName || ''}`, showConfirmButton: false, timer: 2000 });
     });
 };
@@ -7370,6 +7475,7 @@ window.__V2__.openCheckerAuthModal = function (fieldId) {
         BOOT.executionValues[fieldId].default = data.signature_image || data.fullName;
         BOOT.executionValues[fieldId]._meta = { default: { by: data.fullName, at: nowViV2() } };
         window.__V2__.repaintAllFields();
+        window.__V2__.autoSaveRecordData && window.__V2__.autoSaveRecordData();
         window.Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: `Đã xác thực: ${data.fullName}`, showConfirmButton: false, timer: 2000 });
     });
 };
@@ -7776,9 +7882,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Gạch chéo "KHÔNG SỬ DỤNG" (N/A): gắn listener chọn-bằng-chạm + nút toolbar
     naMarks.init();
 
-    // Các nút lưu HỒ SƠ LÔ (chỉ tồn tại trên trang thực thi)
-    document.getElementById('v2-btn-record-draft')?.addEventListener('click', () => saveRecordDataV2('draft'));
-    document.getElementById('v2-btn-record-complete')?.addEventListener('click', () => saveRecordDataV2('completed'));
     document.getElementById('v2-btn-record-confirm-read')?.addEventListener('click', () => {
         window.Swal.fire({
             title: 'Xác nhận Đọc hồ sơ',

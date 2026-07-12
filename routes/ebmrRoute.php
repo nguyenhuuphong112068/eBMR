@@ -58,12 +58,15 @@ Route::group(['prefix' => 'ebmr', 'as' => 'pages.ebmr.'], function () {
     Route::get('/production', [EbmrExecutionController::class, 'productionIndex'])->name('production');
     Route::get('/dirty-equipments', [\App\Http\Controllers\Pages\ManuEnv\DirtyEquipmentController::class, 'index'])->name('dirty_equipments');
     Route::get('/production/bms-data', [EbmrExecutionController::class, 'getBmsData'])->name('productionBmsData');
+    Route::get('/production/environment-readings/{distribution_id}', [\App\Http\Controllers\Pages\Ebmr\Logbook\ProductionEnvironmentController::class, 'readingsJson'])->name('production.environmentReadings');
     Route::get('/production/logbook-label', [EbmrExecutionController::class, 'getLogbookLabel'])->name('getLogbookLabel');
     Route::post('/production/start', [EbmrExecutionController::class, 'startProduction'])->name('startProduction');
     Route::post('/production/end', [EbmrExecutionController::class, 'endProduction'])->name('endProduction');
     Route::get('/execute/{id}', [EbmrExecutionController::class, 'execute'])->name('execute');
     Route::post('/update-record-data', [EbmrExecutionController::class, 'updateRecordData'])->name('updateRecordData');
     Route::post('/record-structure', [EbmrExecutionController::class, 'saveRecordStructure'])->name('saveRecordStructure');
+    Route::post('/records/attachments', [EbmrExecutionController::class, 'uploadSectionAttachment'])->name('uploadSectionAttachment');
+    Route::delete('/records/attachments/{id}', [EbmrExecutionController::class, 'deleteSectionAttachment'])->name('deleteSectionAttachment');
     Route::get('/run-data-history/{record_id}/{block_uuid}/{cell_id}', [EbmrExecutionController::class, 'getRunDataHistory'])->name('getRunDataHistory');
     Route::post('/verify-password', [EbmrExecutionController::class, 'verifyPassword'])->name('verifyPassword');
     Route::post('/verify-checker', [EbmrExecutionController::class, 'verifyChecker'])->name('verifyChecker');

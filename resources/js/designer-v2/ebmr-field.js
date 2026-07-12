@@ -112,11 +112,17 @@ function buildMetaHtml(fieldId) {
     const rec = (window.__V2__?.executionValues || {})[fieldId];
     const meta = rec && rec._meta && rec._meta.default;
     if (!meta || (!meta.by && !meta.at)) return '';
-    let historyBadge = '';
-    if (meta.history_count > 0) {
-        historyBadge = `<span class="v2-exec-history-pill" onclick="event.stopPropagation(); window.__V2__.showFieldHistory('${fieldId}')">Lịch sử (${meta.history_count})</span>`;
-    }
-    return `<div class="v2-exec-meta">${escapeHtml(meta.at || '')} · ${escapeHtml(meta.by || '')} ${historyBadge}</div>`;
+    return `<div class="v2-exec-meta">${escapeHtml(meta.at || '')} · ${escapeHtml(meta.by || '')}</div>`;
+}
+
+/* Biểu tượng "Lịch sử thay đổi": gom nút "Lịch sử (x)" thành 1 icon nhỏ đặt ở
+ * góc trên bên phải của biến cho gọn. Số lần thay đổi hiển thị trong tooltip. */
+function buildHistoryIconHtml(fieldId) {
+    const rec = (window.__V2__?.executionValues || {})[fieldId];
+    const meta = rec && rec._meta && rec._meta.default;
+    if (!meta || !(meta.history_count > 0)) return '';
+    const n = meta.history_count;
+    return `<span class="v2-exec-history-icon" title="Lịch sử thay đổi (${n} lần)" onclick="event.stopPropagation(); window.__V2__.showFieldHistory('${fieldId}')"><i class="fas fa-history"></i></span>`;
 }
 
 export function paintFieldElement(dom, fieldId) {
@@ -221,9 +227,10 @@ export function paintFieldElement(dom, fieldId) {
             }
         }
 
-        dom.innerHTML = valueHtml + metaHtml;
+        dom.innerHTML = valueHtml + metaHtml + buildHistoryIconHtml(fieldId);
         if (isRO) {
-            dom.title = ''; // readonly: không mời gọi click nhập liệu
+            // readonly: không mời gọi click nhập liệu, nhưng vẫn báo rõ lý do thay vì im lặng
+            dom.title = cfg.type === 'formula' ? '' : 'Chỉ xem — không thể ghi chép (đang xem tất cả công đoạn hoặc hồ sơ đã khoá)';
         } else if (cfg.type !== 'signature' && cfg.type !== 'formula') {
             dom.title = cfg.type === 'checkbox' ? 'Click để tick (Chạy thử)' : 'Click để nhập liệu (Chạy thử)';
         } else if (cfg.type === 'signature') {

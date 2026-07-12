@@ -9,3 +9,4 @@ Route::post('/settings/general-policy', [SettingsController::class, 'update'])->
 
 Route::get('/ebmr/logbooks/production-environment', [ProductionEnvironmentController::class, 'index'])->name('pages.ebmr.logbooks.production_environment');
 Route::get('/ebmr/logbooks/production-environment/{distribution_id}', [ProductionEnvironmentController::class, 'show'])->name('pages.ebmr.logbooks.production_environment.show');
+Route::get('/ebmr/logbooks/production-environment/{distribution_id}/print', [ProductionEnvironmentController::class, 'printReport'])->name('pages.ebmr.logbooks.production_environment.print');

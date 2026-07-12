@@ -28,7 +28,7 @@
                             @foreach ($workshopsList as $ws)
                                 <button type="button"
                                     class="btn btn-outline-primary workshop-btn {{ $loop->first ? 'active' : '' }}"
-                                    onclick="selectWorkshop('{{ $ws }}', this)">
+                                    data-workshop="{{ $ws }}" onclick="selectWorkshop('{{ $ws }}', this)">
                                     <i class="fas fa-building me-1"></i> {{ $ws }}
                                 </button>
                             @endforeach
@@ -55,6 +55,7 @@
                                 @endphp
                                 <div class="col-12 col-md-6 col-lg-4">
                                     <div class="stage-card h-100 border-0 shadow-sm rounded-4 overflow-hidden position-relative"
+                                        data-workshop="{{ $workshop }}" data-stage-codes='{{ $codesJson }}'
                                         onclick='selectStage("{{ $stage->stage_name }}", {{ $codesJson }}, "{{ $stage->icon_class }}", "{{ $stage->gradient_class }}")'>
                                         <div class="card-bg {{ $stage->gradient_class }}"></div>
                                         <div
@@ -176,7 +177,8 @@
                                     $statusClass = 'status-ready'; // green
                                 }
                             @endphp
-                            <div class="col-12 col-md-6 col-lg-4 room-card-col" data-stage-code="{{ $room->stage_code }}"
+                            <div id="room-card-{{ $room->id }}" class="col-12 col-md-6 col-lg-4 room-card-col"
+                                data-room-id="{{ $room->id }}" data-stage-code="{{ $room->stage_code }}"
                                 data-workshop-code="{{ $room->deparment_code }}">
                                 <div
                                     class="card h-100 border-0 shadow-sm rounded-4 room-card transition-all position-relative">
@@ -372,7 +374,8 @@
                                                                 data-distribution-id="{{ $rec->distribution_id }}"
                                                                 data-batch="{{ $rec->batch_number }}"
                                                                 data-product="{{ $rec->product_name }}"
-                                                                data-section="{{ $rec->section_label ?: 'Công đoạn ' . $rec->section_id }}">
+                                                                data-section="{{ $rec->section_label ?: 'Công đoạn ' . $rec->section_id }}"
+                                                                data-clearance-missing="{{ json_encode($rec->clearance_process_missing ?? [], JSON_UNESCAPED_UNICODE) }}">
                                                                 <span class="start-btn-icon"><i class="fas fa-play"></i></span>
                                                                 <span>Bắt đầu sản xuất</span>
                                                             </button>
@@ -661,6 +664,27 @@
             transform: translateY(-5px);
             box-shadow: 0 8px 20px rgba(0, 58, 79, 0.1) !important;
             border-color: #003A4F !important;
+        }
+
+        /* Làm nổi bật thẻ phòng khi quay lại từ trang thực thi (?room=) để người dùng
+           thấy ngay mình vừa rời phòng nào, không phải dò lại giữa cả lưới phòng. */
+        .room-card-highlight {
+            animation: room-card-pulse 1.2s ease-out 2;
+            border-color: #003A4F !important;
+        }
+
+        @keyframes room-card-pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(0, 58, 79, 0.5);
+            }
+
+            70% {
+                box-shadow: 0 0 0 14px rgba(0, 58, 79, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(0, 58, 79, 0);
+            }
         }
 
         .border-dashed {
@@ -1034,6 +1058,12 @@
         const sparklineCharts = {};
         const animationFrames = {};
 
+        // Xưởng + mã công đoạn của từng phòng — dùng để đưa người dùng quay lại đúng vị trí
+        // phòng (nút "Quay lại" ở trang thực thi, xem navigateToRoom()).
+        const roomMetaMap = @json($rooms->mapWithKeys(function ($r) {
+            return [$r->id => ['workshop' => $r->deparment_code, 'stageCode' => (int) $r->stage_code]];
+        }));
+
         $(document).ready(function() {
             initSparklines();
 
@@ -1046,7 +1076,42 @@
                 confirmButtonColor: '#003A4F'
             });
             @endif
+
+            // Quay lại từ trang thực thi (?room=ID): tự chọn đúng xưởng + công đoạn rồi cuộn
+            // tới đúng thẻ phòng thay vì bỏ người dùng ở màn hình chọn công đoạn trống.
+            const targetRoomId = new URLSearchParams(window.location.search).get('room');
+            if (targetRoomId) navigateToRoom(targetRoomId);
         });
+
+        function navigateToRoom(roomId) {
+            const meta = roomMetaMap[roomId];
+            if (!meta) return;
+
+            const $wsBtn = $('.workshop-btn[data-workshop="' + meta.workshop + '"]');
+            if ($wsBtn.length) selectWorkshop(meta.workshop, $wsBtn.get(0));
+
+            const $stageCard = $('.stage-card').filter(function() {
+                const codes = $(this).data('stage-codes');
+                return $(this).data('workshop') === meta.workshop && Array.isArray(codes) &&
+                    codes.includes(meta.stageCode);
+            }).first();
+            if ($stageCard.length) $stageCard.trigger('click');
+
+            // selectStage() chuyển màn hình bằng fadeOut/fadeIn 200ms — đợi xong mới cuộn để
+            // scrollIntoView không bị tính sai vị trí lúc #rooms-view còn ẩn.
+            setTimeout(function() {
+                const $card = $('#room-card-' + roomId);
+                if (!$card.length) return;
+                $card.get(0).scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center'
+                });
+                $card.addClass('room-card-highlight');
+                setTimeout(function() {
+                    $card.removeClass('room-card-highlight');
+                }, 2500);
+            }, 500);
+        }
 
         function calculateMockValue(roomId, metric, timeSecs) {
             roomId = parseInt(roomId);
@@ -1728,6 +1793,15 @@
                 return;
             }
 
+            // Chặn NGAY nếu phòng/thiết bị chưa được thiết kế quy trình dọn quang — không mở
+            // dialog xác nhận "đủ điều kiện" xanh gây hiểu lầm. (Server vẫn kiểm tra lại lần nữa
+            // trong startProduction để phòng trường hợp dữ liệu đổi giữa lúc render và lúc bấm.)
+            const clearanceMissing = btn.data('clearance-missing');
+            if (Array.isArray(clearanceMissing) && clearanceMissing.length > 0) {
+                warnClearanceProcessMissing(clearanceMissing);
+                return;
+            }
+
             confirmStartProduction(
                 distributionId,
                 String(btn.data('batch') ?? ''),
@@ -1739,6 +1813,22 @@
         function escapeHtml(str) {
             return String(str).replace(/[&<>"']/g, function(c) {
                 return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+            });
+        }
+
+        function warnClearanceProcessMissing(reasons) {
+            const items = reasons.map(r => `<li>${escapeHtml(r)}</li>`).join('');
+            Swal.fire({
+                title: 'Chưa thể bắt đầu sản xuất',
+                html: `
+                    <div class="text-start" style="font-size: 0.9rem;">
+                        <p class="mb-2">Phòng hoặc thiết bị chưa được thiết kế <strong>quy trình dọn quang</strong>. Cần bổ sung trước khi bắt đầu sản xuất:</p>
+                        <ul class="mb-2 ps-3 text-danger">${items}</ul>
+                        <div class="small text-muted"><i class="fas fa-info-circle me-1"></i>Thiết kế tại <strong>Môi Trường &gt; Dọn Quang Phòng</strong> và <strong>Dọn Quang Thiết Bị</strong>.</div>
+                    </div>`,
+                icon: 'warning',
+                confirmButtonText: 'Đã hiểu',
+                confirmButtonColor: '#003A4F'
             });
         }
 
@@ -1764,7 +1854,8 @@
                 confirmButtonColor: '#15803d',
                 focusCancel: true
             }).then((result) => {
-                if (!result.isConfirmed) return;
+                // SweetAlert2 của layout là v9 — chưa có result.isConfirmed (v10+), phải dùng result.value
+                if (!result.value) return;
                 callStartProduction(distributionId, 'Đang khởi tạo phiên sản xuất...');
             });
         }
@@ -1779,12 +1870,19 @@
             $.ajax({
                 url: "{{ route('pages.ebmr.startProduction') }}",
                 method: 'POST',
+                dataType: 'json', // ép jQuery JSON.parse — tránh trường hợp Content-Type không phải
+                                  // application/json khiến res là chuỗi, res.success = undefined và
+                                  // rơi nhầm vào nhánh cảnh báo thay vì điều hướng sang trang dọn quang.
                 data: {
                     distribution_id: distributionId,
                     _token: "{{ csrf_token() }}"
                 },
                 success: function(res) {
-                    if (res.success && res.redirect_url) {
+                    // Phòng thủ thêm: nếu vì lý do nào đó res vẫn về dạng chuỗi thì tự parse.
+                    if (typeof res === 'string') {
+                        try { res = JSON.parse(res); } catch (e) { res = {}; }
+                    }
+                    if (res && res.success && res.redirect_url) {
                         window.location.href = res.redirect_url;
                     } else {
                         // Điều kiện đổi giữa chừng (vd nhãn vệ sinh vừa hết hạn) — tải
@@ -1792,12 +1890,22 @@
                         Swal.fire({
                             icon: 'warning',
                             title: 'Không thể tiếp tục',
-                            text: res.message || 'Có lỗi xảy ra',
+                            text: (res && res.message) || 'Có lỗi xảy ra',
                             confirmButtonColor: '#003A4F'
                         }).then(() => window.location.reload());
                     }
                 },
-                error: function() {
+                error: function(xhr) {
+                    // 419 = CSRF hết hạn (trang mở lâu). Tách riêng để người dùng biết cần tải lại.
+                    if (xhr && xhr.status === 419) {
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'Phiên làm việc đã hết hạn',
+                            text: 'Vui lòng tải lại trang rồi thử lại.',
+                            confirmButtonColor: '#003A4F'
+                        }).then(() => window.location.reload());
+                        return;
+                    }
                     Swal.fire('Lỗi', 'Không thể kết nối đến máy chủ', 'error');
                 }
             });
@@ -1828,7 +1936,8 @@
                 confirmButtonColor: '#dc3545',
                 focusCancel: true
             }).then((result) => {
-                if (!result.isConfirmed) return;
+                // SweetAlert2 của layout là v9 — chưa có result.isConfirmed (v10+), phải dùng result.value
+                if (!result.value) return;
 
                 Swal.fire({ title: 'Đang kết thúc sản xuất...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 

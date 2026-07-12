@@ -83,48 +83,137 @@ export function createNaMarksV2(ctx) {
         window.Swal?.fire({ toast: true, position: 'top-end', icon, title, showConfirmButton: false, timer: 2200 });
     }
 
-    /* ── Vẽ gạch chéo lên DOM (gọi sau MỖI renderDocument) ──── */
-    function buildOverlay(key, info, isBlock) {
+    /* ── Vẽ gạch chéo lên DOM (gọi sau MỖI renderDocument) ────
+     * opts:
+     *   isBlock     - mục cấp khối (bảng/khối văn bản)
+     *   isGroup     - lớp phủ cấp VÙNG (nhiều ô cùng 1 lần gạch) đặt trên .v2-table-wrap
+     *   showLine    - có vẽ đường chéo không (ô con của vùng thì KHÔNG, để chỉ 1 đường)
+     *   showReason  - có hiện chip lý do không
+     *   interactive - true: cả lớp phủ chặn nhập + chạm xem lý do (khóa ô đã gạch);
+     *                 false: lớp phủ để CHO XUYÊN QUA (không chặn ô kế bên), chỉ chip bắt chạm
+     */
+    function buildOverlay(keys, info, opts) {
+        opts = opts || {};
+        const { isBlock = false, isGroup = false, showLine = true, showReason = true, interactive = true } = opts;
+        const keyList = Array.isArray(keys) ? keys : [keys];
         const ov = document.createElement('div');
-        ov.className = 'v2-na-x' + (isBlock ? ' v2-na-x-block' : '');
-        ov.setAttribute('data-na-key', key);
+        ov.className = 'v2-na-x'
+            + (isBlock ? ' v2-na-x-block' : '')
+            + (isGroup ? ' v2-na-x-group' : '')
+            + (interactive ? '' : ' v2-na-x-passive');
+        ov.setAttribute('data-na-key', keyList[0] || '');
+        if (keyList.length > 1) ov.setAttribute('data-na-keys', keyList.join(','));
         const reason = info.reason || 'Không sử dụng';
         const meta = [info.by, info.at].filter(Boolean).join(' — ');
         ov.title = `Không sử dụng: ${reason}${meta ? `\n${meta}` : ''}`;
-        // SVG (không phải background CSS) để 2 đường chéo LUÔN in ra giấy
-        ov.innerHTML = `
-            <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-                <line x1="0" y1="100" x2="100" y2="0" vector-effect="non-scaling-stroke"></line>
-                <line x1="0" y1="0" x2="100" y2="100" vector-effect="non-scaling-stroke"></line>
-            </svg>
-            <span class="v2-na-reason">${escHtml(reason)}${isBlock && meta ? `<small>${escHtml(meta)}</small>` : ''}</span>`;
+        // SVG (không phải background CSS) để đường chéo LUÔN in ra giấy — 1 đường mảnh
+        // màu xanh dương từ góc TRÊN-PHẢI xuống góc DƯỚI-TRÁI.
+        let html = '';
+        if (showLine) {
+            html += `<svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                <line x1="100" y1="0" x2="0" y2="100" vector-effect="non-scaling-stroke"></line>
+            </svg>`;
+        }
+        // Chữ chú thích viết SONG SONG với đường gạch (như hồ sơ giấy): LÝ DO nằm 1 bên
+        // đường gạch, NGƯỜI + THỜI GIAN nằm bên kia. Góc xoay khớp đúng đường chéo được
+        // tính sau khi chèn (setLabelAngles) theo tỉ lệ thật của khung.
+        if (showReason) {
+            html += `<span class="v2-na-reason v2-na-reason--main">${escHtml(reason)}</span>`;
+            if (meta) html += `<span class="v2-na-reason v2-na-reason--meta">${escHtml(meta)}</span>`;
+        }
+        ov.innerHTML = html;
         // Ngoài chế độ gạch chéo: chạm để xem lý do / hủy gạch. Trong chế độ
         // gạch chéo, onClickCapture xử lý trước (capture) nên listener này không chạy.
-        ov.addEventListener('click', (e) => {
-            if (active) return;
-            e.stopPropagation();
-            showInfo(key);
-        });
+        const openInfo = (e) => { if (active) return; e.stopPropagation(); showInfo(keyList); };
+        if (interactive) {
+            ov.addEventListener('click', openInfo);
+        } else {
+            // Lớp đường-chéo cấp vùng KHÔNG chặn ô bên dưới; chỉ chữ chú thích bắt chạm
+            ov.querySelectorAll('.v2-na-reason').forEach((chip) => chip.addEventListener('click', openInfo));
+        }
         return ov;
+    }
+
+    /** Vẽ 1 đường chéo DUY NHẤT phủ khung bao của nhiều ô cùng 1 group (đặt trên .v2-table-wrap) */
+    function drawGroupOverlay(cluster) {
+        const wrap = cluster.wrap;
+        if (!wrap) return;
+        if (getComputedStyle(wrap).position === 'static') wrap.style.position = 'relative';
+        const wr = wrap.getBoundingClientRect();
+        let minL = Infinity, minT = Infinity, maxR = -Infinity, maxB = -Infinity;
+        cluster.pairs.forEach(({ el }) => {
+            const r = el.getBoundingClientRect();
+            if (r.width === 0 && r.height === 0) return;
+            minL = Math.min(minL, r.left); minT = Math.min(minT, r.top);
+            maxR = Math.max(maxR, r.right); maxB = Math.max(maxB, r.bottom);
+        });
+        if (!isFinite(minL)) return;
+        const keys = cluster.pairs.map((p) => p.key);
+        const ov = buildOverlay(keys, cluster.info, { isGroup: true, showLine: true, showReason: true, interactive: false });
+        ov.style.left = (minL - wr.left + wrap.scrollLeft) + 'px';
+        ov.style.top = (minT - wr.top + wrap.scrollTop) + 'px';
+        ov.style.width = (maxR - minL) + 'px';
+        ov.style.height = (maxB - minT) + 'px';
+        wrap.appendChild(ov);
     }
 
     function onAfterRender() {
         if (!BOOT.isExecutionMode) return; // Thiết kế: không vẽ gạch chéo (dữ liệu vẫn giữ trong bộ nhớ)
+        // Dọn lớp phủ vùng còn sót (renderDocument dựng lại DOM ô, nhưng lớp vùng bám .v2-table-wrap)
+        document.querySelectorAll('#v2-pages .v2-na-x-group').forEach((el) => el.remove());
         const na = BOOT.executionValues && BOOT.executionValues.__na__;
         if (na) {
+            // Gom các ô cùng group (và cùng 1 bảng) thành cụm để chỉ vẽ 1 đường chéo
+            const clusters = new Map(); // groupId::tableId -> { info, keys:Set, els:[], wrap }
             Object.keys(na).forEach((key) => {
                 if (key.startsWith('_')) return; // _meta do server/luồng lưu chèn vào
                 const info = markInfo(key);
                 if (!info) return;
                 const isBlock = parseKey(key).r === undefined;
-                // Không còn phần tử nào (VD: khác section đang xem) -> bỏ qua lượt vẽ này
-                findTargetEls(key).forEach((el) => {
-                    el.classList.add(isBlock ? 'v2-na-block' : 'v2-na-cell');
-                    el.appendChild(buildOverlay(key, info, isBlock));
-                });
+                const els = findTargetEls(key);
+                if (!els.length) return; // khác section đang xem -> bỏ qua
+                els.forEach((el) => el.classList.add(isBlock ? 'v2-na-block' : 'v2-na-cell'));
+
+                if (!isBlock && info.group) {
+                    // Ô bảng có group: gom theo (group, bảng) để quyết định vẽ 1 hay nhiều đường.
+                    els.forEach((el) => {
+                        const wrap = el.closest('.v2-table-wrap[data-id]');
+                        if (!wrap) { el.appendChild(buildOverlay(key, info, {})); return; }
+                        const ck = info.group + '::' + wrap.getAttribute('data-id');
+                        if (!clusters.has(ck)) clusters.set(ck, { info, pairs: [], wrap });
+                        clusters.get(ck).pairs.push({ el, key });
+                    });
+                } else {
+                    // Khối / ô lẻ: lớp phủ trọn gói (đường + chip) ngay trên phần tử
+                    els.forEach((el) => el.appendChild(buildOverlay(key, info, { isBlock })));
+                }
+            });
+            // Với mỗi cụm: 1 ô -> lớp trọn gói; nhiều ô -> mỗi ô 1 lớp KHÓA trong suốt
+            // (chặn nhập + chạm chọn/xem đúng ô đó) + CHỈ 1 đường chéo phủ khung bao cả vùng.
+            clusters.forEach((c) => {
+                if (c.pairs.length === 1) {
+                    c.pairs[0].el.appendChild(buildOverlay(c.pairs[0].key, c.info, {}));
+                } else {
+                    c.pairs.forEach((p) => p.el.appendChild(buildOverlay(p.key, c.info, { showLine: false, showReason: false })));
+                    drawGroupOverlay(c);
+                }
             });
         }
+        setLabelAngles();
         if (active) paintPicked();
+    }
+
+    /** Xoay chữ chú thích cho SONG SONG đúng với đường gạch (top-phải -> dưới-trái)
+     *  theo tỉ lệ THẬT của từng khung — khung rộng/thấp thì đường gạch thoải, chữ theo đó. */
+    function setLabelAngles() {
+        document.querySelectorAll('#v2-pages .v2-na-x').forEach((ov) => {
+            if (!ov.querySelector('.v2-na-reason')) return;
+            const w = ov.offsetWidth, h = ov.offsetHeight;
+            if (!w || !h) return;
+            // Đường từ (W,0) -> (0,H): vector hướng (W,-H) => góc âm (đi lên bên phải)
+            const deg = Math.atan2(-h, w) * 180 / Math.PI;
+            ov.style.setProperty('--na-angle', deg.toFixed(2) + 'deg');
+        });
     }
 
     /* ── Chọn mục (chế độ gạch chéo) ────────────────────────── */
@@ -201,8 +290,11 @@ export function createNaMarksV2(ctx) {
     function applyMark(keys, reason) {
         const by = BOOT.currentUserName || 'Người dùng';
         const at = nowVi();
+        // Cùng 1 lần gạch nhiều ô -> chung 1 "group" để vẽ CHỈ 1 đường chéo phủ cả vùng
+        // (thay vì mỗi ô 1 đường). group đi kèm dữ liệu nên tải lại vẫn gộp đúng.
+        const group = 'g' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
         keys.forEach((key) => {
-            naState()[key] = { reason, by, at };
+            naState()[key] = { reason, by, at, group };
             pendingReasons[key] = reason;
         });
     }
@@ -228,7 +320,9 @@ export function createNaMarksV2(ctx) {
             picked.clear();
             tapTrail.length = 0;
             ctx.renderDocument();
-            toast(`Đã gạch chéo ${keys.length} mục — nhớ bấm Lưu để ghi vào hồ sơ`);
+            // Lưu ngay sau khi gạch chéo (không còn nút Lưu bản nháp)
+            window.__V2__?.autoSaveRecordData?.();
+            toast(`Đã gạch chéo & lưu ${keys.length} mục`);
         });
     }
 
@@ -254,26 +348,31 @@ export function createNaMarksV2(ctx) {
             });
             keys.forEach((k) => picked.delete(k));
             ctx.renderDocument();
-            toast('Đã hủy gạch chéo — nhớ bấm Lưu để ghi vào hồ sơ', 'info');
+            // Lưu ngay sau khi hủy gạch chéo (không còn nút Lưu bản nháp)
+            window.__V2__?.autoSaveRecordData?.();
+            toast('Đã hủy gạch chéo & lưu', 'info');
         });
     }
 
-    function showInfo(key) {
-        const info = markInfo(key);
+    function showInfo(keyOrKeys) {
+        const keys = Array.isArray(keyOrKeys) ? keyOrKeys : [keyOrKeys];
+        const info = markInfo(keys[0]);
         if (!info) return;
         const canEdit = !BOOT.isReadOnly;
+        const multiNote = keys.length > 1 ? `<div class="small text-muted mt-1"><i class="fas fa-object-group me-1"></i>${keys.length} ô cùng 1 lần gạch</div>` : '';
         window.Swal.fire({
-            title: '<i class="fas fa-ban me-2 text-danger"></i>Không sử dụng',
+            title: '<i class="fas fa-ban me-2 text-primary"></i>Không sử dụng',
             html: `
                 <div class="text-start">
                     <div class="mb-1"><b>Lý do:</b> ${escHtml(info.reason || '')}</div>
                     <div class="small text-muted">${escHtml(info.by || '')}${info.at ? ' — ' + escHtml(info.at) : ''}</div>
+                    ${multiNote}
                 </div>`,
             showDenyButton: canEdit,
             denyButtonText: '<i class="fas fa-undo me-1"></i> Hủy gạch chéo…',
             confirmButtonText: 'Đóng',
         }).then((res) => {
-            if (res.isDenied) promptUnmark([key]);
+            if (res.isDenied) promptUnmark(keys);
         });
     }
 
@@ -342,7 +441,12 @@ export function createNaMarksV2(ctx) {
         e.stopPropagation();
 
         const ov = e.target.closest('.v2-na-x');
-        if (ov) { togglePick(ov.getAttribute('data-na-key')); return; }
+        if (ov) {
+            const multi = ov.getAttribute('data-na-keys');
+            if (multi) multi.split(',').forEach((k) => togglePick(k));
+            else togglePick(ov.getAttribute('data-na-key'));
+            return;
+        }
 
         const td = e.target.closest('td[data-row]');
         const wrap = td && td.closest('.v2-table-wrap[data-id]');

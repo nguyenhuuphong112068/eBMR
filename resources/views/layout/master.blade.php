@@ -843,9 +843,12 @@
         }
     </style>
 
-    @if (request()->query('embed'))
+    @if (request()->query('embed') || request()->is('ebmr/execute/*'))
         {{-- Chế độ nhúng (preview trong iframe): ẩn toàn bộ khung điều hướng, chỉ để lại nội dung
-             tài liệu để phục vụ xem trước phân đoạn khi Phân phối. --}}
+             tài liệu để phục vụ xem trước phân đoạn khi Phân phối. Trang THỰC THI LÔ
+             (ebmr/execute/*) cũng dùng lại đúng chế độ này -> toàn màn hình cho người ghi
+             chép, không có leftNAV/topNAV; điều hướng quay lại dùng nút mũi tên riêng trên
+             thanh công cụ (xem #v2-btn-back-production trong designer_v2.blade.php). --}}
         <style>
             body.embed-mode .main-header,
             body.embed-mode .main-sidebar,
@@ -872,7 +875,7 @@
 
 </head>
 
-<body class="hold-transition sidebar-mini layout-navbar-fixed layout-fixed {{ request()->is('ebmr/designer*') ? 'sidebar-collapse' : '' }} {{ request()->query('embed') ? 'embed-mode' : '' }}">
+<body class="hold-transition sidebar-mini layout-navbar-fixed layout-fixed {{ request()->is('ebmr/designer*') ? 'sidebar-collapse' : '' }} {{ (request()->query('embed') || request()->is('ebmr/execute/*')) ? 'embed-mode' : '' }}">
 
     <!-- General wrapper -->
     <div class="wrapper ebmr-content-wrapper">
