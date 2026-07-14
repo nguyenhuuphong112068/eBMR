@@ -747,8 +747,30 @@ class ClearanceProcessController extends Controller
                         'clearance_completed_at' => now(),
                         'updated_at' => now(),
                     ]);
+
+                    // Các công đoạn NỐI TRANG cùng nhóm (gộp chung 1 card ở productionIndex,
+                    // cùng chốt started_at khi bấm "Bắt đầu sản xuất" — xem
+                    // EbmrExecutionController::startProduction) cũng phải mở khoá ghi chép
+                    // đồng thời, nếu không công đoạn còn lại sẽ kẹt mãi ở "Đang dọn quang".
+                    $groupSectionIds = [$dist->section_id];
+                    if (!empty($dist->group_key)) {
+                        DB::table('ebmr_record_distributions')
+                            ->where('record_id', $dist->record_id)
+                            ->where('group_key', $dist->group_key)
+                            ->where('id', '!=', $dist->id)
+                            ->update([
+                                'clearance_completed_at' => now(),
+                                'updated_at' => now(),
+                            ]);
+                        $groupSectionIds = DB::table('ebmr_record_distributions')
+                            ->where('record_id', $dist->record_id)
+                            ->where('group_key', $dist->group_key)
+                            ->pluck('section_id')
+                            ->all();
+                    }
+
                     $redirectUrl = route('pages.ebmr.execute', $dist->record_id)
-                        . '?section=' . urlencode($dist->section_id) . '&dist=' . $dist->id;
+                        . '?section=' . urlencode(implode(',', $groupSectionIds)) . '&dist=' . $dist->id;
                 }
             }
 

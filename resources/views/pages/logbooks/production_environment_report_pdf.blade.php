@@ -9,6 +9,7 @@
     <meta charset="UTF-8">
     <title>Báo Cáo Môi Trường Sản Xuất - {{ $room->code ?? '' }} - {{ $dist->batch_number }}</title>
     <style>
+        @page { margin: 15mm 12mm; }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'DejaVu Sans', sans-serif; font-size: 10px; color: #212529; }
         .navy { color: #003A4F; }

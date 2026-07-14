@@ -222,8 +222,16 @@ class CleaningEquipCampaignController extends Controller
         $processList  = CleaningEquipProcessList::find($campaign->process_list_id);
         $cleaningType = $campaign->cleaning_type ?? ($processList?->cleaning_type ?? 1);
 
-        $cleanLevel      = match((int)$cleaningType) { 2 => 'Vệ Sinh Cấp II', 3 => 'Vệ Sinh Lại', default => 'Vệ Sinh Cấp I' };
-        $cleanExpiryDate = match((int)$cleaningType) { 2 => now()->addDays(7), 3 => now()->addHours(24), default => now()->addDays(3) };
+        // Nếu có bất kỳ bước nào KHÔNG ĐẠT thì quy trình kết thúc nhưng thiết bị
+        // vẫn ở trạng thái "cần vệ sinh" (dirty) chứ không được coi là đã sạch.
+        $hasFailedStep = $campaign->steps->contains(fn($s) => $s->is_passed === false);
+
+        $resultStatus    = $hasFailedStep ? 'dirty' : 'cleaned';
+        $cleanLevel      = $hasFailedStep ? null : match((int)$cleaningType) { 2 => 'Vệ Sinh Cấp II', 3 => 'Vệ Sinh Lại', default => 'Vệ Sinh Cấp I' };
+        $cleanExpiryDate = $hasFailedStep ? null : match((int)$cleaningType) { 2 => now()->addDays(7), 3 => now()->addHours(24), default => now()->addDays(3) };
+        $remarks         = $hasFailedStep
+            ? 'Kết thúc vệ sinh thiết bị (có bước KHÔNG ĐẠT) bởi ' . $fullName
+            : 'Hoàn thành vệ sinh thiết bị bởi ' . $fullName;
 
         DB::beginTransaction();
         try {
@@ -235,7 +243,7 @@ class CleaningEquipCampaignController extends Controller
 
             // Ghi nhận vào room_logbooks
             $roomIdToLog = $campaign->source_room_id ?? $campaign->clearing_room_id;
-            
+
             if ($roomIdToLog) {
                 DB::table('room_logbooks')->insert([
                     'room_id'            => $roomIdToLog,
@@ -247,11 +255,11 @@ class CleaningEquipCampaignController extends Controller
                     'end_time'           => now(),
                     'employee_ids'       => json_encode([$userId]),
                     'previous_status'    => 'cleaning',
-                    'current_status'     => 'cleaned',
+                    'current_status'     => $resultStatus,
                     'clean_level'        => $cleanLevel,
                     'clean_expiry_date'  => $cleanExpiryDate,
                     'created_by'         => $userId,
-                    'remarks'            => 'Hoàn thành vệ sinh thiết bị bởi ' . $fullName,
+                    'remarks'            => $remarks,
                     'created_at'         => now(),
                     'updated_at'         => now(),
                 ]);
@@ -266,11 +274,11 @@ class CleaningEquipCampaignController extends Controller
                 'end_time'           => now(),
                 'employee_ids'       => json_encode([$userId]),
                 'previous_status'    => 'cleaning',
-                'current_status'     => 'cleaned',
+                'current_status'     => $resultStatus,
                 'clean_level'        => $cleanLevel,
                 'clean_expiry_date'  => $cleanExpiryDate,
                 'created_by'         => $userId,
-                'remarks'            => 'Hoàn thành vệ sinh thiết bị bởi ' . $fullName,
+                'remarks'            => $remarks,
                 'created_at'         => now(),
                 'updated_at'         => now(),
             ]);
@@ -278,8 +286,11 @@ class CleaningEquipCampaignController extends Controller
             DB::commit();
 
             return response()->json([
-                'success' => true,
-                'message' => 'Hoàn thành vệ sinh thiết bị!',
+                'success'    => true,
+                'has_failed' => $hasFailedStep,
+                'message'    => $hasFailedStep
+                    ? 'Quy trình vệ sinh đã kết thúc nhưng có bước KHÔNG ĐẠT — thiết bị vẫn ở trạng thái "Cần vệ sinh". Vui lòng bắt đầu lại quy trình vệ sinh.'
+                    : 'Hoàn thành vệ sinh thiết bị!',
             ]);
         } catch (\Exception $e) {
             DB::rollBack();

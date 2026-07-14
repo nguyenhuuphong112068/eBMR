@@ -43,7 +43,19 @@ class EbmrExecutionController extends Controller
             ->select('ebmr_records.*', 'user_management.fullName as issuer_name', 'ebmr_templates.type', 'ebmr_templates.caterogy_id', 'ebmr_templates.doc_properties');
 
         if ($mode == 'completed') {
-            $query->whereIn('ebmr_records.status', ['completed', 'reviewed']);
+            // "Hồ Sơ Hoàn Thành" gồm cả hồ sơ đã hoàn thành/duyệt TOÀN BỘ (status) LẪN hồ sơ
+            // mới hoàn thành MỘT phần công đoạn (ebmr_record_distributions.production_ended_at
+            // đã chốt cho ít nhất 1 công đoạn) — 1 hồ sơ có thể phân phối nhiều phòng, ghi
+            // chép nhiều ngày khác nhau nên không đợi TẤT CẢ công đoạn xong mới hiện ở đây.
+            $query->where(function ($q) {
+                $q->whereIn('ebmr_records.status', ['completed', 'reviewed'])
+                    ->orWhereExists(function ($sub) {
+                        $sub->select(DB::raw(1))
+                            ->from('ebmr_record_distributions')
+                            ->whereColumn('ebmr_record_distributions.record_id', 'ebmr_records.id')
+                            ->whereNotNull('ebmr_record_distributions.production_ended_at');
+                    });
+            });
         } elseif ($mode != 'history') {
             // Working mode
             $query->whereNotIn('ebmr_records.status', ['completed', 'reviewed']);
@@ -208,12 +220,130 @@ class EbmrExecutionController extends Controller
                 ->where('record_id', $r->id)
                 ->get()
                 ->keyBy('section_id');
+
+            // Ở trang "Hồ Sơ Hoàn Thành": phân biệt hồ sơ đã hoàn thành TOÀN BỘ (status) với
+            // hồ sơ mới hoàn thành MỘT PHẦN (còn công đoạn đã phân phối nhưng chưa kết thúc
+            // sản xuất) để hiển thị badge "Chờ hoàn thành" thay vì trạng thái gốc gây hiểu nhầm.
+            if ($mode == 'completed' && !in_array($r->status, ['completed', 'reviewed'])) {
+                $r->is_partial_completion = $r->distributions->contains(fn($d) => !is_null($d->production_ended_at));
+            } else {
+                $r->is_partial_completion = false;
+            }
         }
 
         return view('pages.ebmr.records.list', [
             'records' => $records,
             'mode' => $mode
         ]);
+    }
+
+    /**
+     * Với 1 template, trả về map section_id => "khoá nhóm" — dùng để suy ra group_key cho
+     * các bản ghi ebmr_record_distributions chưa có group_key (bản ghi cũ tạo trước
+     * 2026-07-13, hoặc thuộc nhóm NHÁNH PHÒNG bên dưới mà distributeSections() không set).
+     * Gồm 2 loại nhóm, ưu tiên (1) trước (2) nếu 1 section_id rơi vào cả hai (hiếm):
+     *
+     * 1) Nhóm NỐI TRANG (noPageBreak trong properties — xem toggleSectionPageBreakV2 ở
+     *    main.js): các section KHÁC NHAU về nội dung nhưng chung 1 trang in. Khoá nhóm =
+     *    section_id của thành viên đầu tiên trong chuỗi. Thuật toán giống hệt phần xây
+     *    $sectionGroups trong index(), lược bỏ phần tính label/số tiêu đề vì không cần.
+     *
+     * 2) Nhóm NHÁNH PHÒNG (splitSectionIntoRoomTrackV2 — xem comment ở index() dòng ~104):
+     *    nhiều "track" của CÙNG 1 công đoạn (section_id dạng "{cat}_{track}_{stage}"),
+     *    thiết kế để phân phối ĐỘC LẬP tới các phòng khác nhau (vd sản xuất song song).
+     *    Khoá nhóm = "track::{category}::{stageCode}" (không phải section_id thật, chỉ dùng
+     *    làm token so khớp). Chỉ merge hiển thị khi 2+ track CÙNG rơi vào 1 phòng — do
+     *    productionIndex() luôn ràng buộc room_id bằng nhau khi gộp card nên các nhánh được
+     *    phân phối tới phòng khác nhau (đúng mục đích thiết kế) vẫn hiển thị tách biệt.
+     */
+    private function buildSectionGroupRootMap($templateId): array
+    {
+        $sectionBlocks = DB::table('ebmr_template_blocks')
+            ->where('template_id', $templateId)
+            ->where('type', 'section')
+            ->orderBy('order')
+            ->get();
+
+        $sectionTrackKey = function ($sectionId) {
+            $parts = explode('_', (string) $sectionId);
+            if (count($parts) >= 3 && is_numeric($parts[1])) {
+                return [
+                    'key' => $parts[0] . '::' . implode('_', array_slice($parts, 2)),
+                    'track' => (int) $parts[1],
+                ];
+            }
+            return [
+                'key' => implode('_', array_slice($parts, 0, -1)) . '::' . (end($parts) ?: ''),
+                'track' => 1,
+            ];
+        };
+
+        $trackCounts = [];
+        foreach ($sectionBlocks as $b) {
+            $ti = $sectionTrackKey($b->section_id);
+            $trackCounts[$ti['key']] = max($trackCounts[$ti['key']] ?? 1, $ti['track']);
+        }
+
+        $groups = [];
+        $pendingId = null;
+        foreach ($sectionBlocks as $b) {
+            $prop = json_decode($b->properties);
+            $ti = $sectionTrackKey($b->section_id);
+            $key = $ti['key'];
+            $track = $ti['track'];
+
+            $isRootWithBranches = $track === 1 && ($trackCounts[$key] ?? 1) >= 2;
+            if ($isRootWithBranches && !empty($prop->noPageBreak)) {
+                $pendingId = $b->section_id;
+                continue;
+            }
+
+            if ($pendingId !== null) {
+                $groups[] = [$pendingId, $b->section_id];
+                $pendingId = null;
+                continue;
+            }
+
+            if (!empty($prop->noPageBreak) && !empty($groups)) {
+                $groups[count($groups) - 1][] = $b->section_id;
+            } else {
+                $groups[] = [$b->section_id];
+            }
+        }
+        if ($pendingId !== null) {
+            $groups[] = [$pendingId];
+        }
+
+        $map = [];
+        foreach ($groups as $g) {
+            if (count($g) < 2) continue;
+            $root = $g[0];
+            foreach ($g as $sid) {
+                $map[$sid] = $root;
+            }
+        }
+
+        // (2) Nhóm nhánh phòng: section_id không thuộc nhóm nối trang nào ở trên nhưng key
+        // (category::stageCode) của nó có từ 2 track trở lên trong template. Nếu 1 track khác
+        // CÙNG key đã có root từ nhóm nối trang ở trên (vd track 1+2 được nối trang với nhau —
+        // trường hợp phổ biến nhất của tính năng tách nhánh phòng), dùng lại đúng root đó để
+        // mọi track cùng key luôn quy về 1 nhóm thống nhất thay vì tách thành 2 nhóm khác nhau.
+        $rootByKey = [];
+        foreach ($map as $sid => $root) {
+            $key = $sectionTrackKey($sid)['key'];
+            if (!isset($rootByKey[$key])) {
+                $rootByKey[$key] = $root;
+            }
+        }
+        foreach ($sectionBlocks as $b) {
+            if (isset($map[$b->section_id])) continue;
+            $ti = $sectionTrackKey($b->section_id);
+            if (($trackCounts[$ti['key']] ?? 1) >= 2) {
+                $map[$b->section_id] = $rootByKey[$ti['key']] ?? ('track::' . $ti['key']);
+            }
+        }
+
+        return $map;
     }
 
     /**
@@ -243,6 +373,7 @@ class EbmrExecutionController extends Controller
                 'ebmr_templates.caterogy_id',
                 'ebmr_record_distributions.section_id',
                 'ebmr_record_distributions.section_label',
+                'ebmr_record_distributions.group_key',
                 'ebmr_record_distributions.room_id',
                 'ebmr_record_distributions.id as distribution_id',
                 'ebmr_record_distributions.user_ids as distribution_user_ids',
@@ -251,6 +382,10 @@ class EbmrExecutionController extends Controller
                 'ebmr_record_distributions.production_ended_at'
             )
             ->whereNotIn('ebmr_records.status', ['completed', 'reviewed'])
+            // Công đoạn đã "Kết thúc sản xuất" (production_ended_at) coi như đã khoá và
+            // chuyển sang trang "Hồ Sơ Hoàn Thành" — không còn hiển thị ở card phòng nữa,
+            // kể cả khi các công đoạn khác của cùng hồ sơ vẫn đang ghi chép ở phòng khác.
+            ->whereNull('ebmr_record_distributions.production_ended_at')
             ->get();
 
         $currentUserId = (int) (session('user')['userId'] ?? 0);
@@ -312,6 +447,51 @@ class EbmrExecutionController extends Controller
             }, $r->distribution_user_id_list);
             $r->assigned_user_names = implode(', ', array_filter($names));
         }
+
+        // Các bản ghi phân phối được TẠO TRƯỚC khi có cột group_key (2026-07-13) vẫn NULL dù
+        // section_id của chúng thực sự thuộc cùng 1 nhóm nối trang trong template — tính lại
+        // nhóm từ ebmr_template_blocks (buildSectionGroupRootMap) làm phương án dự phòng, đồng
+        // thời backfill group_key ngay lúc đọc để lần sau khỏi phải tính lại, và để
+        // startProduction/endProduction/completeCampaign (vốn chỉ đọc cột group_key persist)
+        // cũng cascade đúng cho các bản ghi cũ này.
+        $sectionRootMapsByTemplate = [];
+        foreach ($activeRecords as $r) {
+            if (!empty($r->group_key)) continue;
+            if (!array_key_exists($r->template_id, $sectionRootMapsByTemplate)) {
+                $sectionRootMapsByTemplate[$r->template_id] = $this->buildSectionGroupRootMap($r->template_id);
+            }
+            $root = $sectionRootMapsByTemplate[$r->template_id][$r->section_id] ?? null;
+            if ($root !== null) {
+                $r->group_key = $root;
+                DB::table('ebmr_record_distributions')
+                    ->where('record_id', $r->id)
+                    ->where('section_id', $r->section_id)
+                    ->whereNull('group_key')
+                    ->update(['group_key' => $root, 'updated_at' => now()]);
+            }
+        }
+
+        // Gộp các công đoạn NỐI TRANG (group_key — xem distributeSections) cùng lô + cùng
+        // phòng thành 1 card duy nhất: chúng luôn được phân phối/bắt đầu/kết thúc sản xuất
+        // đồng thời (xem startProduction/endProduction cascade theo group_key) nên hiển thị
+        // rời rạc thành nhiều card giống hệt nhau chỉ gây rối người dùng. Công đoạn "gốc"
+        // (section_id === group_key) đại diện toàn nhóm; section_id/section_label hiển thị
+        // được nối lại để "Xem hồ sơ"/"Ghi chép dữ liệu" vẫn mở đúng nội dung gộp (execute()
+        // đã hỗ trợ sẵn "id1,id2" — xem dòng ~660).
+        $activeRecords = $activeRecords
+            ->groupBy(function ($r) {
+                return $r->id . '|' . $r->room_id . '|' . ($r->group_key ?? $r->section_id);
+            })
+            ->map(function ($rows) {
+                if ($rows->count() === 1) {
+                    return $rows->first();
+                }
+                $primary = $rows->first(fn($row) => $row->section_id === $row->group_key) ?? $rows->sortBy('distribution_id')->first();
+                $primary->section_id = $rows->pluck('section_id')->implode(',');
+                $primary->section_label = $rows->pluck('section_label')->filter()->unique()->implode(' + ') ?: null;
+                return $primary;
+            })
+            ->values();
 
         // Group active records by room_id
         $recordsByRoom = $activeRecords->groupBy('room_id');
@@ -418,6 +598,46 @@ class EbmrExecutionController extends Controller
             'success' => true,
             'data' => $telemetries
         ]);
+    }
+
+    /**
+     * Tạo 1 khối chú thích (static-text, chỉ đọc) hiển thị NGAY TRÊN nội dung GF được
+     * liên kết, cho biết vị trí này đang gắn Số biểu mẫu nào / ấn bản mấy / SOP đối chiếu —
+     * để người dùng biết đang liên kết với biểu mẫu chung số bao nhiêu, ấn bản mấy.
+     * Số biểu mẫu = mã danh mục GF (gf_category.code) + "-" + version, khớp footer GF gốc
+     * (xem generateDefaultGfHeader trong virtual_blocks_v2.blade.php). Trả null nếu không
+     * tra được GF (bỏ qua, không chèn chú thích).
+     */
+    private function buildLinkedGfCaptionField(int $linkedTemplateId, int $hostBlockId, $sectionId = null): ?array
+    {
+        $gf = DB::table('ebmr_templates')
+            ->leftJoin('gf_category', 'ebmr_templates.caterogy_id', '=', 'gf_category.id')
+            ->where('ebmr_templates.id', $linkedTemplateId)
+            ->select('ebmr_templates.doc_code', 'ebmr_templates.version', 'gf_category.relatived_sop_no', 'gf_category.code as category_code')
+            ->first();
+        if (!$gf) {
+            return null;
+        }
+
+        $code = $gf->category_code ?: $gf->doc_code;
+        $version = $gf->version;
+        $formNo = ($version !== null && $version !== '') ? ($code . '-' . $version) : $code;
+        $sop = $gf->relatived_sop_no ?: '—';
+
+        $html = '<div class="ebmr-gf-caption" style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px 16px;padding:7px 14px;margin:4px 0 10px;background:#eff5ff;border:1px solid #bcd3fb;border-left:4px solid #2563eb;border-radius:6px;font-size:.88rem;line-height:1.35;">'
+            . '<span style="font-weight:600;color:#1e40af;"><i class="fas fa-link" style="margin-right:6px;"></i>Biểu mẫu chung đính kèm</span>'
+            . '<span style="color:#334155;">Số biểu mẫu: <strong>' . e($formNo) . '</strong> &nbsp;·&nbsp; Ấn bản: <strong>' . e($version) . '</strong> &nbsp;·&nbsp; SOP đối chiếu: <strong>' . e($sop) . '</strong></span>'
+            . '</div>';
+
+        return [
+            'id' => 'gf_caption_' . $hostBlockId,
+            'type' => 'static-text',
+            'content' => $html,
+            'locked' => true,
+            'isVirtual' => true,
+            'is_linked' => true,
+            'section_id' => $sectionId,
+        ];
     }
 
     /**
@@ -614,12 +834,30 @@ class EbmrExecutionController extends Controller
                     // trong 1 BMR không đụng id field (block_uuid) lẫn nhau.
                     $linkedConfig = \App\Services\LinkedGfResolver::namespaceLinkedFieldsConfig((array) $linkedConfig, $hostBlockId);
                     $fieldsConfig = array_merge((array)$fieldsConfig, (array)$linkedConfig);
+                    $caption = $this->buildLinkedGfCaptionField($linkedTemplateId, $hostBlockId, $block->section_id);
+                    $captionPlaced = false;
+                    $gfStartIdx = count($allFields);
                     foreach ($linkedBlocks as $lb) {
                         $linkedF = json_decode($lb->properties, true);
                         $this->injectContent($linkedF, $lb, $lContentBlocks->get($lb->id), $testingCriteria, $properties);
                         $linkedF['is_linked'] = true; // Mark as linked if needed by frontend
                         $linkedF = \App\Services\LinkedGfResolver::namespaceLinkedField($linkedF, $hostBlockId);
+                        // Ẩn tiêu đề section của GF (VD "Nội Dung") — không hiển thị lại tiêu đề
+                        // riêng của biểu mẫu chung khi đã nhúng vào BMR.
+                        if (($linkedF['type'] ?? null) === 'section') {
+                            $linkedF['hideTitle'] = true;
+                        }
                         $allFields[] = $linkedF;
+                        // Đặt thanh chú thích "Số biểu mẫu" NGAY SAU section đầu tiên của GF để nó
+                        // nằm CÙNG card với nội dung biểu mẫu (thay vì tách thành 1 khối phía trên).
+                        if (!$captionPlaced && $caption && ($linkedF['type'] ?? null) === 'section') {
+                            $allFields[] = $caption;
+                            $captionPlaced = true;
+                        }
+                    }
+                    // GF không có section nào → đặt chú thích lên đầu nội dung GF.
+                    if (!$captionPlaced && $caption) {
+                        array_splice($allFields, $gfStartIdx, 0, [$caption]);
                     }
                 }
             } else {
@@ -715,12 +953,27 @@ class EbmrExecutionController extends Controller
                             $linkedConfig = \App\Services\LinkedGfResolver::namespaceLinkedFieldsConfig((array) $linkedConfig, $hostBlockId);
                             $fieldsConfig = array_merge((array)$fieldsConfig, (array)$linkedConfig);
                         }
+                        $caption = $this->buildLinkedGfCaptionField($linkedTemplateId, $hostBlockId, $block->section_id);
+                        $captionPlaced = false;
+                        $gfStartIdx = count($fields);
                         foreach ($linkedBlocks as $lb) {
                             $linkedF = json_decode($lb->properties, true);
                             $this->injectContent($linkedF, $lb, $lContentBlocks->get($lb->id));
                             $linkedF['is_linked'] = true;
                             $linkedF = \App\Services\LinkedGfResolver::namespaceLinkedField($linkedF, $hostBlockId);
+                            // Ẩn tiêu đề section của GF (VD "Nội Dung") khi nhúng vào BMR.
+                            if (($linkedF['type'] ?? null) === 'section') {
+                                $linkedF['hideTitle'] = true;
+                            }
                             $fields[] = $linkedF;
+                            // Chú thích "Số biểu mẫu" đi CÙNG card với nội dung biểu mẫu.
+                            if (!$captionPlaced && $caption && ($linkedF['type'] ?? null) === 'section') {
+                                $fields[] = $caption;
+                                $captionPlaced = true;
+                            }
+                        }
+                        if (!$captionPlaced && $caption) {
+                            array_splice($fields, $gfStartIdx, 0, [$caption]);
                         }
                     }
                 } else {
@@ -768,11 +1021,23 @@ class EbmrExecutionController extends Controller
             $executionValues->$blockUuid->$cellId = $decryptedVal;
 
             // Lưu metadata
-            $executionValues->$blockUuid->_meta->$cellId = (object)[
+            $metaEntry = [
                 'by' => RunDataEncryptionService::decrypt($rd->updated_by),
                 'at' => $rd->updated_at ? \Carbon\Carbon::parse($rd->updated_at)->format('d/m/Y H:i') : null,
                 'history_count' => $historyCounts[$rd->id] ?? 0
             ];
+
+            // Thông tin "giấy cân" (thiết bị/đơn vị đọc từ Cân điện tử) được lưu kèm trong
+            // cột `value` (khoá "_scale") lúc lưu — phục hồi lại đây để giữ style phiếu
+            // cân sau khi refresh trang, không chỉ tồn tại tạm trong bộ nhớ JS.
+            $storedValue = RunDataEncryptionService::decryptJson($rd->value);
+            if (is_array($storedValue) && isset($storedValue['_scale']) && is_array($storedValue['_scale'])) {
+                $metaEntry['device'] = $storedValue['_scale']['device'] ?? null;
+                $metaEntry['deviceCode'] = $storedValue['_scale']['deviceCode'] ?? null;
+                $metaEntry['unit'] = $storedValue['_scale']['unit'] ?? null;
+            }
+
+            $executionValues->$blockUuid->_meta->$cellId = (object)$metaEntry;
         }
 
         $template->schema = (object)['fields' => $fields, 'fieldsConfig' => $fieldsConfig];
@@ -881,6 +1146,13 @@ class EbmrExecutionController extends Controller
 
         $dist = DB::table('ebmr_record_distributions')->where('id', $distId)->where('record_id', $record->id)->first();
         if (!$dist) {
+            return true;
+        }
+
+        // Công đoạn này đã "Kết thúc sản xuất" — khoá ghi chép vĩnh viễn cho riêng công
+        // đoạn/phiên phân phối này (không đụng tới các công đoạn khác của cùng hồ sơ đang
+        // ghi chép ở phòng khác/ngày khác).
+        if (!is_null($dist->production_ended_at)) {
             return true;
         }
 
@@ -1098,6 +1370,23 @@ class EbmrExecutionController extends Controller
                     'updated_at' => $now,
                 ]);
 
+                // Các công đoạn NỐI TRANG cùng nhóm (group_key) đã được gộp thành 1 card duy
+                // nhất trên dashboard (xem productionIndex) nên bấm "Bắt đầu sản xuất" ở đây
+                // phải chốt started_at đồng thời cho toàn nhóm — nếu không, công đoạn còn lại
+                // sẽ kẹt vĩnh viễn ở trạng thái chưa bắt đầu vì không còn card riêng để bấm.
+                if (!empty($dist->group_key)) {
+                    DB::table('ebmr_record_distributions')
+                        ->where('record_id', $dist->record_id)
+                        ->where('group_key', $dist->group_key)
+                        ->where('id', '!=', $dist->id)
+                        ->whereNull('started_at')
+                        ->update([
+                            'started_at' => $now,
+                            'started_by' => $currentUserId,
+                            'updated_at' => $now,
+                        ]);
+                }
+
                 // Nhật ký phòng chuyển 'producing' — trang Sản Xuất hiển thị nhãn "Đang sản xuất"
                 $prevStatus = DB::table('room_logbooks')
                     ->where('room_id', $dist->room_id)
@@ -1212,12 +1501,51 @@ class EbmrExecutionController extends Controller
             return response()->json(['success' => false, 'message' => 'Bạn không nằm trong danh sách được phân phối công đoạn này.']);
         }
 
+        // Điều kiện bắt buộc trước khi kết thúc: MỌI biến số thuộc (các) công đoạn nối trang
+        // của phân phối này đều phải có giá trị HOẶC đã bị gạch chéo "Không sử dụng" — nếu
+        // còn sót phải chặn lại và liệt kê cho người dùng biết cần hoàn tất chỗ nào.
+        $groupSectionIds = array_values(array_unique(array_filter([(string) $dist->section_id])));
+        if (!empty($dist->group_key)) {
+            $siblingSectionIds = DB::table('ebmr_record_distributions')
+                ->where('record_id', $dist->record_id)
+                ->where('group_key', $dist->group_key)
+                ->pluck('section_id')
+                ->map(fn($s) => (string) $s)
+                ->toArray();
+            $groupSectionIds = array_values(array_unique(array_merge($groupSectionIds, $siblingSectionIds)));
+        }
+        $missingVariables = $this->findMissingVariables((int) $dist->record_id, $groupSectionIds);
+        if (!empty($missingVariables)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Còn ' . count($missingVariables) . ' biến số chưa có giá trị và chưa gạch chéo "Không sử dụng". Vui lòng hoàn tất nhập liệu trước khi kết thúc sản xuất.',
+                'missing_variables' => $missingVariables,
+            ]);
+        }
+
         $now = now();
         DB::table('ebmr_record_distributions')->where('id', $dist->id)->update([
             'production_ended_at' => $now,
             'ended_by' => $currentUserId,
             'updated_at' => $now,
         ]);
+
+        // Chốt luôn cho các công đoạn NỐI TRANG cùng nhóm (đã gộp chung 1 card ở
+        // productionIndex, xem cascade tương ứng ở startProduction) — tránh để lại công
+        // đoạn "mồ côi" vẫn treo production_ended_at rỗng, khiến hồ sơ không bao giờ
+        // chuyển hẳn sang "Hồ Sơ Hoàn Thành".
+        if (!empty($dist->group_key)) {
+            DB::table('ebmr_record_distributions')
+                ->where('record_id', $dist->record_id)
+                ->where('group_key', $dist->group_key)
+                ->where('id', '!=', $dist->id)
+                ->whereNull('production_ended_at')
+                ->update([
+                    'production_ended_at' => $now,
+                    'ended_by' => $currentUserId,
+                    'updated_at' => $now,
+                ]);
+        }
 
         $prevStatus = DB::table('room_logbooks')
             ->where('room_id', $dist->room_id)
@@ -1239,6 +1567,60 @@ class EbmrExecutionController extends Controller
             'updated_at' => $now,
         ]);
 
+        // Thiết bị trong phòng cũng chuyển "Cần vệ sinh" giống phòng — ghi cả room_logbooks
+        // (equipment_id, để card Phòng Sản Xuất/trang Thiết Bị hiển thị đúng) lẫn
+        // instrument_logbooks (nhật ký sử dụng thiết bị), cùng cấu trúc bản ghi mà
+        // CleaningEquipCampaignController dùng khi hoàn thành vệ sinh thiết bị.
+        $record = DB::table('ebmr_records')->where('id', $dist->record_id)->first();
+        $template = $record ? DB::table('ebmr_templates')->where('id', $record->template_id)->first() : null;
+        $productName = $template ? $this->resolveProductName($template->type, $template->caterogy_id) : null;
+
+        $equipRows = DB::table('equipment_in_room')
+            ->join('instrument', 'equipment_in_room.equipment_id', '=', 'instrument.id')
+            ->where('equipment_in_room.room_id', $dist->room_id)
+            ->select('instrument.id', 'instrument.code')
+            ->get();
+
+        foreach ($equipRows as $eq) {
+            $prevEqStatus = DB::table('room_logbooks')
+                ->where('equipment_id', $eq->id)
+                ->orderByDesc('id')
+                ->value('current_status') ?? 'cleaned';
+
+            DB::table('room_logbooks')->insert([
+                'room_id' => $dist->room_id,
+                'equipment_id' => $eq->id,
+                'action_type' => 'idle',
+                'product_name' => $productName,
+                'batch_number' => $record->batch_number ?? null,
+                'start_time' => $now,
+                'end_time' => $now,
+                'employee_ids' => json_encode($userIds),
+                'previous_status' => $prevEqStatus,
+                'current_status' => 'dirty',
+                'remarks' => 'Kết thúc sản xuất — thiết bị ' . $eq->code . ' cần vệ sinh',
+                'created_by' => $currentUserId,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+
+            DB::table('instrument_logbooks')->insert([
+                'instrument_id' => $eq->id,
+                'action_type' => 'idle',
+                'product_name' => $productName,
+                'batch_number' => $record->batch_number ?? null,
+                'start_time' => $dist->started_at ?? $now,
+                'end_time' => $now,
+                'employee_ids' => json_encode($userIds),
+                'previous_status' => $prevEqStatus,
+                'current_status' => 'dirty',
+                'remarks' => 'Kết thúc sản xuất — thiết bị ' . $eq->code . ' cần vệ sinh',
+                'created_by' => $currentUserId,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        }
+
         // Tự xuất Báo cáo môi trường sản xuất của phiên này thành PDF và đính kèm vào
         // phân đoạn (ebmr_record_section_attachments). Lỗi xuất báo cáo không được chặn
         // nghiệp vụ kết thúc sản xuất (đã chốt production_ended_at ở trên) — chỉ báo lại.
@@ -1254,10 +1636,201 @@ class EbmrExecutionController extends Controller
             $reportMessage = 'Lưu ý: xuất báo cáo môi trường PDF thất bại — có thể in thủ công từ Lịch Sử Môi Trường Sản Xuất.';
         }
 
+        // Tự xuất Báo cáo dọn quang PHÒNG (+ từng THIẾT BỊ trong phòng, nếu có) của phiên
+        // này thành PDF và đính kèm vào phân đoạn — song song với báo cáo môi trường ở
+        // trên. Lỗi không được chặn nghiệp vụ kết thúc sản xuất (đã chốt ở trên).
+        $clearanceMessage = '';
+        try {
+            $clearanceAttachments = \App\Services\ClearanceReportService::attachReportsPdf(
+                (int) $dist->id,
+                $currentUserId,
+                session('user')['fullName'] ?? 'Hệ thống'
+            );
+            if (!empty($clearanceAttachments)) {
+                $clearanceMessage = ' Đã đính kèm ' . count($clearanceAttachments) . ' báo cáo dọn quang (PDF).';
+            }
+        } catch (\Throwable $e) {
+            Log::error('endProduction: lỗi xuất báo cáo dọn quang PDF cho phiên #' . $dist->id . ': ' . $e->getMessage());
+            $clearanceMessage = ' Lưu ý: xuất báo cáo dọn quang PDF thất bại.';
+        }
+
         return response()->json([
             'success' => true,
-            'message' => 'Đã kết thúc sản xuất. Phòng chuyển trạng thái "Cần vệ sinh" cho lô kế tiếp. ' . $reportMessage,
+            'message' => 'Đã kết thúc sản xuất. Phòng chuyển trạng thái "Cần vệ sinh" cho lô kế tiếp. ' . $reportMessage . $clearanceMessage,
         ]);
+    }
+
+    /**
+     * Quét mọi biến số (biến kiểu nhập liệu, KHÔNG tính công thức tự tính hoặc checkbox
+     * tự tick theo công thức) thuộc các công đoạn $sectionIds của $recordId, đối chiếu
+     * với ebmr_run_data + trạng thái gạch chéo N/A (__na__) để tìm biến CHƯA có giá trị
+     * và CHƯA bị đánh dấu "Không sử dụng" — dùng làm điều kiện chặn "Kết thúc sản xuất".
+     * Trả về danh sách [['label' => ..., 'section' => ...], ...].
+     */
+    private function findMissingVariables(int $recordId, array $sectionIds): array
+    {
+        $sectionIds = array_values(array_filter($sectionIds, fn($s) => $s !== null && $s !== ''));
+        if (empty($sectionIds)) return [];
+
+        $record = DB::table('ebmr_records')->where('id', $recordId)->first();
+        if (!$record) return [];
+        $template = DB::table('ebmr_templates')->where('id', $record->template_id)->first();
+        if (!$template) return [];
+
+        $blocksQuery = DB::table('ebmr_template_blocks')
+            ->where('template_id', $template->id)
+            ->where(function ($q) use ($sectionIds, $template) {
+                $q->whereIn('section_id', $sectionIds)
+                    ->orWhere('section_id', (string) $template->caterogy_id);
+            })
+            ->orderBy('order')
+            ->get();
+        if ($blocksQuery->isEmpty()) return [];
+
+        $bqIds = $blocksQuery->pluck('id')->toArray();
+        $bqContentBlocks = DB::table('ebmr_content_blocks')->whereIn('ebmr_template_blocks_id', $bqIds)->get()->groupBy('ebmr_template_blocks_id');
+
+        $fieldsConfig = [];
+        $variants = DB::table('ebmr_variants')->where('template_id', $template->id)->get();
+        foreach ($variants as $v) {
+            $config = json_decode($v->config, true) ?? [];
+            $fieldsConfig[$v->field_key] = array_merge(['id' => $v->field_key, 'name' => $v->name, 'label' => $v->label, 'type' => $v->type], $config);
+        }
+        if (empty($fieldsConfig)) {
+            $legacy = DB::table('ebmr_template_blocks')->where('template_id', $template->id)->whereNotNull('fields_config')->first();
+            if ($legacy) $fieldsConfig = json_decode($legacy->fields_config, true) ?? [];
+        }
+
+        // Cấu trúc phát sinh riêng cho lô này (VD: dòng bảng thêm vào lúc chạy — dynamic_rows)
+        $recordStructures = DB::table('ebmr_record_structures')->where('record_id', $recordId)->get()->keyBy('block_uuid');
+
+        $activeItems = [];
+        $currentSectionLabel = null;
+
+        foreach ($blocksQuery as $block) {
+            $f = json_decode($block->properties, true) ?: [];
+            $this->injectContent($f, $block, $bqContentBlocks->get($block->id));
+
+            if (($f['type'] ?? null) === 'section') {
+                $currentSectionLabel = $f['label'] ?? 'Phân đoạn';
+                continue;
+            }
+
+            if (($f['type'] ?? null) === 'linked-template') {
+                // Biểu mẫu GF liên kết (namespace field id "{hostBlockId}__gf...") CHƯA được
+                // quét ở đây — cấu trúc namespace phức tạp (khác với field id nhúng thẳng
+                // trong content HTML) nên bỏ qua để tránh báo sai, thà bỏ sót còn hơn chặn
+                // nhầm "Kết thúc sản xuất". Biến số trong GF liên kết vẫn cần người dùng tự
+                // rà soát thủ công.
+                continue;
+            }
+
+            $this->collectFieldContainers($f, $fieldsConfig, $recordStructures, $currentSectionLabel, $activeItems);
+        }
+
+        if (empty($activeItems)) return [];
+
+        // Trạng thái gạch chéo N/A của LÔ này (__na__ block đặc biệt trong ebmr_run_data)
+        $naState = [];
+        foreach (DB::table('ebmr_run_data')->where('record_id', $recordId)->where('block_uuid', '__na__')->get() as $row) {
+            $val = RunDataEncryptionService::decrypt($row->raw_value);
+            if (is_string($val) && trim($val) !== '' && str_starts_with(trim($val), '{')) {
+                $decoded = json_decode($val, true);
+                if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                    $naState[$row->cell_id] = $decoded;
+                }
+            }
+        }
+
+        $fieldIds = array_values(array_unique(array_column($activeItems, 'fieldId')));
+        $valueRows = DB::table('ebmr_run_data')
+            ->where('record_id', $recordId)
+            ->whereIn('block_uuid', $fieldIds)
+            ->where('cell_id', 'default')
+            ->get()
+            ->keyBy('block_uuid');
+
+        $missing = [];
+        $seen = [];
+        foreach ($activeItems as $it) {
+            // Bị gạch chéo N/A: hoặc đúng ô/khối này, hoặc cả bảng (khối cha) đã gạch chéo trọn
+            if (isset($naState[$it['containerKey']]) || isset($naState[$it['blockId']])) continue;
+
+            $row = $valueRows->get($it['fieldId']);
+            $hasValue = false;
+            if ($row) {
+                $raw = RunDataEncryptionService::decrypt($row->raw_value);
+                $hasValue = $raw !== null && trim((string) $raw) !== '';
+            }
+            if ($hasValue) continue;
+
+            if (isset($seen[$it['fieldId']])) continue;
+            $seen[$it['fieldId']] = true;
+            $missing[] = ['label' => $it['label'], 'section' => $it['section']];
+        }
+
+        return $missing;
+    }
+
+    /**
+     * Quét 1 block (static-text hoặc table) tìm mọi badge biến số (data-field-id) và
+     * gom vào $activeItems kèm "khoá gạch chéo" (containerKey — khớp targetKey của
+     * na-marks.js) + nhân bản đủ theo Lặp nhóm khối (loop_group_id/loop_count, id lần
+     * lặp thứ i>=2 là "{id}__it{i}" — xem getLoopIterFieldMapV2 ở main.js).
+     */
+    private function collectFieldContainers(array $f, array &$fieldsConfig, $recordStructures, ?string $sectionLabel, array &$activeItems): void
+    {
+        $blockId = $f['id'] ?? null;
+        if (!$blockId) return;
+        $loopCount = !empty($f['loop_group_id']) ? max(1, (int) ($f['loop_count'] ?? 1)) : 1;
+
+        if (($f['type'] ?? null) === 'table') {
+            $data = $f['data'] ?? [];
+            $rs = $recordStructures->get($blockId);
+            if ($rs && $rs->kind === 'dynamic_rows') {
+                $payload = json_decode($rs->payload, true) ?: [];
+                foreach (($payload['rows'] ?? []) as $row) $data[] = $row;
+                if (!empty($payload['fieldsConfig'])) $fieldsConfig = array_merge($fieldsConfig, $payload['fieldsConfig']);
+            }
+            foreach ($data as $r => $row) {
+                foreach (($row ?? []) as $c => $cell) {
+                    if (!is_array($cell) || !empty($cell['hidden']) || empty($cell['content'])) continue;
+                    if (strpos($cell['content'], 'data-field-id') === false) continue;
+                    $containerKey = $blockId . ':' . $r . '_' . $c;
+                    preg_match_all('/data-field-id="(field_[a-zA-Z0-9_]+)"/', $cell['content'], $m);
+                    foreach (array_unique($m[1]) as $baseFieldId) {
+                        $this->addFieldContainerEntries($baseFieldId, $blockId, $containerKey, $loopCount, $fieldsConfig, $sectionLabel, $activeItems);
+                    }
+                }
+            }
+        } elseif (!empty($f['content']) && strpos($f['content'], 'data-field-id') !== false) {
+            preg_match_all('/data-field-id="(field_[a-zA-Z0-9_]+)"/', $f['content'], $m);
+            foreach (array_unique($m[1]) as $baseFieldId) {
+                $this->addFieldContainerEntries($baseFieldId, $blockId, $blockId, $loopCount, $fieldsConfig, $sectionLabel, $activeItems);
+            }
+        }
+    }
+
+    private function addFieldContainerEntries(string $baseFieldId, string $blockId, string $containerKey, int $loopCount, array $fieldsConfig, ?string $sectionLabel, array &$activeItems): void
+    {
+        $cfg = $fieldsConfig[$baseFieldId] ?? null;
+        if (!$cfg) return;
+        $type = $cfg['type'] ?? 'text';
+        if ($type === 'formula') return; // công thức tự tính — không cần người nhập
+        if ($type === 'checkbox' && !empty($cfg['formula'])) return; // checkbox tự tick theo công thức — khoá nhập tay
+
+        for ($i = 1; $i <= $loopCount; $i++) {
+            $fieldId = $i === 1 ? $baseFieldId : ($baseFieldId . '__it' . $i);
+            $label = $cfg['label'] ?? ($cfg['name'] ?? $baseFieldId);
+            if ($loopCount > 1) $label .= ' (Lần ' . $i . ')';
+            $activeItems[] = [
+                'fieldId' => $fieldId,
+                'blockId' => $blockId,
+                'containerKey' => $containerKey,
+                'label' => $label,
+                'section' => $sectionLabel,
+            ];
+        }
     }
 
     /**
@@ -1360,9 +1933,16 @@ class EbmrExecutionController extends Controller
                 ? array_values(array_unique(array_map('strval', $dist['member_section_ids'])))
                 : [(string) $dist['section_id']];
 
+            // Nhóm NỐI TRANG (>1 member) luôn nằm chung 1 phòng vì chung 1 trang in vật lý —
+            // neo group_key = section_id của công đoạn đầu nhóm để trang Sản Xuất gộp hiển
+            // thị + gộp thao tác Bắt đầu/Kết thúc sản xuất (xem productionIndex/startProduction/
+            // endProduction). Công đoạn đứng độc lập không cần group_key.
+            $groupKey = count($memberSectionIds) > 1 ? $memberSectionIds[0] : null;
+
             foreach ($memberSectionIds as $memberSectionId) {
                 $payload = [
                     'section_label' => $dist['section_label'] ?? null,
+                    'group_key' => $groupKey,
                     'room_id' => $dist['room_id'],
                     'room_code' => $room->code ?? null,
                     'room_name' => $room->name ?? null,
@@ -1507,6 +2087,12 @@ class EbmrExecutionController extends Controller
 
                 // Nếu value là mảng hoặc đối tượng (dành cho bảng/ô có tọa độ)
                 if (is_array($value) || is_object($value)) {
+                    // Meta gửi kèm theo field (vd. thông tin thiết bị cân khi đọc từ Cân điện
+                    // tử — xem writeScaleValueToField trong scale-reader.js) — cần lưu lại cùng
+                    // giá trị để "giấy cân" còn hiển thị đúng style sau khi tải lại trang.
+                    $scaleMetaByCell = (is_array($value) && isset($value['_meta']) && is_array($value['_meta']))
+                        ? $value['_meta'] : [];
+
                     foreach ($value as $cellId => $rawValue) {
                         if ($cellId === '_meta') continue;
 
@@ -1532,6 +2118,16 @@ class EbmrExecutionController extends Controller
                             }
                         }
 
+                        $storedValue = [$cellId => $rawValue];
+                        $cellScaleMeta = $scaleMetaByCell[$cellId] ?? null;
+                        if (is_array($cellScaleMeta) && !empty($cellScaleMeta['device'])) {
+                            $storedValue['_scale'] = [
+                                'device' => $cellScaleMeta['device'],
+                                'deviceCode' => $cellScaleMeta['deviceCode'] ?? null,
+                                'unit' => $cellScaleMeta['unit'] ?? null,
+                            ];
+                        }
+
                         Log::info("Saving cell: " . $cellId . " = " . $rawValueStr);
                         DB::table('ebmr_run_data')->updateOrInsert(
                             [
@@ -1542,7 +2138,7 @@ class EbmrExecutionController extends Controller
                             [
                                 'filled_by' => RunDataEncryptionService::encrypt((string)$userId),
                                 'filled_at' => $now,
-                                'value'     => RunDataEncryptionService::encryptJson([$cellId => $rawValue]),
+                                'value'     => RunDataEncryptionService::encryptJson($storedValue),
                                 'raw_value' => RunDataEncryptionService::encrypt($rawValueStr),
                                 'updated_at' => $now,
                                 'updated_by' => RunDataEncryptionService::encrypt($userName),

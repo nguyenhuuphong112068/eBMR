@@ -1913,8 +1913,10 @@
 
         // ── KẾT THÚC SẢN XUẤT ────────────────────────────────────────────────
         // Chốt mốc dừng của phiên sản xuất — dùng để "Lịch sử môi trường sản xuất"
-        // biết dừng ghi nhận ở đâu, và giải phóng phòng sang trạng thái "Cần vệ sinh"
-        // cho lô/công đoạn kế tiếp. KHÔNG khoá quyền "Ghi chép dữ liệu" hồ sơ.
+        // biết dừng ghi nhận ở đâu, giải phóng phòng + thiết bị sang trạng thái "Cần vệ
+        // sinh" cho lô/công đoạn kế tiếp, VÀ khoá ghi chép cho riêng công đoạn này (xem
+        // computeIsReadOnly()) — card công đoạn này sẽ không còn hiện ở phòng nữa, chuyển
+        // sang trang "Hồ Sơ Hoàn Thành".
         $(document).on('click', '.js-end-production', function() {
             const btn = $(this);
             const distributionId = btn.data('distribution-id');
@@ -1927,7 +1929,7 @@
                         <div class="mb-3 p-3 bg-light rounded-3">
                             <div><strong>Số lô:</strong> <span class="font-monospace">${escapeHtml(batchNumber)}</span></div>
                         </div>
-                        <div class="small text-muted"><i class="fas fa-info-circle me-1"></i>Phòng sẽ chuyển sang trạng thái "Cần vệ sinh" cho lô kế tiếp. Việc ghi chép hồ sơ vẫn tiếp tục bình thường sau khi kết thúc.</div>
+                        <div class="small text-muted"><i class="fas fa-info-circle me-1"></i>Phòng &amp; thiết bị sẽ chuyển sang trạng thái "Cần vệ sinh" cho lô kế tiếp. Công đoạn này sẽ bị khoá, không thể ghi chép thêm và sẽ chuyển sang trang "Hồ Sơ Hoàn Thành".</div>
                     </div>`,
                 icon: 'question',
                 showCancelButton: true,
@@ -1952,6 +1954,22 @@
                         if (res.success) {
                             Swal.fire({ icon: 'success', title: 'Đã kết thúc sản xuất!', text: res.message, timer: 1800, showConfirmButton: false })
                                 .then(() => window.location.reload());
+                        } else if (res.missing_variables && res.missing_variables.length) {
+                            // Còn biến số chưa nhập & chưa gạch chéo N/A — liệt kê rõ cho người dùng biết
+                            // cần quay lại phần ghi chép để hoàn tất trước khi kết thúc sản xuất.
+                            const items = res.missing_variables.map(v =>
+                                `<li>${escapeHtml(v.label || '')}${v.section ? ` <span class="text-muted">(${escapeHtml(v.section)})</span>` : ''}</li>`
+                            ).join('');
+                            Swal.fire({
+                                icon: 'warning',
+                                title: 'Chưa thể kết thúc sản xuất',
+                                html: `
+                                    <div class="text-start" style="font-size: 0.85rem;">
+                                        <div class="mb-2">${escapeHtml(res.message)}</div>
+                                        <ul class="ps-3 mb-0" style="max-height: 260px; overflow-y: auto;">${items}</ul>
+                                    </div>`,
+                                confirmButtonColor: '#003A4F'
+                            });
                         } else {
                             Swal.fire('Không thể kết thúc', res.message, 'warning');
                         }

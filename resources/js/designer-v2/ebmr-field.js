@@ -23,6 +23,7 @@ export const FIELD_TYPES = {
     signature: { label: 'Chữ ký', icon: 'fa-signature' },
     checkbox: { label: 'Tick', icon: 'fa-check-square' },
     select: { label: 'Lựa chọn', icon: 'fa-list-ul' },
+    radio: { label: 'Chọn 1 (Radio)', icon: 'fa-dot-circle' },
     formula: { label: 'Công thức', icon: 'fa-square-root-alt' },
 };
 
@@ -142,16 +143,26 @@ export function paintFieldElement(dom, fieldId) {
         const showLabel = cfg.showLabel !== false;
 
         if (cfg.type === 'checkbox') {
-            let isChecked = val === true || val === 'true' || val === '1' || val === 'yes' || val === 'có';
+            // 3 trạng thái: chưa xác định (chưa chạm) / Có / Không — ĐỌC THẲNG giá trị gốc
+            // (bỏ qua fallback cfg.defaultValue ở `val` phía trên) để phân biệt được "chưa
+            // trả lời" khỏi "đã trả lời Không" (xem toggleExecutionCheckbox ở main.js).
+            const rawVal = (window.__V2__?.executionValues || {})[fieldId]?.default;
+            let state = window.__V2__?.isCheckboxTrue?.(rawVal) ? 'checked'
+                : (window.__V2__?.isCheckboxFalseExplicit?.(rawVal) ? 'unchecked' : 'unset');
             let locked = false;
             if (cfg.formula) {
+                // Tự tick theo công thức: KHÔNG phải câu trả lời tay nên giữ nguyên hình khối
+                // trống/xanh như trước (không dùng dấu X đỏ của trạng thái "Không" tay).
                 const result = window.__V2__?.calculateFormula ? window.__V2__.calculateFormula(cfg.formula, 2, fieldId) : '0';
-                isChecked = parseFloat(String(result).replace(/,/g, '')) > 0;
+                state = parseFloat(String(result).replace(/,/g, '')) > 0 ? 'checked' : 'unset';
                 locked = true;
             }
+            const iconClass = state === 'unchecked' ? 'fa-times' : 'fa-check';
+            const stateClass = state === 'checked' ? ' is-checked' : (state === 'unchecked' ? ' is-unchecked' : '');
+            const title = locked ? 'Tự động theo công thức' : (state === 'unset' ? 'Chạm để chọn Có/Không' : 'Chạm để đổi trạng thái');
             valueHtml =
-                `<span class="v2-exec-checkbox${locked ? ' is-locked' : ''}${isChecked ? ' is-checked' : ''}" title="${locked ? 'Tự động theo công thức' : 'Click để tick'}">` +
-                `<span class="v2-exec-checkbox-box"><i class="fas fa-check"></i></span>` +
+                `<span class="v2-exec-checkbox${locked ? ' is-locked' : ''}${stateClass}" title="${title}">` +
+                `<span class="v2-exec-checkbox-box"><i class="fas ${iconClass}"></i></span>` +
                 (showLabel ? `<span class="v2-exec-checkbox-text">${escapeHtml(cfg.label || '')}</span>` : '') +
                 `</span>`;
             metaHtml = locked ? '' : metaHtml;
@@ -169,6 +180,24 @@ export function paintFieldElement(dom, fieldId) {
                     `<option value="">--</option>` +
                     optionsFromCfg.map((o) => `<option value="${escapeHtml(o)}" ${val === o ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('') +
                     `</select>`;
+            }
+        } else if (cfg.type === 'radio') {
+            // Nhiều mục tick chọn nhưng chỉ chọn được 1 (khác select: hiện thẳng danh sách,
+            // không cần mở dropdown — phù hợp tablet, không cần chuột).
+            const optionsFromCfg = Array.isArray(cfg.options)
+                ? cfg.options
+                : (typeof cfg.options === 'string' ? cfg.options.split(/[,;\n]/).map((o) => o.trim()).filter(Boolean) : []);
+            if (optionsFromCfg.length === 0) {
+                valueHtml = `<span class="v2-exec-placeholder">(Chưa cấu hình lựa chọn)</span>`;
+            } else {
+                valueHtml = `<span class="v2-exec-radio-group${isRO ? ' is-readonly' : ''}">` +
+                    optionsFromCfg.map((o) =>
+                        `<span class="v2-exec-radio-option${val === o ? ' is-checked' : ''}" data-radio-value="${escapeHtml(o)}">` +
+                        `<span class="v2-exec-radio-dot"></span>` +
+                        `<span class="v2-exec-radio-text">${escapeHtml(o)}</span>` +
+                        `</span>`
+                    ).join('') +
+                    `</span>`;
             }
         } else if (cfg.type === 'signature') {
             metaHtml = ''; // chữ ký tự có dòng "đã ký bởi" riêng, không lặp lại meta chung
@@ -232,7 +261,9 @@ export function paintFieldElement(dom, fieldId) {
             // readonly: không mời gọi click nhập liệu, nhưng vẫn báo rõ lý do thay vì im lặng
             dom.title = cfg.type === 'formula' ? '' : 'Chỉ xem — không thể ghi chép (đang xem tất cả công đoạn hoặc hồ sơ đã khoá)';
         } else if (cfg.type !== 'signature' && cfg.type !== 'formula') {
-            dom.title = cfg.type === 'checkbox' ? 'Click để tick (Chạy thử)' : 'Click để nhập liệu (Chạy thử)';
+            dom.title = cfg.type === 'checkbox' ? 'Click để tick (Chạy thử)'
+                : cfg.type === 'radio' ? 'Chạm vào 1 lựa chọn (Chạy thử)'
+                    : 'Click để nhập liệu (Chạy thử)';
         } else if (cfg.type === 'signature') {
             dom.title = cfg.is_checker ? 'Click để xác thực người kiểm tra' : 'Click để ký (Chạy thử)';
         } else {
@@ -267,12 +298,18 @@ export function paintFieldElement(dom, fieldId) {
 
 export function handleFieldBadgeClick(e, fieldId, paint) {
     if (e.target.closest('select.v2-exec-select')) return; // để trình duyệt tự mở dropdown
+    const radioOption = e.target.closest('.v2-exec-radio-option');
     e.preventDefault();
 
     if (window.__V2__?.isExecutionMode) {
         const cfg = (window.__V2__?.fieldsConfig || {})[fieldId] || {};
         if (cfg.type === 'select') return; // tương tác qua onchange của <select>, không qua click
         if (cfg.type === 'formula') return; // chỉ đọc
+        if (cfg.type === 'radio') {
+            // Chỉ chạm đúng 1 mục mới đổi giá trị (bấm khoảng trống giữa các mục thì bỏ qua).
+            if (radioOption) window.__V2__?.handleSelectChange?.(fieldId, radioOption.dataset.radioValue);
+            return;
+        }
 
         if (cfg.type === 'checkbox') {
             window.__V2__?.toggleExecutionCheckbox?.(fieldId);

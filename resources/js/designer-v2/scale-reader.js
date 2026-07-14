@@ -391,6 +391,8 @@ export function initScaleReaderV2(BOOT) {
             BOOT.executionValues[fieldId] = {};
         }
         const rec = BOOT.executionValues[fieldId];
+        const oldVal = rec.default;
+        const hasExisting = oldVal !== undefined && oldVal !== null && oldVal !== '';
         rec.default = String(finalValue);
         if (!rec._meta) rec._meta = {};
         if (!rec._meta.default) rec._meta.default = {};
@@ -416,7 +418,22 @@ export function initScaleReaderV2(BOOT) {
         rec._meta.default.at = new Date().toLocaleString('vi-VN');
         rec._meta.default.by = BOOT.currentUserName || 'Hệ thống';
 
+        // Ghi đè giá trị đã có: server đòi lý do thay đổi cho MỌI field (kể cả field khác
+        // trong cùng lượt lưu tự động) — không tự sinh lý do sẽ làm hỏng luôn cả những field
+        // người dùng đã nhập lý do thủ công, vì cả lô được lưu chung 1 transaction.
+        if (hasExisting && String(oldVal) !== rec.default) {
+            const reason = `Đọc lại từ ${deviceName} (${deviceCode}) lúc ${rec._meta.default.at}`;
+            rec._meta.default.reason = reason;
+            rec._meta.default.history_count = (rec._meta.default.history_count || 0) + 1;
+            if (!rec._meta.default.history_list) rec._meta.default.history_list = [];
+            rec._meta.default.history_list.push({ val: rec.default, old_val: oldVal, reason, by: rec._meta.default.by, at: rec._meta.default.at });
+        }
+
         BOOT.repaintAllFields();
+        // Lưu ngay xuống DB — giống mọi thao tác nhập liệu khác (xem applyExecutionValue ở
+        // main.js). Thiếu dòng này giá trị đọc từ cân chỉ tồn tại trong bộ nhớ JS, mất khi
+        // refresh hoặc chưa kịp có thao tác nào khác kích hoạt autoSaveRecordData().
+        BOOT.autoSaveRecordData && BOOT.autoSaveRecordData();
     };
 
     /** LUÔN mở modal kết nối cân theo yêu cầu — không tự động điền trực tiếp. */
@@ -526,12 +543,22 @@ export function initScaleReaderV2(BOOT) {
             });
         }
 
-        if (modalEl && typeof bootstrap !== 'undefined' && typeof bootstrap.Modal !== 'undefined') {
-            const isVisible = modalEl.classList.contains('show');
-            if (!isVisible) {
-                const modal = bootstrap.Modal.getOrCreateInstance ? bootstrap.Modal.getOrCreateInstance(modalEl) : new bootstrap.Modal(modalEl);
-                modal.show();
-            }
+        if (modalEl && !modalEl.classList.contains('show')) BOOT.showScaleModal(modalEl);
+    };
+
+    BOOT.showScaleModal = function (modalEl) {
+        modalEl = modalEl || document.getElementById('scaleConnectionModal');
+        if (!modalEl) return;
+
+        // Bootstrap 5: static getOrCreateInstance (only present when Modal is a class).
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal && typeof bootstrap.Modal.getOrCreateInstance === 'function') {
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+            return;
+        }
+
+        // Bootstrap 4 / jQuery plugin fallback.
+        if (window.jQuery && typeof window.jQuery(modalEl).modal === 'function') {
+            window.jQuery(modalEl).modal('show');
         }
     };
 
@@ -592,17 +619,34 @@ export function initScaleReaderV2(BOOT) {
         }
     };
 
+    BOOT.hideScaleModal = function () {
+        const modalEl = document.getElementById('scaleConnectionModal');
+        if (!modalEl) return;
+
+        // Bootstrap 5: static getInstance/getOrCreateInstance (only available when Modal is a class).
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal && typeof bootstrap.Modal.getOrCreateInstance === 'function') {
+            const inst = bootstrap.Modal.getInstance(modalEl) || bootstrap.Modal.getOrCreateInstance(modalEl);
+            if (inst) { inst.hide(); return; }
+        }
+
+        // Bootstrap 4 / jQuery plugin fallback.
+        if (window.jQuery && typeof window.jQuery(modalEl).modal === 'function') {
+            window.jQuery(modalEl).modal('hide');
+            return;
+        }
+
+        // Last resort: trigger the dismiss button so Bootstrap's own handler cleans up.
+        const closeBtn = modalEl.querySelector('[data-bs-dismiss="modal"], [data-dismiss="modal"]');
+        if (closeBtn) closeBtn.click();
+    };
+
     BOOT.readScaleFromModal = function () {
         if (!BOOT._scaleTargetFieldId) return;
         const result = ScaleManager.getLastResult();
         if (!result || result.value === undefined) return;
         BOOT.writeScaleValueToField(BOOT._scaleTargetFieldId, result.value, result.unit);
 
-        const modalEl = document.getElementById('scaleConnectionModal');
-        if (modalEl && typeof bootstrap !== 'undefined' && typeof bootstrap.Modal !== 'undefined') {
-            const inst = bootstrap.Modal.getInstance(modalEl) || (bootstrap.Modal.getOrCreateInstance ? bootstrap.Modal.getOrCreateInstance(modalEl) : null);
-            if (inst) inst.hide();
-        }
+        BOOT.hideScaleModal();
     };
 
     BOOT.toggleScaleDetails = function () {

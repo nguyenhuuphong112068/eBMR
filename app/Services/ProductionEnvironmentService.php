@@ -20,17 +20,43 @@ class ProductionEnvironmentService
     {
         $time = $timestamp ?? time();
 
-        $baseTemp = 20.0 + ($roomId % 5) * 0.8;
-        $fluctTemp = sin($time / 30.0 + $roomId) * 0.4;
-        $temperature = round($baseTemp + $fluctTemp, 1);
+        // Lấy ngưỡng cấu hình của phòng để sinh giá trị nằm trong ngưỡng đạt
+        try {
+            $condition = \Illuminate\Support\Facades\DB::table('room_manufactured_condition')
+                ->where('room_id', $roomId)
+                ->first();
+            $t = self::thresholds($condition);
+        } catch (\Throwable $e) {
+            // Cấu hình mặc định khi không truy vấn được DB
+            $t = self::thresholds(null);
+        }
 
-        $baseHumid = 42 + ($roomId % 6) * 1.5;
-        $fluctHumid = cos($time / 45.0 + $roomId) * 2;
-        $humidity = round($baseHumid + $fluctHumid, 0);
+        // Nhiệt độ: Luôn nằm trong khoảng [temp_min, temp_max]
+        $tempMin = $t['temp_min'];
+        $tempMax = $t['temp_max'];
+        $midTemp = ($tempMin + $tempMax) / 2.0;
+        $rangeTemp = $tempMax - $tempMin;
+        $maxFluctTemp = $rangeTemp > 0 ? min(0.5, $rangeTemp * 0.2) : 0.0;
+        $fluctTemp = sin($time / 30.0 + $roomId) * $maxFluctTemp;
+        $temperature = round($midTemp + $fluctTemp, 1);
 
-        $basePressure = 8 + ($roomId % 8);
-        $fluctPressure = sin($time / 60.0 + $roomId) * 1;
-        $pressure = round($basePressure + $fluctPressure, 0);
+        // Độ ẩm: Luôn nằm trong khoảng [humid_min, humid_max]
+        $humidMin = $t['humid_min'];
+        $humidMax = $t['humid_max'];
+        $midHumid = ($humidMin + $humidMax) / 2.0;
+        $rangeHumid = $humidMax - $humidMin;
+        $maxFluctHumid = $rangeHumid > 0 ? min(3.0, $rangeHumid * 0.2) : 0.0;
+        $fluctHumid = cos($time / 45.0 + $roomId) * $maxFluctHumid;
+        $humidity = round($midHumid + $fluctHumid, 0);
+
+        // Áp suất: Luôn nằm trong khoảng [press_min, press_max]
+        $pressMin = $t['press_min'];
+        $pressMax = $t['press_max'];
+        $midPress = ($pressMin + $pressMax) / 2.0;
+        $rangePress = $pressMax - $pressMin;
+        $maxFluctPress = $rangePress > 0 ? min(2.0, $rangePress * 0.2) : 0.0;
+        $fluctPress = sin($time / 60.0 + $roomId) * $maxFluctPress;
+        $pressure = round($midPress + $fluctPress, 0);
 
         return [
             'temperature' => $temperature,

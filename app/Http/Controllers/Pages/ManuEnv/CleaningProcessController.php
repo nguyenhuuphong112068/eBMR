@@ -854,23 +854,34 @@ class CleaningProcessController extends Controller
         $fullName = session('user')['fullName'] ?? 'N/A';
 
         $campaign = CleaningRoomCampaign::with('steps')->findOrFail($campaign_id);
-        
+
         // Lấy loại quy trình để tính hạn vệ sinh
         $processList = CleaningRoomProcessList::find($campaign->process_list_id);
         $cleaningType = $processList ? $processList->cleaning_type : 1;
-        
-        $cleanExpiryDate = now();
-        $cleanLevel = '';
-        if ($cleaningType == 1) {
-            $cleanExpiryDate = now()->addDays(3);
-            $cleanLevel = 'Vệ Sinh Cấp I';
-        } elseif ($cleaningType == 2) {
-            $cleanExpiryDate = now()->addDays(7);
-            $cleanLevel = 'Vệ Sinh Cấp II';
-        } elseif ($cleaningType == 3) {
-            $cleanExpiryDate = now()->addHours(24);
-            $cleanLevel = 'Vệ Sinh Lại';
+
+        // Nếu có bất kỳ bước nào KHÔNG ĐẠT thì quy trình kết thúc nhưng phòng
+        // vẫn ở trạng thái "cần vệ sinh" (dirty) chứ không được coi là đã sạch.
+        $hasFailedStep = $campaign->steps->contains(fn($s) => $s->is_passed === false);
+
+        $cleanExpiryDate = null;
+        $cleanLevel = null;
+        if (!$hasFailedStep) {
+            if ($cleaningType == 1) {
+                $cleanExpiryDate = now()->addDays(3);
+                $cleanLevel = 'Vệ Sinh Cấp I';
+            } elseif ($cleaningType == 2) {
+                $cleanExpiryDate = now()->addDays(7);
+                $cleanLevel = 'Vệ Sinh Cấp II';
+            } elseif ($cleaningType == 3) {
+                $cleanExpiryDate = now()->addHours(24);
+                $cleanLevel = 'Vệ Sinh Lại';
+            }
         }
+
+        $resultStatus = $hasFailedStep ? 'dirty' : 'cleaned';
+        $remarks      = $hasFailedStep
+            ? 'Kết thúc vệ sinh phòng (có bước KHÔNG ĐẠT) bởi ' . $fullName
+            : 'Hoàn thành vệ sinh bởi ' . $fullName;
 
         // Kiểm tra tất cả bước đã hoàn thành chưa
         $undoneSteps = $campaign->steps->where('is_done', false)->count();
@@ -890,7 +901,7 @@ class CleaningProcessController extends Controller
                 'completed_at' => now(),
             ]);
 
-            // Cập nhật room_logbooks: ghi nhận trạng thái 'cleaned'
+            // Cập nhật room_logbooks: ghi nhận trạng thái 'cleaned' hoặc 'dirty' nếu có bước KHÔNG ĐẠT
             DB::table('room_logbooks')->insert([
                 'room_id'           => $campaign->room_id,
                 'campaign_id'       => $campaign->id,
@@ -900,11 +911,11 @@ class CleaningProcessController extends Controller
                 'end_time'          => now(),
                 'employee_ids'      => json_encode([$userId]),
                 'previous_status'   => 'cleaning',
-                'current_status'    => 'cleaned',
+                'current_status'    => $resultStatus,
                 'clean_level'       => $cleanLevel,
                 'clean_expiry_date' => $cleanExpiryDate,
                 'created_by'        => $userId,
-                'remarks'           => 'Hoàn thành vệ sinh bởi ' . $fullName,
+                'remarks'           => $remarks,
                 'created_at'        => now(),
                 'updated_at'        => now(),
             ]);
@@ -912,8 +923,11 @@ class CleaningProcessController extends Controller
             DB::commit();
 
             return response()->json([
-                'success' => true,
-                'message' => 'Hoàn thành quy trình vệ sinh! Trạng thái phòng đã được cập nhật thành "Đã vệ sinh".'
+                'success'    => true,
+                'has_failed' => $hasFailedStep,
+                'message'    => $hasFailedStep
+                    ? 'Quy trình vệ sinh đã kết thúc nhưng có bước KHÔNG ĐẠT — phòng vẫn ở trạng thái "Cần vệ sinh". Vui lòng bắt đầu lại quy trình vệ sinh.'
+                    : 'Hoàn thành quy trình vệ sinh! Trạng thái phòng đã được cập nhật thành "Đã vệ sinh".'
             ]);
         } catch (\Exception $e) {
             DB::rollBack();

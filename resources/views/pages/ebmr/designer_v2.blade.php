@@ -588,6 +588,46 @@
         </div>
     @endif
 
+    {{-- ===== Hộp thoại nhỏ KHÔNG MODAL (modeless): Nhiệt độ/Độ ẩm/Chênh áp phòng — xem
+         nhanh giá trị hiện tại + khoảng thiết kế + mini biểu đồ, bố cục giống card phòng
+         ở trang Phòng Sản Xuất (telemetry-panel). Bấm 1 trong 3 nút trên toolbar mở hộp
+         thoại này; KHÔNG có backdrop nên vẫn thao tác được form phía sau, và kéo được
+         bằng tiêu đề (xem makeQuickPanelDraggable() trong env-monitor.js — hỗ trợ cả
+         chuột lẫn chạm vì trang thực thi chạy trên tablet không chuột). Có nút "Xem lịch
+         sử chi tiết" để mở modal biểu đồ + bảng đầy đủ (#v2EnvHistoryModal) bên dưới. ===== --}}
+    <div id="v2EnvQuickPanel" class="v2-env-quick-panel shadow-lg" style="display: none;" role="dialog"
+        aria-hidden="true" aria-label="Môi Trường Phòng — Trực Tiếp">
+        <div class="v2-env-quick-panel-header" id="v2-env-quick-drag-handle">
+            <h6 class="fw-bold small mb-0 text-white"><i class="fas fa-satellite-dish me-2"></i>Môi Trường Phòng — Trực Tiếp</h6>
+            <button type="button" class="v2-env-quick-close" id="v2-env-quick-close" aria-label="Đóng"><span aria-hidden="true">&times;</span></button>
+        </div>
+        <div class="v2-env-quick-panel-body p-3">
+            <div class="telemetry-panel rounded-3 p-3 bg-light d-flex justify-content-between shadow-inner">
+                @foreach (['temperature' => ['NHIỆT ĐỘ', '°C'], 'humidity' => ['ĐỘ ẨM', '%'], 'pressure' => ['CHÊNH ÁP', 'Pa']] as $metricKey => $meta)
+                    <div class="text-center flex-fill {{ $metricKey !== 'pressure' ? 'border-end' : '' }} px-1">
+                        <div class="small text-muted mb-1 font-monospace d-flex justify-content-center align-items-center"
+                            style="font-size: 0.65rem;">
+                            <span>{{ $meta[0] }}</span>
+                            <span class="badge bg-danger text-white px-1 py-0 ms-1 rounded warning-badge d-none"
+                                id="v2-env-quick-warn-{{ $metricKey }}" style="font-size: 0.55rem;">CẢNH BÁO</span>
+                        </div>
+                        <div class="fw-bold v2-env-quick-navy mb-1" style="font-size: 1.1rem;"><span
+                                id="v2-env-quick-val-{{ $metricKey }}">--</span><span
+                                style="font-size: 0.8rem;">{{ $meta[1] }}</span></div>
+                        <canvas id="v2-env-quick-spark-{{ $metricKey }}" class="sparkline-canvas" width="200" height="60"></canvas>
+                        <div class="text-muted font-monospace mt-1" id="v2-env-quick-range-{{ $metricKey }}"
+                            style="font-size: 0.55rem; opacity: 0.8;">-- - --{{ $meta[1] }}</div>
+                    </div>
+                @endforeach
+            </div>
+        </div>
+        <div class="v2-env-quick-panel-footer px-3 pb-3">
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="v2-env-quick-history-btn">
+                <i class="fas fa-chart-line me-1"></i> Xem lịch sử chi tiết
+            </button>
+        </div>
+    </div>
+
     {{-- ===== Modal: Lịch sử Nhiệt độ/Độ ẩm/Chênh áp phòng — biểu đồ + toàn bộ lần đọc
          từ lúc Bắt đầu sản xuất (xem resources/js/designer-v2/env-monitor.js) ===== --}}
     <div class="modal fade" id="v2EnvHistoryModal" tabindex="-1" aria-hidden="true">
@@ -599,7 +639,9 @@
                         aria-label="Close"><span aria-hidden="true">&times;</span></button>
                 </div>
                 <div class="modal-body">
-                    <canvas id="v2-env-history-chart" height="90"></canvas>
+                    <div style="position: relative; height: 180px; width: 100%;">
+                        <canvas id="v2-env-history-chart"></canvas>
+                    </div>
                     <div class="table-responsive mt-3" style="max-height: 300px; overflow-y: auto;">
                         <table class="table table-sm table-hover mb-0">
                             <thead class="bg-light" style="position: sticky; top: 0;">
@@ -632,7 +674,7 @@
                         <label class="small fw-bold mb-0 text-nowrap" for="v2-attach-section-select">
                             <i class="fas fa-layer-group me-1 text-info"></i>Phân đoạn
                         </label>
-                        <select id="v2-attach-section-select" class="form-control form-control-sm"></select>
+                        <select id="v2-attach-section-select" class="form-control" style="height: 42px;"></select>
                     </div>
                     <div class="table-responsive" style="max-height: 320px; overflow-y: auto;">
                         <table class="table table-sm table-hover mb-0">
@@ -2701,17 +2743,18 @@
             outline-offset: 2px;
         }
 
-        /* Chỉ-đọc (readonly-active — vd. đang "Xem tất cả công đoạn" hoặc hồ sơ đã khoá):
-           làm mờ viền cam mời-click + tắt hiệu ứng hover, để người dùng biết ngay biến số
-           này không ghi được thay vì bấm thử rồi tưởng nhầm là lỗi không phản hồi. */
+        /* Chỉ-đọc (readonly-active — vd. đang "Xem tất cả công đoạn", phân đoạn đã hoàn thành,
+           hoặc hồ sơ đã khoá): làm nhạt viền cam mời-click + tắt hiệu ứng hover, để người dùng
+           biết ngay biến số này không ghi được thay vì bấm thử rồi tưởng nhầm là lỗi không phản hồi.
+           Cố ý KHÔNG làm mờ nội dung (opacity) để giá trị đã điền vẫn đọc rõ — khoá nhưng không mờ. */
         .readonly-active .v2-field-badge.v2-field-exec {
             outline-color: #cbd5e1;
-            opacity: 0.75;
         }
 
         .readonly-active .v2-exec-input,
         .readonly-active .v2-exec-checkbox,
-        .readonly-active .v2-exec-select {
+        .readonly-active .v2-exec-select,
+        .readonly-active .v2-exec-radio-group {
             cursor: default !important;
         }
 
@@ -2726,6 +2769,10 @@
 
         .readonly-active .v2-exec-select:hover {
             border-bottom-color: #94a3b8;
+        }
+
+        .readonly-active .v2-exec-radio-option:hover .v2-exec-radio-dot {
+            border-color: #94a3b8;
         }
 
         /* ===== Gạch chéo "KHÔNG SỬ DỤNG" (N/A) — xem na-marks.js ===== */
@@ -2945,6 +2992,71 @@
             border-bottom-color: #3b82f6;
         }
 
+        /* radio: nhiều mục tick chọn nhưng chỉ chọn được 1 — hiện sẵn danh sách (không cần
+           mở dropdown), phù hợp tablet chạy sản xuất không dùng chuột. */
+        .v2-exec-radio-group {
+            display: inline-flex;
+            flex-wrap: wrap;
+            gap: 4px 12px;
+            vertical-align: middle;
+        }
+
+        .v2-exec-radio-option {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
+            user-select: none;
+            white-space: normal;
+        }
+
+        .v2-exec-radio-dot {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 15px;
+            height: 15px;
+            flex-shrink: 0;
+            border: 1.5px solid #94a3b8;
+            border-radius: 50%;
+            background: #fff;
+            transition: background-color 0.15s, border-color 0.15s;
+        }
+
+        .v2-exec-radio-dot::after {
+            content: '';
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #fff;
+            opacity: 0;
+            transform: scale(0.5);
+            transition: opacity 0.15s, transform 0.15s;
+        }
+
+        .v2-exec-radio-option:hover .v2-exec-radio-dot {
+            border-color: #16a34a;
+        }
+
+        .v2-exec-radio-option.is-checked .v2-exec-radio-dot {
+            border-color: #16a34a;
+            background: #16a34a;
+        }
+
+        .v2-exec-radio-option.is-checked .v2-exec-radio-dot::after {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        .v2-exec-radio-option.is-checked .v2-exec-radio-text {
+            color: #15803d;
+            font-weight: 500;
+        }
+
+        .v2-exec-radio-group.is-readonly .v2-exec-radio-option {
+            cursor: default;
+        }
+
         /* dòng meta người/giờ + nhãn lịch sử thay đổi */
         .v2-exec-meta {
             font-size: 10px;
@@ -3039,6 +3151,23 @@
 
         .v2-exec-checkbox.is-checked .v2-exec-checkbox-text {
             color: #15803d;
+        }
+
+        /* Trạng thái "Không" (đã trả lời rõ ràng là Không) — khác với ô trống "chưa xác định":
+           nền/viền đỏ nhạt + dấu X, để phân biệt trực quan với ô chưa từng chạm tới. */
+        .v2-exec-checkbox.is-unchecked .v2-exec-checkbox-box {
+            background: #fef2f2;
+            border-color: #dc2626;
+        }
+
+        .v2-exec-checkbox.is-unchecked .v2-exec-checkbox-box i {
+            opacity: 1;
+            transform: scale(1);
+            color: #dc2626;
+        }
+
+        .v2-exec-checkbox.is-unchecked .v2-exec-checkbox-text {
+            color: #b91c1c;
         }
 
         /* Checkbox khoá vì được tự động tick theo công thức — không cho tick tay, nhưng giữ màu xanh nếu checked */
@@ -3763,6 +3892,89 @@
             color: #7f1d1d;
             border-radius: 3px;
             padding: 0 2px;
+        }
+
+        /* ===== Hộp thoại nhỏ KHÔNG MODAL Môi Trường Phòng (#v2EnvQuickPanel) — nổi tự do,
+           kéo được bằng tiêu đề, không backdrop nên không chặn thao tác form phía sau.
+           Bố cục mượn từ telemetry-panel của card phòng. z-index cao hơn
+           .v2-toolbar-fixed (2000) để không bị thanh công cụ cố định che mất.
+           Xem resources/js/designer-v2/env-monitor.js ===== */
+        .v2-env-quick-panel {
+            position: fixed;
+            top: 70px;
+            right: 20px;
+            width: 420px;
+            max-width: calc(100vw - 24px);
+            background: #fff;
+            border-radius: 12px;
+            overflow: hidden;
+            z-index: 2100;
+        }
+
+        .v2-env-quick-panel-header {
+            background-color: #003A4F;
+            padding: 8px 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: move;
+            touch-action: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        .v2-env-quick-close {
+            background: transparent;
+            border: 0;
+            color: #fff;
+            opacity: 0.85;
+            font-size: 1.3rem;
+            line-height: 1;
+            padding: 0 4px;
+            cursor: pointer;
+        }
+
+        .v2-env-quick-close:hover {
+            opacity: 1;
+        }
+
+        .v2-env-quick-navy {
+            color: #003A4F;
+        }
+
+        .v2-env-quick-panel-footer {
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .telemetry-panel {
+            border: 1px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .sparkline-canvas {
+            width: 100%;
+            height: 38px;
+            margin-top: 8px;
+            display: block;
+        }
+
+        @keyframes v2-env-pulse-red {
+            0% { background-color: #dc3545; box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); }
+            70% { background-color: #dc3545; box-shadow: 0 0 0 6px rgba(220, 53, 69, 0); }
+            100% { background-color: #dc3545; box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
+        }
+
+        .warning-badge {
+            animation: v2-env-pulse-red 1.2s infinite;
+        }
+
+        @keyframes v2-env-blink-red-text {
+            0%, 100% { color: #dc3545 !important; text-shadow: 0 0 6px rgba(220, 53, 69, 0.5); }
+            50% { color: #003A4F !important; text-shadow: none; }
+        }
+
+        .text-danger-blink {
+            animation: v2-env-blink-red-text 1.2s infinite !important;
         }
     </style>
 @endsection

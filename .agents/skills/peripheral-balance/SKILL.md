@@ -277,3 +277,5 @@ khi reboot server, sử dụng công cụ quản lý tiến trình **PM2**:
 
 > **Ngắt kết nối tự động**: Khi tab/cửa sổ bị đóng, kết nối serial sẽ bị ngắt tự động bởi trình duyệt.
 > Không cần xử lý thêm.
+
+pm2 start scale-bridge.js --name "ebmr-scale-bridge"

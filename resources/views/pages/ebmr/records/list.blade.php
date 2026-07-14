@@ -89,12 +89,21 @@
                                                                         // Ghi chép (?section=id1,id2) hiển thị đúng nội dung gộp của cả trang in.
                                                                         $sSectionParam = implode(',', $s['member_ids'] ?? [$s['id']]);
                                                                     @endphp
+                                                                    @php
+                                                                        $sEnded = $sDist && !is_null($sDist->production_ended_at);
+                                                                        $sBadgeClass = $sEnded
+                                                                            ? 'bg-soft-secondary text-secondary border-secondary'
+                                                                            : ($sDist ? 'bg-soft-success text-success border-success' : 'bg-soft-info text-info border-info');
+                                                                        $sIcon = $sEnded ? 'fa-lock' : ($sDist ? 'fa-check-circle' : 'fa-play-circle');
+                                                                        $sTitle = $sEnded
+                                                                            ? 'Đã kết thúc sản xuất tại phòng ' . $sDist->room_code . ' — công đoạn đã khoá'
+                                                                            : ($sDist ? 'Đã phân phối tới phòng ' . $sDist->room_code : 'Chưa phân phối');
+                                                                    @endphp
                                                                     <a href="{{ route('pages.ebmr.execute', $r->id) }}?section={{ $sSectionParam }}{{ $mode == 'working' ? '&from=issuance' : '' }}"
-                                                                        class="badge {{ $sDist ? 'bg-soft-success text-success border-success' : 'bg-soft-info text-info border-info' }} border rounded-pill py-1 px-2 text-decoration-none hover-glow"
+                                                                        class="badge {{ $sBadgeClass }} border rounded-pill py-1 px-2 text-decoration-none hover-glow"
                                                                         style="font-size: 0.75rem; cursor: pointer; transition: all 0.2s;"
-                                                                        title="{{ $sDist ? 'Đã phân phối tới phòng ' . $sDist->room_code : 'Chưa phân phối' }}">
-                                                                        <i
-                                                                            class="fas {{ $sDist ? 'fa-check-circle' : 'fa-play-circle' }} me-1"></i>
+                                                                        title="{{ $sTitle }}">
+                                                                        <i class="fas {{ $sIcon }} me-1"></i>
                                                                         {{ $s['label'] }}
                                                                         @if ($sDist)
                                                                             <span
@@ -114,7 +123,13 @@
                                                             {{ $r->issuer_name ?? 'N/A' }}
                                                         </td>
                                                         <td>
-                                                            @if ($r->status === 'active')
+                                                            @if (!empty($r->is_partial_completion))
+                                                                <span
+                                                                    class="badge bg-soft-warning text-warning border border-warning"
+                                                                    title="Có công đoạn đã kết thúc sản xuất, các công đoạn khác vẫn đang ghi chép">
+                                                                    <i class="fas fa-hourglass-half me-1"></i> Chờ hoàn
+                                                                    thành</span>
+                                                            @elseif ($r->status === 'active')
                                                                 <span
                                                                     class="badge bg-soft-success text-success border border-success"><i
                                                                         class="fas fa-spinner fa-spin me-1"></i> Đang sản
@@ -261,6 +276,14 @@
 
         .bg-soft-info {
             background-color: rgba(23, 162, 184, 0.1);
+        }
+
+        .bg-soft-secondary {
+            background-color: rgba(108, 117, 125, 0.1);
+        }
+
+        .bg-soft-warning {
+            background-color: rgba(255, 193, 7, 0.15);
         }
 
         .hover-glow:hover {

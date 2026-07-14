@@ -48,7 +48,49 @@ class LinkedGfResolver
         if (isset($field['id'])) {
             $field['id'] = $hostBlockId . '__gf' . $field['id'];
         }
+
+        // Badge biến số được nhúng THẲNG vào HTML nội dung (injectContent chạy TRƯỚC hàm này)
+        // vẫn mang data-field-id/onclick với field-key GỐC "field_...". Phải namespace luôn các
+        // chuỗi này cho khớp fieldsConfig đã đổi tên ({hostBlockId}__gf...), nếu không frontend
+        // tra fieldsConfig[id-gốc] không ra -> bỏ qua badge, không kích hoạt ô nhập
+        // (activateStaticBadgesIn: `if (!fid || !fieldsConfig[fid]) return;`).
+        $prefix = $hostBlockId . '__gf';
+        if (!empty($field['content']) && is_string($field['content'])) {
+            $field['content'] = self::namespaceFieldIdsInHtml($field['content'], $prefix);
+        }
+        if (($field['type'] ?? null) === 'table' && !empty($field['data']) && is_array($field['data'])) {
+            foreach ($field['data'] as &$row) {
+                if (!is_array($row)) continue;
+                foreach ($row as &$cell) {
+                    if (is_array($cell) && !empty($cell['content']) && is_string($cell['content'])) {
+                        $cell['content'] = self::namespaceFieldIdsInHtml($cell['content'], $prefix);
+                    }
+                }
+                unset($cell);
+            }
+            unset($row);
+        }
+
         return $field;
+    }
+
+    /**
+     * Đổi tên mọi field-key gốc "field_..." nhúng trong 1 đoạn HTML (data-field-id + tham số
+     * selectField) sang dạng đã namespace theo host-block. Bỏ qua sớm nếu đoạn HTML không chứa
+     * "field_" để không tốn regex. Dùng callback để prefix (chứa số) không bị hiểu là backreference.
+     */
+    private static function namespaceFieldIdsInHtml(string $html, string $prefix): string
+    {
+        if (strpos($html, 'field_') === false) {
+            return $html;
+        }
+        $html = preg_replace_callback('/data-field-id="(field_[a-zA-Z0-9_]+)"/', function ($m) use ($prefix) {
+            return 'data-field-id="' . $prefix . $m[1] . '"';
+        }, $html);
+        $html = preg_replace_callback("/selectField\\(event,\\s*'(field_[a-zA-Z0-9_]+)'\\)/", function ($m) use ($prefix) {
+            return "selectField(event, '" . $prefix . $m[1] . "')";
+        }, $html);
+        return $html;
     }
 
     /**

@@ -1214,7 +1214,7 @@
                 Swal.fire({
                     icon: 'question',
                     title: 'Xác nhận hoàn thành vệ sinh?',
-                    html: 'Sau khi xác nhận, trạng thái phòng <strong>{{ $room->code }}</strong> sẽ được cập nhật thành <span class="text-success fw-bold">Đã vệ sinh</span>.',
+                    html: 'Sau khi xác nhận, quy trình vệ sinh phòng <strong>{{ $room->code }}</strong> sẽ kết thúc. Nếu tất cả tiêu chuẩn đều Đạt, phòng sẽ chuyển thành <span class="text-success fw-bold">Đã vệ sinh</span>; nếu có tiêu chuẩn Không đạt, phòng vẫn ở trạng thái <span class="text-danger fw-bold">Cần vệ sinh</span>.',
                     showCancelButton: true,
                     confirmButtonColor: '#22c55e',
                     cancelButtonColor: '#6c757d',
@@ -1233,10 +1233,10 @@
                         success: function(res) {
                             if (res.success) {
                                 Swal.fire({
-                                    icon: 'success',
-                                    title: 'Hoàn thành!',
+                                    icon: res.has_failed ? 'warning' : 'success',
+                                    title: res.has_failed ? 'Kết thúc quy trình' : 'Hoàn thành!',
                                     text: res.message,
-                                    timer: 2500,
+                                    timer: res.has_failed ? 4000 : 2500,
                                     showConfirmButton: false
                                 }).then(function() {
                                     window.location.href = '{{ route('pages.ebmr.production') }}';

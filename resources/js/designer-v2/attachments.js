@@ -94,7 +94,7 @@ export function createAttachmentsV2({ BOOT }) {
         const submitBtn = document.getElementById('v2-attach-submit-btn');
         if (!fileInput.files.length || !currentSectionId) return;
 
-        const sec = sectionList().find((s) => String(s.id) === String(currentSectionId));
+        const sec = sectionList().find((s) => String(s.section_id) === String(currentSectionId));
 
         const fd = new FormData();
         fd.append('record_id', BOOT.recordId);
@@ -134,8 +134,8 @@ export function createAttachmentsV2({ BOOT }) {
         const select = document.getElementById('v2-attach-section-select');
         if (!select) return;
         select.innerHTML = sectionList().map((s) => {
-            const count = (state[s.id] || []).length;
-            return `<option value="${escHtml(s.id)}">${escHtml(s.label || 'Phân đoạn')}${count ? ` (${count} tài liệu)` : ''}</option>`;
+            const count = (state[s.section_id] || []).length;
+            return `<option value="${escHtml(s.section_id)}">${escHtml(s.label || 'Phân đoạn')}${count ? ` (${count} tài liệu)` : ''}</option>`;
         }).join('');
         if (currentSectionId) select.value = String(currentSectionId);
         if (!select.value && select.options.length) select.selectedIndex = 0;

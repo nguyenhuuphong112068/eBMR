@@ -995,10 +995,10 @@
                     success: function(res) {
                         if (res.success) {
                             Swal.fire({
-                                    icon: 'success',
-                                    title: 'Hoàn thành!',
+                                    icon: res.has_failed ? 'warning' : 'success',
+                                    title: res.has_failed ? 'Kết thúc quy trình' : 'Hoàn thành!',
                                     text: res.message,
-                                    timer: 2500,
+                                    timer: res.has_failed ? 4000 : 2500,
                                     showConfirmButton: false
                                 })
                                 .then(() => {
