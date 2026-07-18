@@ -197,7 +197,9 @@ const selection = createSelectionController({
     cutFields: (ids) => cutFieldsV2(ids),
     pasteFieldsIntoCell: (item, r, c) => pasteFieldsIntoCellV2(item, r, c),
     pasteFieldsAtCursor: () => pasteFieldsV2(),
+    pasteFieldsAtInsertPoint: () => pasteFieldsAsNewBlockV2(),
     hasFieldClipboard: () => hasFieldClipboardV2(),
+    setClipboardHint: (html) => setClipboardHintV2(html),
     deleteBlock: (id) => deleteBlock(id),
     convertStaticSelectionToEditable: (action) => convertStaticSelectionToEditableV2(action),
 });
@@ -1214,6 +1216,8 @@ function copyPickedBlocksV2(isCut) {
         .filter(Boolean);
     if (!picked.length) return;
     blockClipboardV2 = { blocks: JSON.parse(JSON.stringify(picked)) };
+    selection.notifyBlocksCopied(); // Ctrl+V sau đó dán KHỐI, không dán nhầm biến số/ô đã copy trước
+    setClipboardHintV2(`<b>${picked.length} khối</b> — bấm vào vị trí đích rồi Ctrl+V để dán`);
     showToast('info', isCut ? `Đã cắt ${picked.length} khối` : `Đã sao chép ${picked.length} khối`);
     if (isCut) {
         saveDocState();
@@ -1779,7 +1783,7 @@ function renderTable(item, fieldsOverride) {
             td.appendChild(inner);
 
             if (!BOOT.isReadOnly && !BOOT.isExecutionMode && !item.locked) {
-                inner.addEventListener('click', (e) => {
+                const openCellEditor = (e) => {
                     if (activeHost === inner) return;
                     if (hasNativeTextSelectionV2()) return; // vừa quét chọn chữ để copy — giữ selection, không mở editor
                     e.stopPropagation();
@@ -1789,6 +1793,13 @@ function renderTable(item, fieldsOverride) {
                         () => cellRef.content || '',
                         (html) => { cellRef.content = html; item.dirty = true; markDirty(); },
                         { kind: 'cell', item, r: rowIdx, c: colIdx }, { x: e.clientX, y: e.clientY });
+                };
+                inner.addEventListener('click', openCellEditor);
+                // Ô cao hơn nội dung (ô trống, ô rowspan...): phần td NGOÀI div nội dung
+                // trước đây click không làm gì -> không mở được editor để gõ/dán vào ô.
+                // Chỉ bắt khi target là CHÍNH td để không đè handler của resizer/gutter/badge.
+                td.addEventListener('click', (e) => {
+                    if (e.target === td) openCellEditor(e);
                 });
             }
             tr.appendChild(td);
@@ -3848,6 +3859,7 @@ function copyFieldsV2(ids) {
     const valid = (ids || []).filter((id) => fieldsConfig[id]);
     if (!valid.length) return 0;
     fieldClipboardV2 = valid.map((id) => JSON.parse(JSON.stringify(fieldsConfig[id])));
+    setClipboardHintV2(`<b>${valid.length} biến số</b> — bấm vào vị trí đích rồi Ctrl+V để dán bản sao`);
     return valid.length;
 }
 
@@ -3856,6 +3868,7 @@ function cutFieldsV2(ids) {
     if (!n) return 0;
     saveDocState();
     deleteVariablesV2(ids); // gỡ badge + config, clearFields, renderDocument
+    setClipboardHintV2(`<b>${n} biến số</b> (đã cắt) — bấm vào vị trí đích rồi Ctrl+V để di chuyển tới đó`);
     return n;
 }
 
@@ -3936,7 +3949,51 @@ function pasteFieldsV2() {
     return true;
 }
 
+/**
+ * Dán biến từ clipboard khi KHÔNG có editor mở và KHÔNG có ô đích: tạo khối văn bản
+ * mới chứa badge tại điểm chèn (block/section vừa click — cùng vị trí với global paste).
+ * Nhờ vậy Cắt biến -> click chỗ trống/tiêu đề section -> Ctrl+V vẫn dán được như Word.
+ */
+function pasteFieldsAsNewBlockV2() {
+    if (!hasFieldClipboardV2()) return false;
+    if (BOOT.isReadOnly || BOOT.isExecutionMode) return false;
+    const { insertIdx, sectionId } = getInsertPointV2();
+    saveDocState();
+    const plan = registerPasteFieldsPlanV2();
+    let html = '<p>';
+    plan.forEach(({ id }) => { html += `<span contenteditable="false" class="ebmr-field-badge" data-field-id="${id}"></span>​`; });
+    html += '</p>';
+    const block = {
+        id: newBlockId(), type: 'static-text', label: 'Văn bản',
+        content: html, section_id: sectionId, borderMode: 'none', dirty: true,
+    };
+    items.splice(insertIdx, 0, block);
+    pasteAnchorIdV2 = block.id;
+    markDirty();
+    renderDocument();
+    showToast('success', `Đã dán ${plan.length} biến số`);
+    return true;
+}
+
 const hasFieldClipboardV2 = () => !!(fieldClipboardV2 && fieldClipboardV2.length);
+
+/* ----------------------------------------------------------
+ * Pill chỉ báo CLIPBOARD NỘI BỘ (biến số / ô bảng / khối) — cố định góc dưới màn
+ * hình, cho người dùng biết Ctrl+V sắp dán gì. Tự ẩn khi copy/cắt chữ thường
+ * (selection.js bắt event 'copy'/'cut' native -> clipboard hệ thống là nguồn dán).
+ * Gọi setClipboardHintV2(null) để ẩn. Nút × chỉ ẩn pill, KHÔNG xóa clipboard.
+ * ---------------------------------------------------------- */
+function setClipboardHintV2(html) {
+    let el = document.getElementById('v2-clipboard-hint');
+    if (!html) { el?.remove(); return; }
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'v2-clipboard-hint';
+        document.body.appendChild(el);
+    }
+    el.innerHTML = `<i class="fas fa-clipboard"></i><span>${html}</span>`
+        + '<button type="button" title="Ẩn thông báo (clipboard vẫn giữ nguyên)" onclick="this.parentElement.remove()">&times;</button>';
+}
 
 function showToast(type, msg) {
     if (window.toastr) { window.toastr[type](msg); return; }
@@ -4270,6 +4327,14 @@ function openFieldPanel(fieldId, onSaved) {
                     oninput="syncFieldConfigV2('${fieldId}','options',this.value)"
                     >${Array.isArray(cfg.options) ? cfg.options.join(', ') : (cfg.options || '')}</textarea>
                 <div class="form-text" style="font-size:0.7rem">Mỗi lựa chọn cách nhau bởi dấu phẩy (,). Khi chạy thử sẽ hiện sẵn dạng nút tròn, chạm để chọn — chỉ chọn được 1 mục.</div>
+            </div>
+            <div class="mb-3">
+                <label class="v2-prop-label"><i class="fas fa-arrows-alt me-1"></i>Cách sắp xếp các lựa chọn</label>
+                <select class="form-select form-select-sm"
+                    onchange="syncFieldConfigV2('${fieldId}','radioLayout',this.value); _v2RepaintBadge('${fieldId}')">
+                    <option value="horizontal" ${cfg.radioLayout !== 'vertical' ? 'selected' : ''}>Ngang (trên 1 hàng)</option>
+                    <option value="vertical"   ${cfg.radioLayout === 'vertical' ? 'selected' : ''}>Dọc (mỗi mục 1 dòng)</option>
+                </select>
             </div>`;
     }
 
@@ -6795,15 +6860,32 @@ function toggleExecutionModeV2() {
     // Repaint lại tất cả các field badge
     renderDocument();
 
+    // Sandbox nhập thử (hồ sơ đã khoá, mở trong trình thiết kế): nói rõ dữ liệu
+    // chỉ lưu tạm trên trình duyệt để người kiểm tra/phê duyệt yên tâm nhập thử.
+    const isSandbox = isExec && BOOT.isReadOnly && !BOOT.recordId;
     window.Swal.fire({
         toast: true,
         position: 'top-end',
         icon: isExec ? 'success' : 'info',
         title: isExec ? 'Đã chuyển sang chế độ Chạy thử' : 'Đã quay lại chế độ Thiết kế',
+        text: isSandbox ? 'Bạn có thể nhập thử dữ liệu vào biến số. Dữ liệu thử chỉ lưu tạm trên trình duyệt, KHÔNG ghi vào hồ sơ.' : undefined,
         showConfirmButton: false,
-        timer: 3000
+        timer: isSandbox ? 6000 : 3000
     });
 }
+
+/* ---------------------------------------------------------
+ * SANDBOX NHẬP THỬ: hồ sơ đã khoá cấu trúc (đang trình ký/đã duyệt) mở trong TRÌNH
+ * THIẾT KẾ vẫn cho người kiểm tra/phê duyệt NHẬP THỬ vào biến số khi Chạy thử.
+ * An toàn vì trang thiết kế không có recordId — autoSaveRecordData/saveRecordDataV2
+ * đều no-op, giá trị chỉ nằm trong BOOT.executionValues (bộ nhớ trình duyệt, mất khi
+ * tải lại trang). Cấu trúc hồ sơ vẫn khoá như cũ (các guard BOOT.isReadOnly ngoài
+ * Chạy thử không đổi). Trang thực thi lô thật (có recordId) giữ nguyên luật cũ.
+ * --------------------------------------------------------- */
+function canEnterExecDataV2() {
+    return !!BOOT.isExecutionMode && (!BOOT.isReadOnly || !BOOT.recordId);
+}
+window.__V2__.canEnterExecData = canEnterExecDataV2;
 
 /* ---------------------------------------------------------
  * 6a. Hạ tầng dùng chung cho Chạy thử (mọi loại biến)
@@ -6857,8 +6939,9 @@ sectionAttachments.init();
 // bắt buộc nhập "Lý do thay đổi" trước khi áp dụng + lưu vào lịch sử (giống V1).
 window.__V2__.applyExecutionValue = function (fieldId, finalValue, onDone) {
     // Gate trung tâm: hồ sơ readonly (đã hoàn thành/đã duyệt, hoặc không được phân phối)
-    // thì MỌI ngõ nhập liệu đều bị chặn tại đây.
-    if (BOOT.isReadOnly) { if (onDone) onDone(false); return; }
+    // thì MỌI ngõ nhập liệu đều bị chặn tại đây — trừ sandbox nhập thử trong trình
+    // thiết kế (xem canEnterExecDataV2).
+    if (!canEnterExecDataV2()) { if (onDone) onDone(false); return; }
     const existing = getExecDefaultV2(fieldId);
     const hasExisting = existing !== undefined && existing !== null && existing !== '';
 
@@ -7413,7 +7496,7 @@ function scheduleWeightSampleAlertV2(tableId, freqMinutes) {
  * 6c. Tương tác theo từng loại biến trong Chạy thử
  * --------------------------------------------------------- */
 window.__V2__.toggleExecutionCheckbox = function (fieldId) {
-    if (!BOOT.isExecutionMode || BOOT.isReadOnly) return;
+    if (!canEnterExecDataV2()) return;
     const field = fieldsConfig[fieldId];
     if (!field || field.formula) return; // biến khoá theo công thức: không cho tick tay
 
@@ -7443,12 +7526,12 @@ window.__V2__.isCheckboxFalseExplicit = function (v) {
 };
 
 window.__V2__.handleSelectChange = function (fieldId, value) {
-    if (!BOOT.isExecutionMode || BOOT.isReadOnly) return;
+    if (!canEnterExecDataV2()) return;
     window.__V2__.applyExecutionValue(fieldId, value);
 };
 
 window.__V2__.autoFillExecutionDate = function (fieldId) {
-    if (!BOOT.isExecutionMode || BOOT.isReadOnly) return;
+    if (!canEnterExecDataV2()) return;
     const field = fieldsConfig[fieldId];
     if (!field) return;
 
@@ -7473,7 +7556,7 @@ window.__V2__.autoFillExecutionDate = function (fieldId) {
 };
 
 window.__V2__.openExecutionModal = function (fieldId) {
-    if (!BOOT.isExecutionMode || BOOT.isReadOnly) return;
+    if (!canEnterExecDataV2()) return;
     const field = fieldsConfig[fieldId];
     if (!field) return;
 
@@ -7597,7 +7680,7 @@ window.__V2__.openExecutionModal = function (fieldId) {
  * 6d. Chữ ký điện tử — xác thực mật khẩu / xác thực người kiểm tra
  * --------------------------------------------------------- */
 window.__V2__.openSignatureModal = function (fieldId) {
-    if (!BOOT.isExecutionMode || BOOT.isReadOnly) return;
+    if (!canEnterExecDataV2()) return;
     if (!fieldsConfig[fieldId]) return;
 
     window.Swal.fire({
@@ -7641,7 +7724,7 @@ window.__V2__.openSignatureModal = function (fieldId) {
 };
 
 window.__V2__.openCheckerAuthModal = function (fieldId) {
-    if (!BOOT.isExecutionMode || BOOT.isReadOnly) return;
+    if (!canEnterExecDataV2()) return;
     if (!fieldsConfig[fieldId]) return;
 
     window.Swal.fire({
@@ -8523,6 +8606,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // "Chọn khối" trên toolbar mỗi khối, giữ Shift để chọn cả dải). Nhường hẳn cho
     // selection.js khi đang chọn Ô bảng/biến số (selection.hasCells()) hoặc đang gõ.
     document.addEventListener('keydown', (e) => {
+        if (e.defaultPrevented) return; // selection.js đã xử lý lượt Ctrl+C/X/V này (biến số/ô)
         if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
         if (activeEditor || selection.hasCells()) return;
         if (BOOT.isReadOnly || BOOT.isExecutionMode) return;

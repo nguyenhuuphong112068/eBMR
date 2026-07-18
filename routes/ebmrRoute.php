@@ -13,6 +13,11 @@ Route::group(['prefix' => 'ebmr', 'as' => 'pages.ebmr.'], function () {
     Route::post('/templates/co-category', [EbmrTemplateController::class, 'storeCoCategory'])->name('storeCoCategory');
     Route::post('/templates/duplicate', [EbmrTemplateController::class, 'duplicateTemplate'])->name('duplicateTemplate');
     Route::post('/templates/effective-date', [EbmrTemplateController::class, 'updateEffectiveDate'])->name('updateEffectiveDate');
+    // Ủy quyền chỉnh sửa & đổi Dược sĩ phụ trách
+    Route::get('/templates/{id}/editors', [EbmrTemplateController::class, 'getEditors'])->name('getTemplateEditors');
+    Route::post('/templates/editors/add', [EbmrTemplateController::class, 'addEditor'])->name('addTemplateEditor');
+    Route::post('/templates/editors/remove', [EbmrTemplateController::class, 'removeEditor'])->name('removeTemplateEditor');
+    Route::post('/templates/change-owner', [EbmrTemplateController::class, 'changeOwner'])->name('changeTemplateOwner');
     Route::post('/templates/{id}/change-reason', [EbmrTemplateController::class, 'saveChangeReason'])->name('saveChangeReason');
     Route::get('/templates/{id}/data', [EbmrTemplateController::class, 'getMetadata'])->name('getTemplateMetadata');
     Route::get('/get-templates', [EbmrTemplateController::class, 'getTemplates'])->name('getTemplates');

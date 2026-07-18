@@ -410,18 +410,18 @@ CleaningEquipCampaign::create([
 
 | File | Vai trò |
 |------|---------|
-| [`CleaningProcessController.php`](file:///c:/eBMR/app/Http/Controllers/Pages/ManuEnv/CleaningProcessController.php) | Controller chính VS phòng |
-| [`CleaningEquipCampaignController.php`](file:///c:/eBMR/app/Http/Controllers/Pages/ManuEnv/CleaningEquipCampaignController.php) | Controller campaign thiết bị |
-| [`RoomClearingController.php`](file:///c:/eBMR/app/Http/Controllers/Pages/ManuEnv/RoomClearingController.php) | CRUD phòng VS chung |
-| [`CleaningRoomCampaign.php`](file:///c:/eBMR/app/Models/CleaningRoomCampaign.php) | Model campaign phòng |
-| [`CleaningEquipCampaign.php`](file:///c:/eBMR/app/Models/CleaningEquipCampaign.php) | Model campaign thiết bị |
-| [`CleaningEquipCampaignStep.php`](file:///c:/eBMR/app/Models/CleaningEquipCampaignStep.php) | Model bước VS thiết bị |
-| [`RoomClearing.php`](file:///c:/eBMR/app/Models/RoomClearing.php) | Model phòng VS chung |
-| [`campaign_execute.blade.php`](file:///c:/eBMR/resources/views/pages/manu_env/cleaning_process/campaign_execute.blade.php) | View thực hiện VS phòng |
-| [`equip_campaign_execute.blade.php`](file:///c:/eBMR/resources/views/pages/manu_env/cleaning_process/equip_campaign_execute.blade.php) | View thực hiện VS thiết bị |
-| [`room_clearing/index.blade.php`](file:///c:/eBMR/resources/views/pages/manu_env/room_clearing/index.blade.php) | Quản lý phòng VS chung |
-| [`room_clearing/dashboard.blade.php`](file:///c:/eBMR/resources/views/pages/manu_env/room_clearing/dashboard.blade.php) | Dashboard phòng VS chung |
-| [`manuEnvRoute.php`](file:///c:/eBMR/routes/manuEnvRoute.php) | Toàn bộ routes VS |
+| [`CleaningProcessController.php`](app/Http/Controllers/Pages/ManuEnv/CleaningProcessController.php) | Controller chính VS phòng |
+| [`CleaningEquipCampaignController.php`](app/Http/Controllers/Pages/ManuEnv/CleaningEquipCampaignController.php) | Controller campaign thiết bị |
+| [`RoomClearingController.php`](app/Http/Controllers/Pages/ManuEnv/RoomClearingController.php) | CRUD phòng VS chung |
+| [`CleaningRoomCampaign.php`](app/Models/CleaningRoomCampaign.php) | Model campaign phòng |
+| [`CleaningEquipCampaign.php`](app/Models/CleaningEquipCampaign.php) | Model campaign thiết bị |
+| [`CleaningEquipCampaignStep.php`](app/Models/CleaningEquipCampaignStep.php) | Model bước VS thiết bị |
+| [`RoomClearing.php`](app/Models/RoomClearing.php) | Model phòng VS chung |
+| [`campaign_execute.blade.php`](resources/views/pages/manu_env/cleaning_process/campaign_execute.blade.php) | View thực hiện VS phòng |
+| [`equip_campaign_execute.blade.php`](resources/views/pages/manu_env/cleaning_process/equip_campaign_execute.blade.php) | View thực hiện VS thiết bị |
+| [`room_clearing/index.blade.php`](resources/views/pages/manu_env/room_clearing/index.blade.php) | Quản lý phòng VS chung |
+| [`room_clearing/dashboard.blade.php`](resources/views/pages/manu_env/room_clearing/dashboard.blade.php) | Dashboard phòng VS chung |
+| [`manuEnvRoute.php`](routes/manuEnvRoute.php) | Toàn bộ routes VS |
 
 ---
 

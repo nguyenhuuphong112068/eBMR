@@ -267,6 +267,8 @@
                             class="fas fa-check-square me-2 text-muted"></i>Tick chọn</a>
                     <a class="dropdown-item" href="javascript:void(0)" data-insert-field="select"><i
                             class="fas fa-list-ul me-2 text-muted"></i>Lựa chọn</a>
+                    <a class="dropdown-item" href="javascript:void(0)" data-insert-field="radio"><i
+                            class="fas fa-dot-circle me-2 text-muted"></i>Chọn 1 (Radio)</a>
                     <a class="dropdown-item" href="javascript:void(0)" data-insert-field="formula"><i
                             class="fas fa-square-root-alt me-2 text-muted"></i>Công thức</a>
                 </div>
@@ -1898,6 +1900,43 @@
             }
         }
 
+        /* ── Pill chỉ báo clipboard nội bộ (Ctrl+V sắp dán gì) — setClipboardHintV2 ── */
+        #v2-clipboard-hint {
+            position: fixed;
+            left: 50%;
+            bottom: 16px;
+            transform: translateX(-50%);
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            max-width: 85vw;
+            background: rgba(30, 41, 59, .93);
+            color: #fff;
+            font-size: .78rem;
+            padding: 6px 8px 6px 14px;
+            border-radius: 50rem;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, .25);
+        }
+
+        #v2-clipboard-hint>i {
+            color: #fbbf24;
+        }
+
+        #v2-clipboard-hint button {
+            border: 0;
+            background: transparent;
+            color: #94a3b8;
+            font-size: 1.05rem;
+            line-height: 1;
+            padding: 0 6px;
+            cursor: pointer;
+        }
+
+        #v2-clipboard-hint button:hover {
+            color: #fff;
+        }
+
         /* ── Lưới chọn nhanh số hàng x cột (dropdown Chèn bảng, giống Word) ── */
         #v2-table-grid {
             display: grid;
@@ -2741,6 +2780,10 @@
             vertical-align: middle;
             outline: 2px solid #fbbf24;
             outline-offset: 2px;
+            /* Ghi đè font-size: 0.78em kế thừa từ .v2-field-badge (dùng cho nhãn biến số lúc
+               Thiết kế) — giá trị người dùng Cấp 2 nhập lúc Chạy thử cần đọc rõ hơn nhãn nhỏ đó.
+               Dòng .v2-exec-meta (lịch sử) đặt font-size 10px tuyệt đối riêng nên không đổi theo. */
+            font-size: 1em;
         }
 
         /* Chỉ-đọc (readonly-active — vd. đang "Xem tất cả công đoạn", phân đoạn đã hoàn thành,
@@ -2999,6 +3042,13 @@
             flex-wrap: wrap;
             gap: 4px 12px;
             vertical-align: middle;
+        }
+
+        /* Sắp xếp dọc (radioLayout = vertical): mỗi lựa chọn 1 dòng */
+        .v2-exec-radio-group.is-vertical {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 4px;
         }
 
         .v2-exec-radio-option {

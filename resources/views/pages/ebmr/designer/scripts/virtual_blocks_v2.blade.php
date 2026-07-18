@@ -1368,6 +1368,24 @@
                 let sigTable = generateSignatureTable();
                 sigTable.id = 'sys_gf_tbl_signatures';
                 virtualBlocks.push(sigTable);
+
+                // 5. LỊCH SỬ THAY ĐỔI ẤN BẢN (Section + Table) — cùng trang với Trình Ký, giống BMR
+                let gfVerHistTable = generateVersionHistoryTable();
+                if (gfVerHistTable) {
+                    virtualBlocks.push({
+                        id: 'sys_gf_sec_version_history',
+                        type: 'section',
+                        label: 'LỊCH SỬ THAY ĐỔI ẤN BẢN',
+                        section_id: catId,
+                        noPageBreak: true,
+                        locked: true,
+                        isVirtual: true
+                    });
+
+                    gfVerHistTable.id = 'sys_gf_tbl_version_history';
+                    gfVerHistTable.isVirtual = true;
+                    virtualBlocks.push(gfVerHistTable);
+                }
             } else if (type === 'CO') {
                 // Không sinh virtual block nào cho Component
             } else {
@@ -1403,26 +1421,26 @@
                 sigTable.id = 'sys_bmr_tbl_signatures';
                 virtualBlocks.push(sigTable);
 
+                // LỊCH SỬ THAY ĐỔI ẤN BẢN (Section + Table) — cùng trang với Trình Ký, trước THÔNG TIN SẢN PHẨM
+                // Áp dụng cho mọi loại rơi vào nhánh này (BMR/MF/BPR), không riêng BMR.
+                let verHistTable = generateVersionHistoryTable();
+                if (verHistTable) {
+                    virtualBlocks.push({
+                        id: 'sys_bmr_sec_version_history',
+                        type: 'section',
+                        label: 'LỊCH SỬ THAY ĐỔI ẤN BẢN',
+                        section_id: catId,
+                        noPageBreak: true,
+                        locked: true,
+                        isVirtual: true
+                    });
+
+                    verHistTable.id = 'sys_bmr_tbl_version_history';
+                    verHistTable.isVirtual = true;
+                    virtualBlocks.push(verHistTable);
+                }
 
                 if (type !== 'MF' && type !== 'BPR') {
-                    // LỊCH SỬ THAY ĐỔI ẤN BẢN (Section + Table) — cùng trang với Trình Ký, trước THÔNG TIN SẢN PHẨM
-                    let verHistTable = generateVersionHistoryTable();
-                    if (verHistTable) {
-                        virtualBlocks.push({
-                            id: 'sys_bmr_sec_version_history',
-                            type: 'section',
-                            label: 'LỊCH SỬ THAY ĐỔI ẤN BẢN',
-                            section_id: catId,
-                            noPageBreak: true,
-                            locked: true,
-                            isVirtual: true
-                        });
-
-                        verHistTable.id = 'sys_bmr_tbl_version_history';
-                        verHistTable.isVirtual = true;
-                        virtualBlocks.push(verHistTable);
-                    }
-
                     // 3. THÔNG TIN CHUNG SẢN PHẨM (Section)
                     virtualBlocks.push({
                         id: 'sys_bmr_sec_common_info',

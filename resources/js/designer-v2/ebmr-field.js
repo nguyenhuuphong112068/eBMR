@@ -113,7 +113,8 @@ function buildMetaHtml(fieldId) {
     const rec = (window.__V2__?.executionValues || {})[fieldId];
     const meta = rec && rec._meta && rec._meta.default;
     if (!meta || (!meta.by && !meta.at)) return '';
-    return `<div class="v2-exec-meta">${escapeHtml(meta.at || '')} · ${escapeHtml(meta.by || '')}</div>`;
+    // Luôn 2 dòng: thời gian phía trên, tên người thực hiện phía dưới
+    return `<div class="v2-exec-meta"><div>${escapeHtml(meta.at || '')}</div><div>${escapeHtml(meta.by || '')}</div></div>`;
 }
 
 /* Biểu tượng "Lịch sử thay đổi": gom nút "Lịch sử (x)" thành 1 icon nhỏ đặt ở
@@ -131,8 +132,12 @@ export function paintFieldElement(dom, fieldId) {
 
     if (window.__V2__?.isExecutionMode) {
         dom.classList.add('v2-field-exec');
-        // Hồ sơ readonly (đã hoàn thành/duyệt hoặc không được phân phối): chỉ XEM giá trị
-        const isRO = !!window.__V2__?.isReadOnly;
+        // Hồ sơ readonly (đã hoàn thành/duyệt hoặc không được phân phối): chỉ XEM giá trị.
+        // Ngoại lệ: sandbox nhập thử trong trình thiết kế — canEnterExecData (main.js)
+        // cho phép nhập thử vào biến số dù hồ sơ đã khoá cấu trúc.
+        const isRO = window.__V2__?.canEnterExecData
+            ? !window.__V2__.canEnterExecData()
+            : !!window.__V2__?.isReadOnly;
         let val = (window.__V2__?.executionValues || {})[fieldId]?.default;
         if (val === undefined || val === null || val === '') val = cfg.defaultValue || '';
 
@@ -190,7 +195,7 @@ export function paintFieldElement(dom, fieldId) {
             if (optionsFromCfg.length === 0) {
                 valueHtml = `<span class="v2-exec-placeholder">(Chưa cấu hình lựa chọn)</span>`;
             } else {
-                valueHtml = `<span class="v2-exec-radio-group${isRO ? ' is-readonly' : ''}">` +
+                valueHtml = `<span class="v2-exec-radio-group${cfg.radioLayout === 'vertical' ? ' is-vertical' : ''}${isRO ? ' is-readonly' : ''}">` +
                     optionsFromCfg.map((o) =>
                         `<span class="v2-exec-radio-option${val === o ? ' is-checked' : ''}" data-radio-value="${escapeHtml(o)}">` +
                         `<span class="v2-exec-radio-dot"></span>` +
@@ -216,7 +221,7 @@ export function paintFieldElement(dom, fieldId) {
             const rec = (window.__V2__?.executionValues || {})[fieldId];
             const meta = rec && rec._meta && rec._meta.default;
             if (val && meta && meta.at) {
-                metaHtml = `<div class="v2-exec-meta">${escapeHtml(meta.at)} · ${escapeHtml(meta.by || '')}</div>`;
+                metaHtml = `<div class="v2-exec-meta"><div>${escapeHtml(meta.at)}</div><div>${escapeHtml(meta.by || '')}</div></div>`;
             }
         } else if (cfg.type === 'formula') {
             const dPlaces = (cfg.validation && cfg.validation.decimal_places !== null && cfg.validation.decimal_places !== undefined) ? cfg.validation.decimal_places : 2;

@@ -43,7 +43,8 @@ export function createSelectionController(ctx) {
     let _drag = null;          // {kind:'cell-drag'|'badge-marquee', startX, startY, committed, startTd?, marqueeEl?}
     let _suppressClick = false;
     let _clipboard = null;     // { rows, cols, count, grid: [[cellCopy|null]] } — Copy vùng ô
-    let _lastCopyKind = null;  // 'cells' | 'fields' — lần copy gần nhất, để Ctrl+V chọn đúng nguồn dán
+    let _lastCopyKind = null;  // 'cells' | 'fields' | 'blocks' | null — lần copy gần nhất, để Ctrl+V
+                               // chọn đúng nguồn dán; null = clipboard HỆ THỐNG (copy chữ thường) là nguồn
 
     const blocked = () => ctx.BOOT.isReadOnly || ctx.BOOT.isExecutionMode;
 
@@ -198,6 +199,10 @@ export function createSelectionController(ctx) {
     /** Đánh dấu "lần copy gần nhất là BIẾN SỐ" — gọi khi copy biến từ NGOÀI bàn phím
      *  (VD: menu chuột phải "Sao chép biến") để Ctrl+V sau đó biết dán biến, không phải Ô. */
     function notifyFieldsCopied() { _lastCopyKind = 'fields'; }
+
+    /** Đánh dấu "lần copy gần nhất là CỤM KHỐI" (nút Chọn khối -> Ctrl+C) — để Ctrl+V
+     *  không dán nhầm biến số/ô đã copy TRƯỚC đó. */
+    function notifyBlocksCopied() { _lastCopyKind = 'blocks'; }
 
     function clearAll() { clearCells(); clearFields(); }
 
@@ -701,6 +706,10 @@ export function createSelectionController(ctx) {
                     // (contenteditable thật) thì để trình duyệt/TipTap tự cắt như cũ.
                     if (k === 'x' && !ctx.hasActiveEditor() && ctx.convertStaticSelectionToEditable('cut')) {
                         e.preventDefault();
+                        // Đoạn chữ vừa cắt nằm ở clipboard HỆ THỐNG (writeText, không phát
+                        // event 'cut') -> Ctrl+V sau đó phải dán chữ này, bỏ nguồn nội bộ cũ.
+                        _lastCopyKind = null;
+                        ctx.setClipboardHint?.(null);
                     }
                     return; // Ctrl+C, hoặc Ctrl+X trong editor thật -> native tuyệt đối
                 }
@@ -727,6 +736,9 @@ export function createSelectionController(ctx) {
                 e.preventDefault();
                 if (k === 'x') applyToCells((cell) => { cell.content = ''; });
                 toast(k === 'x' ? `Đã cắt ${_clipboard.count} ô` : `Đã sao chép ${_clipboard.count} ô`, 'info');
+                ctx.setClipboardHint?.(_clipboard.fullTable
+                    ? `Cả bảng (${_clipboard.count} ô) — Ctrl+V để dán`
+                    : `${_clipboard.count} ô bảng — chọn ô đích rồi Ctrl+V`);
                 return;
             }
 
@@ -740,7 +752,14 @@ export function createSelectionController(ctx) {
                 return;
             }
             if (t.closest && (t.closest('input') || t.closest('textarea') || t.closest('[contenteditable="true"]'))) return;
-            if (!cells.size) return; // chưa chọn ô đích → nhường paste native
+            if (!cells.size) {
+                // Không có ô đích nhưng clipboard nội bộ đang giữ BIẾN SỐ -> dán thành
+                // khối văn bản mới tại điểm chèn (con trỏ nhấp nháy / block vừa click).
+                if (_lastCopyKind === 'fields' && ctx.hasFieldClipboard() && ctx.pasteFieldsAtInsertPoint?.()) {
+                    e.preventDefault();
+                }
+                return; // còn lại → nhường paste native
+            }
             if (_lastCopyKind === 'fields' && ctx.hasFieldClipboard()) {
                 const anchor = getAnchorCell();
                 if (!anchor) return;
@@ -748,7 +767,7 @@ export function createSelectionController(ctx) {
                 if (ctx.pasteFieldsIntoCell(anchor.item, anchor.r, anchor.c)) toast('Đã dán biến số vào ô');
                 return;
             }
-            if (!_clipboard) return;
+            if (_lastCopyKind !== 'cells' || !_clipboard) return; // lần copy gần nhất không phải Ô -> không dán bản ô cũ
             e.preventDefault();
             if (pasteCells()) toast('Đã dán nội dung ô');
         }
@@ -760,6 +779,14 @@ export function createSelectionController(ctx) {
         document.addEventListener('mouseup', onMouseUp);
         document.addEventListener('click', onClickCapture, true);
         document.addEventListener('keydown', onKeyDown);
+        // Copy/Cắt NATIVE (bôi đen chữ rồi Ctrl+C/X, menu chuột phải của trình duyệt,
+        // copy trong editor/input...) -> clipboard HỆ THỐNG trở thành nguồn dán mới:
+        // bỏ đánh dấu clipboard nội bộ để Ctrl+V dán đúng chữ vừa copy, không dán lại
+        // biến số/ô đã copy trước đó. (Copy nội bộ preventDefault ở keydown nên KHÔNG
+        // phát 2 event này — chỉ copy thật của trình duyệt mới vào đây.)
+        const onNativeClipboardWrite = () => { _lastCopyKind = null; ctx.setClipboardHint?.(null); };
+        document.addEventListener('copy', onNativeClipboardWrite);
+        document.addEventListener('cut', onNativeClipboardWrite);
     }
 
     function getActiveTable() {
@@ -772,7 +799,7 @@ export function createSelectionController(ctx) {
         init, decorateTable, onAfterRender,
         clearCells, clearFields, clearAll,
         hasCells, cellCount, getCells, getAnchorCell, applyToCells,
-        setFields, getFieldIds, notifyFieldsCopied,
+        setFields, getFieldIds, notifyFieldsCopied, notifyBlocksCopied,
         setRange, selectTable,
         getFullTableClipboard,
         getActiveTable,

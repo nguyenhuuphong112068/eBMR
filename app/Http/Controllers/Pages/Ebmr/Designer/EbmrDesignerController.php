@@ -110,9 +110,9 @@ class EbmrDesignerController extends Controller
                     // Determine read-only state
                     $currentUserId = session('user')['userId'] ?? null;
                     $isAdmin = (session('user')['userGroup'] ?? '') === 'Admin';
-                    // Read-only nếu: không phải owner, hoặc không ở trạng thái draft
-                    // Admin luôn có thể xem (read-only) nhưng không bị redirect
-                    if (!$currentUserId || ($template->owner_id != $currentUserId && !$isAdmin) || $template->status !== 'draft') {
+                    // Read-only nếu: không phải Dược sĩ phụ trách / người được ủy quyền / Admin,
+                    // hoặc không ở trạng thái draft. Admin luôn có thể xem (read-only) nhưng không bị redirect.
+                    if (!ebmr_user_can_edit_template($template, $currentUserId) || $template->status !== 'draft') {
                         $isReadOnly = true;
                     }
 

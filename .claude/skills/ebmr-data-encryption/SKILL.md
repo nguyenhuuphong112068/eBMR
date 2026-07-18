@@ -27,9 +27,10 @@ Hệ thống dùng **Laravel Crypt** (AES-256-CBC + HMAC signature) để mã ho
 
 | File | Vai trò |
 |------|---------|
-| [`RunDataEncryptionService.php`](file:///c:/eBMR/app/Services/RunDataEncryptionService.php) | Service class duy nhất — toàn bộ logic encrypt/decrypt tập trung đây |
-| [`EbmrExecutionController.php`](file:///c:/eBMR/app/Http/Controllers/EbmrExecutionController.php) | Controller chính ghi/đọc `ebmr_run_data` trong quá trình thực thi BMR |
-| [`EbmrController.php`](file:///c:/eBMR/app/Http/Controllers/EbmrController.php) | Controller legacy — cũng ghi/đọc `ebmr_run_data` (execute cũ) |
+| [RunDataEncryptionService.php](app/Services/RunDataEncryptionService.php) | Service class duy nhất — toàn bộ logic encrypt/decrypt tập trung đây |
+| [EbmrExecutionController.php](app/Http/Controllers/Pages/Ebmr/Records/EbmrExecutionController.php) | Controller duy nhất ghi/đọc `ebmr_run_data` trong quá trình thực thi BMR (`updateRecordData`, `execute`, `getRunDataHistory`) |
+
+> `EbmrController` legacy đã bị xóa cùng trình soạn thảo V1 — mọi đường ghi/đọc giờ chỉ qua `EbmrExecutionController`.
 
 ---
 
@@ -43,11 +44,14 @@ Hệ thống dùng **Laravel Crypt** (AES-256-CBC + HMAC signature) để mã ho
 | `raw_value` | text | ✅ **Encrypted** | Giá trị thô người dùng nhập, dùng `encrypt()` |
 | `id` | bigint | ❌ Plaintext | Primary key |
 | `record_id` | bigint | ❌ Plaintext | FK — dùng để `WHERE record_id = ?` |
-| `block_uuid` | varchar | ❌ Plaintext | Dùng để lookup và group dữ liệu |
+| `block_uuid` | varchar | ❌ Plaintext | Dùng để lookup và group dữ liệu (`__na__` cho gạch chéo N/A) |
 | `cell_id` | varchar | ❌ Plaintext | Dùng để phân biệt ô trong bảng |
 | `filled_by` | varchar | ❌ Plaintext | User ID (số nguyên) |
 | `updated_by` | varchar | ❌ Plaintext | Tên người cập nhật |
 | `filled_at`, `*_at` | timestamp | ❌ Plaintext | Dùng để sort/filter |
+
+### `ebmr_run_data_history`
+`old_raw_value` và `new_raw_value` cũng **bắt buộc** mã hoá qua `encrypt()` (xem skill `audit-trail-variable-history`).
 
 ---
 
@@ -73,7 +77,6 @@ RunDataEncryptionService::decryptJson(string|null $value, bool $assoc = true): m
 Tất cả hàm `decrypt*` đều có `try/catch`: nếu chuỗi không phải định dạng mã hoá của Laravel → trả về nguyên gốc. **Không cần migration dữ liệu cũ.**
 
 ```php
-// Data cũ plaintext → tự fallback, không crash
 RunDataEncryptionService::decrypt('old-plain-text'); // → 'old-plain-text'
 RunDataEncryptionService::decryptJson('{"r0c1":"old"}'); // → ['r0c1' => 'old']
 ```
@@ -99,39 +102,21 @@ RunDataEncryptionService::decryptJson('{"r0c1":"old"}'); // → ['r0c1' => 'old'
 
 ---
 
-## Kết Quả Trong phpMyAdmin
-
-Sau khi mã hoá, DBA mở bảng `ebmr_run_data` chỉ thấy:
-
-```
-raw_value: eyJpdiI6InI5WlhmZnkwMWwzYTNGaXQ0YWVMckE9PSIsInZhbHVlIjoi...
-value:     eyJpdiI6Ik9VTmpBZ2h2UWg0cHlIdktFYUxsQT09IiwidmFsdWUiOiJp...
-```
-
----
-
 ## Khi Mở Rộng Mã Hoá Sang Bảng/Cột Khác
 
 ### Checklist bắt buộc
 
 1. **Xác định cột nào KHÔNG mã hoá** (cột dùng để `WHERE`, `JOIN`, `ORDER BY`, `GROUP BY`)
-2. **Thêm use statement** vào controller:
-   ```php
-   use App\Services\RunDataEncryptionService;
-   ```
+2. **Thêm use statement** vào controller: `use App\Services\RunDataEncryptionService;`
 3. **Khi ghi (INSERT/UPDATE)**:
    ```php
-   // Chuỗi đơn
-   'column' => RunDataEncryptionService::encrypt($value),
-   // JSON/array
-   'column' => RunDataEncryptionService::encryptJson($arrayValue),
+   'column' => RunDataEncryptionService::encrypt($value),        // chuỗi đơn
+   'column' => RunDataEncryptionService::encryptJson($arrayValue), // JSON/array
    ```
 4. **Khi đọc (SELECT)**:
    ```php
-   // Chuỗi đơn
    $plain = RunDataEncryptionService::decrypt($row->column);
-   // JSON
-   $arr = RunDataEncryptionService::decryptJson($row->column);
+   $arr   = RunDataEncryptionService::decryptJson($row->column);
    ```
 5. **Tăng kích thước cột** nếu cần — chuỗi mã hoá dài hơn plaintext ~50-80%:
    - `varchar(255)` → cần ít nhất `varchar(400)` hoặc đổi sang `text`
@@ -146,64 +131,35 @@ value:     eyJpdiI6Ik9VTmpBZ2h2UWg0cHlIdktFYUxsQT09IiwidmFsdWUiOiJp...
 > Mất key = mất data vĩnh viễn, không khôi phục được.
 
 ```bash
-# Xem key hiện tại
-php artisan key:generate --show
-
+php artisan key:generate --show   # Xem key hiện tại
 # File .env — KHÔNG commit lên Git
-APP_KEY=base64:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=
 ```
 
-**Backup key:**
-- Lưu `APP_KEY` vào nơi an toàn tách biệt (không chỉ trong file `.env`)
-- Backup `.env` định kỳ cùng với backup DB
+**Backup key:** Lưu `APP_KEY` vào nơi an toàn tách biệt; backup `.env` định kỳ cùng backup DB.
 
 ### Nếu cần đổi APP_KEY (rotate):
-```bash
-# Bước 1: Decrypt toàn bộ data cũ trước khi đổi key
-php artisan tinker
-# Chạy script decrypt tất cả cột encrypted, lưu tạm vào cột phụ
+1. Decrypt toàn bộ data cũ, lưu tạm vào cột phụ.
+2. `php artisan key:generate` (đổi key).
+3. Re-encrypt lại từ cột phụ với key mới.
+4. Xoá cột phụ.
 
-# Bước 2: Đổi key
-php artisan key:generate
-
-# Bước 3: Re-encrypt lại với key mới
-# Chạy script encrypt lại từ cột phụ
-
-# Bước 4: Xoá cột phụ
-```
-
-> ⚠️ Rotate key là thao tác phức tạp — cần downtime và backup đầy đủ trước khi thực hiện.
+> ⚠️ Rotate key cần downtime và backup đầy đủ trước khi thực hiện.
 
 ---
 
 ## Debug Lỗi Thường Gặp
 
-### 1. `DecryptException: The payload is invalid`
-**Nguyên nhân**: APP_KEY bị đổi sau khi data đã được mã hoá.
-**Giải pháp**: Khôi phục APP_KEY cũ từ backup.
-
-### 2. Dữ liệu hiển thị là chuỗi `eyJpdiI6Ii...` thay vì giá trị thực
-**Nguyên nhân**: Quên gọi `decrypt()` khi đọc từ DB.
-**Kiểm tra**: Tìm trong controller chỗ đọc cột đó — phải có `RunDataEncryptionService::decrypt(...)`.
-
-### 3. Lỗi `Column too long` khi INSERT
-**Nguyên nhân**: Cột `varchar(N)` quá ngắn để chứa chuỗi mã hoá.
-**Giải pháp**: Tăng kích thước cột hoặc đổi sang `text`.
-```sql
-ALTER TABLE ebmr_run_data MODIFY COLUMN raw_value TEXT;
-```
-
-### 4. Data cũ hiển thị sai sau khi bật mã hoá
-**Nguyên nhân bình thường**: Data cũ là plaintext → fallback tự động xử lý → không cần lo.
-**Nếu vẫn sai**: Kiểm tra xem có đúng cột đang được decrypt không.
+1. **`DecryptException: The payload is invalid`** — APP_KEY bị đổi sau khi data đã mã hoá → khôi phục APP_KEY cũ từ backup.
+2. **Hiển thị chuỗi `eyJpdiI6Ii...` thay vì giá trị thực** — quên `decrypt()` khi đọc → tìm chỗ đọc cột đó trong controller.
+3. **`Column too long` khi INSERT** — cột `varchar(N)` quá ngắn → `ALTER TABLE ... MODIFY COLUMN raw_value TEXT;`
+4. **Data cũ hiển thị sai sau khi bật mã hoá** — data cũ plaintext được fallback tự động; nếu vẫn sai, kiểm tra đúng cột đang decrypt không.
 
 ---
 
 ## Lưu Ý Quan Trọng
 
-> Hệ thống eBMR chạy mạng **nội bộ (intranet)** — không cần HTTPS.
-> Mã hoá ở tầng DB là đủ để ngăn DBA đọc trực tiếp từ SQL client.
+> Hệ thống eBMR chạy mạng **nội bộ (intranet)** — không cần HTTPS. Mã hoá ở tầng DB là đủ để ngăn DBA đọc trực tiếp từ SQL client.
 
 > Chỉ mã hoá cột **nội dung nhập liệu**, tuyệt đối không mã hoá cột dùng để `WHERE`, `JOIN`, `ORDER BY` — sẽ phá vỡ toàn bộ truy vấn.
 
-> Laravel `Crypt` đã bao gồm **HMAC signature** — nếu chuỗi bị sửa trực tiếp trong DB, `decrypt()` sẽ ném `DecryptException` ngay lập tức. Đây là cơ chế phát hiện tampering (giả mạo dữ liệu).
+> Laravel `Crypt` đã bao gồm **HMAC signature** — nếu chuỗi bị sửa trực tiếp trong DB, `decrypt()` ném `DecryptException` ngay: đây là cơ chế phát hiện tampering (giả mạo dữ liệu).

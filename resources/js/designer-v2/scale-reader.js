@@ -438,7 +438,9 @@ export function initScaleReaderV2(BOOT) {
 
     /** LUÔN mở modal kết nối cân theo yêu cầu — không tự động điền trực tiếp. */
     BOOT.readScaleValueIntoField = function (fieldId) {
-        if (BOOT.isReadOnly) return; // hồ sơ đã khoá: không đọc cân vào field
+        // Hồ sơ đã khoá: không đọc cân vào field — trừ sandbox nhập thử trong trình
+        // thiết kế (canEnterExecData, xem main.js): giá trị chỉ vào bộ nhớ trình duyệt.
+        if (!(BOOT.canEnterExecData && BOOT.canEnterExecData())) return;
         if (!BOOT.fieldsConfig[fieldId]) return;
         BOOT.openScaleConnectionModal(fieldId);
     };

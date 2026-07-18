@@ -78,6 +78,18 @@ class EbmrTemplateController extends Controller
             }
         }
 
+        // Quyền ủy quyền / đổi Dược sĩ phụ trách cho danh sách hiển thị
+        $currentUserId = (int) (session('user')['userId'] ?? 0);
+        $isAdminUser = (session('user')['userGroup'] ?? '') === 'Admin';
+        $canChangeOwner = user_has_permission($currentUserId, 'ebmr_change_owner', 'boolean');
+        $canDelegateGlobal = user_has_permission($currentUserId, 'ebmr_delegate_edit', 'boolean');
+        // Tập template_id mà user hiện tại đang được ủy quyền chỉnh sửa (1 query, tránh N+1)
+        $delegatedTemplateIds = DB::table('ebmr_template_editors')
+            ->where('user_id', $currentUserId)
+            ->pluck('template_id')
+            ->map(fn ($v) => (int) $v)
+            ->toArray();
+
         // Fetch all active ingredients (formulas of role 'Hoạt Chất') for these templates
         $templateIds = $templates->pluck('id')->toArray();
         $activeIngredients = [];
@@ -98,6 +110,12 @@ class EbmrTemplateController extends Controller
         foreach ($templates as $t) {
             $t->is_max_version = ($t->caterogy_id && (int)$t->version === ($maxVersions[$t->caterogy_id] ?? 0));
             $t->has_pending_version = in_array($t->caterogy_id, $pendingCategoryIds);
+
+            // Cờ quyền cho từng hồ sơ
+            $isOwner = (int) $t->owner_id === $currentUserId;
+            $t->can_edit = $isOwner || $isAdminUser || in_array((int) $t->id, $delegatedTemplateIds, true);
+            $t->can_delegate = $isOwner || $canDelegateGlobal;
+            $t->can_change_owner = $canChangeOwner;
             
             // Build Labeled Strength (Hàm lượng nhãn)
             $strengthParts = [];
@@ -594,6 +612,169 @@ class EbmrTemplateController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Đã lưu lý do thay đổi ấn bản',
+        ]);
+    }
+
+    /**
+     * Danh sách người đang được ủy quyền chỉnh sửa 1 hồ sơ + danh sách ứng viên để thêm mới,
+     * kèm cờ quyền của người gọi (dùng để hiển thị UI).
+     */
+    public function getEditors($id)
+    {
+        $template = DB::table('ebmr_templates')->where('id', $id)->first();
+        if (!$template) {
+            return response()->json(['success' => false, 'message' => 'Hồ sơ không tồn tại'], 404);
+        }
+
+        $currentUserId = (int) (session('user')['userId'] ?? 0);
+
+        $editors = DB::table('ebmr_template_editors')
+            ->join('user_management', 'ebmr_template_editors.user_id', '=', 'user_management.id')
+            ->where('ebmr_template_editors.template_id', $id)
+            ->select('user_management.id', 'user_management.fullName as name')
+            ->orderBy('user_management.fullName')
+            ->get();
+
+        $editorIds = $editors->pluck('id')->toArray();
+
+        // Ứng viên: mọi user đang hoạt động, trừ Dược sĩ phụ trách hiện tại và người đã được ủy quyền.
+        $candidates = DB::table('user_management')
+            ->select('id', 'fullName as name')
+            ->where('id', '!=', $template->owner_id)
+            ->when(!empty($editorIds), fn ($q) => $q->whereNotIn('id', $editorIds))
+            ->orderBy('fullName')
+            ->get();
+
+        // Danh sách cho modal đổi Dược sĩ phụ trách: mọi user trừ owner hiện tại
+        // (bao gồm cả người đang được ủy quyền — có thể được chọn làm chủ mới).
+        $allUsers = DB::table('user_management')
+            ->select('id', 'fullName as name')
+            ->where('id', '!=', $template->owner_id)
+            ->orderBy('fullName')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'owner_id' => (int) $template->owner_id,
+            'owner_name' => DB::table('user_management')->where('id', $template->owner_id)->value('fullName'),
+            'editors' => $editors,
+            'candidates' => $candidates,
+            'all_users' => $allUsers,
+            'can_delegate' => ebmr_user_can_delegate($template, $currentUserId),
+            'can_change_owner' => user_has_permission($currentUserId, 'ebmr_change_owner', 'boolean'),
+        ]);
+    }
+
+    /**
+     * Ủy quyền chỉnh sửa cho 1 người dùng.
+     */
+    public function addEditor(Request $request)
+    {
+        $validated = $request->validate([
+            'template_id' => 'required|integer',
+            'user_id' => 'required|integer',
+        ]);
+
+        $template = DB::table('ebmr_templates')->where('id', $validated['template_id'])->first();
+        if (!$template) {
+            return response()->json(['success' => false, 'message' => 'Hồ sơ không tồn tại'], 404);
+        }
+
+        $currentUserId = (int) (session('user')['userId'] ?? 0);
+        if (!ebmr_user_can_delegate($template, $currentUserId)) {
+            return response()->json(['success' => false, 'message' => 'Bạn không có quyền ủy quyền chỉnh sửa hồ sơ này'], 403);
+        }
+
+        if ((int) $validated['user_id'] === (int) $template->owner_id) {
+            return response()->json(['success' => false, 'message' => 'Người này đã là Dược sĩ phụ trách của hồ sơ'], 422);
+        }
+
+        DB::table('ebmr_template_editors')->updateOrInsert(
+            ['template_id' => $validated['template_id'], 'user_id' => $validated['user_id']],
+            ['granted_by' => $currentUserId, 'updated_at' => now(), 'created_at' => now()]
+        );
+
+        return response()->json(['success' => true, 'message' => 'Đã ủy quyền chỉnh sửa']);
+    }
+
+    /**
+     * Bỏ ủy quyền chỉnh sửa của 1 người dùng.
+     */
+    public function removeEditor(Request $request)
+    {
+        $validated = $request->validate([
+            'template_id' => 'required|integer',
+            'user_id' => 'required|integer',
+        ]);
+
+        $template = DB::table('ebmr_templates')->where('id', $validated['template_id'])->first();
+        if (!$template) {
+            return response()->json(['success' => false, 'message' => 'Hồ sơ không tồn tại'], 404);
+        }
+
+        $currentUserId = (int) (session('user')['userId'] ?? 0);
+        if (!ebmr_user_can_delegate($template, $currentUserId)) {
+            return response()->json(['success' => false, 'message' => 'Bạn không có quyền bỏ ủy quyền hồ sơ này'], 403);
+        }
+
+        DB::table('ebmr_template_editors')
+            ->where('template_id', $validated['template_id'])
+            ->where('user_id', $validated['user_id'])
+            ->delete();
+
+        return response()->json(['success' => true, 'message' => 'Đã bỏ ủy quyền chỉnh sửa']);
+    }
+
+    /**
+     * Đổi Dược sĩ phụ trách (chuyển chủ sở hữu) — quyền linh động 'ebmr_change_owner'.
+     */
+    public function changeOwner(Request $request)
+    {
+        $validated = $request->validate([
+            'template_id' => 'required|integer',
+            'new_owner_id' => 'required|integer',
+        ]);
+
+        $template = DB::table('ebmr_templates')->where('id', $validated['template_id'])->first();
+        if (!$template) {
+            return response()->json(['success' => false, 'message' => 'Hồ sơ không tồn tại'], 404);
+        }
+
+        $currentUserId = (int) (session('user')['userId'] ?? 0);
+        if (!user_has_permission($currentUserId, 'ebmr_change_owner', 'boolean')) {
+            return response()->json(['success' => false, 'message' => 'Bạn không có quyền thay đổi Dược sĩ phụ trách'], 403);
+        }
+
+        $newOwner = DB::table('user_management')->where('id', $validated['new_owner_id'])->first();
+        if (!$newOwner) {
+            return response()->json(['success' => false, 'message' => 'Người dùng không tồn tại'], 404);
+        }
+
+        if ((int) $validated['new_owner_id'] === (int) $template->owner_id) {
+            return response()->json(['success' => false, 'message' => 'Người này đã là Dược sĩ phụ trách hiện tại'], 422);
+        }
+
+        DB::table('ebmr_templates')->where('id', $validated['template_id'])->update([
+            'owner_id' => $validated['new_owner_id'],
+            'updated_at' => now(),
+        ]);
+
+        // Dọn ủy quyền nếu Dược sĩ phụ trách mới đang là người được ủy quyền (tránh trùng lặp).
+        DB::table('ebmr_template_editors')
+            ->where('template_id', $validated['template_id'])
+            ->where('user_id', $validated['new_owner_id'])
+            ->delete();
+
+        \Illuminate\Support\Facades\Log::info('eBMR change owner', [
+            'template_id' => $validated['template_id'],
+            'old_owner_id' => $template->owner_id,
+            'new_owner_id' => $validated['new_owner_id'],
+            'changed_by' => $currentUserId,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Đã đổi Dược sĩ phụ trách thành ' . ($newOwner->fullName ?? ''),
         ]);
     }
 

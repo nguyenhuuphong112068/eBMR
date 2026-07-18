@@ -183,32 +183,42 @@
                                                             title="Lịch sử ấn bản">
                                                             <i class="fas fa-history"></i> Lịch sử ấn bản
                                                         </button>
-                                                        @if ($current_type === 'BMR')
-                                                            <button class="btn btn-sm btn-white text-info fw-bold"
-                                                                onclick="openConfigSXModal({{ $t->id }}, '{{ addslashes($t->category_name) }}')"
-                                                                title="Cấu hình sản xuất">
-                                                                <i class="fas fa-cogs text-info me-1"></i> Cấu hình SX
-                                                            </button>
-                                                        @else
-                                                            <button class="btn btn-sm btn-white text-info"
-                                                                onclick="openEditModal({{ $t->id }})"
-                                                                title="Cập nhật thông tin gốc">
-                                                                <i class="fas fa-edit"></i> Sửa
-                                                            </button>
+                                                        @if ($t->can_edit)
+                                                            @if ($current_type === 'BMR')
+                                                                <button class="btn btn-sm btn-white text-info fw-bold"
+                                                                    onclick="openConfigSXModal({{ $t->id }}, '{{ addslashes($t->category_name) }}')"
+                                                                    title="Cấu hình sản xuất">
+                                                                    <i class="fas fa-cogs text-info me-1"></i> Cấu hình SX
+                                                                </button>
+                                                            @else
+                                                                <button class="btn btn-sm btn-white text-info"
+                                                                    onclick="openEditModal({{ $t->id }})"
+                                                                    title="Cập nhật thông tin gốc">
+                                                                    <i class="fas fa-edit"></i> Sửa
+                                                                </button>
+                                                            @endif
                                                         @endif
 
                                                         @if ($t->status === 'draft')
-                                                            <a href="{{ route('pages.ebmr.designer', $t->id) }}"
-                                                                class="btn btn-sm btn-white text-navy"
-                                                                title="Thiết kế nội dung">
-                                                                <i class="fas fa-pencil-ruler"></i> Thiết kế
-                                                            </a>
-                                                            @if ($current_type !== 'CO')
-                                                            <button class="btn btn-sm btn-white text-success"
-                                                                onclick="openWorkflowModal({{ $t->id }})"
-                                                                title="Trình ký">
-                                                                <i class="fas fa-paper-plane"></i> Gửi duyệt
-                                                            </button>
+                                                            @if ($t->can_edit)
+                                                                <a href="{{ route('pages.ebmr.designer', $t->id) }}"
+                                                                    class="btn btn-sm btn-white text-navy"
+                                                                    title="Thiết kế nội dung">
+                                                                    <i class="fas fa-pencil-ruler"></i> Thiết kế
+                                                                </a>
+                                                                @if ($current_type !== 'CO')
+                                                                <button class="btn btn-sm btn-white text-success"
+                                                                    onclick="openWorkflowModal({{ $t->id }})"
+                                                                    title="Trình ký">
+                                                                    <i class="fas fa-paper-plane"></i> Gửi duyệt
+                                                                </button>
+                                                                @endif
+                                                            @else
+                                                                <a href="{{ route('pages.ebmr.designer', $t->id) }}?mode=review"
+                                                                    class="btn btn-sm btn-white text-primary"
+                                                                    title="Xem nội dung">
+                                                                    <i class="fas fa-eye"></i> Xem hồ sơ
+                                                                </a>
                                                             @endif
                                                         @else
                                                             <a href="{{ route('pages.ebmr.designer', $t->id) }}?mode=review"
@@ -230,6 +240,21 @@
                                                                 onclick="openEffectiveDateModal({{ $t->id }})"
                                                                 title="Xác định ngày hiệu lực">
                                                                 <i class="fas fa-calendar-check"></i> Hiệu lực
+                                                            </button>
+                                                        @endif
+
+                                                        @if ($t->can_delegate)
+                                                            <button class="btn btn-sm btn-white text-info"
+                                                                onclick="openDelegateModal({{ $t->id }})"
+                                                                title="Ủy quyền chỉnh sửa">
+                                                                <i class="fas fa-user-friends"></i> Ủy quyền
+                                                            </button>
+                                                        @endif
+                                                        @if ($t->can_change_owner)
+                                                            <button class="btn btn-sm btn-white text-dark"
+                                                                onclick="openChangeOwnerModal({{ $t->id }})"
+                                                                title="Đổi Dược sĩ phụ trách">
+                                                                <i class="fas fa-user-tag"></i> Đổi DS phụ trách
                                                             </button>
                                                         @endif
                                                     </div>
@@ -380,34 +405,44 @@
                                                             title="Lịch sử ấn bản">
                                                             <i class="fas fa-history me-1"></i> Lịch sử ấn bản
                                                         </button>
-                                                        @if ($current_type === 'BMR')
-                                                            <button
-                                                                class="btn btn-sm btn-outline-info rounded-pill px-3 py-1 fw-bold"
-                                                                onclick="openConfigSXModal({{ $t->id }}, '{{ addslashes($t->category_name) }}')"
-                                                                title="Cấu hình sản xuất">
-                                                                <i class="fas fa-cogs me-1"></i> Cấu hình SX
-                                                            </button>
-                                                        @else
-                                                            <button
-                                                                class="btn btn-sm btn-outline-info rounded-pill px-3 py-1"
-                                                                onclick="openEditModal({{ $t->id }})"
-                                                                title="Cập nhật thông tin gốc">
-                                                                <i class="fas fa-edit me-1"></i> Sửa
-                                                            </button>
+                                                        @if ($t->can_edit)
+                                                            @if ($current_type === 'BMR')
+                                                                <button
+                                                                    class="btn btn-sm btn-outline-info rounded-pill px-3 py-1 fw-bold"
+                                                                    onclick="openConfigSXModal({{ $t->id }}, '{{ addslashes($t->category_name) }}')"
+                                                                    title="Cấu hình sản xuất">
+                                                                    <i class="fas fa-cogs me-1"></i> Cấu hình SX
+                                                                </button>
+                                                            @else
+                                                                <button
+                                                                    class="btn btn-sm btn-outline-info rounded-pill px-3 py-1"
+                                                                    onclick="openEditModal({{ $t->id }})"
+                                                                    title="Cập nhật thông tin gốc">
+                                                                    <i class="fas fa-edit me-1"></i> Sửa
+                                                                </button>
+                                                            @endif
                                                         @endif
 
                                                         @if ($t->status === 'draft')
-                                                            <a href="{{ route('pages.ebmr.designer', $t->id) }}"
-                                                                class="btn btn-sm btn-navy rounded-pill px-3 py-1"
-                                                                title="Thiết kế nội dung">
-                                                                <i class="fas fa-pencil-ruler me-1"></i> Thiết kế
-                                                            </a>
-                                                            @if ($current_type !== 'CO')
-                                                            <button class="btn btn-sm btn-success rounded-pill px-3 py-1"
-                                                                onclick="openWorkflowModal({{ $t->id }})"
-                                                                title="Trình ký">
-                                                                <i class="fas fa-paper-plane me-1"></i> Gửi duyệt
-                                                            </button>
+                                                            @if ($t->can_edit)
+                                                                <a href="{{ route('pages.ebmr.designer', $t->id) }}"
+                                                                    class="btn btn-sm btn-navy rounded-pill px-3 py-1"
+                                                                    title="Thiết kế nội dung">
+                                                                    <i class="fas fa-pencil-ruler me-1"></i> Thiết kế
+                                                                </a>
+                                                                @if ($current_type !== 'CO')
+                                                                <button class="btn btn-sm btn-success rounded-pill px-3 py-1"
+                                                                    onclick="openWorkflowModal({{ $t->id }})"
+                                                                    title="Trình ký">
+                                                                    <i class="fas fa-paper-plane me-1"></i> Gửi duyệt
+                                                                </button>
+                                                                @endif
+                                                            @else
+                                                                <a href="{{ route('pages.ebmr.designer', $t->id) }}?mode=review"
+                                                                    class="btn btn-sm btn-primary text-white rounded-pill px-3 py-1"
+                                                                    title="Xem nội dung">
+                                                                    <i class="fas fa-eye me-1"></i> Xem hồ sơ
+                                                                </a>
                                                             @endif
                                                         @else
                                                             <a href="{{ route('pages.ebmr.designer', $t->id) }}?mode=review"
@@ -430,6 +465,21 @@
                                                                 onclick="openEffectiveDateModal({{ $t->id }})"
                                                                 title="Xác định ngày hiệu lực">
                                                                 <i class="fas fa-calendar-check me-1"></i> Hiệu lực
+                                                            </button>
+                                                        @endif
+
+                                                        @if ($t->can_delegate)
+                                                            <button class="btn btn-sm btn-outline-info rounded-pill px-3 py-1"
+                                                                onclick="openDelegateModal({{ $t->id }})"
+                                                                title="Ủy quyền chỉnh sửa">
+                                                                <i class="fas fa-user-friends me-1"></i> Ủy quyền
+                                                            </button>
+                                                        @endif
+                                                        @if ($t->can_change_owner)
+                                                            <button class="btn btn-sm btn-outline-dark rounded-pill px-3 py-1"
+                                                                onclick="openChangeOwnerModal({{ $t->id }})"
+                                                                title="Đổi Dược sĩ phụ trách">
+                                                                <i class="fas fa-user-tag me-1"></i> Đổi DS phụ trách
                                                             </button>
                                                         @endif
                                                     </div>
@@ -634,13 +684,13 @@
                         <i class="fas fa-chevron-right"></i>
                     </button>
                 @endif
-                <div class="modal-dialog {{ request('type') == 'MF' ? 'modal-lg' : 'modal-xl' }} modal-dialog-centered modal-dialog-scrollable" role="document"
-                    style="{{ request('type') == 'MF' ? '' : 'max-width: 95%;' }}">
+                <div class="modal-dialog {{ in_array(request('type'), ['MF', 'GF']) ? 'modal-lg' : 'modal-xl' }} modal-dialog-centered modal-dialog-scrollable" role="document"
+                    style="{{ in_array(request('type'), ['MF', 'GF']) ? '' : 'max-width: 95%;' }}">
                     <div class="modal-content border-0 shadow-lg">
                         <div class="modal-header">
                             <h5 class="modal-title font-weight-bold text-info" id="modalTitle">
                                 <i class="fas fa-file-medical me-2"></i>
-                                {{ request('type') == 'GF' ? 'Tạo Biểu Mẫu Dùng Chung' : (request('type') == 'BPR' ? 'Tạo Hồ Sơ Đóng Gói' : (request('type') == 'MF' ? 'Tạo Biểu Mẫu Gốc' : 'Tạo Hồ Sơ Lô Sản Xuất')) }}
+                                {{ request('type') == 'GF' ? 'Soạn Mới Biểu Mẫu Chung' : (request('type') == 'BPR' ? 'Tạo Hồ Sơ Đóng Gói' : (request('type') == 'MF' ? 'Tạo Biểu Mẫu Gốc' : 'Tạo Hồ Sơ Lô Sản Xuất')) }}
                             </h5>
                             <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                                 <span aria-hidden="true">&times;</span>
@@ -648,7 +698,7 @@
                         </div>
                         <div class="modal-body p-4">
                             <div class="row align-items-center mb-3">
-                                <div class="{{ request('type') == 'MF' ? 'col-md-8' : 'col-md-6' }}">
+                                <div class="{{ in_array(request('type'), ['MF', 'GF']) ? 'col-md-8' : 'col-md-6' }}">
                                     <div class="p-3 rounded border" style="background: linear-gradient(145deg, #ffffff, #f8f9fa); border-color: #e2e8f0 !important; border-left: 4px solid #0d6efd !important; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
                                         <div class="w-100" style="min-width: 0;">
                                             <div class="text-uppercase fw-bold mb-1" style="color: #64748b; font-size: 0.65rem; letter-spacing: 0.5px;">Sản phẩm đang chọn</div>
@@ -659,7 +709,7 @@
                                         </div>
                                     </div>
                                 </div>
-                                @if (request('type') != 'MF')
+                                @if (!in_array(request('type'), ['MF', 'GF']))
                                 <div class="col-md-3">
                                     <div class="form-group mb-0">
                                         <label
@@ -669,7 +719,7 @@
                                     </div>
                                 </div>
                                 @endif
-                                <div class="{{ request('type') == 'MF' ? 'col-md-4' : 'col-md-3' }}">
+                                <div class="{{ in_array(request('type'), ['MF', 'GF']) ? 'col-md-4' : 'col-md-3' }}">
                                     <div class="form-group mb-0">
                                         <label class="form-label fw-bold small">Phiên Bản <span
                                                 class="text-danger">*</span></label>
@@ -2078,7 +2128,8 @@
                         '');
                 }
                 $('#enable_recalculation').prop('checked', false);
-                $('#modalTitle').html('<i class="fas fa-file-medical me-2"></i> Soạn Mới Hồ Sơ Gốc');
+                const createModalTitle = $('#templateType').val() === 'GF' ? 'Soạn Mới Biểu Mẫu Chung' : 'Soạn Mới Hồ Sơ Gốc';
+                $('#modalTitle').html('<i class="fas fa-file-medical me-2"></i> ' + createModalTitle);
                 $('#templateMetadataModal').modal('show');
             }
 
@@ -2412,6 +2463,146 @@
                             Swal.fire('Lỗi', 'Không thể kết nối đến máy chủ', 'error');
                         });
                     }
+                });
+            }
+
+            // ===== Ủy quyền chỉnh sửa & Đổi Dược sĩ phụ trách =====
+            function openDelegateModal(id) {
+                $.get(`/ebmr/templates/${id}/editors`, function(res) {
+                    if (!res.success) {
+                        Swal.fire('Lỗi', res.message || 'Không tải được dữ liệu', 'error');
+                        return;
+                    }
+                    const editorsHtml = res.editors.length
+                        ? res.editors.map(e => `
+                            <div class="d-flex justify-content-between align-items-center border rounded-pill px-3 py-1 mb-2">
+                                <span><i class="fas fa-user me-2 text-info"></i>${escapeHtml(e.name)}</span>
+                                <button type="button" class="btn btn-sm btn-outline-danger rounded-pill py-0 px-2" onclick="removeTemplateEditor(${id}, ${e.id})">
+                                    <i class="fas fa-times"></i> Bỏ
+                                </button>
+                            </div>`).join('')
+                        : '<div class="text-muted fst-italic small mb-2">Chưa ủy quyền cho ai.</div>';
+
+                    const options = res.candidates.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+
+                    Swal.fire({
+                        title: 'Ủy quyền chỉnh sửa',
+                        width: 560,
+                        html: `
+                            <div class="text-left">
+                                <div class="mb-2 small text-muted"><i class="fas fa-user-shield me-1"></i> Dược sĩ phụ trách: <strong>${escapeHtml(res.owner_name || 'N/A')}</strong></div>
+                                <label class="form-label fw-bold text-navy">Người được ủy quyền chỉnh sửa:</label>
+                                <div id="editorList" class="mb-3">${editorsHtml}</div>
+                                <div class="d-flex gap-2">
+                                    <select id="editorSelect" class="form-control rounded-pill">
+                                        <option value="">-- Chọn người --</option>
+                                        ${options}
+                                    </select>
+                                    <button type="button" class="btn btn-info text-white rounded-pill px-3 text-nowrap" onclick="addTemplateEditor(${id})">
+                                        <i class="fas fa-plus me-1"></i> Thêm
+                                    </button>
+                                </div>
+                            </div>`,
+                        showConfirmButton: false,
+                        showCloseButton: true,
+                    });
+                }).fail(function(xhr) {
+                    Swal.fire('Lỗi', xhr.responseJSON?.message || 'Không thể kết nối đến máy chủ', 'error');
+                });
+            }
+
+            function addTemplateEditor(id) {
+                const userId = document.getElementById('editorSelect').value;
+                if (!userId) {
+                    Swal.showValidationMessage('Vui lòng chọn người để ủy quyền');
+                    return;
+                }
+                $.post('{{ route('pages.ebmr.addTemplateEditor') }}', {
+                    _token: '{{ csrf_token() }}',
+                    template_id: id,
+                    user_id: userId
+                }, function(res) {
+                    if (res.success) {
+                        openDelegateModal(id);
+                    } else {
+                        Swal.fire('Lỗi', res.message, 'error');
+                    }
+                }).fail(function(xhr) {
+                    Swal.fire('Lỗi', xhr.responseJSON?.message || 'Không thể kết nối đến máy chủ', 'error');
+                });
+            }
+
+            function removeTemplateEditor(id, userId) {
+                $.post('{{ route('pages.ebmr.removeTemplateEditor') }}', {
+                    _token: '{{ csrf_token() }}',
+                    template_id: id,
+                    user_id: userId
+                }, function(res) {
+                    if (res.success) {
+                        openDelegateModal(id);
+                    } else {
+                        Swal.fire('Lỗi', res.message, 'error');
+                    }
+                }).fail(function(xhr) {
+                    Swal.fire('Lỗi', xhr.responseJSON?.message || 'Không thể kết nối đến máy chủ', 'error');
+                });
+            }
+
+            function openChangeOwnerModal(id) {
+                $.get(`/ebmr/templates/${id}/editors`, function(res) {
+                    if (!res.success) {
+                        Swal.fire('Lỗi', res.message || 'Không tải được dữ liệu', 'error');
+                        return;
+                    }
+                    const options = (res.all_users || res.candidates).map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+                    Swal.fire({
+                        title: 'Đổi Dược sĩ phụ trách',
+                        html: `
+                            <div class="text-left">
+                                <div class="mb-2 small text-muted">Hiện tại: <strong>${escapeHtml(res.owner_name || 'N/A')}</strong></div>
+                                <label class="form-label fw-bold text-navy">Chọn Dược sĩ phụ trách mới:</label>
+                                <select id="newOwnerSelect" class="form-control rounded-pill">
+                                    <option value="">-- Chọn người --</option>
+                                    ${options}
+                                </select>
+                                <small class="text-muted mt-2 d-block"><i class="fas fa-info-circle me-1"></i> Người này sẽ trở thành chủ hồ sơ và có toàn quyền chỉnh sửa.</small>
+                            </div>`,
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonText: '<i class="fas fa-check me-1"></i> Xác nhận',
+                        cancelButtonText: 'Hủy bỏ',
+                        confirmButtonColor: '#6f42c1',
+                        reverseButtons: true,
+                        preConfirm: () => {
+                            const v = document.getElementById('newOwnerSelect').value;
+                            if (!v) {
+                                Swal.showValidationMessage('Vui lòng chọn Dược sĩ phụ trách mới');
+                            }
+                            return v;
+                        }
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            Swal.fire({
+                                title: 'Đang xử lý...',
+                                didOpen: () => Swal.showLoading()
+                            });
+                            $.post('{{ route('pages.ebmr.changeTemplateOwner') }}', {
+                                _token: '{{ csrf_token() }}',
+                                template_id: id,
+                                new_owner_id: result.value
+                            }, function(res) {
+                                if (res.success) {
+                                    Swal.fire('Thành công', res.message, 'success').then(() => location.reload());
+                                } else {
+                                    Swal.fire('Lỗi', res.message, 'error');
+                                }
+                            }).fail(function(xhr) {
+                                Swal.fire('Lỗi', xhr.responseJSON?.message || 'Không thể kết nối đến máy chủ', 'error');
+                            });
+                        }
+                    });
+                }).fail(function(xhr) {
+                    Swal.fire('Lỗi', xhr.responseJSON?.message || 'Không thể kết nối đến máy chủ', 'error');
                 });
             }
 
